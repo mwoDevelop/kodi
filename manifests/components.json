@@ -4,7 +4,7 @@
     "plugin.video.umbrella": {
       "repository": "mwoDevelop/umbrellaplug.github.io",
       "source": "umbrella/omega/plugin.video.umbrella",
-      "commit": "1541a3d74c4924f79128dc986345754a9a0a73cd",
+      "commit": "47c27b5094492c23acc879b76d2746bff8b8dc7c",
       "include": ["*"]
     },
     "script.module.mwoscrapers": {
