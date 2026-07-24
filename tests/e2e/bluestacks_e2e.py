@@ -16,8 +16,8 @@ from pathlib import Path
 ROOT = Path(__file__).parents[2]
 KODI_ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
 EXPECTED = {
-    "plugin.video.umbrella": "6.7.81.5",
-    "script.module.mwoscrapers": "0.1.1",
+    "plugin.video.umbrella": "6.7.81.7",
+    "script.module.mwoscrapers": "0.1.2",
     "repository.mwodevelop.testing": "1.0.0",
 }
 
@@ -58,13 +58,36 @@ def sha256(path):
 def prepare(args):
     backup = Path(args.backup_dir).resolve()
     backup.mkdir(parents=True, exist_ok=False)
-    if kodi_version(args.adb, args.serial) != "21.2":
-        raise RuntimeError("BlueStacks1 must run Kodi 21.2")
+    if kodi_version(args.adb, args.serial) != "21.3":
+        raise RuntimeError("BlueStacks1 must run Kodi 21.3")
 
     settings = "%s/userdata/addon_data/plugin.video.umbrella/settings.xml" % KODI_ROOT
     database = "%s/userdata/Database" % KODI_ROOT
-    run(args.adb, args.serial, "pull", settings, str(backup / "umbrella-settings.xml"))
+    run(
+        args.adb,
+        args.serial,
+        "pull",
+        settings,
+        str(backup / "umbrella-settings.xml"),
+        check=False,
+    )
     run(args.adb, args.serial, "pull", database, str(backup / "Database"))
+    before = {
+        addon_id: addon_version(args.adb, args.serial, addon_id)
+        for addon_id in EXPECTED
+    }
+    (backup / "prepare-state.json").write_text(
+        json.dumps({"installed_before": before}, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    if not args.allow_existing and any(
+        before[addon_id]
+        for addon_id in ("plugin.video.umbrella", "script.module.mwoscrapers")
+    ):
+        raise RuntimeError(
+            "clean dependency test requires Umbrella and MwoScrapers to be absent; "
+            "backup was created at %s" % backup
+        )
 
     package = ROOT / "dist/repository.mwodevelop.testing-1.0.0.zip"
     if not package.is_file():
@@ -75,10 +98,11 @@ def prepare(args):
         "phase": "prepared",
         "device": "BlueStacks1",
         "serial": args.serial,
-        "kodi": "21.2",
+        "kodi": "21.3",
         "repository_zip": remote,
         "repository_zip_sha256": sha256(package),
         "backup": str(backup),
+        "installed_before": before,
     }
     print(json.dumps(report, indent=2, sort_keys=True))
     print(
@@ -100,6 +124,15 @@ def verify(args):
     backup = Path(args.backup_dir).resolve()
     if not backup.is_dir():
         raise RuntimeError("prepare backup does not exist: %s" % backup)
+    prepare_state = json.loads(
+        (backup / "prepare-state.json").read_text(encoding="utf-8")
+    )
+    before = prepare_state["installed_before"]
+    clean_dependency_test = not before.get("plugin.video.umbrella") and not before.get(
+        "script.module.mwoscrapers"
+    )
+    if not args.allow_existing and not clean_dependency_test:
+        raise RuntimeError("prepare phase was not a clean dependency test")
     log_path = backup / "kodi-after-install.log"
     run(args.adb, args.serial, "pull", KODI_ROOT + "/temp/kodi.log", str(log_path))
     log_text = log_path.read_text(encoding="utf-8", errors="replace")
@@ -109,9 +142,9 @@ def verify(args):
         if "mwodevelop.github.io/kodi" in line.lower()
         or "repository.mwodevelop.testing" in line.lower()
         or "script.module.mwoscrapers" in line.lower()
-        or "plugin.video.umbrella v6.7.81.5 installed" in line
+        or "plugin.video.umbrella v6.7.81.7 installed" in line
     ]
-    if not any("script.module.mwoscrapers v0.1.1" in line for line in evidence):
+    if not any("script.module.mwoscrapers v0.1.2" in line for line in evidence):
         raise RuntimeError("Kodi log does not prove MwoScrapers installation")
     report = {
         "phase": "verified",
@@ -119,6 +152,8 @@ def verify(args):
         "serial": args.serial,
         "kodi": kodi_version(args.adb, args.serial),
         "installed": versions,
+        "installed_before": before,
+        "automatic_dependency_proven": clean_dependency_test,
         "repository_log_evidence": evidence[-60:],
         "backup": str(backup),
     }
@@ -137,6 +172,11 @@ def main():
     parser.add_argument("--serial", default="127.0.0.1:5556")
     parser.add_argument("--backup-dir", required=True)
     parser.add_argument("--result", default="docs/e2e-results/bluestacks1.json")
+    parser.add_argument(
+        "--allow-existing",
+        action="store_true",
+        help="permit a regression run that does not prove dependency installation",
+    )
     args = parser.parse_args()
     (prepare if args.phase == "prepare" else verify)(args)
 
