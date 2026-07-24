@@ -3,14 +3,11 @@
   "channels": {
     "stable": {
       "repository_addon": "repository.mwodevelop",
-      "components": []
+      "lock": "manifests/locks/stable.json"
     },
     "testing": {
       "repository_addon": "repository.mwodevelop.testing",
-      "components": [
-        "plugin.video.umbrella",
-        "script.module.mwoscrapers"
-      ]
+      "lock": "manifests/locks/testing.json"
     }
   }
 }

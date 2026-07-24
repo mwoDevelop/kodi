@@ -1,6 +1,6 @@
 # Plan projektu Kodi: Umbrella, MwoScrapers i wspólne repozytorium dodatków
 
-Status: Etapy 0–8 wdrożone; kanał testing i rzeczywisty E2E Kodi w walidacji
+Status: bramy kodowe wdrożone; publikacja finalnego testing i E2E BlueStacks w toku
 Data rozpoznania: 2026-07-24
 Konto docelowe GitHub: `mwoDevelop`
 Lokalny katalog nadrzędny: `/home/mwo/projects/kodi`
@@ -11,11 +11,13 @@ Zbudować utrzymywalny projekt, który:
 
 1. utrzymuje fork Umbrelli i regularnie pobiera zmiany z upstreamu;
 2. rozwija własny pakiet providerów `script.module.mwoscrapers`;
-3. wybiera i portuje najlepsze providery z CocoScrapers, ViperScrapers i
-   Magneto bez kopiowania całych trzech dodatków;
+3. rozwija przede wszystkim oryginalne adaptery do publicznych API, a porty
+   z CocoScrapers, ViperScrapers i Magneto dopuszcza dopiero po pełnej
+   kwalifikacji pochodzenia konkretnego pliku;
 4. nakłada małą, odizolowaną i niezależną od providera poprawkę resolvera
    Real-Debrid w Umbrelli;
-5. publikuje Umbrellę i MwoScrapers przez jedno repozytorium Kodi;
+5. publikuje Umbrellę i jej techniczną zależność MwoScrapers przez jedno
+   repozytorium Kodi, eksponując użytkownikowi przede wszystkim Umbrellę;
 6. aktualizuje upstreamy cyklicznie, ale nie publikuje niesprawdzonego kodu;
 7. pozwala odtworzyć pochodzenie każdego zaimportowanego pliku i łatwo
    wycofać wadliwe wydanie.
@@ -49,6 +51,13 @@ Coco / Viper / Magneto
 MwoScrapers nie będzie sam wywoływał Real-Debrid. Łączenie scraperów i
 resolvera w jednym dodatku zwiększyłoby sprzężenie, powieliło kod Umbrelli i
 utrudniło ochronę tokenu RD.
+
+MwoScrapers pozostaje osobnym komponentem kodowym, dodatkiem
+`xbmc.python.module` i artefaktem Kodi. Nie jest jednak osobno promowanym
+produktem użytkowym: podstawowa instrukcja każe zainstalować Umbrellę, a Kodi
+automatycznie dobiera MwoScrapers jako wymaganą zależność. Moduł pozostaje
+widoczny w zarządzaniu zależnościami Kodi. Real-Debrid nie jest osobnym
+dodatkiem: klient, autoryzacja i resolver pozostają częścią Umbrelli.
 
 ## 2. Zakres i elementy poza zakresem
 
@@ -153,7 +162,8 @@ mwoDevelop/script.module.mwoscrapers
 ├── nowy downstreamowy projekt pochodny GPL-3.0
 ├── API zgodne z CocoScrapers
 ├── wybrane i jawnie zaadaptowane providery
-└── manifest pochodzenia każdego providera
+├── manifest pochodzenia każdego providera
+└── komponent techniczny dystrybuowany przez to samo repo Kodi co Umbrella
 ```
 
 `script.module.mwoscrapers` jest nowym projektem, a nie forkiem w rozumieniu
@@ -171,8 +181,11 @@ sieci forków GitHub. Źródłami importu pozostają trzy niezależne rodziny.
 │   ├── repository.mwodevelop/
 │   └── repository.mwodevelop.testing/
 ├── manifests/
-│   ├── umbrella.lock.yml
-│   └── mwoscrapers.lock.yml
+│   ├── components.json                # katalog źródeł komponentów
+│   ├── channels.json                  # definicje kanałów
+│   └── locks/
+│       ├── stable.json                # niezależne, niezmienne piny stable
+│       └── testing.json               # piny aktualnego kandydata
 ├── tools/
 ├── tests/
 └── dist/                             # generowane; bez ręcznej edycji
@@ -180,6 +193,9 @@ sieci forków GitHub. Źródłami importu pozostają trzy niezależne rodziny.
 
 Oba komponenty wykonawcze będą osobnymi repozytoriami przypiętymi jako
 submoduły. Repo główne będzie wskazywało dokładnie zweryfikowane commity.
+Oddzielne repo Git MwoScrapers umożliwia niezależne testy, audyt pochodzenia i
+wersjonowanie providerów; nie powstaje dla niego osobne repozytorium Kodi ani
+osobna instrukcja instalacji dla użytkownika.
 
 ## 5. Projekt MwoScrapers
 
@@ -188,6 +204,7 @@ submoduły. Repo główne będzie wskazywało dokładnie zweryfikowane commity.
 - ID dodatku: `script.module.mwoscrapers`.
 - Namespace Pythona: `mwoscrapers`.
 - Własne wersjonowanie SemVer, początkowo `0.1.0`.
+- Jawna wersja kontraktu API providera, początkowo `1`.
 - Licencja projektu: GPL-3.0, z zachowaniem informacji o autorach portów.
 - Publiczne API wejściowe wymagane przez Umbrellę:
 
@@ -201,22 +218,54 @@ Umbrelli: `hasMovies`, `hasEpisodes`, `pack_capable`, `priority`, wymagane
 metody filmu/serialu/odcinka, `sources(data, hostDict)`, typy pól, obsługa
 wyjątków, timeouty i semantyka `ret_all`.
 
-Zgodność nazwy funkcji nie wystarcza do integracji. Fork Umbrelli otrzyma
-mały adapter wykrywania MwoScrapers, jawny wybór modułu w ustawieniach i
-zależność `script.module.mwoscrapers` w `addon.xml` jako wymaganą wyłącznie
-dla downstreamowego pakietu. Test instalacyjny potwierdzi:
+Zmiany kompatybilne zachowują numer kontraktu API. Zmiana łamiąca zwiększa
+numer kontraktu i wymaga równoczesnego wydania Umbrelli oraz MwoScrapers.
+Ponieważ Kodi interpretuje wersję zależności jako minimum, każda publikowana
+para jest dodatkowo przypięta dokładnymi commitami i testowana z locka kanału;
+nie wolno opublikować samodzielnej, niekompatybilnej wersji MwoScrapers.
 
-1. instalację zależności z repo;
+Zgodność nazwy funkcji nie wystarcza do integracji. Fork Umbrelli wykorzysta
+istniejący w upstreamie, ogólny mechanizm `external_provider`; nie należy go
+wyodrębniać do downstreamowego `provider_adapter.py` bez konkretnego błędu,
+ponieważ zwiększyłoby to patch stack i ryzyko konfliktów. Nazwa
+`mwoscrapers` nie może być zakodowana w ogólnym loaderze ani w ścieżce
+resolvera. Jedynym zamierzonym sprzężeniem dystrybucyjnym jest wymagana
+zależność `script.module.mwoscrapers` w downstreamowym `addon.xml`.
+
+Granica zaufania wymaga natomiast osobnej, małej polityki
+`resources/lib/downstream/provider_context_policy.py`. Bezpośrednio przed
+wywołaniem kodu zewnętrznego providera Umbrella przekaże sanitizowaną kopię
+kontekstu, która:
+
+- nigdy nie zawiera `debrid_token`, refresh tokenu, sekretu klienta ani
+  rozwiązanego URL-a;
+- może zawierać wyłącznie niewrażliwą nazwę aktywnej usługi debrid, jeśli
+  provider potrzebuje jej do oznaczenia wyniku;
+- zachowuje metadane filmu lub odcinka potrzebne do wyszukania źródeł;
+- nie zmienia kontekstu używanego później wewnątrz resolvera Umbrelli.
+
+`sources.py` ma zawierać tylko cienkie wywołanie sanitizera w każdym miejscu,
+które przekazuje `data` zewnętrznemu providerowi. Do czasu wdrożenia i testu
+tej polityki nie wolno importować nie w pełni zaufanego kodu providera ani
+promować dodatku do stable.
+
+Test instalacyjny potwierdzi:
+
+1. instalację wyłącznie Umbrelli z repo i automatyczne dobranie MwoScrapers
+   jako zależności;
 2. wykrycie pustego rejestru MwoScrapers;
 3. wybór MwoScrapers zamiast Coco/Viper/Magneto;
-4. powrót do poprzedniego modułu bez utraty jego ustawień.
+4. powrót do poprzedniego modułu bez utraty jego ustawień;
+5. kontrolowany fallback przy pustym rejestrze lub wyjątku `sources()`;
+6. poprawne fail-closed instalacji lub uruchomienia, gdy wymaganej zależności
+   nie można zainstalować albo została wyłączona.
 
 ### 5.2 Układ kodu
 
 ```text
 script.module.mwoscrapers/
 ├── addon.xml
-├── LICENSE.txt
+├── LICENSE
 ├── NOTICE.md
 ├── lib/
 │   └── mwoscrapers/
@@ -224,9 +273,8 @@ script.module.mwoscrapers/
 │       ├── registry.py
 │       ├── contract.py
 │       ├── normalize.py
-│       ├── deduplicate.py
 │       ├── health.py
-│       ├── modules/
+│       ├── settings.py
 │       └── providers/
 │           └── torrents/
 ├── resources/
@@ -330,13 +378,18 @@ dwóch odczytów ruchomego `master`.
 
 Brak pełnego łańcucha oznacza `license-blocked`, a nie warunkowy import.
 
-### 6.2 Workflow `check-provider-upstreams.yml`
+### 6.2 Integralność pinów i wykrywanie nowych wersji
 
-Uruchamiany raz dziennie i ręcznie:
+Obecny `check-provider-upstreams.yml` jest audytem integralności przypiętych
+artefaktów: ponownie pobiera zapisane URL-e i potwierdza oczekiwane sumy. Nie
+wolno opisywać go jako mechanizmu wykrywania nowych wydań.
 
-1. odczytuje manifesty Coco, Viper i Magneto;
-2. wykrywa zmianę wersji lub sumy;
-3. pobiera ZIP do katalogu tymczasowego;
+Osobny `discover-provider-upstreams.yml`, uruchamiany raz dziennie i ręcznie:
+
+1. odczytuje bieżące feedy Coco, Viper i Magneto;
+2. porównuje wersję, URL i pełny commit SHA z przypiętym stanem;
+3. pobiera ZIP do katalogu tymczasowego, przy czym odwołania GitHub
+   `main/master` rozwiązuje najpierw do pełnego, niezmiennego commit SHA;
 4. weryfikuje SHA-256, zgodność feed/ZIP, `addon.xml` i bezpiecznie
    inwentaryzuje archiwum bez importowania lub wykonywania jego kodu;
 5. egzekwuje limity liczby plików, rozmiaru skompresowanego i
@@ -346,7 +399,7 @@ Uruchamiany raz dziennie i ręcznie:
    Windows;
 7. wykonuje skan licencji, zależności i niedozwolonych plików;
 8. porównuje wyłącznie providery śledzone przez MwoScrapers;
-9. generuje raport zmian;
+9. generuje raport zmian względem przypiętego artefaktu;
 10. otwiera issue lub PR na gałęzi `import/<rodzina>-<wersja>`;
 11. nie scala i nie publikuje automatycznie.
 
@@ -516,6 +569,12 @@ Testing publikuje kandydata o jego docelowej wersji, a stable promuje
 dokładnie te same bajty. Nigdy nie wolno opublikować innych bajtów pod tym
 samym `ID+version`.
 
+Kanały nie mogą korzystać ze wspólnego ruchomego pinu komponentu. Każdy ma
+własny lock mapujący `addon ID` na co najmniej: commit źródłowy, wersję,
+SHA-256 ZIP-a i wersję kontraktu zależności. `stable` wskazuje niezmienny
+artefakt wcześniej opublikowany i zweryfikowany w `testing`; późniejsza
+publikacja testing nie może przebudować ani zmienić żadnego pliku stable.
+
 Zachowanie `origin` Kodi nie będzie zakładane. Etap 0 sprawdzi na czystej
 bazie Addons cztery przypadki: instalację Umbrelli z repo upstream,
 instalację repo downstream, jawny wybór wersji downstream i następną
@@ -547,6 +606,12 @@ https://mwodevelop.github.io/kodi/
 wyłącznie `testing`. Urządzenie produkcyjne nie będzie miało zainstalowanego
 repo testing.
 
+Oba indeksy muszą zawierać MwoScrapers, ponieważ Kodi potrzebuje jego
+metadanych i ZIP-a do rozwiązania zależności Umbrelli. Dokumentacja i
+podstawowa ścieżka UI wskazują jednak instalację Umbrelli; MwoScrapers nie
+otrzymuje osobnego repo Kodi ani kroku ręcznej instalacji. Jego bezpośredni
+ZIP pozostaje publiczny dla mechanizmu zależności, audytu i diagnostyki.
+
 Każdy dodatek repo będzie miał jawny wpis:
 
 ```xml
@@ -568,7 +633,7 @@ CI, workflow wdrożeniowy i test powdrożeniowy.
 
 Generator w repo głównym:
 
-1. czyta przypięte commity komponentów;
+1. czyta katalog komponentów i niezależny lock każdego kanału;
 2. sprawdza ID, wersję, licencję i zależności;
 3. tworzy deterministyczne ZIP-y z katalogiem ID w korzeniu;
 4. generuje `addons.xml`;
@@ -579,6 +644,22 @@ Generator w repo głównym:
 9. publikuje niezmienny artefakt CI;
 10. po zatwierdzeniu wdraża dokładnie ten artefakt na GitHub Pages;
 11. porównuje publiczne SHA-256 każdego pliku z manifestem.
+
+Lock kanału ma postać logiczną:
+
+```text
+channel
+└── addon ID
+    ├── commit
+    ├── version
+    ├── zip_sha256
+    └── dependency_contract
+```
+
+Przy publikacji testing generator musi odtworzyć stable wyłącznie z jego
+locka lub skopiować jego niezmienny snapshot artefaktu. Test sekwencyjny
+buduje `stable=A`, następnie `testing=B`, potem `testing=C` i wymaga, aby
+każdy bajt `stable` nadal odpowiadał A.
 
 Repo główne jest jedynym źródłem publikacji. Wygenerowane ZIP-y nie będą
 ręcznie kopiowane pomiędzy repozytoriami. Publikacje mają concurrency lock,
@@ -621,6 +702,21 @@ a środowisko `stable` wymaga ręcznego zatwierdzenia.
 - maksymalna liczba retry, prób źródła i budżet 60 s są egzekwowane;
 - logi nie zawierają tokenu RD ani pełnego URL-a.
 
+### 11.2a Granica zaufania Umbrella–provider
+
+- istniejący upstreamowy mechanizm `external_provider` ładuje dowolny moduł
+  zgodny z kontraktem, bez warunków specyficznych dla MwoScrapers;
+- test podmienia moduł zgodny, pusty i rzucający wyjątek;
+- provider-canary kończy test błędem, jeśli otrzyma `debrid_token` lub inny
+  sekret;
+- `provider_context_policy.py` zwraca kopię kontekstu bez sekretów i nie
+  importuje kodu resolvera;
+- brak lub wyłączenie wymaganej zależności jest testowane jako fail-closed
+  Kodi, a nie wspierany fallback runtime;
+- zmiana lub dodanie providera nie wymaga zmiany resolvera;
+- konflikt rebase w cienkich wywołaniach sanitizera zatrzymuje automatyczną
+  publikację.
+
 ### 11.3 Repozytorium Kodi
 
 - parsowanie `addon.xml` i `addons.xml`;
@@ -629,7 +725,10 @@ a środowisko `stable` wymaga ręcznego zatwierdzenia.
 - Kodi Addon-Checker tam, gdzie ma zastosowanie;
 - deterministyczność ZIP-ów i sum;
 - HTTP 200 dla indeksu, sum i pakietów;
-- instalacja na czystym profilu Kodi 21.2;
+- instalacja samej Umbrelli na czystym profilu Kodi 21.3 i potwierdzenie
+  automatycznej instalacji MwoScrapers;
+- stan bazy dodatków i log `CAddonInstallJob` przed i po czystej instalacji,
+  dowodzące, że MwoScrapers nie był obecny i został dobrany jako zależność;
 - instalacja na czystym profilu najnowszego Kodi 21.x;
 - rzeczywiste odświeżenie indeksu repo i wykrycie nowej wersji;
 - aktualizacja testing→stable bez zmiany bajtów;
@@ -664,8 +763,10 @@ CI.
 2. zapisać wersje i repozytoria pochodzenia;
 3. nie usuwać danych uwierzytelniających;
 4. zainstalować wyłącznie `repository.mwodevelop.testing`;
-5. zainstalować MwoScrapers obok Magneto;
-6. przełączać tylko setting zewnętrznego providera Umbrelli.
+5. z repo testing zainstalować wyłącznie Umbrellę i potwierdzić w logu oraz
+   bazie dodatków, że Kodi automatycznie zainstalował MwoScrapers;
+6. pozostawić Magneto tylko jako opcjonalny baseline porównawczy;
+7. przełączać tylko setting zewnętrznego providera Umbrelli.
 
 Kopie profilu i logi pozostają lokalne, są zredagowane i nie trafiają do
 artefaktów CI; tokeny i dane kont nie mogą być kopiowane do repo.
@@ -698,6 +799,11 @@ Zapisać:
 - `34` uruchamia kontrolowany backoff;
 - awaria jednego providera nie przerywa całego scrapingu;
 - MwoScrapers zwraca schemat zgodny z Umbrellą;
+- czysta instalacja Umbrelli automatycznie instaluje zgodną wersję
+  MwoScrapers bez osobnego działania użytkownika;
+- pusty rejestr lub wyjątek MwoScrapers daje kontrolowany fallback, a
+  brakująca lub wyłączona wymagana zależność blokuje uruchomienie fail-closed;
+- żaden zewnętrzny provider nie otrzymuje tokenu ani sekretu Real-Debrid;
 - działające kolejne źródło może zostać rozwiązane;
 - cała akcja kończy się lub zwraca kontrolowany komunikat w budżecie 60 s;
 - żaden provider nie przekracza własnego budżetu 15 s;
@@ -764,7 +870,8 @@ kodu ani publikacji.
 - sklonować do `/home/mwo/projects/kodi/mwoscrapers`;
 - wdrożyć addon manifest, API, registry, kontrakt i testy;
 - dodać provenance i importer bez aktywnych portów;
-- potwierdzić wykrycie pustego modułu przez Umbrellę.
+- potwierdzić wykrycie pustego modułu przez ogólny adapter providerów
+  Umbrelli.
 
 ### Etap 4 — bezpieczny importer
 
@@ -776,9 +883,12 @@ kodu ani publikacji.
 
 ### Etap 5 — kwalifikacja pierwszych providerów
 
-- utworzyć macierz porównawczą wspólnych providerów;
-- zakwalifikować maksymalnie 2–3 providery;
-- portować każdy osobnym commitem;
+- wdrożyć i zakwalifikować maksymalnie 2–3 oryginalne adaptery publicznych
+  API jako model podstawowy pierwszego wydania;
+- utworzyć macierz porównawczą rodzin Coco/Viper/Magneto wyłącznie jako
+  przyszłą ścieżkę warunkową;
+- ewentualny port wykonać osobnym commitem dopiero po pełnej kwalifikacji
+  licencyjnej konkretnego pliku;
 - uruchomić testy kontraktowe, fixtures, normalizację per-provider oraz
   integracyjną deduplikację między providerami w Umbrelli.
 
@@ -791,7 +901,8 @@ wynik resolution nie wybiera providera przed naprawą resolvera.
 - zaimplementować deterministyczny generator;
 - dodać Umbrellę i MwoScrapers jako submoduły;
 - zbudować i opublikować wyłącznie `testing`;
-- przeprowadzić test czystej instalacji.
+- przeprowadzić test czystej instalacji Umbrelli wraz z automatycznym
+  rozwiązaniem zależności MwoScrapers.
 
 ### Etap 7 — testy reprodukujące resolver
 
@@ -814,8 +925,27 @@ wynik resolution nie wybiera providera przed naprawą resolvera.
 - naprawić regresje;
 - zatwierdzić dokładne commity obu komponentów.
 
+### Etap 9a — bramy przed stable
+
+- wdrożyć `provider_context_policy.py` i usunąć sekrety debrid z kontekstu
+  przekazywanego providerom;
+- dodać niezależne locki stable/testing i test niezmienności stable;
+- wdrożyć prawdziwe wykrywanie nowych wersji upstream oddzielone od audytu
+  integralności przypiętych ZIP-ów;
+- potwierdzić automatyczną instalację MwoScrapers jako zależności Umbrelli na
+  czystym profilu wraz ze stanem bazy przed/po;
+- uzupełnić testy `origin`, migracji, forward-revert i najnowszego Kodi 21.x;
+- wykonać integracyjny test kodów RD `34/35` przez pełną ścieżkę
+  `sources.py → realdebrid.py`;
+- ujednolicić README ze stanem bram opisanym w tym planie;
+- powtórzyć E2E od scrapingu do odtwarzania na finalnym buildzie przed
+  promocją stable.
+
 ### Etap 10 — pierwsze stable
 
+- wdrożyć chroniony, ręczny workflow promocji stable;
+- wskazać dokładny immutable candidate z testing po SHA-256;
+- skopiować ZIP-y i snapshot bez przebudowy komponentów;
 - oznaczyć komponenty tagami;
 - promować bez przebudowy zweryfikowany artefakt;
 - sprawdzić publiczne URL-e i aktualizację Kodi;
@@ -843,6 +973,13 @@ wynik resolution nie wybiera providera przed naprawą resolvera.
 10. Deduplikacja między providerami pozostaje w Umbrelli.
 11. Limiter obejmuje transport wszystkich autoryzowanych żądań RD.
 12. Rollback zainstalowanego wydania używa wyższej wersji forward-revert.
+13. MwoScrapers pozostaje osobnym repo Git i modułem Kodi, ale nie otrzymuje
+    osobnego repo Kodi ani ręcznej ścieżki instalacji.
+14. Umbrella zachowuje upstreamowy ogólny loader providerów; downstream
+    dodaje jedynie izolowaną sanitizację kontekstu bez sekretów.
+15. Kanały stable/testing mają niezależne locki komponentów i artefaktów.
+16. Breaking change kontraktu MwoScrapers wymaga równoczesnego wydania
+    kompatybilnej Umbrelli.
 
 Po zatwierdzeniu planu realizację należy prowadzić etapami. Każdy etap
 kończy się działającym, zweryfikowanym rezultatem i nie wymusza rozpoczęcia
@@ -871,23 +1008,60 @@ warunku pierwszego wydania; można je dodać po uruchomieniu deterministycznej
 publikacji. Przechowywanie Git blob SHA, patch-id oraz kontrolę odświeżenia
 repo uwzględniono już w podstawowym planie.
 
+### 16.1 Ponowny audyt po decyzji o wydzieleniu MwoScrapers
+
+Drugi niezależny audyt potwierdził sens osobnego repo Git i dodatku
+`xbmc.python.module`, instalowanego automatycznie jako zależność Umbrelli z
+tego samego repo Kodi. Przyjęto następujące uwagi:
+
+- MwoScrapers jest osobnym artefaktem Kodi widocznym w zależnościach, ale nie
+  osobno promowanym produktem użytkowym;
+- istniejącego loadera `external_provider` nie refaktoryzuje się tylko dla
+  OCP; pozostaje niezmienionym punktem rozszerzenia upstream;
+- kontekst providera musi zostać zsanityzowany, ponieważ obecna Umbrella
+  przekazuje w `data` również `debrid_token`;
+- stable i testing wymagają niezależnych locków, a promocja stable osobnego
+  workflow kopiującego dokładny artefakt bez przebudowy;
+- wymagany MwoScrapers jest testowany przez czystą instalację samej Umbrelli;
+  brak zależności jest fail-closed, nie wspieranym fallbackiem;
+- status wdrożenia musi odróżniać przechodzące testy jednostkowe i istniejący
+  playback E2E od jeszcze niewykonanych bram promocji.
+
+Odrzucono rekomendację tworzenia `provider_adapter.py` wyłącznie dla OCP,
+ukrywania MwoScrapers w `addons.xml`, scalania jego repo z Umbrellą,
+oznaczania zależności jako opcjonalnej oraz przenoszenia resolvera
+Real-Debrid do MwoScrapers.
+
 ## 17. Stan realizacji 2026-07-24
 
-- Etapy 0–4: zakończone; kontrakt, pochodzenie, importer, testy bezpieczeństwa
-  i cykliczny audyt upstreamów działają.
+- Etap 0: częściowo zakończony; kontrakt, granice deduplikacji, threat model i
+  polityki wydania są opisane. Test testing→stable jest odtwarzalny lokalnie,
+  a `BlueStacks1` działa już na Kodi 21.3; testy `origin`, migracji i
+  forward-revert pozostają otwarte.
+- Etapy 1–4: repozytoria, fork, szkielet MwoScrapers, bezpieczna
+  inwentaryzacja i audyt integralności przypiętych upstreamów działają.
+  Oddzielny workflow discovery rozwiązuje ruchome feedy do pełnych commitów,
+  porównuje je z lockiem i tworzy deduplikowane issue; nie publikuje kodu.
 - Etap 5: zamiast kopiowania kodu z niepewnym łańcuchem licencyjnym wdrożono
   dwa oryginalne adaptery JSON: Torrentio domyślnie i Comet jako opt-in.
-- Etap 6: zakończony; deterministyczny generator, dwa kanały, submoduły,
-  manifest pochodzenia i GitHub Pages działają.
-- Etapy 7–8: zakończone; polityki resolvera i transportu RD są izolowane w
-  `resources/lib/downstream`, a zmiany plików upstream stanowią cienkie
-  adaptery.
-- Etap 9: zakończony na Kodi 21.2 w `BlueStacks1`; instalacja z repo,
-  wykrycie i wybór MwoScrapers, live scrape oraz rozwiązanie przez
-  Real-Debrid i odtwarzanie legalnego filmu testowego zostały potwierdzone.
-- Etap 10 pozostaje celowo niewykonany: `stable` nie otrzyma wersji przed
-  zamknięciem rzeczywistego testu resolvera i świadomą promocją dokładnie tych
-  samych artefaktów z `testing`.
+- Etap 6: deterministyczny generator, niezależne locki stable/testing,
+  pobieranie dokładnych commitów i test niezmienności stable działają.
+  Repo testing zawiera oba artefakty, lecz instrukcja instaluje wyłącznie
+  Umbrellę. Finalny czysty test zależności czeka na publikację tego commita.
+- Etapy 7–8: testy jednostkowe, polityki resolvera/transportu RD oraz
+  integracyjny przebieg `sources.py → resolver_policy → RD transport` dla
+  kodów `34/35` działają. Provider otrzymuje sanitizowany kontekst bez tokenu.
+- Etap 9: wcześniejszy live scrape, rozwiązanie Real-Debrid i odtwarzanie
+  legalnego filmu testowego zostały potwierdzone. Kodi w `BlueStacks1`
+  zaktualizowano do 21.3, stare Umbrella/MwoScrapers usunięto z zachowaniem
+  ustawień; finalna instalacja od zera i playback wersji z locka są następne.
+- Etap 9a: bramy kodowe — sanitizacja sekretów, locki kanałów, discovery,
+  czysty test repo w symulowanym profilu oraz test RD — są wdrożone.
+  Pozostają rzeczywisty czysty test BlueStacks i końcowy playback.
+- Etap 10: ręczny workflow promocji exact testing candidate po SHA-256 jest
+  wdrożony i testowany lokalnie. Publiczny stable pozostaje pusty do czasu
+  przejścia finalnych bram urządzeniowych; workflow nie został jeszcze
+  uruchomiony.
 
 Zastosowanie OCP jest bramą przeglądu: nowa polityka downstream ma powstawać
 w osobnym module z testami; zmiana kodu upstream jest dopuszczalna tylko jako

@@ -1,8 +1,11 @@
 import hashlib
 import json
+from copy import deepcopy
 from pathlib import Path
 from xml.etree import ElementTree
 from zipfile import ZipFile
+
+import pytest
 
 from tools.build_repo import build
 
@@ -19,6 +22,11 @@ def test_two_builds_are_byte_identical(tmp_path):
     first = build(tmp_path / "first")
     second = build(tmp_path / "second")
     assert tree_digest(first) == tree_digest(second)
+
+
+def test_build_rejects_filesystem_root():
+    with pytest.raises(ValueError, match="unsafe output directory"):
+        build(Path("/"))
 
 
 def test_testing_index_and_dependency_closure(tmp_path):
@@ -45,12 +53,38 @@ def test_zips_have_single_safe_root(tmp_path):
             assert all(".." not in Path(name).parts for name in names)
 
 
-def test_provenance_matches_submodule_locks(tmp_path):
+def test_provenance_matches_channel_locks(tmp_path):
     output = build(tmp_path / "repo")
     provenance = json.loads((output / "build-provenance.json").read_text())
-    components = json.loads(Path("manifests/components.json").read_text())["components"]
-    for addon_id, data in provenance["components"].items():
-        assert data["commit"] == components[addon_id]["commit"]
+    testing = json.loads(Path("manifests/locks/testing.json").read_text())
+    for addon_id, data in provenance["channels"]["testing"]["components"].items():
+        pin = testing["components"][addon_id]
+        assert data["commit"] == pin["commit"]
+        assert data["version"] == pin["version"]
+        assert data["zip_sha256"] == pin["zip_sha256"]
+
+
+def test_testing_changes_cannot_mutate_stable_snapshot(tmp_path):
+    current = json.loads(Path("manifests/locks/testing.json").read_text())
+    stable = deepcopy(current)
+    stable["channel"] = "stable"
+    empty_testing = {
+        "schema": 1,
+        "channel": "testing",
+        "components": {},
+    }
+
+    first = build(
+        tmp_path / "first",
+        lock_overrides={"stable": stable, "testing": current},
+    )
+    second = build(
+        tmp_path / "second",
+        lock_overrides={"stable": stable, "testing": empty_testing},
+    )
+
+    assert tree_digest(first / "stable") == tree_digest(second / "stable")
+    assert tree_digest(first / "testing") != tree_digest(second / "testing")
 
 
 def test_metadata_assets_are_published_next_to_zip(tmp_path):

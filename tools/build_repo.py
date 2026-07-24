@@ -5,6 +5,8 @@ import argparse
 import fnmatch
 import hashlib
 import json
+import os
+import re
 import shutil
 import subprocess
 from pathlib import Path, PurePosixPath
@@ -12,6 +14,7 @@ from xml.etree import ElementTree
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).parents[1]
+COMPONENT_ROOT = Path(os.environ.get("KODI_COMPONENT_ROOT", ROOT))
 ZIP_TIME = (2020, 1, 1, 0, 0, 0)
 EXCLUDED_PARTS = {
     ".git",
@@ -54,15 +57,20 @@ def addon_files(source, patterns):
 def write_deterministic_zip(output, root_name, files):
     output.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(output, "w", ZIP_DEFLATED, compresslevel=9) as archive:
-        for path, relative in files:
+        for payload, relative in files:
             info = ZipInfo((PurePosixPath(root_name) / relative).as_posix(), ZIP_TIME)
             info.compress_type = ZIP_DEFLATED
             info.external_attr = 0o100644 << 16
-            archive.writestr(info, path.read_bytes())
+            content = payload.read_bytes() if isinstance(payload, Path) else payload
+            archive.writestr(info, content)
 
 
 def parse_addon(path):
-    root = ElementTree.parse(path).getroot()
+    return parse_addon_payload(Path(path).read_bytes())
+
+
+def parse_addon_payload(payload):
+    root = ElementTree.fromstring(payload)
     addon_id = root.attrib["id"]
     version = root.attrib["version"]
     if "/" in addon_id or "/" in version:
@@ -70,20 +78,72 @@ def parse_addon(path):
     return root, addon_id, version
 
 
-def publish_assets(addon, source, target):
+def publish_assets(addon, files, target):
     """Publish metadata assets next to the add-on ZIP, as Kodi expects."""
+    content = {
+        PurePosixPath(relative).as_posix(): (
+            payload.read_bytes() if isinstance(payload, Path) else payload
+        )
+        for payload, relative in files
+    }
     for asset in addon.findall("./extension/assets/*"):
         relative = PurePosixPath((asset.text or "").strip())
         if not relative.parts:
             continue
         if relative.is_absolute() or ".." in relative.parts:
             raise ValueError("unsafe add-on asset path: %s" % relative)
-        source_path = source.joinpath(*relative.parts)
-        if not source_path.is_file() or source_path.is_symlink():
-            raise ValueError("missing add-on asset: %s" % source_path)
+        key = relative.as_posix()
+        if key not in content:
+            raise ValueError("missing add-on asset: %s" % relative)
         output_path = target.joinpath(*relative.parts)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source_path, output_path)
+        output_path.write_bytes(content[key])
+
+
+def component_files(config, commit):
+    source_parts = PurePosixPath(config["source"]).parts
+    checkout = COMPONENT_ROOT / source_parts[0]
+    prefix = PurePosixPath(*source_parts[1:]).as_posix() if source_parts[1:] else ""
+    subprocess.run(
+        ["git", "-C", str(checkout), "cat-file", "-e", "%s^{commit}" % commit],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    command = ["git", "-C", str(checkout), "ls-tree", "-r", commit]
+    if prefix:
+        command.extend(["--", prefix])
+    rows = subprocess.check_output(command, text=True).splitlines()
+    result = []
+    for row in rows:
+        metadata, full_path = row.split("\t", 1)
+        mode, kind, _object_id = metadata.split()
+        if kind != "blob" or mode == "120000":
+            continue
+        relative = PurePosixPath(full_path)
+        if prefix:
+            relative = relative.relative_to(PurePosixPath(prefix))
+        if any(part in EXCLUDED_PARTS for part in relative.parts):
+            continue
+        if not selected(relative, config["include"]):
+            continue
+        payload = subprocess.check_output(
+            ["git", "-C", str(checkout), "show", "%s:%s" % (commit, full_path)]
+        )
+        result.append((payload, relative))
+    if not result:
+        raise ValueError("component has no files at %s" % commit)
+    return result
+
+
+def validate_provider_api(files, expected):
+    by_name = {PurePosixPath(relative).as_posix(): payload for payload, relative in files}
+    payload = by_name.get("lib/mwoscrapers/__init__.py", b"").decode(
+        "utf-8", errors="replace"
+    )
+    match = re.search(r"^PROVIDER_API_VERSION\s*=\s*(\d+)\s*$", payload, re.MULTILINE)
+    if not match or int(match.group(1)) != int(expected):
+        raise ValueError("MwoScrapers provider API contract drift")
 
 
 def render_addons(addons):
@@ -129,9 +189,13 @@ def copy_repository_addon(addon_id, channel_root, output_root):
     return addon
 
 
-def build(output):
-    output = Path(output).resolve()
-    if output == ROOT or ROOT in output.parents and output.name == "":
+def build(output, lock_overrides=None):
+    requested_output = Path(output)
+    if requested_output.is_symlink():
+        raise ValueError("output directory cannot be a symlink")
+    output = requested_output.resolve()
+    filesystem_root = Path(output.anchor)
+    if output == filesystem_root or output == ROOT or output in ROOT.parents:
         raise ValueError("unsafe output directory")
     if output.exists():
         shutil.rmtree(output)
@@ -139,51 +203,64 @@ def build(output):
 
     components = load_json("manifests/components.json")["components"]
     channels = load_json("manifests/channels.json")["channels"]
-    built = {}
-    provenance = {"schema": 1, "components": {}}
-
-    for addon_id, config in sorted(components.items()):
-        source = ROOT / config["source"]
-        actual_commit = git_commit(ROOT / config["source"].split("/")[0])
-        if actual_commit != config["commit"]:
-            raise ValueError(
-                "%s commit drift: expected %s, got %s"
-                % (addon_id, config["commit"], actual_commit)
-            )
-        addon, parsed_id, version = parse_addon(source / "addon.xml")
-        if parsed_id != addon_id:
-            raise ValueError("component directory and id differ")
-        files = list(addon_files(source, config["include"]))
-        if not files:
-            raise ValueError("component has no files: %s" % addon_id)
-        built[addon_id] = (addon, version, files)
-        provenance["components"][addon_id] = {
-            "repository": config["repository"],
-            "commit": actual_commit,
-            "version": version,
-        }
+    provenance = {"schema": 2, "channels": {}}
+    lock_overrides = lock_overrides or {}
 
     for channel, config in sorted(channels.items()):
+        lock = lock_overrides.get(channel) or load_json(config["lock"])
+        if lock.get("schema") != 1 or lock.get("channel") != channel:
+            raise ValueError("invalid %s channel lock" % channel)
         channel_root = output / channel / "omega"
         channel_root.mkdir(parents=True)
         addons = [copy_repository_addon(config["repository_addon"], channel_root, output)]
-        for addon_id in config["components"]:
-            addon, version, files = built[addon_id]
+        channel_provenance = {"lock": config["lock"], "components": {}}
+        for addon_id, pin in sorted(lock["components"].items()):
+            if addon_id not in components:
+                raise ValueError("unknown component in %s lock: %s" % (channel, addon_id))
+            component = components[addon_id]
+            commit = pin["commit"]
+            files = component_files(component, commit)
+            by_name = {
+                PurePosixPath(relative).as_posix(): payload
+                for payload, relative in files
+            }
+            if "addon.xml" not in by_name:
+                raise ValueError("component has no addon.xml: %s" % addon_id)
+            addon, parsed_id, version = parse_addon_payload(by_name["addon.xml"])
+            if parsed_id != addon_id:
+                raise ValueError("component directory and id differ")
+            if version != pin["version"]:
+                raise ValueError(
+                    "%s version drift: expected %s, got %s"
+                    % (addon_id, pin["version"], version)
+                )
+            if "provider_api" in pin:
+                validate_provider_api(files, pin["provider_api"])
             addon_root = channel_root / addon_id
             target = addon_root / ("%s-%s.zip" % (addon_id, version))
             write_deterministic_zip(target, addon_id, files)
-            publish_assets(
-                addon,
-                ROOT / components[addon_id]["source"],
-                addon_root,
-            )
+            digest = sha256(target)
+            expected_digest = pin.get("zip_sha256")
+            if expected_digest and digest != expected_digest:
+                raise ValueError(
+                    "%s ZIP drift: expected %s, got %s"
+                    % (addon_id, expected_digest, digest)
+                )
+            publish_assets(addon, files, addon_root)
             addons.append(addon)
+            channel_provenance["components"][addon_id] = {
+                "repository": component["repository"],
+                "commit": commit,
+                "version": version,
+                "zip_sha256": digest,
+            }
         validate_dependency_closure(addons)
         index = render_addons(addons)
         (channel_root / "addons.xml").write_bytes(index)
         (channel_root / "addons.xml.sha256").write_text(
             hashlib.sha256(index).hexdigest() + "\n", encoding="ascii"
         )
+        provenance["channels"][channel] = channel_provenance
 
     (output / "build-provenance.json").write_text(
         json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"

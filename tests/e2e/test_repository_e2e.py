@@ -29,21 +29,38 @@ def test_installable_repository_and_provider_contract(tmp_path):
     output = build(tmp_path / "dist")
     profile = tmp_path / "kodi-profile" / "addons"
     profile.mkdir(parents=True)
+    installed = []
     with repository_server(output) as base:
         index_payload = urlopen(base + "testing/omega/addons.xml", timeout=5).read()
         index = ElementTree.fromstring(index_payload)
-        for addon_id in ("script.module.mwoscrapers", "plugin.video.umbrella"):
+
+        def install(addon_id):
+            if addon_id in installed:
+                return
             addon = index.find("./addon[@id='%s']" % addon_id)
+            assert addon is not None, "repository cannot resolve %s" % addon_id
+            for dependency in addon.findall("./requires/import"):
+                dependency_id = dependency.attrib["addon"]
+                if dependency.attrib.get("optional") == "true":
+                    continue
+                if index.find("./addon[@id='%s']" % dependency_id) is not None:
+                    install(dependency_id)
             version = addon.attrib["version"]
             relative = "testing/omega/%s/%s-%s.zip" % (addon_id, addon_id, version)
             package = tmp_path / ("%s.zip" % addon_id)
             package.write_bytes(urlopen(base + relative, timeout=5).read())
             with ZipFile(package) as archive:
                 archive.extractall(profile)
+            installed.append(addon_id)
 
+        assert not (profile / "script.module.mwoscrapers").exists()
+        install("plugin.video.umbrella")
+
+    assert installed == ["script.module.mwoscrapers", "plugin.video.umbrella"]
     sys.path.insert(0, str(profile / "script.module.mwoscrapers" / "lib"))
     try:
         module = importlib.import_module("mwoscrapers")
+        assert module.PROVIDER_API_VERSION == 1
         providers = module.sources(ret_all=True)
         assert [name for name, _ in providers] == ["torrentio", "comet"]
     finally:
