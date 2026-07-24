@@ -1,6 +1,6 @@
 # Plan projektu Kodi: Umbrella, MwoScrapers i wspólne repozytorium dodatków
 
-Status: finalny testing i E2E BlueStacks przeszły; promocja stable w toku
+Status: pierwsze stable opublikowane po przejściu finalnego E2E BlueStacks
 Data rozpoznania: 2026-07-24
 Konto docelowe GitHub: `mwoDevelop`
 Lokalny katalog nadrzędny: `/home/mwo/projects/kodi`
@@ -1046,8 +1046,8 @@ Real-Debrid do MwoScrapers.
   dwa oryginalne adaptery JSON: Torrentio domyślnie i Comet jako opt-in.
 - Etap 6: deterministyczny generator, niezależne locki stable/testing,
   pobieranie dokładnych commitów i test niezmienności stable działają.
-  Repo testing zawiera oba artefakty, lecz instrukcja instaluje wyłącznie
-  Umbrellę. Finalny czysty test zależności czeka na publikację tego commita.
+  Oba kanały zawierają wymagane artefakty, lecz instrukcja instaluje wyłącznie
+  Umbrellę. Czysty test potwierdził automatyczne rozwiązanie zależności.
 - Etapy 7–8: testy jednostkowe, polityki resolvera/transportu RD oraz
   integracyjny przebieg `sources.py → resolver_policy → RD transport` dla
   kodów `34/35` działają. Provider otrzymuje sanitizowany kontekst bez tokenu.
@@ -1059,10 +1059,11 @@ Real-Debrid do MwoScrapers.
 - Etap 9a: zakończony; sanitizacja sekretów, locki kanałów, discovery, czysty
   test repo, test RD, rzeczywista automatyczna zależność i końcowy playback
   mają zapisane odtwarzalne testy lub raporty.
-- Etap 10: ręczny workflow promocji exact testing candidate po SHA-256 jest
-  wdrożony i testowany lokalnie. Publiczny stable pozostaje pusty do czasu
-  przejścia finalnych bram urządzeniowych; workflow nie został jeszcze
-  uruchomiony.
+- Etap 10: zakończony. Ręczny workflow pobrał exact testing candidate
+  `0f0904b942d8be6a86b31428c491f666081157f685d62cd685a37bf7d4005cbe`,
+  zweryfikował locki i skopiował identyczne ZIP-y do publicznego stable.
+  Umbrella otrzymała tag `mwo-6.7.81.7`, a MwoScrapers tag `v0.1.2`;
+  publiczny smoke test potwierdził 23 pliki i równość sum testing/stable.
 
 Zastosowanie OCP jest bramą przeglądu: nowa polityka downstream ma powstawać
 w osobnym module z testami; zmiana kodu upstream jest dopuszczalna tylko jako
