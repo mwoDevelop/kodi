@@ -882,9 +882,9 @@ repo uwzględniono już w podstawowym planie.
 - Etapy 7–8: zakończone; polityki resolvera i transportu RD są izolowane w
   `resources/lib/downstream`, a zmiany plików upstream stanowią cienkie
   adaptery.
-- Etap 9: instalacja z repo na Kodi 21.2 w `BlueStacks1`, wykrycie i wybór
-  MwoScrapers oraz live scrape legalnego filmu testowego zostały potwierdzone.
-  Końcowa walidacja wersji `6.7.81.2`/`0.1.1` i odtwarzania trwa.
+- Etap 9: zakończony na Kodi 21.2 w `BlueStacks1`; instalacja z repo,
+  wykrycie i wybór MwoScrapers, live scrape oraz rozwiązanie przez
+  Real-Debrid i odtwarzanie legalnego filmu testowego zostały potwierdzone.
 - Etap 10 pozostaje celowo niewykonany: `stable` nie otrzyma wersji przed
   zamknięciem rzeczywistego testu resolvera i świadomą promocją dokładnie tych
   samych artefaktów z `testing`.

@@ -1,0 +1,30 @@
+{
+  "device": "BlueStacks1",
+  "kodi": "21.2",
+  "repository": {
+    "id": "repository.mwodevelop.testing",
+    "version": "1.0.0"
+  },
+  "components": {
+    "plugin.video.umbrella": "6.7.81.4",
+    "script.module.mwoscrapers": "0.1.1"
+  },
+  "provider": "torrentio",
+  "test_content": {
+    "imdb": "tt1727587",
+    "title": "Sintel",
+    "year": 2010
+  },
+  "sources_displayed": 5,
+  "resolver_attempts_before_success": 4,
+  "rd_error_codes": {
+    "34": 0,
+    "35": 0
+  },
+  "playback": {
+    "active_player": "internal video",
+    "observed_seconds": 31,
+    "total_seconds": 888
+  },
+  "result": "pass"
+}

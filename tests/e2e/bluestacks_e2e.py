@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[2]
 KODI_ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
 EXPECTED = {
-    "plugin.video.umbrella": "6.7.81.4",
+    "plugin.video.umbrella": "6.7.81.5",
     "script.module.mwoscrapers": "0.1.1",
     "repository.mwodevelop.testing": "1.0.0",
 }
@@ -109,9 +109,9 @@ def verify(args):
         if "mwodevelop.github.io/kodi" in line.lower()
         or "repository.mwodevelop.testing" in line.lower()
         or "script.module.mwoscrapers" in line.lower()
-        or "plugin.video.umbrella v6.7.81.4 installed" in line.lower()
+        or "plugin.video.umbrella v6.7.81.5 installed" in line
     ]
-    if not any("script.module.mwoscrapers v0.1.0 installed" in line for line in evidence):
+    if not any("script.module.mwoscrapers v0.1.1" in line for line in evidence):
         raise RuntimeError("Kodi log does not prove MwoScrapers installation")
     report = {
         "phase": "verified",
