@@ -1,0 +1,6 @@
+[submodule "umbrella"]
+	path = umbrella
+	url = https://github.com/mwoDevelop/umbrellaplug.github.io.git
+[submodule "mwoscrapers"]
+	path = mwoscrapers
+	url = https://github.com/mwoDevelop/script.module.mwoscrapers.git

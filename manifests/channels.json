@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "channels": {
+    "stable": {
+      "repository_addon": "repository.mwodevelop",
+      "components": []
+    },
+    "testing": {
+      "repository_addon": "repository.mwodevelop.testing",
+      "components": [
+        "plugin.video.umbrella",
+        "script.module.mwoscrapers"
+      ]
+    }
+  }
+}

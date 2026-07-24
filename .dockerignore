@@ -1,0 +1,10 @@
+.git
+.venv
+.e2e
+dist
+**/__pycache__
+**/.pytest_cache
+umbrella/.venv-downstream
+mwoscrapers/.venv
+mwoscrapers/build
+mwoscrapers/dist

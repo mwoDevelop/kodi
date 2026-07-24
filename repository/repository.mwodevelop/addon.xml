@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addon id="repository.mwodevelop"
+       name="mwoDevelop Add-ons"
+       version="1.0.0"
+       provider-name="mwoDevelop">
+  <extension point="xbmc.addon.repository" name="mwoDevelop stable">
+    <dir minversion="21.0.0" maxversion="21.99.0">
+      <info compressed="false">https://mwodevelop.github.io/kodi/stable/omega/addons.xml</info>
+      <checksum>https://mwodevelop.github.io/kodi/stable/omega/addons.xml.sha256</checksum>
+      <datadir zip="true">https://mwodevelop.github.io/kodi/stable/omega/</datadir>
+      <hashes>false</hashes>
+    </dir>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">Stable mwoDevelop add-ons</summary>
+    <description lang="en_GB">Reviewed stable releases for Kodi 21/Omega.</description>
+    <platform>all</platform>
+    <license>GPL-3.0-only</license>
+    <source>https://github.com/mwoDevelop/kodi</source>
+  </extension>
+</addon>

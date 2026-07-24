@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addon id="repository.mwodevelop.testing"
+       name="mwoDevelop Add-ons (Testing)"
+       version="1.0.0"
+       provider-name="mwoDevelop">
+  <extension point="xbmc.addon.repository" name="mwoDevelop testing">
+    <dir minversion="21.0.0" maxversion="21.99.0">
+      <info compressed="false">https://mwodevelop.github.io/kodi/testing/omega/addons.xml</info>
+      <checksum>https://mwodevelop.github.io/kodi/testing/omega/addons.xml.sha256</checksum>
+      <datadir zip="true">https://mwodevelop.github.io/kodi/testing/omega/</datadir>
+      <hashes>false</hashes>
+    </dir>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">Testing mwoDevelop add-ons</summary>
+    <description lang="en_GB">Pre-release channel for reproducible integration testing.</description>
+    <platform>all</platform>
+    <license>GPL-3.0-only</license>
+    <source>https://github.com/mwoDevelop/kodi</source>
+  </extension>
+</addon>
