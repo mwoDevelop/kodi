@@ -55,6 +55,44 @@ def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def log_line_count(adb, serial):
+    payload = shell(
+        adb,
+        serial,
+        "wc -l < '%s/temp/kodi.log'" % KODI_ROOT,
+        check=False,
+    ).strip()
+    return int(payload) if payload.isdigit() else 0
+
+
+def playback_log_evidence(log_text, title, imdb):
+    lines = log_text.splitlines()
+    candidates = [
+        index
+        for index, line in enumerate(lines)
+        if "VideoPlayer::OpenFile: plugin://plugin.video.umbrella/" in line
+        and ("title=%s" % title) in line
+        and ("imdb=%s" % imdb) in line
+    ]
+    if not candidates:
+        raise RuntimeError("Kodi log does not contain the requested Umbrella playback")
+    playback_lines = lines[candidates[-1] :]
+    markers = (
+        "Creating InputStream",
+        "Creating Demuxer",
+        "Using codec:",
+        "Successful opened audio decoder",
+        "CVideoPlayer::CloseFile()",
+    )
+    evidence = ["VideoPlayer::OpenFile title=%s imdb=%s" % (title, imdb)]
+    for marker in markers:
+        match = next((line for line in playback_lines if marker in line), None)
+        if not match:
+            raise RuntimeError("Kodi playback log is missing marker: %s" % marker)
+        evidence.append(match)
+    return evidence
+
+
 def prepare(args):
     backup = Path(args.backup_dir).resolve()
     backup.mkdir(parents=True, exist_ok=False)
@@ -76,8 +114,17 @@ def prepare(args):
         addon_id: addon_version(args.adb, args.serial, addon_id)
         for addon_id in EXPECTED
     }
+    log_lines_before = log_line_count(args.adb, args.serial)
     (backup / "prepare-state.json").write_text(
-        json.dumps({"installed_before": before}, indent=2, sort_keys=True) + "\n",
+        json.dumps(
+            {
+                "installed_before": before,
+                "log_lines_before": log_lines_before,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
         encoding="utf-8",
     )
     if not args.allow_existing and any(
@@ -103,6 +150,7 @@ def prepare(args):
         "repository_zip_sha256": sha256(package),
         "backup": str(backup),
         "installed_before": before,
+        "log_lines_before": log_lines_before,
     }
     print(json.dumps(report, indent=2, sort_keys=True))
     print(
@@ -136,12 +184,17 @@ def verify(args):
     log_path = backup / "kodi-after-install.log"
     run(args.adb, args.serial, "pull", KODI_ROOT + "/temp/kodi.log", str(log_path))
     log_text = log_path.read_text(encoding="utf-8", errors="replace")
+    log_lines = log_text.splitlines()
+    marker = int(prepare_state.get("log_lines_before", 0))
+    if marker > len(log_lines):
+        raise RuntimeError("Kodi log rotated after prepare; repeat the clean test")
+    test_lines = log_lines[marker:]
     evidence = [
         line
-        for line in log_text.splitlines()
+        for line in test_lines
         if "mwodevelop.github.io/kodi" in line.lower()
         or "repository.mwodevelop.testing" in line.lower()
-        or "script.module.mwoscrapers" in line.lower()
+        or "script.module.mwoscrapers v0.1.2 installed" in line
         or "plugin.video.umbrella v6.7.81.7 installed" in line
     ]
     if not any("script.module.mwoscrapers v0.1.2" in line for line in evidence):
@@ -165,9 +218,54 @@ def verify(args):
     print(json.dumps(report, indent=2, sort_keys=True))
 
 
+def verify_playback(args):
+    result = Path(args.result).resolve()
+    if not result.is_file():
+        raise RuntimeError("installation result does not exist: %s" % result)
+    report = json.loads(result.read_text(encoding="utf-8"))
+    if not report.get("automatic_dependency_proven"):
+        raise RuntimeError("playback requires a successful clean dependency test")
+
+    backup = Path(args.backup_dir).resolve()
+    log_path = backup / "kodi-final-playback.log"
+    run(args.adb, args.serial, "pull", KODI_ROOT + "/temp/kodi.log", str(log_path))
+    log_text = log_path.read_text(encoding="utf-8", errors="replace")
+    evidence = playback_log_evidence(log_text, args.title, args.imdb)
+    install_evidence = [
+        line
+        for line in report.get("repository_log_evidence", [])
+        if "script.module.mwoscrapers v0.1.2 installed" in line
+        or "plugin.video.umbrella v6.7.81.7 installed" in line
+    ]
+    report.update(
+        {
+            "phase": "verified_playback",
+            "provider": args.provider,
+            "sources_displayed": args.sources,
+            "test_content": {
+                "title": args.title,
+                "year": args.year,
+                "imdb": args.imdb,
+            },
+            "playback": {
+                "observed_seconds": args.observed_seconds,
+                "result": "pass",
+                "log_evidence": evidence,
+            },
+            "repository_log_evidence": install_evidence,
+        }
+    )
+    result.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    print(json.dumps(report, indent=2, sort_keys=True))
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--phase", choices=("prepare", "verify"), required=True)
+    parser.add_argument(
+        "--phase", choices=("prepare", "verify", "playback"), required=True
+    )
     parser.add_argument("--adb", required=True)
     parser.add_argument("--serial", default="127.0.0.1:5556")
     parser.add_argument("--backup-dir", required=True)
@@ -177,8 +275,19 @@ def main():
         action="store_true",
         help="permit a regression run that does not prove dependency installation",
     )
+    parser.add_argument("--title", default="Sintel")
+    parser.add_argument("--year", type=int, default=2010)
+    parser.add_argument("--imdb", default="tt1727587")
+    parser.add_argument("--provider", default="torrentio")
+    parser.add_argument("--sources", type=int, default=0)
+    parser.add_argument("--observed-seconds", type=int, default=0)
     args = parser.parse_args()
-    (prepare if args.phase == "prepare" else verify)(args)
+    if args.phase == "prepare":
+        prepare(args)
+    elif args.phase == "verify":
+        verify(args)
+    else:
+        verify_playback(args)
 
 
 if __name__ == "__main__":

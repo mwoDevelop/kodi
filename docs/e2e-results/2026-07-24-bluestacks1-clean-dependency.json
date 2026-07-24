@@ -1,0 +1,41 @@
+{
+  "automatic_dependency_proven": true,
+  "backup": "/home/mwo/projects/kodi/.device-backups/bluestacks1-clean-20260724",
+  "device": "BlueStacks1",
+  "installed": {
+    "plugin.video.umbrella": "6.7.81.7",
+    "repository.mwodevelop.testing": "1.0.0",
+    "script.module.mwoscrapers": "0.1.2"
+  },
+  "installed_before": {
+    "plugin.video.umbrella": null,
+    "repository.mwodevelop.testing": "1.0.0",
+    "script.module.mwoscrapers": null
+  },
+  "kodi": "21.3",
+  "phase": "verified_playback",
+  "playback": {
+    "log_evidence": [
+      "VideoPlayer::OpenFile title=Sintel imdb=tt1727587",
+      "2026-07-24 17:13:29.471 T:20751    info <general>: Creating InputStream",
+      "2026-07-24 17:13:30.012 T:20751    info <general>: Creating Demuxer",
+      "2026-07-24 17:13:30.722 T:20751    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Using codec: OMX.qcom.video.decoder.avc",
+      "2026-07-24 17:13:30.724 T:20751    info <general>: CDVDAudioCodecFFmpeg::Open() Successful opened audio decoder aac",
+      "2026-07-24 17:17:51.657 T:18659    info <general>: CVideoPlayer::CloseFile()"
+    ],
+    "observed_seconds": 50,
+    "result": "pass"
+  },
+  "provider": "torrentio",
+  "repository_log_evidence": [
+    "2026-07-24 17:07:02.020 T:20239    info <general>: CAddonMgr::FindAddon: script.module.mwoscrapers v0.1.2 installed",
+    "2026-07-24 17:07:02.641 T:20239    info <general>: CAddonMgr::FindAddon: plugin.video.umbrella v6.7.81.7 installed"
+  ],
+  "serial": "127.0.0.1:5556",
+  "sources_displayed": 5,
+  "test_content": {
+    "imdb": "tt1727587",
+    "title": "Sintel",
+    "year": 2010
+  }
+}

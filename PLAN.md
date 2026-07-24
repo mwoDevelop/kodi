@@ -1,6 +1,6 @@
 # Plan projektu Kodi: Umbrella, MwoScrapers i wspólne repozytorium dodatków
 
-Status: bramy kodowe wdrożone; publikacja finalnego testing i E2E BlueStacks w toku
+Status: finalny testing i E2E BlueStacks przeszły; promocja stable w toku
 Data rozpoznania: 2026-07-24
 Konto docelowe GitHub: `mwoDevelop`
 Lokalny katalog nadrzędny: `/home/mwo/projects/kodi`
@@ -1051,13 +1051,14 @@ Real-Debrid do MwoScrapers.
 - Etapy 7–8: testy jednostkowe, polityki resolvera/transportu RD oraz
   integracyjny przebieg `sources.py → resolver_policy → RD transport` dla
   kodów `34/35` działają. Provider otrzymuje sanitizowany kontekst bez tokenu.
-- Etap 9: wcześniejszy live scrape, rozwiązanie Real-Debrid i odtwarzanie
-  legalnego filmu testowego zostały potwierdzone. Kodi w `BlueStacks1`
-  zaktualizowano do 21.3, stare Umbrella/MwoScrapers usunięto z zachowaniem
-  ustawień; finalna instalacja od zera i playback wersji z locka są następne.
-- Etap 9a: bramy kodowe — sanitizacja sekretów, locki kanałów, discovery,
-  czysty test repo w symulowanym profilu oraz test RD — są wdrożone.
-  Pozostają rzeczywisty czysty test BlueStacks i końcowy playback.
+- Etap 9: zakończony na Kodi 21.3 w `BlueStacks1`. Ze stanu bez Umbrelli i
+  MwoScrapers zainstalowano wyłącznie Umbrellę 6.7.81.7 z publicznego testing;
+  Kodi automatycznie dobrał MwoScrapers 0.1.2. Następnie Torrentio zwróciło
+  pięć źródeł, Real-Debrid rozwiązał wybrane źródło, a legalny film testowy
+  `Sintel` był odtwarzany co najmniej 50 sekund.
+- Etap 9a: zakończony; sanitizacja sekretów, locki kanałów, discovery, czysty
+  test repo, test RD, rzeczywista automatyczna zależność i końcowy playback
+  mają zapisane odtwarzalne testy lub raporty.
 - Etap 10: ręczny workflow promocji exact testing candidate po SHA-256 jest
   wdrożony i testowany lokalnie. Publiczny stable pozostaje pusty do czasu
   przejścia finalnych bram urządzeniowych; workflow nie został jeszcze
