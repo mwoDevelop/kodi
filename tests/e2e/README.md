@@ -54,5 +54,19 @@ python tests/e2e/bluestacks_e2e.py \
   --result docs/e2e-results/bluestacks1.json
 ```
 
-This intentional two-phase design respects Android scoped storage and tests
+After a controlled Sintel search, source selection, at least 30 seconds of
+playback, and stopping Kodi's player, validate the media pipeline from the
+redacted-safe log markers:
+
+```bash
+python tests/e2e/bluestacks_e2e.py \
+  --phase playback \
+  --adb /path/to/platform-tools/adb \
+  --backup-dir .device-backups/bluestacks1-YYYYMMDD-HHMMSS \
+  --result docs/e2e-results/bluestacks1.json \
+  --sources 5 \
+  --observed-seconds 30
+```
+
+This intentional three-phase design respects Android scoped storage and tests
 the real Kodi repository path instead of injecting files into Kodi's profile.
