@@ -44,7 +44,8 @@ The clean dependency test requires Umbrella and MwoScrapers to be absent before
 `prepare`; the script records that state after backing up the existing profile.
 Install the copied repository ZIP and only Umbrella through Kodi's own add-on
 manager, as printed by the script. Then validate installed IDs, versions,
-automatic MwoScrapers installation, and the Kodi log:
+their owning repository (`origin` in Kodi's add-on database), automatic
+MwoScrapers installation, and the Kodi log:
 
 ```bash
 python tests/e2e/bluestacks_e2e.py \
@@ -53,6 +54,11 @@ python tests/e2e/bluestacks_e2e.py \
   --backup-dir .device-backups/bluestacks1-YYYYMMDD-HHMMSS \
   --result docs/e2e-results/bluestacks1.json
 ```
+
+The testing repository is expected by default. To exercise the production
+channel, pass `--expected-origin repository.mwodevelop` to both `prepare` and
+`verify`. This also selects the stable repository ZIP and fails if either
+component remains attached to the testing channel.
 
 After a controlled Sintel search, source selection, at least 30 seconds of
 playback, and stopping Kodi's player, validate the media pipeline from the

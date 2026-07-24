@@ -1,0 +1,32 @@
+{
+  "backup": "/home/mwo/projects/kodi/.device-backups/bluestacks1-after-stable-refresh-20260724",
+  "device": "BlueStacks1",
+  "installed": {
+    "plugin.video.umbrella": "6.7.81.7",
+    "repository.mwodevelop": "1.0.0",
+    "script.module.mwoscrapers": "0.1.2"
+  },
+  "installed_origins": {
+    "plugin.video.umbrella": "repository.mwodevelop",
+    "repository.mwodevelop": "repository.mwodevelop",
+    "script.module.mwoscrapers": "repository.mwodevelop"
+  },
+  "kodi": "21.3",
+  "phase": "stable_refresh_verified_playback",
+  "playback": {
+    "audio_decoder": "aac",
+    "observed_seconds": 74,
+    "result": "pass",
+    "video_decoder": "OMX.qcom.video.decoder.avc"
+  },
+  "provider": "torrentio",
+  "resolver": "real-debrid",
+  "serial": "127.0.0.1:5556",
+  "sources_displayed": 5,
+  "test_content": {
+    "imdb": "tt1727587",
+    "title": "Sintel",
+    "year": 2010
+  },
+  "testing_repository_removed": true
+}
