@@ -12,17 +12,24 @@ python3 -m pytest
 The build is deterministic: independent stable/testing locks, component
 commits, file contents, and fixed ZIP metadata completely define `dist/`.
 
+## Install stable
+
+Install `repository.mwodevelop-1.0.0.zip` from:
+
+<https://mwodevelop.github.io/kodi/repository.mwodevelop-1.0.0.zip>
+
+Open `mwoDevelop Add-ons`, then install Umbrella only. Kodi automatically
+installs MwoScrapers as its required technical dependency.
+
 ## Install testing
 
 Install `repository.mwodevelop.testing-1.0.0.zip` from:
 
 <https://mwodevelop.github.io/kodi/repository.mwodevelop.testing-1.0.0.zip>
 
-The testing repository contains `plugin.video.umbrella` and
-`script.module.mwoscrapers`. The stable repository is intentionally empty
-until the security, independent-lock, BlueStacks, and clean-profile E2E gates
-pass. Install Umbrella only; Kodi installs MwoScrapers as its required
-technical dependency.
+Use testing only for release candidates. Both channel indexes contain
+`plugin.video.umbrella` and `script.module.mwoscrapers`, but the user-facing
+installation remains Umbrella only.
 
 ## Reproducible E2E
 
