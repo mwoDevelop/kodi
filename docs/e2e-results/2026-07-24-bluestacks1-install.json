@@ -1,0 +1,17 @@
+{
+  "backup": "/home/mwo/projects/kodi/.device-backups/bluestacks1-20260724-e2e",
+  "device": "BlueStacks1",
+  "installed": {
+    "plugin.video.umbrella": "6.7.81.5",
+    "repository.mwodevelop.testing": "1.0.0",
+    "script.module.mwoscrapers": "0.1.1"
+  },
+  "kodi": "21.2",
+  "phase": "verified",
+  "repository_log_evidence": [
+    "2026-07-24 15:35:02.048 T:16268    info <general>: CAddonMgr::FindAddons: plugin.video.umbrella v6.7.81.5 installed",
+    "2026-07-24 15:35:02.049 T:16268    info <general>: CAddonMgr::FindAddons: repository.mwodevelop.testing v1.0.0 installed",
+    "2026-07-24 15:35:02.050 T:16268    info <general>: CAddonMgr::FindAddons: script.module.mwoscrapers v0.1.1 installed"
+  ],
+  "serial": "127.0.0.1:5556"
+}
