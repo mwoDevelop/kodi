@@ -26,3 +26,30 @@ Container form:
 The container wrapper requires a running Docker daemon. CI uses the native
 script in a fresh GitHub runner, which provides the same clean-filesystem
 property without requiring Docker-in-Docker.
+
+## BlueStacks1 / Kodi 21.2
+
+Build `dist`, connect ADB to the `BlueStacks1` instance, then prepare a
+recoverable device test:
+
+```bash
+python tests/e2e/bluestacks_e2e.py \
+  --phase prepare \
+  --adb /path/to/platform-tools/adb \
+  --backup-dir .device-backups/bluestacks1-$(date +%Y%m%d-%H%M%S)
+```
+
+Install the copied repository ZIP and Umbrella through Kodi's own add-on
+manager, as printed by the script. Then validate installed IDs, versions, and
+the Kodi log:
+
+```bash
+python tests/e2e/bluestacks_e2e.py \
+  --phase verify \
+  --adb /path/to/platform-tools/adb \
+  --backup-dir .device-backups/bluestacks1-YYYYMMDD-HHMMSS \
+  --result docs/e2e-results/bluestacks1.json
+```
+
+This intentional two-phase design respects Android scoped storage and tests
+the real Kodi repository path instead of injecting files into Kodi's profile.

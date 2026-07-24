@@ -1,8 +1,8 @@
 # Plan projektu Kodi: Umbrella, MwoScrapers i wspólne repozytorium dodatków
 
-Status: po audycie zewnętrznym; gotowy do zatwierdzenia Etapu 0  
-Data rozpoznania: 2026-07-24  
-Konto docelowe GitHub: `mwoDevelop`  
+Status: Etapy 0–8 wdrożone; kanał testing i rzeczywisty E2E Kodi w walidacji
+Data rozpoznania: 2026-07-24
+Konto docelowe GitHub: `mwoDevelop`
 Lokalny katalog nadrzędny: `/home/mwo/projects/kodi`
 
 ## 1. Cel i decyzja architektoniczna
@@ -455,7 +455,8 @@ zwrócą typy oczekiwane przez upstream.
 Początkowe bezpieczniki, następnie strojenie na podstawie pomiaru:
 
 - maksymalnie jedno równoległe autoryzowane żądanie RD na konto;
-- minimalny odstęp 250 ms pomiędzy rozpoczęciem żądań;
+- minimalny odstęp 1 s pomiędzy rozpoczęciem żądań, zgodnie z ograniczeniem
+  opisanym w istniejącym kliencie Umbrelli;
 - najwyżej jedna ponowna próba żądania po kodzie `34`;
 - `Retry-After` respektowany do 30 s; większa wartość kończy bieżącą akcję
   kontrolowanym komunikatem;
@@ -869,3 +870,26 @@ Opcjonalnych rozszerzeń SBOM/CycloneDX i osobnego canary nie wpisano jako
 warunku pierwszego wydania; można je dodać po uruchomieniu deterministycznej
 publikacji. Przechowywanie Git blob SHA, patch-id oraz kontrolę odświeżenia
 repo uwzględniono już w podstawowym planie.
+
+## 17. Stan realizacji 2026-07-24
+
+- Etapy 0–4: zakończone; kontrakt, pochodzenie, importer, testy bezpieczeństwa
+  i cykliczny audyt upstreamów działają.
+- Etap 5: zamiast kopiowania kodu z niepewnym łańcuchem licencyjnym wdrożono
+  dwa oryginalne adaptery JSON: Torrentio domyślnie i Comet jako opt-in.
+- Etap 6: zakończony; deterministyczny generator, dwa kanały, submoduły,
+  manifest pochodzenia i GitHub Pages działają.
+- Etapy 7–8: zakończone; polityki resolvera i transportu RD są izolowane w
+  `resources/lib/downstream`, a zmiany plików upstream stanowią cienkie
+  adaptery.
+- Etap 9: instalacja z repo na Kodi 21.2 w `BlueStacks1`, wykrycie i wybór
+  MwoScrapers oraz live scrape legalnego filmu testowego zostały potwierdzone.
+  Końcowa walidacja wersji `6.7.81.2`/`0.1.1` i odtwarzania trwa.
+- Etap 10 pozostaje celowo niewykonany: `stable` nie otrzyma wersji przed
+  zamknięciem rzeczywistego testu resolvera i świadomą promocją dokładnie tych
+  samych artefaktów z `testing`.
+
+Zastosowanie OCP jest bramą przeglądu: nowa polityka downstream ma powstawać
+w osobnym module z testami; zmiana kodu upstream jest dopuszczalna tylko jako
+minimalne wywołanie tego rozszerzenia. Synchronizacja odtwarza mały stos
+patchy na czystym `upstream-master` i zatrzymuje się przy konflikcie.

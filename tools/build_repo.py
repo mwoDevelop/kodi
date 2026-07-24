@@ -70,6 +70,22 @@ def parse_addon(path):
     return root, addon_id, version
 
 
+def publish_assets(addon, source, target):
+    """Publish metadata assets next to the add-on ZIP, as Kodi expects."""
+    for asset in addon.findall("./extension/assets/*"):
+        relative = PurePosixPath((asset.text or "").strip())
+        if not relative.parts:
+            continue
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError("unsafe add-on asset path: %s" % relative)
+        source_path = source.joinpath(*relative.parts)
+        if not source_path.is_file() or source_path.is_symlink():
+            raise ValueError("missing add-on asset: %s" % source_path)
+        output_path = target.joinpath(*relative.parts)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source_path, output_path)
+
+
 def render_addons(addons):
     body = [b'<?xml version="1.0" encoding="UTF-8"?>\n<addons>\n']
     for addon in sorted(addons, key=lambda node: node.attrib["id"]):
@@ -153,8 +169,14 @@ def build(output):
         addons = [copy_repository_addon(config["repository_addon"], channel_root, output)]
         for addon_id in config["components"]:
             addon, version, files = built[addon_id]
-            target = channel_root / addon_id / ("%s-%s.zip" % (addon_id, version))
+            addon_root = channel_root / addon_id
+            target = addon_root / ("%s-%s.zip" % (addon_id, version))
             write_deterministic_zip(target, addon_id, files)
+            publish_assets(
+                addon,
+                ROOT / components[addon_id]["source"],
+                addon_root,
+            )
             addons.append(addon)
         validate_dependency_closure(addons)
         index = render_addons(addons)

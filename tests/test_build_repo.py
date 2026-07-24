@@ -51,3 +51,10 @@ def test_provenance_matches_submodule_locks(tmp_path):
     components = json.loads(Path("manifests/components.json").read_text())["components"]
     for addon_id, data in provenance["components"].items():
         assert data["commit"] == components[addon_id]["commit"]
+
+
+def test_metadata_assets_are_published_next_to_zip(tmp_path):
+    output = build(tmp_path / "repo")
+    umbrella = output / "testing/omega/plugin.video.umbrella"
+    assert (umbrella / "icon.png").is_file()
+    assert (umbrella / "fanart.jpg").is_file()
