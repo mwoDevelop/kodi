@@ -10,16 +10,18 @@ import argparse
 import hashlib
 import json
 import re
+import sqlite3
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
 KODI_ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
-EXPECTED = {
+COMPONENT_VERSIONS = {
     "plugin.video.umbrella": "6.7.81.7",
     "script.module.mwoscrapers": "0.1.2",
-    "repository.mwodevelop.testing": "1.0.0",
 }
+REPOSITORY_VERSION = "1.0.0"
+DEFAULT_ORIGIN = "repository.mwodevelop.testing"
 
 
 def run(adb, serial, *args, check=True, capture=False):
@@ -41,6 +43,34 @@ def addon_version(adb, serial, addon_id):
     payload = shell(adb, serial, "sed -n '1,8p' '%s'" % path, check=False)
     match = re.search(r'<addon[^>]+version="([^"]+)"', payload.replace("\n", " "))
     return match.group(1) if match else None
+
+
+def expected_versions(origin):
+    return {**COMPONENT_VERSIONS, origin: REPOSITORY_VERSION}
+
+
+def addon_origins(database, addon_ids):
+    placeholders = ",".join("?" for _ in addon_ids)
+    with sqlite3.connect(database) as connection:
+        rows = connection.execute(
+            "SELECT addonID, origin FROM installed "
+            "WHERE addonID IN (%s)" % placeholders,
+            tuple(addon_ids),
+        )
+        return dict(rows)
+
+
+def pull_addons_database(args, destination):
+    remote = shell(
+        args.adb,
+        args.serial,
+        "ls '%s/userdata/Database'/Addons*.db 2>/dev/null | sort -V | tail -1"
+        % KODI_ROOT,
+        check=False,
+    ).strip()
+    if not remote:
+        raise RuntimeError("Kodi Addons database was not found")
+    run(args.adb, args.serial, "pull", remote, str(destination))
 
 
 def kodi_version(adb, serial):
@@ -112,7 +142,7 @@ def prepare(args):
     run(args.adb, args.serial, "pull", database, str(backup / "Database"))
     before = {
         addon_id: addon_version(args.adb, args.serial, addon_id)
-        for addon_id in EXPECTED
+        for addon_id in expected_versions(args.expected_origin)
     }
     log_lines_before = log_line_count(args.adb, args.serial)
     (backup / "prepare-state.json").write_text(
@@ -136,7 +166,7 @@ def prepare(args):
             "backup was created at %s" % backup
         )
 
-    package = ROOT / "dist/repository.mwodevelop.testing-1.0.0.zip"
+    package = ROOT / ("dist/%s-%s.zip" % (args.expected_origin, REPOSITORY_VERSION))
     if not package.is_file():
         raise RuntimeError("build dist first with tools/build_repo.py")
     remote = "/sdcard/Download/" + package.name
@@ -154,19 +184,22 @@ def prepare(args):
     }
     print(json.dumps(report, indent=2, sort_keys=True))
     print(
-        "\nIn Kodi select: Add-ons -> Install from zip file -> External storage "
-        "-> Download -> repository.mwodevelop.testing-1.0.0.zip; then install "
-        "Umbrella from mwoDevelop Add-ons (Testing). Run this script with "
-        "--phase verify afterwards."
+        (
+            "\nIn Kodi select: Add-ons -> Install from zip file -> External "
+            "storage -> Download -> %s; then install Umbrella from that "
+            "repository. Run this script with --phase verify afterwards."
+        )
+        % package.name
     )
 
 
 def verify(args):
+    expected = expected_versions(args.expected_origin)
     versions = {
         addon_id: addon_version(args.adb, args.serial, addon_id)
-        for addon_id in EXPECTED
+        for addon_id in expected
     }
-    if versions != EXPECTED:
+    if versions != expected:
         raise RuntimeError("unexpected installed versions: %r" % versions)
 
     backup = Path(args.backup_dir).resolve()
@@ -181,6 +214,15 @@ def verify(args):
     )
     if not args.allow_existing and not clean_dependency_test:
         raise RuntimeError("prepare phase was not a clean dependency test")
+    database_path = backup / "addons-after-install.db"
+    pull_addons_database(args, database_path)
+    origins = addon_origins(database_path, expected)
+    expected_origins = {addon_id: args.expected_origin for addon_id in expected}
+    if origins != expected_origins:
+        raise RuntimeError(
+            "unexpected installed origins: %r (expected %r)"
+            % (origins, expected_origins)
+        )
     log_path = backup / "kodi-after-install.log"
     run(args.adb, args.serial, "pull", KODI_ROOT + "/temp/kodi.log", str(log_path))
     log_text = log_path.read_text(encoding="utf-8", errors="replace")
@@ -193,7 +235,7 @@ def verify(args):
         line
         for line in test_lines
         if "mwodevelop.github.io/kodi" in line.lower()
-        or "repository.mwodevelop.testing" in line.lower()
+        or args.expected_origin in line.lower()
         or "script.module.mwoscrapers v0.1.2 installed" in line
         or "plugin.video.umbrella v6.7.81.7 installed" in line
     ]
@@ -205,6 +247,7 @@ def verify(args):
         "serial": args.serial,
         "kodi": kodi_version(args.adb, args.serial),
         "installed": versions,
+        "installed_origins": origins,
         "installed_before": before,
         "automatic_dependency_proven": clean_dependency_test,
         "repository_log_evidence": evidence[-60:],
@@ -270,6 +313,12 @@ def main():
     parser.add_argument("--serial", default="127.0.0.1:5556")
     parser.add_argument("--backup-dir", required=True)
     parser.add_argument("--result", default="docs/e2e-results/bluestacks1.json")
+    parser.add_argument(
+        "--expected-origin",
+        default=DEFAULT_ORIGIN,
+        choices=("repository.mwodevelop", "repository.mwodevelop.testing"),
+        help="repository ID that must own the repository and installed components",
+    )
     parser.add_argument(
         "--allow-existing",
         action="store_true",
