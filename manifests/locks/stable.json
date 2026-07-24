@@ -1,5 +1,17 @@
 {
-  "schema": 1,
   "channel": "stable",
-  "components": {}
+  "components": {
+    "plugin.video.umbrella": {
+      "commit": "bae403e7b32059fa3fa51a9158c9c1a90bef2f18",
+      "version": "6.7.81.7",
+      "zip_sha256": "faaf7d6e38ae1a42ecd020bcf0b953f4eca11c944d5a7f3f6a0baec122315d2b"
+    },
+    "script.module.mwoscrapers": {
+      "commit": "3e124356b315dd5babf787b1cfea0ece7bc52e1c",
+      "provider_api": 1,
+      "version": "0.1.2",
+      "zip_sha256": "13b3d77eb2b31458d9e2cf39f9f31b0a3d619292e9117c06b18fd82b68687491"
+    }
+  },
+  "schema": 1
 }
