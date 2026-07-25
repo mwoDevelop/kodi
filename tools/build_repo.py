@@ -252,7 +252,13 @@ def sha256(path):
 
 def validate_dependency_closure(addons):
     ids = {addon.attrib["id"] for addon in addons}
-    platform = {"xbmc.python", "script.module.requests", "plugin.video.youtube"}
+    platform = {
+        "xbmc.python",
+        "inputstream.adaptive",
+        "plugin.video.youtube",
+        "script.module.requests",
+        "script.module.six",
+    }
     for addon in addons:
         for dependency in addon.findall("./requires/import"):
             dependency_id = dependency.attrib["addon"]

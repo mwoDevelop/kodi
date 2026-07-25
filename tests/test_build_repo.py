@@ -35,6 +35,7 @@ def test_testing_index_and_dependency_closure(tmp_path):
     ids = {addon.attrib["id"] for addon in index}
     assert ids == {
         "plugin.video.umbrella",
+        "plugin.video.watchnixtoons2.mwodevelop",
         "repository.mwodevelop.testing",
         "script.module.mwoscrapers",
         "script.mwoscrapers",
@@ -44,6 +45,14 @@ def test_testing_index_and_dependency_closure(tmp_path):
     manager = index.find("./addon[@id='script.mwoscrapers']")
     assert manager.find("./requires/import[@addon='script.module.mwoscrapers']") is not None
     assert manager.find("./extension[@point='xbmc.python.script']") is not None
+    watchnixtoons = index.find(
+        "./addon[@id='plugin.video.watchnixtoons2.mwodevelop']"
+    )
+    assert watchnixtoons.attrib["version"] == "0.25.1"
+    assert watchnixtoons.find(
+        "./requires/import[@addon='inputstream.adaptive']"
+    ) is not None
+    assert watchnixtoons.find("./requires/import[@addon='script.module.six']") is not None
 
 
 def test_home_page_catalogs_both_channels(tmp_path):
@@ -57,6 +66,7 @@ def test_home_page_catalogs_both_channels(tmp_path):
     assert "Umbrella" in home
     assert "MwoScrapers" in home
     assert "MwoScrapers Manager" in home
+    assert "WatchNixtoons2 (mwoDevelop)" in home
 
 
 def test_zips_have_single_safe_root(tmp_path):
@@ -109,3 +119,8 @@ def test_metadata_assets_are_published_next_to_zip(tmp_path):
     umbrella = output / "testing/omega/plugin.video.umbrella"
     assert (umbrella / "icon.png").is_file()
     assert (umbrella / "fanart.jpg").is_file()
+    watchnixtoons = (
+        output / "testing/omega/plugin.video.watchnixtoons2.mwodevelop"
+    )
+    assert (watchnixtoons / "icon.png").is_file()
+    assert (watchnixtoons / "fanart.jpg").is_file()

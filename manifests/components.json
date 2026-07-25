@@ -1,6 +1,11 @@
 {
   "schema": 1,
   "components": {
+    "plugin.video.watchnixtoons2.mwodevelop": {
+      "repository": "mwoDevelop/ch.repo",
+      "source": "watchnixtoons2/mwodevelop/plugin.video.watchnixtoons2.mwodevelop",
+      "include": ["*"]
+    },
     "plugin.video.umbrella": {
       "repository": "mwoDevelop/umbrellaplug.github.io",
       "source": "umbrella/omega/plugin.video.umbrella",
