@@ -2,6 +2,7 @@ import contextlib
 import functools
 import http.server
 import importlib
+import io
 import sys
 import threading
 from pathlib import Path
@@ -75,3 +76,19 @@ def test_installable_repository_and_provider_contract(tmp_path):
     ]
     for target in targets:
         compile(target.read_bytes(), str(target), "exec")
+
+
+def test_kodi_file_source_exposes_installable_repository_zip(tmp_path):
+    output = build(tmp_path / "dist")
+    with repository_server(output) as base:
+        listing = urlopen(base + "repo", timeout=5).read().decode("utf-8")
+        repository_zip = "repository.mwodevelop-1.0.0.zip"
+        assert 'href="%s"' % repository_zip in listing
+        payload = urlopen(base + "repo/" + repository_zip, timeout=5).read()
+
+    with ZipFile(io.BytesIO(payload)) as archive:
+        addon = ElementTree.fromstring(
+            archive.read("repository.mwodevelop/addon.xml")
+        )
+    assert addon.attrib["id"] == "repository.mwodevelop"
+    assert addon.attrib["version"] == "1.0.0"

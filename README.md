@@ -15,7 +15,14 @@ commits, file contents, and fixed ZIP metadata completely define `dist/`.
 
 ## Install stable
 
-Install `repository.mwodevelop-1.0.0.zip` from:
+Add this address as a Kodi file source:
+
+<https://mwodevelop.github.io/kodi/repo>
+
+Then use `Add-ons -> Install from zip file`, open that source and install
+`repository.mwodevelop-1.0.0.zip`.
+
+The repository ZIP is also available directly from:
 
 <https://mwodevelop.github.io/kodi/repository.mwodevelop-1.0.0.zip>
 

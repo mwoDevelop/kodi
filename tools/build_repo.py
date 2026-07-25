@@ -246,6 +246,30 @@ def render_home(catalog):
     ).encode("utf-8")
 
 
+def render_repository_source(repository):
+    repository_zip = "%s-%s.zip" % (
+        repository["id"],
+        repository["version"],
+    )
+    return (
+        """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>mwoDevelop Kodi repository</title>
+</head>
+<body>
+  <a href="%s">%s</a>
+</body>
+</html>
+"""
+        % (
+            html.escape(repository_zip, quote=True),
+            html.escape(repository_zip),
+        )
+    ).encode("utf-8")
+
+
 def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -384,6 +408,20 @@ def build(output, lock_overrides=None):
         json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     (output / "index.html").write_bytes(render_home(catalog))
+    source_root = output / "repo"
+    source_root.mkdir()
+    stable_repository = catalog["stable"]["repository"]
+    stable_repository_zip = "%s-%s.zip" % (
+        stable_repository["id"],
+        stable_repository["version"],
+    )
+    shutil.copyfile(
+        output / stable_repository_zip,
+        source_root / stable_repository_zip,
+    )
+    (source_root / "index.html").write_bytes(
+        render_repository_source(stable_repository)
+    )
     manifest_lines = []
     for path in sorted(output.rglob("*")):
         if path.is_file() and path.name != "artifact-manifest.sha256":

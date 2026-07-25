@@ -71,6 +71,17 @@ def test_home_page_catalogs_both_channels(tmp_path):
     assert "WatchNixtoons2 (mwoDevelop)" in home
 
 
+def test_kodi_file_source_lists_stable_repository_zip(tmp_path):
+    output = build(tmp_path / "repo")
+    repository_zip = "repository.mwodevelop-1.0.0.zip"
+    source = (output / "repo/index.html").read_text(encoding="utf-8")
+
+    assert 'href="%s"' % repository_zip in source
+    assert (output / "repo" / repository_zip).read_bytes() == (
+        output / repository_zip
+    ).read_bytes()
+
+
 def test_zips_have_single_safe_root(tmp_path):
     output = build(tmp_path / "repo")
     for path in output.rglob("*.zip"):
