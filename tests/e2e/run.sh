@@ -13,6 +13,11 @@ fi
 
 rm -rf "$e2e_root"
 mkdir -p "$e2e_root"
+if [[ -z "${KODI_COMPONENT_ROOT:-}" ]]; then
+  export KODI_COMPONENT_ROOT="$e2e_root/locked-components"
+  "$python_bin" "$repo_root/tools/checkout_locked_components.py" \
+    --output "$KODI_COMPONENT_ROOT"
+fi
 "$python_bin" "$repo_root/tools/build_repo.py" --output "$first"
 "$python_bin" "$repo_root/tools/build_repo.py" --output "$second"
 diff -r "$first" "$second"

@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mwodevelop.github.io/kodi/schemas/upstreams.schema.json",
+  "title": "mwoDevelop upstream synchronization manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schedule_slots",
+    "components"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "schedule_slots": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "cron"
+        ],
+        "properties": {
+          "cron": {
+            "type": "string",
+            "minLength": 9
+          }
+        }
+      }
+    },
+    "components": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "adapter",
+          "schedule_slot",
+          "local_path",
+          "target",
+          "version_policy"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "adapter": {
+            "enum": [
+              "git_patch_stack",
+              "vendored_kodi_addon",
+              "provider_feed",
+              "kodi_repository"
+            ]
+          },
+          "schedule_slot": {
+            "type": "string",
+            "minLength": 1
+          },
+          "local_path": {
+            "type": "string",
+            "pattern": "^[a-z0-9._/-]+$"
+          },
+          "target": {
+            "$ref": "#/$defs/gitEndpoint"
+          },
+          "upstream": {
+            "$ref": "#/$defs/gitEndpoint"
+          },
+          "state_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sources_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version_policy": {
+            "type": "string",
+            "minLength": 1
+          },
+          "protected_paths": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "gitEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "branch"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "branch": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._/-]+$"
+        }
+      }
+    }
+  }
+}

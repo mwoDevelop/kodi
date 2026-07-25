@@ -10,11 +10,10 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
+  pull-requests: write
 
 concurrency:
-  group: kodi-pages
+  group: promote-stable-lock
   cancel-in-progress: false
 
 jobs:
@@ -50,23 +49,33 @@ jobs:
       - name: Copy exact candidate ZIPs into stable
         run: python tools/promote_channel.py inject --dist dist --candidate candidate
       - name: Commit immutable stable lock
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          if git diff --quiet -- manifests/locks/stable.json; then
+            echo "Stable already contains this exact testing candidate."
+            exit 0
+          fi
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          branch="bot/promote-stable-${{ inputs.testing_index_sha256 }}"
+          branch="${branch:0:45}"
+          git switch -c "$branch"
           git add manifests/locks/stable.json
-          git commit -m "Promote verified testing candidate [skip ci]"
-          git push origin HEAD:main
-      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+          git commit -m "Promote verified testing candidate"
+          git push --force-with-lease origin "$branch"
+          existing="$(gh pr list --head "$branch" --base main --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh pr comment "$existing" --body "Candidate revalidated against exact public testing bytes."
+          else
+            gh pr create \
+              --base main \
+              --head "$branch" \
+              --title "Promote verified testing candidate to stable" \
+              --body "Manual promotion PR. Component ZIPs were fetched from public testing, checked against the testing lock and injected byte-for-byte. Merging changes only the stable lock; repository.mwodevelop remains version 1.0.0."
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          path: dist
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    needs: promote
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+          name: stable-promotion-candidate
+          path: candidate
+          retention-days: 90

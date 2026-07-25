@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "schedule_slots": {
+    "daily": {
+      "cron": "20 4 * * *"
+    }
+  },
+  "components": {
+    "umbrella": {
+      "enabled": true,
+      "adapter": "git_patch_stack",
+      "schedule_slot": "daily",
+      "local_path": "umbrella",
+      "target": {
+        "repository": "mwoDevelop/umbrellaplug.github.io",
+        "branch": "main"
+      },
+      "upstream": {
+        "repository": "umbrellaplug/umbrellaplug.github.io",
+        "branch": "master"
+      },
+      "state_path": "downstream-patches.yml",
+      "version_policy": "umbrella_downstream",
+      "protected_paths": [
+        ".github",
+        ".gitmodules"
+      ]
+    },
+    "watchnixtoons2": {
+      "enabled": true,
+      "adapter": "vendored_kodi_addon",
+      "schedule_slot": "daily",
+      "local_path": "watchnixtoons2",
+      "target": {
+        "repository": "mwoDevelop/ch.repo",
+        "branch": "master"
+      },
+      "upstream": {
+        "repository": "christianhaitian/ch.repo",
+        "branch": "master"
+      },
+      "state_path": "mwodevelop/upstream.json",
+      "version_policy": "watchnixtoons2_downstream",
+      "protected_paths": [
+        ".github",
+        ".gitmodules"
+      ]
+    },
+    "provider_observations": {
+      "enabled": true,
+      "adapter": "provider_feed",
+      "schedule_slot": "daily",
+      "local_path": "mwoscrapers",
+      "target": {
+        "repository": "mwoDevelop/script.module.mwoscrapers",
+        "branch": "main"
+      },
+      "sources_path": "resources/upstream-sources.json",
+      "state_path": "resources/upstream-observations.lock.json",
+      "version_policy": "observation_only"
+    }
+  }
+}

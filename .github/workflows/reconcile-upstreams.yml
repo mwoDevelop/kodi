@@ -1,0 +1,56 @@
+name: reconcile upstreams
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 4 * * *"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Validate control-plane manifests
+        run: python -m tools.upstream_sync.cli validate-config
+      - name: Discover immutable upstream state
+        run: >-
+          python -m tools.upstream_sync.cli discover
+          --output upstream-discovery.json
+          --markdown upstream-discovery.md
+      - name: Publish read-only report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: upstream-discovery
+          path: |
+            upstream-discovery.json
+            upstream-discovery.md
+          retention-days: 14
+      - name: Update the managed review issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          action="$(python -c 'import json; p=json.load(open("upstream-discovery.json")); print("noop" if all(x["action"] == "noop" for x in p["sources"]) else "review")')"
+          if [ "$action" = "noop" ]; then
+            exit 0
+          fi
+          title="Managed upstream reconciliation"
+          issue="$(gh issue list --state open --search "$title in:title" --json number,title --jq '.[] | select(.title == "'"$title"'") | .number' | head -n 1)"
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body-file upstream-discovery.md
+          else
+            gh issue create --title "$title" --body-file upstream-discovery.md
+          fi

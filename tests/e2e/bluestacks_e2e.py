@@ -16,11 +16,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
 KODI_ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
-COMPONENT_VERSIONS = {
-    "plugin.video.umbrella": "6.7.81.7",
-    "script.module.mwoscrapers": "0.1.2",
-}
-REPOSITORY_VERSION = "1.0.0"
 DEFAULT_ORIGIN = "repository.mwodevelop.testing"
 
 
@@ -45,8 +40,36 @@ def addon_version(adb, serial, addon_id):
     return match.group(1) if match else None
 
 
+def repository_version(origin):
+    addon = ROOT / "repository" / origin / "addon.xml"
+    payload = addon.read_text(encoding="utf-8")
+    match = re.search(r'<addon[^>]+version="([^"]+)"', payload.replace("\n", " "))
+    if not match:
+        raise RuntimeError("repository version was not found: %s" % addon)
+    return match.group(1)
+
+
 def expected_versions(origin):
-    return {**COMPONENT_VERSIONS, origin: REPOSITORY_VERSION}
+    channel = "stable" if origin == "repository.mwodevelop" else "testing"
+    lock = json.loads(
+        (ROOT / "manifests" / "locks" / ("%s.json" % channel)).read_text(
+            encoding="utf-8"
+        )
+    )
+    required = ("plugin.video.umbrella", "script.module.mwoscrapers")
+    versions = {
+        addon_id: lock["components"][addon_id]["version"] for addon_id in required
+    }
+    versions[origin] = repository_version(origin)
+    return versions
+
+
+def installation_markers(expected):
+    return {
+        addon_id: "%s v%s installed" % (addon_id, version)
+        for addon_id, version in expected.items()
+        if not addon_id.startswith("repository.mwodevelop")
+    }
 
 
 def addon_origins(database, addon_ids):
@@ -166,7 +189,10 @@ def prepare(args):
             "backup was created at %s" % backup
         )
 
-    package = ROOT / ("dist/%s-%s.zip" % (args.expected_origin, REPOSITORY_VERSION))
+    package = ROOT / (
+        "dist/%s-%s.zip"
+        % (args.expected_origin, repository_version(args.expected_origin))
+    )
     if not package.is_file():
         raise RuntimeError("build dist first with tools/build_repo.py")
     remote = "/sdcard/Download/" + package.name
@@ -195,6 +221,7 @@ def prepare(args):
 
 def verify(args):
     expected = expected_versions(args.expected_origin)
+    markers = installation_markers(expected)
     versions = {
         addon_id: addon_version(args.adb, args.serial, addon_id)
         for addon_id in expected
@@ -236,10 +263,10 @@ def verify(args):
         for line in test_lines
         if "mwodevelop.github.io/kodi" in line.lower()
         or args.expected_origin in line.lower()
-        or "script.module.mwoscrapers v0.1.2 installed" in line
-        or "plugin.video.umbrella v6.7.81.7 installed" in line
+        or any(marker in line for marker in markers.values())
     ]
-    if not any("script.module.mwoscrapers v0.1.2" in line for line in evidence):
+    module_marker = markers["script.module.mwoscrapers"]
+    if not any(module_marker in line for line in evidence):
         raise RuntimeError("Kodi log does not prove MwoScrapers installation")
     report = {
         "phase": "verified",
@@ -274,11 +301,11 @@ def verify_playback(args):
     run(args.adb, args.serial, "pull", KODI_ROOT + "/temp/kodi.log", str(log_path))
     log_text = log_path.read_text(encoding="utf-8", errors="replace")
     evidence = playback_log_evidence(log_text, args.title, args.imdb)
+    markers = installation_markers(expected_versions(args.expected_origin))
     install_evidence = [
         line
         for line in report.get("repository_log_evidence", [])
-        if "script.module.mwoscrapers v0.1.2 installed" in line
-        or "plugin.video.umbrella v6.7.81.7 installed" in line
+        if any(marker in line for marker in markers.values())
     ]
     report.update(
         {

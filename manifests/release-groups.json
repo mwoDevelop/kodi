@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "groups": {
+    "mwoscrapers": {
+      "repository": "mwoDevelop/script.module.mwoscrapers",
+      "atomic_commit": true,
+      "components": [
+        "script.module.mwoscrapers",
+        "script.mwoscrapers"
+      ]
+    }
+  }
+}
