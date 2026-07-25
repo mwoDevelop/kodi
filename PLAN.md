@@ -53,11 +53,13 @@ resolvera w jednym dodatku zwiększyłoby sprzężenie, powieliło kod Umbrelli 
 utrudniło ochronę tokenu RD.
 
 MwoScrapers pozostaje osobnym komponentem kodowym, dodatkiem
-`xbmc.python.module` i artefaktem Kodi. Nie jest jednak osobno promowanym
-produktem użytkowym: podstawowa instrukcja każe zainstalować Umbrellę, a Kodi
-automatycznie dobiera MwoScrapers jako wymaganą zależność. Moduł pozostaje
-widoczny w zarządzaniu zależnościami Kodi. Real-Debrid nie jest osobnym
-dodatkiem: klient, autoryzacja i resolver pozostają częścią Umbrelli.
+`xbmc.python.module` i artefaktem Kodi. Podstawowa instrukcja każe zainstalować
+Umbrellę, a Kodi automatycznie dobiera moduł MwoScrapers jako wymaganą
+zależność. Ponieważ Kodi nie pokazuje modułów Pythona w zwykłym katalogu
+dodatków, repo publikuje też cienki, opcjonalny Program add-on
+`script.mwoscrapers`. Wrapper udostępnia ustawienia i stan providerów, ale nie
+duplikuje ich implementacji. Real-Debrid nie jest osobnym dodatkiem: klient,
+autoryzacja i resolver pozostają częścią Umbrelli.
 
 ## 2. Zakres i elementy poza zakresem
 
@@ -595,8 +597,10 @@ https://mwodevelop.github.io/kodi/
 │   ├── addons.xml.sha256
 │   ├── plugin.video.umbrella/
 │   │   └── plugin.video.umbrella-<wersja>.zip
-│   └── script.module.mwoscrapers/
-│       └── script.module.mwoscrapers-<wersja>.zip
+│   ├── script.module.mwoscrapers/
+│   │   └── script.module.mwoscrapers-<wersja>.zip
+│   └── script.mwoscrapers/
+│       └── script.mwoscrapers-<wersja>.zip
 └── testing/omega/
     └── analogiczny układ
 ```
@@ -606,11 +610,11 @@ https://mwodevelop.github.io/kodi/
 wyłącznie `testing`. Urządzenie produkcyjne nie będzie miało zainstalowanego
 repo testing.
 
-Oba indeksy muszą zawierać MwoScrapers, ponieważ Kodi potrzebuje jego
+Oba indeksy muszą zawierać moduł MwoScrapers, ponieważ Kodi potrzebuje jego
 metadanych i ZIP-a do rozwiązania zależności Umbrelli. Dokumentacja i
-podstawowa ścieżka UI wskazują jednak instalację Umbrelli; MwoScrapers nie
-otrzymuje osobnego repo Kodi ani kroku ręcznej instalacji. Jego bezpośredni
-ZIP pozostaje publiczny dla mechanizmu zależności, audytu i diagnostyki.
+podstawowa ścieżka UI nadal wskazują instalację Umbrelli. Opcjonalny
+`script.mwoscrapers` jest osobną pozycją w kategorii Program add-ons i zależy
+od tego samego modułu; stanowi wyłącznie warstwę ustawień i diagnostyki.
 
 Każdy dodatek repo będzie miał jawny wpis:
 
@@ -973,8 +977,9 @@ wynik resolution nie wybiera providera przed naprawą resolvera.
 10. Deduplikacja między providerami pozostaje w Umbrelli.
 11. Limiter obejmuje transport wszystkich autoryzowanych żądań RD.
 12. Rollback zainstalowanego wydania używa wyższej wersji forward-revert.
-13. MwoScrapers pozostaje osobnym repo Git i modułem Kodi, ale nie otrzymuje
-    osobnego repo Kodi ani ręcznej ścieżki instalacji.
+13. MwoScrapers pozostaje osobnym repo Git i modułem Kodi; opcjonalny
+    `script.mwoscrapers` zapewnia ręczną ścieżkę instalacji i zarządzania bez
+    powielania logiki providerów.
 14. Umbrella zachowuje upstreamowy ogólny loader providerów; downstream
     dodaje jedynie izolowaną sanitizację kontekstu bez sekretów.
 15. Kanały stable/testing mają niezależne locki komponentów i artefaktów.
@@ -1014,8 +1019,9 @@ Drugi niezależny audyt potwierdził sens osobnego repo Git i dodatku
 `xbmc.python.module`, instalowanego automatycznie jako zależność Umbrelli z
 tego samego repo Kodi. Przyjęto następujące uwagi:
 
-- MwoScrapers jest osobnym artefaktem Kodi widocznym w zależnościach, ale nie
-  osobno promowanym produktem użytkowym;
+- moduł MwoScrapers jest osobnym artefaktem Kodi widocznym w zależnościach, a
+  osobny wrapper Program add-on może wystawiać wyłącznie UI ustawień i
+  diagnostyki;
 - istniejącego loadera `external_provider` nie refaktoryzuje się tylko dla
   OCP; pozostaje niezmienionym punktem rozszerzenia upstream;
 - kontekst providera musi zostać zsanityzowany, ponieważ obecna Umbrella

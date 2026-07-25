@@ -37,9 +37,13 @@ def test_testing_index_and_dependency_closure(tmp_path):
         "plugin.video.umbrella",
         "repository.mwodevelop.testing",
         "script.module.mwoscrapers",
+        "script.mwoscrapers",
     }
     umbrella = index.find("./addon[@id='plugin.video.umbrella']")
     assert umbrella.find("./requires/import[@addon='script.module.mwoscrapers']") is not None
+    manager = index.find("./addon[@id='script.mwoscrapers']")
+    assert manager.find("./requires/import[@addon='script.module.mwoscrapers']") is not None
+    assert manager.find("./extension[@point='xbmc.python.script']") is not None
 
 
 def test_home_page_catalogs_both_channels(tmp_path):
@@ -52,6 +56,7 @@ def test_home_page_catalogs_both_channels(tmp_path):
     assert 'href="testing/omega/addons.xml"' in home
     assert "Umbrella" in home
     assert "MwoScrapers" in home
+    assert "MwoScrapers Manager" in home
 
 
 def test_zips_have_single_safe_root(tmp_path):
