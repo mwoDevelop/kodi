@@ -8,9 +8,9 @@
       "zip_sha256": "41666b66945565b6a8660028df0701240463437a078fe9e3e1f90668260d560d"
     },
     "plugin.video.umbrella": {
-      "commit": "bae403e7b32059fa3fa51a9158c9c1a90bef2f18",
-      "version": "6.7.81.7",
-      "zip_sha256": "faaf7d6e38ae1a42ecd020bcf0b953f4eca11c944d5a7f3f6a0baec122315d2b"
+      "commit": "1fe711bd5d9abc58265d38c0e57040e889d0bd2b",
+      "version": "6.7.81.8",
+      "zip_sha256": "0148b47d3b5ed4e8a2d46fb2ec58d6426a46511938a416e66f9fa9f151c7aae1"
     },
     "script.module.mwoscrapers": {
       "commit": "7c21ad6a634cc2eeb67fdc84747098aa4b97b030",
