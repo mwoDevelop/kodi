@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from copy import deepcopy
 from pathlib import Path
 from xml.etree import ElementTree
@@ -77,6 +78,13 @@ def test_kodi_file_source_lists_stable_repository_zip(tmp_path):
     source = (output / "repo/index.html").read_text(encoding="utf-8")
 
     assert 'href="%s"' % repository_zip in source
+    kodi_http_directory_item = re.compile(
+        r'<a href="([^"]*)"[^>]*>\s*(.*?)\s*</a>(.+?)(?=<a|</tr|$)',
+        re.IGNORECASE,
+    )
+    assert kodi_http_directory_item.findall(source) == [
+        (repository_zip, repository_zip, "</td>")
+    ]
     assert (output / "repo" / repository_zip).read_bytes() == (
         output / repository_zip
     ).read_bytes()

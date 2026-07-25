@@ -259,7 +259,7 @@ def render_repository_source(repository):
   <title>mwoDevelop Kodi repository</title>
 </head>
 <body>
-  <a href="%s">%s</a>
+  <table><tr><td><a href="%s">%s</a></td></tr></table>
 </body>
 </html>
 """
