@@ -1,0 +1,51 @@
+{
+  "artifact_verification": {
+    "public_smoke_files": 26,
+    "result": "pass",
+    "stable_module_sha256": "afad0ba6bc0f0c51dd58765c5040247a90c2aebe87cebccd6d3a99f4b4efb6ab",
+    "stable_wrapper_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
+  },
+  "device": "BlueStacks1",
+  "installed": {
+    "plugin.video.umbrella": "6.7.81.7",
+    "repository.mwodevelop": "1.0.0",
+    "script.module.mwoscrapers": "0.1.3",
+    "script.mwoscrapers": "0.1.1"
+  },
+  "installed_origins": {
+    "plugin.video.umbrella": "repository.mwodevelop",
+    "repository.mwodevelop": "repository.mwodevelop",
+    "script.module.mwoscrapers": "repository.mwodevelop",
+    "script.mwoscrapers": "repository.mwodevelop"
+  },
+  "kodi": "21.3",
+  "manager_ui": {
+    "program_addon_visible": true,
+    "provider_settings_labels": {
+      "Comet (testing)": "visible",
+      "Providers": "visible",
+      "Torrent providers": "visible",
+      "Torrentio": "visible"
+    },
+    "provider_settings_result": "pass",
+    "provider_status": {
+      "Comet": "disabled",
+      "Torrentio": "enabled",
+      "module_version": "0.1.3"
+    },
+    "provider_status_result": "pass"
+  },
+  "phase": "stable_manager_install_and_ui_verified",
+  "publication_runs": {
+    "promote_stable": 30151768337,
+    "publish_testing": 30151479228
+  },
+  "regression": {
+    "component_pytest": "21 passed",
+    "component_ruff": "pass",
+    "publisher_e2e": "14 passed",
+    "publisher_pytest": "14 passed"
+  },
+  "serial": "127.0.0.1:5555",
+  "testing_repository_removed": true
+}
