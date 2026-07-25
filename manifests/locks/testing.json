@@ -7,16 +7,16 @@
       "version": "6.7.81.7",
       "zip_sha256": "faaf7d6e38ae1a42ecd020bcf0b953f4eca11c944d5a7f3f6a0baec122315d2b"
     },
-    "script.module.mwoscrapers": {
-      "commit": "3e124356b315dd5babf787b1cfea0ece7bc52e1c",
-      "version": "0.1.2",
-      "provider_api": 1,
-      "zip_sha256": "13b3d77eb2b31458d9e2cf39f9f31b0a3d619292e9117c06b18fd82b68687491"
-    },
-    "script.mwoscrapers": {
-      "commit": "62a1c86827ebf285ca07c39f1a59c63a7927c682",
-      "version": "0.1.0",
-      "zip_sha256": "201d131f6d0c9071baa9964f8384652b6ee4173fb3af3ea482d8c9609006ebb9"
-    }
+        "script.module.mwoscrapers": {
+            "commit": "7c21ad6a634cc2eeb67fdc84747098aa4b97b030",
+            "version": "0.1.3",
+            "provider_api": 1,
+            "zip_sha256": "afad0ba6bc0f0c51dd58765c5040247a90c2aebe87cebccd6d3a99f4b4efb6ab"
+        },
+        "script.mwoscrapers": {
+            "commit": "7c21ad6a634cc2eeb67fdc84747098aa4b97b030",
+            "version": "0.1.1",
+            "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
+        }
   }
 }
