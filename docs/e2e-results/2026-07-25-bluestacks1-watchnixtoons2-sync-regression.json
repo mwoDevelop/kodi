@@ -1,0 +1,56 @@
+{
+  "artifact": {
+    "commit": "da4350eb79d032730ca240c3b824e4f3fd2ca09d",
+    "url": "https://mwodevelop.github.io/kodi/stable/omega/plugin.video.watchnixtoons2.mwodevelop/plugin.video.watchnixtoons2.mwodevelop-0.25.2.zip",
+    "zip_sha256": "41666b66945565b6a8660028df0701240463437a078fe9e3e1f90668260d560d"
+  },
+  "captured_at": "2026-07-25T19:47:01.860031+00:00",
+  "catalogue": {
+    "content_path": "mao-episode-17-english-subbed",
+    "items": 16,
+    "qualities": [
+      480,
+      720,
+      1080
+    ],
+    "section": "Latest Releases",
+    "selected_quality": 720,
+    "title": "Mao Episode 17 English Subbed"
+  },
+  "channel": "stable",
+  "cleanup": {
+    "old_salt_repository_retained_for": [
+      "repository.oldsalt"
+    ],
+    "original_addon_removed": true,
+    "testing_repository_removed": true
+  },
+  "device": "BlueStacks1",
+  "installed": {
+    "plugin.video.watchnixtoons2.mwodevelop": {
+      "enabled": true,
+      "origin": "repository.mwodevelop",
+      "version": "0.25.2"
+    },
+    "repository.mwodevelop": {
+      "enabled": true,
+      "origin": "repository.mwodevelop"
+    }
+  },
+  "kodi": "21.3",
+  "playback": {
+    "log_evidence": [
+      "2026-07-25 21:46:16.147 T:5301     info <general>: VideoPlayer::OpenFile: plugin://plugin.video.watchnixtoons2.mwodevelop/?action=actionResolve&url=%2Fmao-episode-17-english-subbed",
+      "2026-07-25 21:46:16.147 T:9252     info <general>: Creating InputStream",
+      "2026-07-25 21:46:16.695 T:9252     info <general>: Creating Demuxer",
+      "2026-07-25 21:46:17.338 T:9252     info <general>: CDVDAudioCodecFFmpeg::Open() Successful opened audio decoder aac",
+      "2026-07-25 21:46:58.601 T:5301     info <general>: CVideoPlayer::CloseFile()"
+    ],
+    "native_hls_without_inputstream_adaptive": true,
+    "observed_seconds": 18,
+    "result": "pass"
+  },
+  "result": "pass",
+  "schema": 1,
+  "serial": "127.0.0.1:5556"
+}
