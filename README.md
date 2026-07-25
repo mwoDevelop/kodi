@@ -1,6 +1,7 @@
 # mwoDevelop Kodi repository
 
-Reproducible publisher for the `mwoDevelop` Umbrella fork and MwoScrapers.
+Reproducible publisher for the `mwoDevelop` Umbrella fork, MwoScrapers, and
+WatchNixtoons2.
 
 ## Build
 
@@ -31,7 +32,8 @@ Install `repository.mwodevelop.testing-1.0.0.zip` from:
 
 Use testing only for release candidates. The channel contains Umbrella, the
 technical `script.module.mwoscrapers` dependency, and the separately visible
-`script.mwoscrapers` manager.
+`script.mwoscrapers` manager. WatchNixtoons2 release candidates are published
+here for side-by-side playback testing before promotion to stable.
 
 ## Reproducible E2E
 

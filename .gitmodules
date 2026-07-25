@@ -4,3 +4,6 @@
 [submodule "mwoscrapers"]
 	path = mwoscrapers
 	url = https://github.com/mwoDevelop/script.module.mwoscrapers.git
+[submodule "watchnixtoons2"]
+	path = watchnixtoons2
+	url = https://github.com/mwoDevelop/ch.repo.git
