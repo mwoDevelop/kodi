@@ -77,6 +77,19 @@ python tests/e2e/bluestacks_e2e.py \
 This intentional three-phase design respects Android scoped storage and tests
 the real Kodi repository path instead of injecting files into Kodi's profile.
 
+Verify the public file-source URL through Kodi's own HTTP directory and ZIP
+engines:
+
+```bash
+python tests/e2e/kodi_http_source.py \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --serial emulator-5554
+```
+
+The check fails unless Kodi lists `repository.mwodevelop-1.0.0.zip`, downloads
+and opens that archive, finds the `repository.mwodevelop` root, and reads its
+`addon.xml` manifest.
+
 ## WatchNixtoons2 on BlueStacks1
 
 Install `WatchNixtoons2 (mwoDevelop)` from the stable repository through Kodi's
