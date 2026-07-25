@@ -4,6 +4,7 @@
 import argparse
 import fnmatch
 import hashlib
+import html
 import json
 import os
 import re
@@ -156,6 +157,95 @@ def render_addons(addons):
     return b"".join(body)
 
 
+def render_home(catalog):
+    cards = []
+    for channel in ("stable", "testing"):
+        data = catalog[channel]
+        repository = data["repository"]
+        repository_zip = "%s-%s.zip" % (
+            repository["id"],
+            repository["version"],
+        )
+        addon_rows = []
+        for addon in data["addons"]:
+            addon_zip = "%s-%s.zip" % (addon["id"], addon["version"])
+            href = "%s/omega/%s/%s" % (channel, addon["id"], addon_zip)
+            addon_rows.append(
+                '<li><a href="%s">%s</a><span>%s</span></li>'
+                % (
+                    html.escape(href, quote=True),
+                    html.escape(addon["name"]),
+                    html.escape(addon["version"]),
+                )
+            )
+        label = "Stable" if channel == "stable" else "Testing"
+        description = (
+            "Recommended production channel."
+            if channel == "stable"
+            else "Pre-release channel for integration testing."
+        )
+        cards.append(
+            """
+      <section class="card">
+        <p class="eyebrow">%s</p>
+        <h2>%s</h2>
+        <p>%s</p>
+        <a class="button" href="%s">Download repository ZIP</a>
+        <ul>%s</ul>
+        <a class="index-link" href="%s/omega/addons.xml">View Kodi XML index</a>
+      </section>"""
+            % (
+                html.escape(label),
+                html.escape(repository["name"]),
+                html.escape(description),
+                html.escape(repository_zip, quote=True),
+                "".join(addon_rows),
+                channel,
+            )
+        )
+    return (
+        """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mwoDevelop Kodi Add-ons</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: #0b1220; color: #e5edf8; }
+    main { width: min(960px, calc(100%% - 32px)); margin: 0 auto; padding: 64px 0; }
+    header { max-width: 700px; margin-bottom: 32px; }
+    h1 { margin: 0 0 12px; font-size: clamp(2rem, 6vw, 4rem); }
+    h2 { margin: 4px 0 8px; }
+    p { color: #aebdd0; line-height: 1.6; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+    .card { padding: 24px; border: 1px solid #253552; border-radius: 16px; background: #111b2e; }
+    .eyebrow { margin: 0; color: #6dd6ff; font-size: .8rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .button { display: inline-block; margin: 10px 0 18px; padding: 11px 16px; border-radius: 9px; background: #1887bd; color: white; font-weight: 700; text-decoration: none; }
+    ul { margin: 0 0 18px; padding: 0; list-style: none; border-top: 1px solid #253552; }
+    li { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid #253552; }
+    li a, .index-link { color: #8edcff; }
+    li span { color: #aebdd0; font-variant-numeric: tabular-nums; }
+    code { color: #d7e7fb; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Kodi 21 Omega</p>
+      <h1>mwoDevelop Add-ons</h1>
+      <p>Download a repository ZIP, install it with Kodi's <strong>Install from zip file</strong>, then install and update add-ons from the selected channel.</p>
+    </header>
+    <div class="grid">%s
+    </div>
+  </main>
+</body>
+</html>
+"""
+        % "".join(cards)
+    ).encode("utf-8")
+
+
 def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -204,6 +294,7 @@ def build(output, lock_overrides=None):
     components = load_json("manifests/components.json")["components"]
     channels = load_json("manifests/channels.json")["channels"]
     provenance = {"schema": 2, "channels": {}}
+    catalog = {}
     lock_overrides = lock_overrides or {}
 
     for channel, config in sorted(channels.items()):
@@ -261,10 +352,32 @@ def build(output, lock_overrides=None):
             hashlib.sha256(index).hexdigest() + "\n", encoding="ascii"
         )
         provenance["channels"][channel] = channel_provenance
+        repository_addon_id = config["repository_addon"]
+        catalog[channel] = {
+            "repository": next(
+                {
+                    "id": addon.attrib["id"],
+                    "name": addon.attrib["name"],
+                    "version": addon.attrib["version"],
+                }
+                for addon in addons
+                if addon.attrib["id"] == repository_addon_id
+            ),
+            "addons": [
+                {
+                    "id": addon.attrib["id"],
+                    "name": addon.attrib["name"],
+                    "version": addon.attrib["version"],
+                }
+                for addon in sorted(addons, key=lambda node: node.attrib["id"])
+                if addon.attrib["id"] != repository_addon_id
+            ],
+        }
 
     (output / "build-provenance.json").write_text(
         json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    (output / "index.html").write_bytes(render_home(catalog))
     manifest_lines = []
     for path in sorted(output.rglob("*")):
         if path.is_file() and path.name != "artifact-manifest.sha256":

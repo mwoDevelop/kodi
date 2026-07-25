@@ -42,6 +42,18 @@ def test_testing_index_and_dependency_closure(tmp_path):
     assert umbrella.find("./requires/import[@addon='script.module.mwoscrapers']") is not None
 
 
+def test_home_page_catalogs_both_channels(tmp_path):
+    output = build(tmp_path / "repo")
+    home = (output / "index.html").read_text(encoding="utf-8")
+
+    assert 'href="repository.mwodevelop-1.0.0.zip"' in home
+    assert 'href="repository.mwodevelop.testing-1.0.0.zip"' in home
+    assert 'href="stable/omega/addons.xml"' in home
+    assert 'href="testing/omega/addons.xml"' in home
+    assert "Umbrella" in home
+    assert "MwoScrapers" in home
+
+
 def test_zips_have_single_safe_root(tmp_path):
     output = build(tmp_path / "repo")
     for path in output.rglob("*.zip"):
