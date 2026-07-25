@@ -6,6 +6,11 @@
       "version": "6.7.81.7",
       "zip_sha256": "faaf7d6e38ae1a42ecd020bcf0b953f4eca11c944d5a7f3f6a0baec122315d2b"
     },
+    "plugin.video.watchnixtoons2.mwodevelop": {
+      "commit": "da4350eb79d032730ca240c3b824e4f3fd2ca09d",
+      "version": "0.25.2",
+      "zip_sha256": "41666b66945565b6a8660028df0701240463437a078fe9e3e1f90668260d560d"
+    },
     "script.module.mwoscrapers": {
       "commit": "7c21ad6a634cc2eeb67fdc84747098aa4b97b030",
       "provider_api": 1,
