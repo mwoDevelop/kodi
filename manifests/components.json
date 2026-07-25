@@ -17,6 +17,15 @@
         "lib/**",
         "resources/**"
       ]
+    },
+    "script.mwoscrapers": {
+      "repository": "mwoDevelop/script.module.mwoscrapers",
+      "source": "mwoscrapers/wrapper/script.mwoscrapers",
+      "include": [
+        "addon.xml",
+        "default.py",
+        "resources/**"
+      ]
     }
   }
 }
