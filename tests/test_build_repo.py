@@ -48,10 +48,12 @@ def test_testing_index_and_dependency_closure(tmp_path):
     watchnixtoons = index.find(
         "./addon[@id='plugin.video.watchnixtoons2.mwodevelop']"
     )
-    assert watchnixtoons.attrib["version"] == "0.25.1"
-    assert watchnixtoons.find(
+    assert watchnixtoons.attrib["version"] == "0.25.2"
+    adaptive = watchnixtoons.find(
         "./requires/import[@addon='inputstream.adaptive']"
-    ) is not None
+    )
+    assert adaptive is not None
+    assert adaptive.attrib["optional"] == "true"
     assert watchnixtoons.find("./requires/import[@addon='script.module.six']") is not None
 
 
