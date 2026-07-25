@@ -1,0 +1,58 @@
+{
+  "artifact": {
+    "commit": "da4350eb79d032730ca240c3b824e4f3fd2ca09d",
+    "url": "https://mwodevelop.github.io/kodi/stable/omega/plugin.video.watchnixtoons2.mwodevelop/plugin.video.watchnixtoons2.mwodevelop-0.25.2.zip",
+    "zip_sha256": "41666b66945565b6a8660028df0701240463437a078fe9e3e1f90668260d560d"
+  },
+  "captured_at": "2026-07-25T14:21:51.892278+00:00",
+  "catalogue": {
+    "content_path": "beyblade-x-episode-120-english-dubbed",
+    "items": 16,
+    "qualities": [
+      480,
+      720,
+      1080
+    ],
+    "section": "Latest Releases",
+    "selected_quality": 720,
+    "title": "Beyblade X Episode 120 English Dubbed"
+  },
+  "channel": "stable",
+  "cleanup": {
+    "old_salt_repository_retained_for": [
+      "plugin.video.youtube",
+      "repository.oldsalt",
+      "script.module.viperscrapers"
+    ],
+    "original_addon_removed": true,
+    "testing_repository_removed": true
+  },
+  "device": "BlueStacks1",
+  "installed": {
+    "plugin.video.watchnixtoons2.mwodevelop": {
+      "enabled": true,
+      "origin": "repository.mwodevelop",
+      "version": "0.25.2"
+    },
+    "repository.mwodevelop": {
+      "enabled": true,
+      "origin": "repository.mwodevelop"
+    }
+  },
+  "kodi": "21.3",
+  "playback": {
+    "log_evidence": [
+      "2026-07-25 16:09:04.204 T:6250     info <general>: VideoPlayer::OpenFile: plugin://plugin.video.watchnixtoons2.mwodevelop/?action=actionResolve&url=%2Fbeyblade-x-episode-120-english-dubbed",
+      "2026-07-25 16:09:04.205 T:24471    info <general>: Creating InputStream",
+      "2026-07-25 16:09:04.363 T:24471    info <general>: Creating Demuxer",
+      "2026-07-25 16:09:04.564 T:24471    info <general>: CDVDAudioCodecFFmpeg::Open() Successful opened audio decoder aac",
+      "2026-07-25 16:09:52.933 T:6250     info <general>: CVideoPlayer::CloseFile()"
+    ],
+    "native_hls_without_inputstream_adaptive": true,
+    "observed_seconds": 25,
+    "result": "pass"
+  },
+  "result": "pass",
+  "schema": 1,
+  "serial": "emulator-5554"
+}
