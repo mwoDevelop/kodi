@@ -76,3 +76,27 @@ python tests/e2e/bluestacks_e2e.py \
 
 This intentional three-phase design respects Android scoped storage and tests
 the real Kodi repository path instead of injecting files into Kodi's profile.
+
+## WatchNixtoons2 on BlueStacks1
+
+Install `WatchNixtoons2 (mwoDevelop)` from the stable repository through Kodi's
+GUI. Open `Latest Releases`, record the item count and available qualities,
+play a selected quality for a controlled interval, then stop playback. Validate
+the stable ownership, cleanup state, deterministic artifact, and Kodi media
+pipeline with:
+
+```bash
+python tests/e2e/watchnixtoons2_bluestacks.py \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --serial emulator-5554 \
+  --catalog-items 16 \
+  --qualities 480 720 1080 \
+  --quality 720 \
+  --observed-seconds 25 \
+  --result docs/e2e-results/2026-07-25-bluestacks1-watchnixtoons2.json
+```
+
+The verifier is read-only on the Kodi profile. It fails unless the mwoDevelop
+add-on is enabled and owned by the stable repository, the legacy add-on and
+testing repository are absent, and the latest matching playback log contains
+input stream, demuxer, audio decoder, and clean player-close markers.
