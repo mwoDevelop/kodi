@@ -8,6 +8,7 @@ device identity and log collection.  It does not read or write debrid tokens.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import re
 import socket
@@ -58,6 +59,31 @@ CASES = {
         "imdb": "tt0133093",
         "tmdb": "603",
         "navigation": ["The Matrix (1999)"],
+    },
+    "interstellar": {
+        "media_type": "movie",
+        "title": "Interstellar",
+        "year": 2014,
+        "imdb": "tt0816692",
+        "tmdb": "157336",
+        "navigation": ["Interstellar (2014)"],
+    },
+    "breaking_bad_s01e01": {
+        "media_type": "episode",
+        "title": "Pilot",
+        "tvshowtitle": "Breaking Bad",
+        "year": 2008,
+        "imdb": "tt0903747",
+        "tmdb": "1396",
+        "tvdb": "81189",
+        "season": 1,
+        "episode": 1,
+        "premiered": "2008-01-20",
+        "navigation": [
+            "Breaking Bad",
+            "Season 1",
+            "Pilot",
+        ],
     },
     "house_of_the_dragon_s01e01": {
         "media_type": "episode",
@@ -217,6 +243,69 @@ class EventClient:
 
     def play_media(self, media_url: str):
         self.execute_builtin("PlayMedia(%s)" % media_url)
+
+
+class AdbEventClient(EventClient):
+    """Send EventServer datagrams from inside an ADB-connected Android guest."""
+
+    def __init__(
+        self,
+        adb: str,
+        serial: str,
+        host: str = "127.0.0.1",
+        port: int = 9777,
+        source_port: int = 40140,
+    ):
+        super().__init__(host, port)
+        self.adb = adb
+        self.serial = serial
+        self.source_port = source_port
+
+    def _packets(self, packet_type: int, payload: bytes = b"") -> list[bytes]:
+        chunks = [
+            payload[offset : offset + self.MAX_PAYLOAD_SIZE]
+            for offset in range(0, len(payload), self.MAX_PAYLOAD_SIZE)
+        ] or [b""]
+        packets = []
+        for index, chunk in enumerate(chunks, start=1):
+            chunk_type = packet_type if index == 1 else self.PT_BLOB
+            packets.append(
+                self._header(chunk_type, index, len(chunks), len(chunk)) + chunk
+            )
+        return packets
+
+    def execute_builtin(self, command: str):
+        hello = (
+            b"mwoDevelop Sony Kodi E2E\0"
+            + bytes((0,))
+            + struct.pack("!H", 0)
+            + struct.pack("!I", 0)
+            + struct.pack("!I", 0)
+        )
+        action = bytes((self.ACTION_EXECBUILTIN,)) + command.encode("utf-8") + b"\0"
+        for packet_type, payload in (
+            (self.PT_HELO, hello),
+            (self.PT_ACTION, action),
+            (self.PT_BYE, b""),
+        ):
+            for packet in self._packets(packet_type, payload):
+                encoded = base64.b64encode(packet).decode("ascii")
+                command_line = (
+                    "echo %s | base64 -d | "
+                    "nc -u -p %d -q 1 %s %d"
+                    % (
+                        encoded,
+                        self.source_port,
+                        self.address[0],
+                        self.address[1],
+                    )
+                )
+                run(
+                    self.adb,
+                    self.serial,
+                    "shell",
+                    command_line,
+                )
 
 
 def addon_version(adb: str, serial: str, addon_id: str) -> str | None:
@@ -441,12 +530,19 @@ def run_case(
     case: dict,
     timeout: int,
     observe_seconds: int,
+    direct_play: bool = False,
 ) -> dict:
     stop_playback(rpc)
     kodi_start_line = log_line_count(adb, serial) + 1
     umbrella_start_line = log_line_count(adb, serial, "umbrella.log") + 1
     started_at = time.monotonic()
-    navigation = open_case_through_gui(rpc, events, case)
+    if direct_play:
+        navigation = []
+        events.execute_builtin("ActivateWindow(Home)")
+        time.sleep(2)
+        events.play_media(plugin_url(case))
+    else:
+        navigation = open_case_through_gui(rpc, events, case)
     playback_started_at = None
     last_properties = {}
     state = "resolve_timeout"
@@ -524,9 +620,20 @@ def main() -> int:
     parser.add_argument("--adb", required=True)
     parser.add_argument("--serial", default="192.168.1.12:5555")
     parser.add_argument("--host", default="192.168.1.12")
+    parser.add_argument("--jsonrpc-port", type=int, default=9090)
+    parser.add_argument(
+        "--event-via-adb",
+        action="store_true",
+        help="send Kodi EventServer packets from inside the ADB target",
+    )
     parser.add_argument("--case", action="append", choices=sorted(CASES))
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--observe-seconds", type=int, default=20)
+    parser.add_argument(
+        "--direct-play",
+        action="store_true",
+        help="invoke Umbrella's autoplay URL without skin-dependent search navigation",
+    )
     parser.add_argument(
         "--result",
         default="docs/e2e-results/sony-android-tv-resolver-matrix.json",
@@ -534,8 +641,12 @@ def main() -> int:
     args = parser.parse_args()
 
     selected = args.case or list(CASES)
-    rpc = JsonRpc(args.host)
-    events = EventClient(args.host)
+    rpc = JsonRpc(args.host, args.jsonrpc_port)
+    events = (
+        AdbEventClient(args.adb, args.serial)
+        if args.event_via_adb
+        else EventClient(args.host)
+    )
     if rpc.call("JSONRPC.Ping") != "pong":
         raise RuntimeError("Kodi JSON-RPC did not return pong")
 
@@ -575,6 +686,7 @@ def main() -> int:
             CASES[case_name],
             args.timeout,
             args.observe_seconds,
+            args.direct_play,
         )
         report["results"].append(result)
         print(
