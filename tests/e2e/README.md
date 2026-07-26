@@ -132,7 +132,9 @@ player, and stores redacted Kodi and Umbrella resolver diagnostics:
 .venv/bin/python tests/e2e/sony_kodi_matrix.py \
   --adb /home/mwo/android-sdk/platform-tools/adb \
   --serial 192.168.1.12:5555 \
-  --host 192.168.1.12 \
+  --host 127.0.0.1 \
+  --jsonrpc-port 19090 \
+  --event-host 192.168.1.12 \
   --observe-seconds 15 \
   --result docs/e2e-results/sony-umbrella-matrix.json
 ```
@@ -161,7 +163,8 @@ immediately if a stale `source_progress` modal is still blocking the UI:
 .venv/bin/python tests/e2e/umbrella_search_e2e.py \
   --adb /home/mwo/android-sdk/platform-tools/adb \
   --serial 192.168.1.12:5555 \
-  --host 192.168.1.12 \
+  --host 127.0.0.1 \
+  --jsonrpc-port 19090 \
   --term Sintel \
   --result docs/e2e-results/sony-umbrella-search.json
 ```
@@ -192,8 +195,8 @@ The ADB port is dynamic; confirm that `127.0.0.1:5555` still identifies the
 `Rvc64`/`BlueStacks1` instance before running the command. JSON-RPC access must
 also be enabled in Kodi for the duration of the test and restored afterwards.
 
-The same focused search check uses the forwarded JSON-RPC endpoint and sends
-EventServer packets from inside BlueStacks:
+The same focused search check uses the forwarded JSON-RPC endpoint in
+BlueStacks:
 
 ```bash
 .venv/bin/python tests/e2e/umbrella_search_e2e.py \
@@ -201,7 +204,6 @@ EventServer packets from inside BlueStacks:
   --serial 127.0.0.1:5555 \
   --host 127.0.0.1 \
   --jsonrpc-port 19090 \
-  --event-via-adb \
   --term Sintel \
   --result docs/e2e-results/bluestacks1-umbrella-search.json
 ```

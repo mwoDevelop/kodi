@@ -9,14 +9,7 @@ import time
 from pathlib import Path
 from urllib.parse import quote_plus
 
-from sony_kodi_matrix import (
-	AdbEventClient,
-	EventClient,
-	JsonRpc,
-	addon_version,
-	kodi_version,
-	shell,
-)
+from sony_kodi_matrix import JsonRpc, addon_version, kodi_version, shell
 
 
 SOURCE_PROGRESS_WINDOW = 10160
@@ -66,9 +59,55 @@ def matching_search_results(rpc: JsonRpc, term: str) -> list[str]:
 	return [label for label in labels if term.casefold() in label.casefold()]
 
 
+def submit_keyboard(rpc: JsonRpc, term: str, timeout: float) -> None:
+	rpc.call("Input.SendText", {"text": term, "done": True})
+	started = time.monotonic()
+	while time.monotonic() - started < timeout:
+		result = rpc.call(
+			"GUI.GetProperties",
+			{"properties": ["currentwindow", "currentcontrol"]},
+		)
+		window = result.get("currentwindow", {}) if isinstance(result, dict) else {}
+		control = result.get("currentcontrol", {}) if isinstance(result, dict) else {}
+		if isinstance(window, dict) and window.get("id") == VIDEOS_WINDOW:
+			return
+		if isinstance(control, dict) and control.get("label") == "Done":
+			rpc.call("Input.Select")
+			return
+		time.sleep(0.1)
+	raise RuntimeError("virtual keyboard never focused its Done control")
+
+
+def open_search_keyboard(
+	rpc: JsonRpc,
+	timeout: float,
+	transitions: list[dict],
+) -> dict:
+	deadline = time.monotonic() + timeout
+	while time.monotonic() < deadline:
+		url = (
+			"plugin://plugin.video.umbrella/"
+			"?action=movieSearchnew&e2e_nonce=%d" % time.time_ns()
+		)
+		rpc.call(
+			"GUI.ActivateWindow",
+			{"window": "videos", "parameters": [url, "return"]},
+		)
+		probe_deadline = min(deadline, time.monotonic() + 10)
+		while time.monotonic() < probe_deadline:
+			window = current_window(rpc)
+			if not transitions or transitions[-1] != window:
+				transitions.append(window)
+			if window.get("id") in KEYBOARD_WINDOWS:
+				return window
+			if window.get("id") == SOURCE_PROGRESS_WINDOW:
+				raise RuntimeError("source_progress appeared while opening search")
+			time.sleep(0.25)
+	raise RuntimeError("Umbrella search keyboard did not open")
+
+
 def run_search(
 	rpc: JsonRpc,
-	events: EventClient,
 	term: str,
 	timeout: float,
 ) -> dict:
@@ -78,24 +117,26 @@ def run_search(
 		raise RuntimeError(
 			"stale Umbrella source_progress window blocks search before test start"
 		)
-	events.execute_builtin("ActivateWindow(Home)")
+	if before.get("id") in KEYBOARD_WINDOWS:
+		rpc.call("Input.Back")
+		wait_for_window(
+			rpc,
+			lambda window: window.get("id") not in KEYBOARD_WINDOWS,
+			timeout,
+			transitions,
+		)
+	rpc.call("GUI.ActivateWindow", {"window": "home"})
 	wait_for_window(
 		rpc,
 		lambda window: window.get("id") == 10000,
 		timeout,
 		transitions,
 	)
-	events.execute_builtin(
-		"ActivateWindow(Videos,"
-		"plugin://plugin.video.umbrella/?action=movieSearchnew,return)"
-	)
-	keyboard = wait_for_window(
-		rpc,
-		lambda window: window.get("id") in KEYBOARD_WINDOWS,
-		timeout,
-		transitions,
-	)
-	rpc.call("Input.SendText", {"text": term, "done": True})
+	time.sleep(2)
+	keyboard = open_search_keyboard(rpc, timeout, transitions)
+	# Kodi 21 may focus the virtual keyboard's Done control without activating it.
+	# Selecting the focused control makes submission deterministic on Android TV.
+	submit_keyboard(rpc, term, timeout)
 	wait_for_window(
 		rpc,
 		lambda window: window.get("id") == VIDEOS_WINDOW,
@@ -129,18 +170,12 @@ def main() -> int:
 	parser.add_argument("--serial", required=True)
 	parser.add_argument("--host", required=True)
 	parser.add_argument("--jsonrpc-port", type=int, default=9090)
-	parser.add_argument("--event-via-adb", action="store_true")
 	parser.add_argument("--term", default="Sintel")
 	parser.add_argument("--timeout", type=float, default=30)
 	parser.add_argument("--result", required=True)
 	args = parser.parse_args()
 
 	rpc = JsonRpc(args.host, args.jsonrpc_port)
-	events = (
-		AdbEventClient(args.adb, args.serial)
-		if args.event_via_adb
-		else EventClient(args.host)
-	)
 	if rpc.call("JSONRPC.Ping") != "pong":
 		raise RuntimeError("Kodi JSON-RPC did not return pong")
 
@@ -159,7 +194,7 @@ def main() -> int:
 		"umbrella_version": addon_version(
 			args.adb, args.serial, "plugin.video.umbrella"
 		),
-		"search": run_search(rpc, events, args.term, args.timeout),
+		"search": run_search(rpc, args.term, args.timeout),
 		"tokens_collected": False,
 	}
 	output = Path(args.result)

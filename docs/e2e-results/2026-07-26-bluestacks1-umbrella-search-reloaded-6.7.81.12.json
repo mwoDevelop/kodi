@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "device": {
+    "serial": "127.0.0.1:5555",
+    "manufacturer": "samsung",
+    "model": "SM-S901E",
+    "kodi": "21.3"
+  },
+  "umbrella_version": "6.7.81.12",
+  "search": {
+    "term": "Sintel",
+    "keyboard_window": {
+      "id": 10103,
+      "label": "Virtual keyboard"
+    },
+    "matches": [
+      "Sintel (2010)"
+    ],
+    "window_transitions": [
+      {
+        "id": 10000,
+        "label": "Home"
+      },
+      {
+        "id": 10025,
+        "label": "Videos"
+      },
+      {
+        "id": 10103,
+        "label": "Virtual keyboard"
+      },
+      {
+        "id": 10138,
+        "label": ""
+      },
+      {
+        "id": 10025,
+        "label": "Videos"
+      }
+    ],
+    "final_window": {
+      "id": 10025,
+      "label": "Videos"
+    }
+  },
+  "tokens_collected": false
+}
