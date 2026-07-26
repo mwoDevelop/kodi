@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""Validate WatchNixtoons2 catalogue and playback on a Sony Android TV."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import time
+from pathlib import Path
+from urllib.parse import quote
+
+from sony_kodi_matrix import (
+    EventClient,
+    JsonRpc,
+    active_video_player,
+    addon_version,
+    kodi_version,
+    log_line_count,
+    log_since,
+    playback_properties,
+    redact,
+    shell,
+)
+
+ADDON_ID = "plugin.video.watchnixtoons2.mwodevelop"
+
+
+def current_label(rpc: JsonRpc) -> str:
+    result = rpc.call("GUI.GetProperties", {"properties": ["currentcontrol"]})
+    control = result.get("currentcontrol", {}) if isinstance(result, dict) else {}
+    return str(control.get("label", ""))
+
+
+def focus_label(rpc: JsonRpc, text: str, limit: int = 30) -> str:
+    for _index in range(limit):
+        label = current_label(rpc)
+        if text.casefold() in label.casefold():
+            return label
+        rpc.call("Input.Down")
+        time.sleep(0.4)
+    raise RuntimeError("could not focus %r" % text)
+
+
+def playback_method(adb: str, serial: str) -> str | None:
+    path = (
+        "/sdcard/Android/data/org.xbmc.kodi/files/.kodi/userdata/addon_data/"
+        + ADDON_ID
+        + "/settings.xml"
+    )
+    payload = shell(
+        adb,
+        serial,
+        "grep 'id=\"playbackMethod\"' '%s'" % path,
+        check=False,
+    )
+    match = re.search(r">([^<]+)<", payload)
+    return match.group(1) if match else None
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--adb", required=True)
+    parser.add_argument("--serial", default="192.168.1.12:5555")
+    parser.add_argument("--host", default="192.168.1.12")
+    parser.add_argument("--content-path", default="mao-episode-17-english-subbed")
+    parser.add_argument("--title", default="Mao Episode 17 English Subbed")
+    parser.add_argument("--observe-seconds", type=int, default=15)
+    parser.add_argument(
+        "--result",
+        default="docs/e2e-results/sony-watchnixtoons2.json",
+    )
+    args = parser.parse_args()
+
+    rpc = JsonRpc(args.host)
+    events = EventClient(args.host)
+    if rpc.call("JSONRPC.Ping") != "pong":
+        raise RuntimeError("Kodi JSON-RPC did not return pong")
+    method = playback_method(args.adb, args.serial)
+    if method != "1":
+        raise RuntimeError(
+            "WatchNixtoons2 playbackMethod must be 1 (Auto Play Highest Quality)"
+        )
+
+    start_line = log_line_count(args.adb, args.serial) + 1
+    events.execute_builtin("ActivateWindow(Home)")
+    time.sleep(2)
+    events.execute_builtin(
+        "ActivateWindow(Videos,plugin://%s/,return)" % ADDON_ID
+    )
+    time.sleep(10)
+    menu_label = focus_label(rpc, "Latest Releases")
+    rpc.call("Input.Select")
+    time.sleep(12)
+
+    catalogue = []
+    for _index in range(16):
+        label = current_label(rpc).strip("[] ")
+        if label and label != ".." and label not in catalogue:
+            catalogue.append(label)
+        rpc.call("Input.Down")
+        time.sleep(0.25)
+    if not catalogue:
+        raise RuntimeError("Latest Releases catalogue was empty")
+
+    events.execute_builtin("ActivateWindow(Home)")
+    time.sleep(2)
+    media_url = (
+        "plugin://%s/?action=actionResolve&url=%s"
+        % (ADDON_ID, quote("/" + args.content_path, safe=""))
+    )
+    events.execute_builtin("PlayMedia(%s)" % media_url)
+
+    started = time.monotonic()
+    player_id = None
+    while time.monotonic() - started < 75:
+        player_id = active_video_player(rpc)
+        if player_id is not None:
+            break
+        time.sleep(1)
+    if player_id is None:
+        raise RuntimeError("WatchNixtoons2 did not start playback")
+
+    resolved_at = time.monotonic()
+    initial = playback_properties(rpc, player_id)
+    time.sleep(args.observe_seconds)
+    final = playback_properties(rpc, player_id)
+    rpc.call("Player.Stop", {"playerid": player_id})
+    time.sleep(2)
+
+    new_log = log_since(args.adb, args.serial, start_line)
+    evidence = [
+        redact(line)
+        for line in new_log.splitlines()
+        if any(
+            marker in line
+            for marker in (
+                "VideoPlayer::OpenFile",
+                "Creating InputStream",
+                "Creating Demuxer",
+                "Successful opened audio decoder",
+            )
+        )
+    ][-20:]
+    report = {
+        "schema": 1,
+        "device": {
+            "serial": args.serial,
+            "model": shell(
+                args.adb,
+                args.serial,
+                "getprop ro.product.model",
+            ).strip(),
+            "kodi": kodi_version(args.adb, args.serial),
+        },
+        "addon": {
+            "id": ADDON_ID,
+            "version": addon_version(args.adb, args.serial, ADDON_ID),
+            "playback_method": "auto_highest",
+        },
+        "catalogue": {
+            "menu": menu_label,
+            "sample_count": len(catalogue),
+            "sample": catalogue,
+        },
+        "playback": {
+            "title": args.title,
+            "content_path": args.content_path,
+            "resolve_seconds": round(resolved_at - started, 3),
+            "observed_seconds": args.observe_seconds,
+            "initial": initial,
+            "final": final,
+            "log_evidence": evidence,
+        },
+        "result": "pass",
+    }
+    result = Path(args.result)
+    result.parent.mkdir(parents=True, exist_ok=True)
+    result.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
