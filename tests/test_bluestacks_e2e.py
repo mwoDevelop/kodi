@@ -1,10 +1,11 @@
+import json
 import sqlite3
 
 import pytest
 
+from tests.e2e import bluestacks_e2e
 from tests.e2e.bluestacks_e2e import (
     addon_origins,
-    expected_versions,
     playback_log_evidence,
 )
 
@@ -68,10 +69,38 @@ def test_addon_origins_reads_kodi_installed_table(tmp_path):
     }
 
 
-def test_expected_versions_come_from_exact_channel_locks():
-    stable = expected_versions("repository.mwodevelop")
-    testing = expected_versions("repository.mwodevelop.testing")
+def test_expected_versions_come_from_exact_channel_locks(tmp_path, monkeypatch):
+    locks = tmp_path / "manifests" / "locks"
+    locks.mkdir(parents=True)
+    channels = (("stable", "stable-version"), ("testing", "testing-version"))
+    for channel, umbrella_version in channels:
+        (locks / f"{channel}.json").write_text(
+            json.dumps(
+                {
+                    "components": {
+                        "plugin.video.umbrella": {"version": umbrella_version},
+                        "script.module.mwoscrapers": {"version": "scraper-version"},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+    for repository_id in (
+        "repository.mwodevelop",
+        "repository.mwodevelop.testing",
+    ):
+        repository = tmp_path / "repository" / repository_id
+        repository.mkdir(parents=True)
+        (repository / "addon.xml").write_text(
+            f'<addon id="{repository_id}" version="1.0.0"/>',
+            encoding="utf-8",
+        )
+    monkeypatch.setattr(bluestacks_e2e, "ROOT", tmp_path)
 
-    assert stable["plugin.video.umbrella"] == "6.7.81.9"
-    assert testing["script.module.mwoscrapers"] == "0.1.3"
+    stable = bluestacks_e2e.expected_versions("repository.mwodevelop")
+    testing = bluestacks_e2e.expected_versions("repository.mwodevelop.testing")
+
+    assert stable["plugin.video.umbrella"] == "stable-version"
+    assert testing["plugin.video.umbrella"] == "testing-version"
+    assert stable["script.module.mwoscrapers"] == "scraper-version"
     assert stable["repository.mwodevelop"] == "1.0.0"
