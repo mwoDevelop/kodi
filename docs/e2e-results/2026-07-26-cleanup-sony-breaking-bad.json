@@ -1,0 +1,50 @@
+{
+  "addons": {
+    "plugin.video.umbrella": "6.7.81.11",
+    "plugin.video.watchnixtoons2.mwodevelop": "0.25.2",
+    "repository.mwodevelop": "1.0.0",
+    "script.module.mwoscrapers": "0.1.3",
+    "script.mwoscrapers": "0.1.1"
+  },
+  "device": {
+    "android": "9",
+    "kodi": "21.2",
+    "manufacturer": "Sony",
+    "model": "BRAVIA 4K GB ATV3",
+    "serial": "192.168.1.12:5555"
+  },
+  "results": [
+    {
+      "case": "breaking_bad_s01e01",
+      "diagnostics": [
+        "2026-07-26 18:12:57.126 T:24214    info <general>: Loading skin file: /storage/emulated/0/Android/data/org.xbmc.kodi/files/.kodi/addons/plugin.video.umbrella/resources/skins/Default/1080i/source_progress.xml, load type: LOAD_ON_GUI_INIT",
+        "2026-07-26 18:12:59.992 T:24214   error <general>: Playlist Player: skipping unplayable item: 0, path [<redacted-plugin-url>]"
+      ],
+      "errors": [
+        "2026-07-26 18:12:46.636 T:24316    info <general>: ES: Client mwoDevelop Sony Kodi E2E from ::ffff:192.168.1.138 timed out",
+        "2026-07-26 18:12:59.992 T:24214   error <general>: Playlist Player: skipping unplayable item: 0, path [<redacted-plugin-url>]",
+        "2026-07-26 18:12:59.992 T:24214 warning <general>: Attempt to set unplayable index 0"
+      ],
+      "media_type": "episode",
+      "navigation": [
+        "[Breaking Bad]",
+        "[Season 1]",
+        "1x01. Pilot"
+      ],
+      "observed_seconds": 0,
+      "player": {},
+      "resolve_seconds": null,
+      "resolver_diagnostics": [],
+      "resolver_errors": [],
+      "state": "unplayable",
+      "title": "Pilot"
+    }
+  ],
+  "schema": 1,
+  "settings": {
+    "all_providers": true,
+    "rescrape": true,
+    "selection": "autoplay",
+    "tokens_collected": false
+  }
+}
