@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "device": {
+    "serial": "127.0.0.1:5555",
+    "manufacturer": "samsung",
+    "model": "SM-S901E",
+    "kodi": "21.3"
+  },
+  "umbrella_version": "6.7.81.13",
+  "search": {
+    "term": "Big Buck Bunny",
+    "keyboard_window": {
+      "id": 10103,
+      "label": "Virtual keyboard"
+    },
+    "matches": [
+      "Big Buck Bunny (2008)",
+      "Big Buck Bunny ()"
+    ],
+    "window_transitions": [
+      {
+        "id": 10025,
+        "label": "Videos"
+      },
+      {
+        "id": 10000,
+        "label": "Home"
+      },
+      {
+        "id": 10103,
+        "label": "Virtual keyboard"
+      },
+      {
+        "id": 10138,
+        "label": ""
+      },
+      {
+        "id": 10025,
+        "label": "Videos"
+      }
+    ],
+    "final_window": {
+      "id": 10025,
+      "label": "Videos"
+    }
+  },
+  "tokens_collected": false
+}

@@ -6,6 +6,8 @@ from sony_kodi_matrix import (
     AdbEventClient,
     EventClient,
     diagnostic_lines,
+    open_media,
+    plugin_url,
     redact,
     terminal_failure_state,
 )
@@ -77,3 +79,32 @@ def test_terminal_failure_state_detects_kodi_unplayable_result():
     )
     assert terminal_failure_state(log) == "unplayable"
     assert terminal_failure_state("Creating Demuxer") is None
+
+
+def test_plugin_url_nonce_prevents_kodi_from_reusing_a_previous_invocation():
+    url = plugin_url(sony_kodi_matrix.CASES["sintel"], e2e_nonce=123456)
+    assert "e2e_nonce=123456" in url
+    assert "action=play_Item" in url
+
+
+def test_open_media_uses_acknowledged_jsonrpc_player_open():
+    class FakeRpc:
+        def __init__(self):
+            self.calls = []
+
+        def call(self, method, params=None):
+            self.calls.append((method, params))
+            return "OK"
+
+    rpc = FakeRpc()
+    open_media(rpc, "plugin://plugin.video.umbrella/?action=play_Item")
+    assert rpc.calls == [
+        (
+            "Player.Open",
+            {
+                "item": {
+                    "file": "plugin://plugin.video.umbrella/?action=play_Item"
+                }
+            },
+        )
+    ]

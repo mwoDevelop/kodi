@@ -125,16 +125,21 @@ the default server:
 export ADB_SERVER_SOCKET=tcp:localhost:5038
 ```
 
-The Umbrella matrix drives real Kodi search and selection screens, observes the
-player, and stores redacted Kodi and Umbrella resolver diagnostics:
+The Umbrella matrix can invoke a real autoplay URL through acknowledged Kodi
+JSON-RPC, observes the player, and stores redacted Kodi and Umbrella resolver
+diagnostics. Forward Kodi's TCP JSON-RPC port first:
 
 ```bash
+/home/mwo/android-sdk/platform-tools/adb \
+  -s 192.168.1.12:5555 forward tcp:19091 tcp:9090
+
 .venv/bin/python tests/e2e/sony_kodi_matrix.py \
   --adb /home/mwo/android-sdk/platform-tools/adb \
   --serial 192.168.1.12:5555 \
   --host 127.0.0.1 \
-  --jsonrpc-port 19090 \
-  --event-host 192.168.1.12 \
+  --jsonrpc-port 19091 \
+  --direct-play \
+  --case sintel \
   --observe-seconds 15 \
   --result docs/e2e-results/sony-umbrella-matrix.json
 ```
@@ -164,7 +169,7 @@ immediately if a stale `source_progress` modal is still blocking the UI:
   --adb /home/mwo/android-sdk/platform-tools/adb \
   --serial 192.168.1.12:5555 \
   --host 127.0.0.1 \
-  --jsonrpc-port 19090 \
+  --jsonrpc-port 19091 \
   --term Sintel \
   --result docs/e2e-results/sony-umbrella-search.json
 ```
@@ -172,19 +177,17 @@ immediately if a stale `source_progress` modal is still blocking the UI:
 ## BlueStacks1 / Kodi 21.3
 
 BlueStacks may expose Kodi's JSON-RPC only on the guest loopback interface.
-Forward it through the exact `BlueStacks1` ADB target and send EventServer
-commands from inside that same guest:
+Forward it through the exact `BlueStacks1` ADB target:
 
 ```bash
 export ADB_SERVER_SOCKET=tcp:localhost:5038
-/home/mwo/android-sdk/platform-tools/adb -s 127.0.0.1:5555 forward tcp:19090 tcp:9090
+/home/mwo/android-sdk/platform-tools/adb -s 127.0.0.1:5555 forward tcp:19190 tcp:9090
 
 .venv/bin/python tests/e2e/sony_kodi_matrix.py \
   --adb /home/mwo/android-sdk/platform-tools/adb \
   --serial 127.0.0.1:5555 \
   --host 127.0.0.1 \
-  --jsonrpc-port 19090 \
-  --event-via-adb \
+  --jsonrpc-port 19190 \
   --direct-play \
   --case sintel \
   --observe-seconds 15 \
@@ -203,7 +206,7 @@ BlueStacks:
   --adb /home/mwo/android-sdk/platform-tools/adb \
   --serial 127.0.0.1:5555 \
   --host 127.0.0.1 \
-  --jsonrpc-port 19090 \
+  --jsonrpc-port 19190 \
   --term Sintel \
   --result docs/e2e-results/bluestacks1-umbrella-search.json
 ```
