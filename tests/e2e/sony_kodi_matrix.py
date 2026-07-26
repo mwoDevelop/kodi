@@ -376,7 +376,7 @@ def terminal_failure_state(log_text: str) -> str | None:
     return None
 
 
-def plugin_url(case: dict) -> str:
+def plugin_url(case: dict, e2e_nonce: int | None = None) -> str:
     meta = {
         key: value
         for key, value in case.items()
@@ -410,7 +410,14 @@ def plugin_url(case: dict) -> str:
             "select": "1",
         }
     )
+    if e2e_nonce is not None:
+        params["e2e_nonce"] = str(e2e_nonce)
     return "plugin://plugin.video.umbrella/?%s" % urlencode(params)
+
+
+def open_media(rpc: JsonRpc, media_url: str):
+    """Open a plug-in URL over the same acknowledged transport used for polling."""
+    rpc.call("Player.Open", {"item": {"file": media_url}})
 
 
 def active_video_player(rpc: JsonRpc) -> int | None:
@@ -538,9 +545,9 @@ def run_case(
     started_at = time.monotonic()
     if direct_play:
         navigation = []
-        events.execute_builtin("ActivateWindow(Home)")
+        rpc.call("GUI.ActivateWindow", {"window": "home"})
         time.sleep(2)
-        events.play_media(plugin_url(case))
+        open_media(rpc, plugin_url(case, e2e_nonce=time.time_ns()))
     else:
         navigation = open_case_through_gui(rpc, events, case)
     playback_started_at = None
@@ -671,6 +678,7 @@ def main() -> int:
             "selection": "autoplay",
             "all_providers": True,
             "rescrape": True,
+            "direct_play_transport": "jsonrpc",
             "tokens_collected": False,
         },
         "results": [],
