@@ -41,10 +41,18 @@ def wait_for_window(
 	raise RuntimeError("window transition timed out; last window was %r" % last)
 
 
-def matching_search_results(rpc: JsonRpc, term: str) -> list[str]:
+def search_action(media_type: str, suffix: str) -> str:
+	return "%sSearch%s" % ("tv" if media_type == "tv" else "movie", suffix)
+
+
+def matching_search_results(
+	rpc: JsonRpc,
+	term: str,
+	media_type: str = "movie",
+) -> list[str]:
 	directory = (
-		"plugin://plugin.video.umbrella/?action=movieSearchterm&name=%s"
-		% quote_plus(term)
+		"plugin://plugin.video.umbrella/?action=%s&name=%s"
+		% (search_action(media_type, "term"), quote_plus(term))
 	)
 	result = rpc.call(
 		"Files.GetDirectory",
@@ -82,12 +90,14 @@ def open_search_keyboard(
 	rpc: JsonRpc,
 	timeout: float,
 	transitions: list[dict],
+	media_type: str = "movie",
 ) -> dict:
 	deadline = time.monotonic() + timeout
 	while time.monotonic() < deadline:
 		url = (
 			"plugin://plugin.video.umbrella/"
-			"?action=movieSearchnew&e2e_nonce=%d" % time.time_ns()
+			"?action=%s&e2e_nonce=%d"
+			% (search_action(media_type, "new"), time.time_ns())
 		)
 		rpc.call(
 			"GUI.ActivateWindow",
@@ -110,6 +120,7 @@ def run_search(
 	rpc: JsonRpc,
 	term: str,
 	timeout: float,
+	media_type: str = "movie",
 ) -> dict:
 	transitions = []
 	before = current_window(rpc)
@@ -133,7 +144,7 @@ def run_search(
 		transitions,
 	)
 	time.sleep(2)
-	keyboard = open_search_keyboard(rpc, timeout, transitions)
+	keyboard = open_search_keyboard(rpc, timeout, transitions, media_type)
 	# Kodi 21 may focus the virtual keyboard's Done control without activating it.
 	# Selecting the focused control makes submission deterministic on Android TV.
 	submit_keyboard(rpc, term, timeout)
@@ -146,7 +157,7 @@ def run_search(
 	matches = []
 	started = time.monotonic()
 	while time.monotonic() - started < timeout:
-		matches = matching_search_results(rpc, term)
+		matches = matching_search_results(rpc, term, media_type)
 		if matches:
 			break
 		time.sleep(0.5)
@@ -157,6 +168,7 @@ def run_search(
 		raise RuntimeError("source_progress window reappeared during search")
 	return {
 		"term": term,
+		"media_type": media_type,
 		"keyboard_window": keyboard,
 		"matches": matches[:10],
 		"window_transitions": transitions,
@@ -171,6 +183,7 @@ def main() -> int:
 	parser.add_argument("--host", required=True)
 	parser.add_argument("--jsonrpc-port", type=int, default=9090)
 	parser.add_argument("--term", default="Sintel")
+	parser.add_argument("--media-type", choices=("movie", "tv"), default="movie")
 	parser.add_argument("--timeout", type=float, default=30)
 	parser.add_argument("--result", required=True)
 	args = parser.parse_args()
@@ -194,7 +207,7 @@ def main() -> int:
 		"umbrella_version": addon_version(
 			args.adb, args.serial, "plugin.video.umbrella"
 		),
-		"search": run_search(rpc, args.term, args.timeout),
+		"search": run_search(rpc, args.term, args.timeout, args.media_type),
 		"tokens_collected": False,
 	}
 	output = Path(args.result)

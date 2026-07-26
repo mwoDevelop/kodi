@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "device": {
+    "serial": "192.168.1.12:5555",
+    "manufacturer": "Sony",
+    "model": "BRAVIA 4K GB ATV3",
+    "kodi": "21.2"
+  },
+  "umbrella_version": "6.7.81.13",
+  "search": {
+    "term": "House of the Dragon",
+    "media_type": "tv",
+    "keyboard_window": {
+      "id": 10138,
+      "label": ""
+    },
+    "matches": [
+      "Enter the House of the Dragon",
+      "House of the Dragon",
+      "The Official Game of Thrones Podcast: House of the Dragon"
+    ],
+    "window_transitions": [
+      {
+        "id": 10025,
+        "label": "Videos"
+      },
+      {
+        "id": 10000,
+        "label": "Home"
+      },
+      {
+        "id": 10138,
+        "label": ""
+      },
+      {
+        "id": 10103,
+        "label": "Virtual keyboard"
+      },
+      {
+        "id": 10138,
+        "label": ""
+      },
+      {
+        "id": 10025,
+        "label": "Videos"
+      }
+    ],
+    "final_window": {
+      "id": 10025,
+      "label": "Videos"
+    }
+  },
+  "tokens_collected": false
+}

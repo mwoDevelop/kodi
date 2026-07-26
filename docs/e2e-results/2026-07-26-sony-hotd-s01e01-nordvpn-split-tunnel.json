@@ -1,0 +1,141 @@
+{
+  "addons": {
+    "plugin.video.umbrella": "6.7.81.13",
+    "plugin.video.watchnixtoons2.mwodevelop": "0.25.2",
+    "repository.mwodevelop": "1.0.0",
+    "script.module.mwoscrapers": "0.1.3",
+    "script.mwoscrapers": "0.1.1"
+  },
+  "device": {
+    "android": "9",
+    "kodi": "21.2",
+    "manufacturer": "Sony",
+    "model": "BRAVIA 4K GB ATV3",
+    "serial": "192.168.1.12:5555"
+  },
+  "results": [
+    {
+      "case": "house_of_the_dragon_s01e01",
+      "diagnostics": [
+        "2026-07-26 21:31:30.085 T:19656    info <general>: Loading skin file: /storage/emulated/0/Android/data/org.xbmc.kodi/files/.kodi/addons/plugin.video.umbrella/resources/skins/Default/1080i/source_progress.xml, load type: LOAD_ON_GUI_INIT",
+        "2026-07-26 21:31:51.747 T:19656    info <general>: VideoPlayer::OpenFile: <redacted-url>",
+        "2026-07-26 21:31:52.676 T:21079    info <general>: Creating Demuxer",
+        "2026-07-26 21:31:52.712 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPAC3",
+        "2026-07-26 21:31:52.713 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPADPCMIMA",
+        "2026-07-26 21:31:52.713 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPADPCMMS",
+        "2026-07-26 21:31:52.714 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.APE",
+        "2026-07-26 21:31:52.716 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPDTS",
+        "2026-07-26 21:31:52.716 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPDTSEXPRESS",
+        "2026-07-26 21:31:52.717 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPDTSHD",
+        "2026-07-26 21:31:52.717 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPEAC3",
+        "2026-07-26 21:31:52.717 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPLPCMALAW",
+        "2026-07-26 21:31:52.718 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPLPCMMLAW",
+        "2026-07-26 21:31:52.718 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPMP1",
+        "2026-07-26 21:31:52.718 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPMP2",
+        "2026-07-26 21:31:52.718 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPPCM",
+        "2026-07-26 21:31:52.719 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPWMA",
+        "2026-07-26 21:31:52.719 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPWMAPRO",
+        "2026-07-26 21:31:52.720 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.VIDEO.DECODER.AVC",
+        "2026-07-26 21:31:52.720 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.VIDEO.DECODER.HEVC",
+        "2026-07-26 21:31:52.887 T:21079    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Using codec: OMX.MTK.VIDEO.DECODER.HEVC",
+        "2026-07-26 21:31:52.894 T:21079    info <general>: CDVDAudioCodecAndroidMediaCodec::Open() Use default handling for non encrypted stream",
+        "2026-07-26 21:31:52.897 T:21102    info <general>: running thread: CVideoPlayerAudio::Process()",
+        "2026-07-26 21:31:53.154 T:19656    info <general>: Instancing CRendererMediaCodecSurface",
+        "2026-07-26 21:31:53.155 T:19656    info <general>: CRendererMediaCodecSurface::Configure",
+        "2026-07-26 21:32:11.438 T:19656    info <general>: CVideoPlayer::CloseFile()",
+        "2026-07-26 21:32:11.439 T:19656    info <general>: VideoPlayer: waiting for threads to exit",
+        "2026-07-26 21:32:11.447 T:21079    info <general>: CVideoPlayer::OnExit()",
+        "2026-07-26 21:32:11.451 T:21102    info <general>: thread end: CVideoPlayerAudio::OnExit()",
+        "2026-07-26 21:32:11.661 T:19656    info <general>: VideoPlayer: finished waiting",
+        "2026-07-26 21:32:11.661 T:19656    info <general>: CVideoPlayer::CloseFile()",
+        "2026-07-26 21:32:11.661 T:19656    info <general>: VideoPlayer: waiting for threads to exit",
+        "2026-07-26 21:32:11.661 T:19656    info <general>: VideoPlayer: finished waiting"
+      ],
+      "errors": [
+        "2026-07-26 21:32:11.492 T:21101 warning <general>: OutputPicture - timeout waiting for buffer"
+      ],
+      "media_type": "episode",
+      "navigation": [],
+      "observed_seconds": 16.172,
+      "player": {
+        "percentage": 0.4538101255893707,
+        "speed": 1,
+        "time": {
+          "hours": 0,
+          "milliseconds": 864,
+          "minutes": 0,
+          "seconds": 17
+        },
+        "totaltime": {
+          "hours": 1,
+          "milliseconds": 448,
+          "minutes": 5,
+          "seconds": 36
+        }
+      },
+      "resolve_seconds": 26.574,
+      "resolver_diagnostics": [
+        "[2026-07-26 21:31:30] [ plugin.video.umbrella: DEBUG ]: Removed 0 duplicate sources for ([COLOR FFFFFF33]House of the Dragon (S01E01)[/COLOR]) from list",
+        "[2026-07-26 21:31:31] [ plugin.video.umbrella: DEBUG ]: Real Debrid less than 5 active torrents.",
+        "[2026-07-26 21:31:32] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.add_magnet() Line # :669",
+        "                       msg : Real-Debrid: Sending MAGNET to cloud: <redacted-magnet>",
+        "[2026-07-26 21:31:32] [ plugin.video.umbrella: WARNING ]: Real-Debrid resolver rejected source: error_code=35 reason=infringing_file",
+        "[2026-07-26 21:31:32] [ plugin.video.umbrella: WARNING ]: Playback not supported for (sourcesAutoPlay()): None",
+        "[2026-07-26 21:31:33] [ plugin.video.umbrella: DEBUG ]: Real Debrid less than 5 active torrents.",
+        "[2026-07-26 21:31:34] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.add_magnet() Line # :669",
+        "                       msg : Real-Debrid: Sending MAGNET to cloud: <redacted-magnet>",
+        "[2026-07-26 21:31:34] [ plugin.video.umbrella: WARNING ]: Real-Debrid resolver rejected source: error_code=35 reason=infringing_file",
+        "[2026-07-26 21:31:34] [ plugin.video.umbrella: WARNING ]: Playback not supported for (sourcesAutoPlay()): None",
+        "[2026-07-26 21:31:35] [ plugin.video.umbrella: DEBUG ]: Real Debrid less than 5 active torrents.",
+        "[2026-07-26 21:31:36] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.add_magnet() Line # :669",
+        "                       msg : Real-Debrid: Sending MAGNET to cloud: <redacted-magnet>",
+        "[2026-07-26 21:31:39] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.delete_torrent() Line # :707",
+        "                       msg : Real-Debrid: Torrent ID X32UIOQS2MTMC was removed from your active torrents",
+        "[2026-07-26 21:31:39] [ plugin.video.umbrella: WARNING ]: Real-Debrid resolver rejected source: error_code=0 reason=no_playable_url",
+        "[2026-07-26 21:31:39] [ plugin.video.umbrella: WARNING ]: Playback not supported for (sourcesAutoPlay()): None",
+        "[2026-07-26 21:31:40] [ plugin.video.umbrella: DEBUG ]: Real Debrid less than 5 active torrents.",
+        "[2026-07-26 21:31:41] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.add_magnet() Line # :669",
+        "                       msg : Real-Debrid: Sending MAGNET to cloud: <redacted-magnet>",
+        "[2026-07-26 21:31:41] [ plugin.video.umbrella: WARNING ]: Real-Debrid resolver rejected source: error_code=35 reason=infringing_file",
+        "[2026-07-26 21:31:41] [ plugin.video.umbrella: WARNING ]: Playback not supported for (sourcesAutoPlay()): None",
+        "[2026-07-26 21:31:42] [ plugin.video.umbrella: DEBUG ]: Real Debrid less than 5 active torrents.",
+        "[2026-07-26 21:31:43] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.add_magnet() Line # :669",
+        "                       msg : Real-Debrid: Sending MAGNET to cloud: <redacted-magnet>",
+        "[2026-07-26 21:31:43] [ plugin.video.umbrella: WARNING ]: Real-Debrid resolver rejected source: error_code=35 reason=infringing_file",
+        "[2026-07-26 21:31:43] [ plugin.video.umbrella: WARNING ]: Playback not supported for (sourcesAutoPlay()): None",
+        "[2026-07-26 21:31:44] [ plugin.video.umbrella: DEBUG ]: Real Debrid less than 5 active torrents.",
+        "[2026-07-26 21:31:45] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.add_magnet() Line # :669",
+        "                       msg : Real-Debrid: Sending MAGNET to cloud: <redacted-magnet>",
+        "[2026-07-26 21:31:50] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.delete_torrent() Line # :707",
+        "                       msg : Real-Debrid: Torrent ID LLL6H65PZNI34 was removed from your active torrents",
+        "[2026-07-26 21:31:51] [ plugin.video.umbrella: DEBUG ]: singleItemPlaylist() started.",
+        "[2026-07-26 21:31:51] [ plugin.video.umbrella: DEBUG ]: singleItemPlaylist() url: <redacted-url>",
+        "[2026-07-26 21:31:51] [ plugin.video.umbrella: DEBUG ]: singleItemPlaylist() returning true.",
+        "[2026-07-26 21:31:51] [ plugin.video.umbrella: DEBUG ]: Played file as resolve.",
+        "[2026-07-26 21:31:54] [ plugin.video.umbrella: DEBUG ]: OpenSubs Authorized.",
+        "[2026-07-26 21:31:54] [ plugin.video.umbrella: DEBUG ]: OpenSubs Searching: Imdb:tt11198330 Season: 1 Episode: 1 Language: en.",
+        "[2026-07-26 21:31:54] [ plugin.video.umbrella: DEBUG ]: downloaded subtitle=House.of.the.Dragon.S01E01.The.Heirs.of.the.Dragon.720p.WEB-DL.DD5.1.H264-MiU",
+        "[2026-07-26 21:31:54] [ plugin.video.umbrella: DEBUG ]: OpenSubs Download Link: None Filename: House.of.the.Dragon.S01E01.The.Heirs.of.the.Dragon.720p.WEB-DL.DD5.1.H264-MiU.",
+        "[2026-07-26 21:31:54] [ plugin.video.umbrella: WARNING ]: OpenSubs returned no usable subtitle download URL.",
+        "[2026-07-26 21:31:55] [ plugin.video.umbrella: DEBUG ]: onAVStarted callback"
+      ],
+      "resolver_errors": [
+        "[2026-07-26 21:31:32] [ plugin.video.umbrella: WARNING ]: Playback not supported for (sourcesAutoPlay()): None",
+        "[2026-07-26 21:31:34] [ plugin.video.umbrella: WARNING ]: Playback not supported for (sourcesAutoPlay()): None",
+        "[2026-07-26 21:31:39] [ plugin.video.umbrella: WARNING ]: Playback not supported for (sourcesAutoPlay()): None",
+        "[2026-07-26 21:31:41] [ plugin.video.umbrella: WARNING ]: Playback not supported for (sourcesAutoPlay()): None",
+        "[2026-07-26 21:31:43] [ plugin.video.umbrella: WARNING ]: Playback not supported for (sourcesAutoPlay()): None"
+      ],
+      "state": "played",
+      "title": "The Heirs of the Dragon"
+    }
+  ],
+  "schema": 1,
+  "settings": {
+    "all_providers": true,
+    "direct_play_transport": "jsonrpc",
+    "rescrape": true,
+    "selection": "autoplay",
+    "tokens_collected": false
+  }
+}

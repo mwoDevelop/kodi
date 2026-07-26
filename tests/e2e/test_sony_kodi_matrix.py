@@ -87,6 +87,14 @@ def test_plugin_url_nonce_prevents_kodi_from_reusing_a_previous_invocation():
     assert "action=play_Item" in url
 
 
+def test_house_of_the_dragon_season_three_case_has_episode_metadata():
+    case = sony_kodi_matrix.CASES["house_of_the_dragon_s03e01"]
+    assert case["media_type"] == "episode"
+    assert case["season"] == 3
+    assert case["episode"] == 1
+    assert case["premiered"] == "2026-06-21"
+
+
 def test_open_media_uses_acknowledged_jsonrpc_player_open():
     class FakeRpc:
         def __init__(self):
