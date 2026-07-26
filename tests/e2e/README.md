@@ -113,3 +113,42 @@ The verifier is read-only on the Kodi profile. It fails unless the mwoDevelop
 add-on is enabled and owned by the stable repository, the legacy add-on and
 testing repository are absent, and the latest matching playback log contains
 input stream, demuxer, audio decoder, and clean player-close markers.
+
+## Sony Android TV / Kodi 21.2
+
+Use an isolated ADB server when another local Android client keeps replacing
+the default server:
+
+```bash
+/home/mwo/android-sdk/platform-tools/adb -P 5038 start-server
+/home/mwo/android-sdk/platform-tools/adb -P 5038 connect 192.168.1.12:5555
+export ADB_SERVER_SOCKET=tcp:localhost:5038
+```
+
+The Umbrella matrix drives real Kodi search and selection screens, observes the
+player, and stores redacted Kodi and Umbrella resolver diagnostics:
+
+```bash
+.venv/bin/python tests/e2e/sony_kodi_matrix.py \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --serial 192.168.1.12:5555 \
+  --host 192.168.1.12 \
+  --observe-seconds 15 \
+  --result docs/e2e-results/sony-umbrella-matrix.json
+```
+
+For the deterministic WatchNixtoons2 playback test, first select `Auto Play
+Highest Quality` in the add-on's Playback Method setting. The runner validates
+the live `Latest Releases` catalogue and a known episode through Kodi's media
+pipeline:
+
+```bash
+.venv/bin/python tests/e2e/sony_watchnixtoons2.py \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --serial 192.168.1.12:5555 \
+  --host 192.168.1.12 \
+  --observe-seconds 15 \
+  --result docs/e2e-results/sony-watchnixtoons2.json
+```
+
+Both reports omit credentials, magnets, and resolved media URLs.
