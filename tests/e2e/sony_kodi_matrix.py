@@ -97,6 +97,10 @@ DIAGNOSTIC_TERMS = (
     "demux",
     "mediacodec",
 )
+TERMINAL_FAILURE_MARKERS = (
+    "Playlist Player: skipping unplayable item",
+    "Attempt to set unplayable index",
+)
 
 
 def run(adb: str, serial: str, *args: str, check: bool = True) -> str:
@@ -277,6 +281,12 @@ def diagnostic_lines(log_text: str) -> tuple[list[str], list[str]]:
     return diagnostics[-120:], errors[-80:]
 
 
+def terminal_failure_state(log_text: str) -> str | None:
+    if any(marker in log_text for marker in TERMINAL_FAILURE_MARKERS):
+        return "unplayable"
+    return None
+
+
 def plugin_url(case: dict) -> str:
     meta = {
         key: value
@@ -440,6 +450,7 @@ def run_case(
     playback_started_at = None
     last_properties = {}
     state = "resolve_timeout"
+    next_failure_probe = time.monotonic() + 4
 
     while time.monotonic() - started_at < timeout:
         try:
@@ -451,6 +462,13 @@ def run_case(
             if playback_started_at is not None:
                 state = "playback_stopped_early"
                 break
+            if time.monotonic() >= next_failure_probe:
+                state = terminal_failure_state(
+                    log_since(adb, serial, kodi_start_line)
+                ) or state
+                if state == "unplayable":
+                    break
+                next_failure_probe = time.monotonic() + 4
             time.sleep(2)
             continue
         if playback_started_at is None:

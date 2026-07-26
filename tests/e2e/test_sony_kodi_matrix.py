@@ -1,6 +1,11 @@
 import struct
 
-from sony_kodi_matrix import EventClient, diagnostic_lines, redact
+from sony_kodi_matrix import (
+    EventClient,
+    diagnostic_lines,
+    redact,
+    terminal_failure_state,
+)
 
 
 def test_redaction_removes_resolver_urls_and_tokens():
@@ -39,3 +44,12 @@ def test_diagnostics_separate_errors_from_normal_playback():
     )
     assert len(diagnostics) == 3
     assert errors == ["Real-Debrid resolver failed safely"]
+
+
+def test_terminal_failure_state_detects_kodi_unplayable_result():
+    log = (
+        "Loading source progress\n"
+        "Playlist Player: skipping unplayable item: 0, path [<redacted>]\n"
+    )
+    assert terminal_failure_state(log) == "unplayable"
+    assert terminal_failure_state("Creating Demuxer") is None
