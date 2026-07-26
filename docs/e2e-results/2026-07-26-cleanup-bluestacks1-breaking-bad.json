@@ -1,0 +1,100 @@
+{
+  "addons": {
+    "plugin.video.umbrella": "6.7.81.11",
+    "plugin.video.watchnixtoons2.mwodevelop": "0.25.2",
+    "repository.mwodevelop": "1.0.0",
+    "script.module.mwoscrapers": "0.1.3",
+    "script.mwoscrapers": "0.1.1"
+  },
+  "device": {
+    "android": "11",
+    "kodi": "21.3",
+    "manufacturer": "samsung",
+    "model": "SM-S901E",
+    "serial": "127.0.0.1:5555"
+  },
+  "results": [
+    {
+      "case": "breaking_bad_s01e01",
+      "diagnostics": [
+        "2026-07-26 18:14:29.570 T:6239     info <general>: Loading skin file: /storage/emulated/0/Android/data/org.xbmc.kodi/files/.kodi/addons/plugin.video.umbrella/resources/skins/Default/1080i/source_progress.xml, load type: LOAD_ON_GUI_INIT",
+        "2026-07-26 18:14:36.777 T:6239     info <general>: VideoPlayer::OpenFile: <redacted-url>",
+        "2026-07-26 18:14:37.573 T:10166    info <general>: Creating Demuxer",
+        "2026-07-26 18:14:38.708 T:10166    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.ffmpeg.ac3.decoder",
+        "2026-07-26 18:14:38.709 T:10166    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.ffmpeg.ape.decoder",
+        "2026-07-26 18:14:38.709 T:10166    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.ffmpeg.dts.decoder",
+        "2026-07-26 18:14:38.709 T:10166    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.ffmpeg.flac.decoder",
+        "2026-07-26 18:14:38.709 T:10166    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.ffmpeg.mp2.decoder",
+        "2026-07-26 18:14:38.709 T:10166    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.ffmpeg.ra.decoder",
+        "2026-07-26 18:14:38.709 T:10166    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.ffmpeg.atrial.decoder",
+        "2026-07-26 18:14:38.709 T:10166    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.ffmpeg.vorbis.decoder",
+        "2026-07-26 18:14:38.709 T:10166    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.ffmpeg.wma.decoder",
+        "2026-07-26 18:14:38.709 T:10166    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.qcom.video.decoder.avc",
+        "2026-07-26 18:14:38.736 T:10166    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Using codec: OMX.qcom.video.decoder.avc",
+        "2026-07-26 18:14:38.736 T:10166    info <general>: CDVDAudioCodecAndroidMediaCodec: Unknown hints.codec(86020)",
+        "2026-07-26 18:14:38.738 T:10178    info <general>: running thread: CVideoPlayerAudio::Process()",
+        "2026-07-26 18:14:38.874 T:6239     info <general>: Instancing CRendererMediaCodecSurface",
+        "2026-07-26 18:14:38.874 T:6239     info <general>: CRendererMediaCodecSurface::Configure",
+        "2026-07-26 18:14:52.671 T:6239     info <general>: CVideoPlayer::CloseFile()",
+        "2026-07-26 18:14:52.671 T:6239     info <general>: VideoPlayer: waiting for threads to exit",
+        "2026-07-26 18:14:52.674 T:10166    info <general>: CVideoPlayer::OnExit()",
+        "2026-07-26 18:14:52.749 T:10178    info <general>: thread end: CVideoPlayerAudio::OnExit()",
+        "2026-07-26 18:14:52.788 T:6239     info <general>: VideoPlayer: finished waiting",
+        "2026-07-26 18:14:52.788 T:6239     info <general>: CVideoPlayer::CloseFile()",
+        "2026-07-26 18:14:52.788 T:6239     info <general>: VideoPlayer: waiting for threads to exit",
+        "2026-07-26 18:14:52.788 T:6239     info <general>: VideoPlayer: finished waiting"
+      ],
+      "errors": [
+        "2026-07-26 18:14:45.753 T:6277     info <general>: ES: Client mwoDevelop Sony Kodi E2E from 127.0.0.1 timed out"
+      ],
+      "media_type": "episode",
+      "navigation": [],
+      "observed_seconds": 12.043,
+      "player": {
+        "percentage": 0.38803645968437195,
+        "speed": 1,
+        "time": {
+          "hours": 0,
+          "milliseconds": 529,
+          "minutes": 0,
+          "seconds": 13
+        },
+        "totaltime": {
+          "hours": 0,
+          "milliseconds": 528,
+          "minutes": 58,
+          "seconds": 6
+        }
+      },
+      "resolve_seconds": 15.735,
+      "resolver_diagnostics": [
+        "[2026-07-26 18:14:29] [ plugin.video.umbrella: DEBUG ]: Removed 0 duplicate sources for ([COLOR FFFFFF33]Breaking Bad (S01E01)[/COLOR]) from list",
+        "[2026-07-26 18:14:30] [ plugin.video.umbrella: DEBUG ]: Real Debrid less than 5 active torrents.",
+        "[2026-07-26 18:14:31] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.add_magnet() Line # :669",
+        "                       msg : Real-Debrid: Sending MAGNET to cloud: <redacted-magnet>",
+        "[2026-07-26 18:14:36] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.delete_torrent() Line # :707",
+        "                       msg : Real-Debrid: Torrent ID HUVPCGRXQFOTI was removed from your active torrents",
+        "[2026-07-26 18:14:36] [ plugin.video.umbrella: DEBUG ]: singleItemPlaylist() started.",
+        "[2026-07-26 18:14:36] [ plugin.video.umbrella: DEBUG ]: singleItemPlaylist() url: <redacted-url>",
+        "[2026-07-26 18:14:36] [ plugin.video.umbrella: DEBUG ]: singleItemPlaylist() returning true.",
+        "[2026-07-26 18:14:36] [ plugin.video.umbrella: DEBUG ]: Played file as resolve.",
+        "[2026-07-26 18:14:39] [ plugin.video.umbrella: DEBUG ]: OpenSubs Authorized.",
+        "[2026-07-26 18:14:39] [ plugin.video.umbrella: DEBUG ]: OpenSubs Searching: Imdb:tt0903747 Season: 1 Episode: 1 Language: en.",
+        "[2026-07-26 18:14:39] [ plugin.video.umbrella: DEBUG ]: downloaded subtitle=Breaking Bad Season 1 Episode 01 - Pilot",
+        "[2026-07-26 18:14:39] [ plugin.video.umbrella: DEBUG ]: OpenSubs Download Link: None Filename: Breaking Bad Season 1 Episode 01 - Pilot.",
+        "[2026-07-26 18:14:39] [ plugin.video.umbrella: WARNING ]: OpenSubs returned no usable subtitle download URL.",
+        "[2026-07-26 18:14:39] [ plugin.video.umbrella: DEBUG ]: onAVStarted callback"
+      ],
+      "resolver_errors": [],
+      "state": "played",
+      "title": "Pilot"
+    }
+  ],
+  "schema": 1,
+  "settings": {
+    "all_providers": true,
+    "rescrape": true,
+    "selection": "autoplay",
+    "tokens_collected": false
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "addon": {
+    "id": "plugin.video.watchnixtoons2.mwodevelop",
+    "playback_method": "auto_highest",
+    "version": "0.25.2"
+  },
+  "catalogue": {
+    "menu": "[[B][COLOR mediumaquamarine]Latest Releases[/COLOR][/B]]",
+    "sample": [
+      "Needy Girl Overdose Episode 13 English Dubbed",
+      "Hanaori-san Still Wants to Fight in the Next Life Episode 3 English Dubbed",
+      "Daemons of the Shadow Realm Episode 14 English Dubbed",
+      "Jaadugar: A Witch in Mongolia Episode 3 English Dubbed",
+      "Jaadugar: A Witch in Mongolia Episode 5 English Subbed",
+      "Grow Up Show: Sunflower Circus Episode 4 English Dubbed",
+      "Black Torch Episode 4 English Dubbed",
+      "Welcome to Demon School! Iruma-kun Season 4 Episode 17 English Dubbed",
+      "Ascendance of a Bookworm Season 4 Episode 13 English Dubbed",
+      "Akane-banashi Episode 12 English Dubbed",
+      "Rich Girl Caretaker: I\u2019m Secretly the Caregiver of the Most Popular Girl in This Rich Kid School Episode 4 English Subbed",
+      "Hanaori-san Still Wants to Fight in the Next Life Episode 3 English Subbed",
+      "Magical Girl Lyrical Nanoha EXCEEDS Gun Blaze Vengeance Episode 4 English Subbed",
+      "The Duke\u2019s Son Claims He Won\u2019t Love Me Yet Showers Me with Adoration Episode 4 English Subbed",
+      "The Ogre\u2019s Bride Episode 4 English Subbed"
+    ],
+    "sample_count": 15
+  },
+  "device": {
+    "kodi": "21.3",
+    "model": "SM-S901E",
+    "serial": "127.0.0.1:5555"
+  },
+  "playback": {
+    "content_path": "mao-episode-17-english-subbed",
+    "final": {
+      "percentage": 0.8550440669059753,
+      "speed": 1,
+      "time": {
+        "hours": 0,
+        "milliseconds": 989,
+        "minutes": 0,
+        "seconds": 12
+      },
+      "totaltime": {
+        "hours": 0,
+        "milliseconds": 103,
+        "minutes": 25,
+        "seconds": 19
+      }
+    },
+    "initial": {
+      "percentage": 0.002633132738992572,
+      "speed": 1,
+      "time": {
+        "hours": 0,
+        "milliseconds": 40,
+        "minutes": 0,
+        "seconds": 0
+      },
+      "totaltime": {
+        "hours": 0,
+        "milliseconds": 103,
+        "minutes": 25,
+        "seconds": 19
+      }
+    },
+    "log_evidence": [
+      "2026-07-26 18:17:54.657 T:6239     info <general>: VideoPlayer::OpenFile: <redacted-plugin-url>",
+      "2026-07-26 18:17:54.657 T:10390    info <general>: Creating InputStream",
+      "2026-07-26 18:17:54.856 T:10390    info <general>: Creating Demuxer",
+      "2026-07-26 18:17:55.079 T:10390    info <general>: CDVDAudioCodecFFmpeg::Open() Successful opened audio decoder aac"
+    ],
+    "observed_seconds": 12,
+    "resolve_seconds": 11.039,
+    "title": "Mao Episode 17 English Subbed"
+  },
+  "result": "pass",
+  "schema": 1
+}
