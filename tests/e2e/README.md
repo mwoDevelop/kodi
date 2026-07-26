@@ -153,6 +153,19 @@ pipeline:
 
 Both reports omit credentials, magnets, and resolved media URLs.
 
+The focused search regression opens Umbrella's real virtual keyboard, submits a
+term, and verifies that Kodi receives a matching directory result. It fails
+immediately if a stale `source_progress` modal is still blocking the UI:
+
+```bash
+.venv/bin/python tests/e2e/umbrella_search_e2e.py \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --serial 192.168.1.12:5555 \
+  --host 192.168.1.12 \
+  --term Sintel \
+  --result docs/e2e-results/sony-umbrella-search.json
+```
+
 ## BlueStacks1 / Kodi 21.3
 
 BlueStacks may expose Kodi's JSON-RPC only on the guest loopback interface.
@@ -178,3 +191,17 @@ export ADB_SERVER_SOCKET=tcp:localhost:5038
 The ADB port is dynamic; confirm that `127.0.0.1:5555` still identifies the
 `Rvc64`/`BlueStacks1` instance before running the command. JSON-RPC access must
 also be enabled in Kodi for the duration of the test and restored afterwards.
+
+The same focused search check uses the forwarded JSON-RPC endpoint and sends
+EventServer packets from inside BlueStacks:
+
+```bash
+.venv/bin/python tests/e2e/umbrella_search_e2e.py \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --serial 127.0.0.1:5555 \
+  --host 127.0.0.1 \
+  --jsonrpc-port 19090 \
+  --event-via-adb \
+  --term Sintel \
+  --result docs/e2e-results/bluestacks1-umbrella-search.json
+```
