@@ -22,3 +22,32 @@ def test_matching_search_results_filters_case_insensitively():
 def test_keyboard_window_ids_cover_kodi_omega_variants():
 	assert 10103 in umbrella_search_e2e.KEYBOARD_WINDOWS
 	assert 10138 in umbrella_search_e2e.KEYBOARD_WINDOWS
+
+
+def test_submit_keyboard_waits_for_done_before_selecting():
+	class KeyboardRpc:
+		def __init__(self):
+			self.calls = []
+			self.probes = 0
+
+		def call(self, method, params=None):
+			self.calls.append((method, params))
+			if method == "GUI.GetProperties":
+				self.probes += 1
+				return {
+					"currentwindow": {"id": 10103},
+					"currentcontrol": {
+						"label": "Done" if self.probes == 2 else ""
+					},
+				}
+			return "OK"
+
+	rpc = KeyboardRpc()
+	umbrella_search_e2e.submit_keyboard(rpc, "Sintel", timeout=1)
+
+	assert [method for method, _params in rpc.calls] == [
+		"Input.SendText",
+		"GUI.GetProperties",
+		"GUI.GetProperties",
+		"Input.Select",
+	]
