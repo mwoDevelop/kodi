@@ -19,6 +19,25 @@ def test_matching_search_results_filters_case_insensitively():
 	]
 
 
+def test_tv_search_uses_tvshow_directory_action():
+	class TvRpc:
+		def call(self, method, params=None):
+			assert method == "Files.GetDirectory"
+			assert "action=tvSearchterm" in params["directory"]
+			return {"files": [{"label": "House of the Dragon"}]}
+
+	assert umbrella_search_e2e.matching_search_results(
+		TvRpc(),
+		"House of the Dragon",
+		media_type="tv",
+	) == ["House of the Dragon"]
+
+
+def test_search_action_selects_movie_or_tv_router():
+	assert umbrella_search_e2e.search_action("movie", "new") == "movieSearchnew"
+	assert umbrella_search_e2e.search_action("tv", "term") == "tvSearchterm"
+
+
 def test_keyboard_window_ids_cover_kodi_omega_variants():
 	assert 10103 in umbrella_search_e2e.KEYBOARD_WINDOWS
 	assert 10138 in umbrella_search_e2e.KEYBOARD_WINDOWS

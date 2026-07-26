@@ -102,6 +102,23 @@ CASES = {
             "The Heirs of the Dragon",
         ],
     },
+    "house_of_the_dragon_s03e01": {
+        "media_type": "episode",
+        "title": "Salt and Sea, Fire and Blood",
+        "tvshowtitle": "House of the Dragon",
+        "year": 2022,
+        "imdb": "tt11198330",
+        "tmdb": "94997",
+        "tvdb": "371572",
+        "season": 3,
+        "episode": 1,
+        "premiered": "2026-06-21",
+        "navigation": [
+            "House of the Dragon",
+            "Season 3",
+            "Salt and Sea, Fire and Blood",
+        ],
+    },
 }
 ERROR_TERMS = (
     " error ",

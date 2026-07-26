@@ -170,9 +170,12 @@ immediately if a stale `source_progress` modal is still blocking the UI:
   --serial 192.168.1.12:5555 \
   --host 127.0.0.1 \
   --jsonrpc-port 19091 \
-  --term Sintel \
+  --term "House of the Dragon" \
+  --media-type tv \
   --result docs/e2e-results/sony-umbrella-search.json
 ```
+
+Omit `--media-type tv` (or pass `--media-type movie`) for movie searches.
 
 ## BlueStacks1 / Kodi 21.3
 
@@ -207,6 +210,7 @@ BlueStacks:
   --serial 127.0.0.1:5555 \
   --host 127.0.0.1 \
   --jsonrpc-port 19190 \
-  --term Sintel \
+  --term "House of the Dragon" \
+  --media-type tv \
   --result docs/e2e-results/bluestacks1-umbrella-search.json
 ```
