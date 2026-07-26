@@ -152,3 +152,29 @@ pipeline:
 ```
 
 Both reports omit credentials, magnets, and resolved media URLs.
+
+## BlueStacks1 / Kodi 21.3
+
+BlueStacks may expose Kodi's JSON-RPC only on the guest loopback interface.
+Forward it through the exact `BlueStacks1` ADB target and send EventServer
+commands from inside that same guest:
+
+```bash
+export ADB_SERVER_SOCKET=tcp:localhost:5038
+/home/mwo/android-sdk/platform-tools/adb -s 127.0.0.1:5555 forward tcp:19090 tcp:9090
+
+.venv/bin/python tests/e2e/sony_kodi_matrix.py \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --serial 127.0.0.1:5555 \
+  --host 127.0.0.1 \
+  --jsonrpc-port 19090 \
+  --event-via-adb \
+  --direct-play \
+  --case sintel \
+  --observe-seconds 15 \
+  --result docs/e2e-results/bluestacks1-umbrella-matrix.json
+```
+
+The ADB port is dynamic; confirm that `127.0.0.1:5555` still identifies the
+`Rvc64`/`BlueStacks1` instance before running the command. JSON-RPC access must
+also be enabled in Kodi for the duration of the test and restored afterwards.

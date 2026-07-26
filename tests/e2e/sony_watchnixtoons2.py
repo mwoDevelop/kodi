@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from sony_kodi_matrix import (
+    AdbEventClient,
     EventClient,
     JsonRpc,
     active_video_player,
@@ -63,6 +64,12 @@ def main() -> int:
     parser.add_argument("--adb", required=True)
     parser.add_argument("--serial", default="192.168.1.12:5555")
     parser.add_argument("--host", default="192.168.1.12")
+    parser.add_argument("--jsonrpc-port", type=int, default=9090)
+    parser.add_argument(
+        "--event-via-adb",
+        action="store_true",
+        help="send Kodi EventServer packets from inside the ADB target",
+    )
     parser.add_argument("--content-path", default="mao-episode-17-english-subbed")
     parser.add_argument("--title", default="Mao Episode 17 English Subbed")
     parser.add_argument("--observe-seconds", type=int, default=15)
@@ -72,8 +79,12 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    rpc = JsonRpc(args.host)
-    events = EventClient(args.host)
+    rpc = JsonRpc(args.host, args.jsonrpc_port)
+    events = (
+        AdbEventClient(args.adb, args.serial)
+        if args.event_via_adb
+        else EventClient(args.host)
+    )
     if rpc.call("JSONRPC.Ping") != "pong":
         raise RuntimeError("Kodi JSON-RPC did not return pong")
     method = playback_method(args.adb, args.serial)

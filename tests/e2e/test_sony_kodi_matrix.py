@@ -1,6 +1,9 @@
+import base64
 import struct
 
+import sony_kodi_matrix
 from sony_kodi_matrix import (
+    AdbEventClient,
     EventClient,
     diagnostic_lines,
     redact,
@@ -34,6 +37,27 @@ def test_eventserver_header_matches_kodi_packet_contract():
     assert struct.unpack("!I", header[8:12])[0] == 1
     assert struct.unpack("!I", header[12:16])[0] == 1
     assert struct.unpack("!H", header[16:18])[0] == 12
+
+
+def test_adb_event_client_sends_one_session_from_a_fixed_source_port(monkeypatch):
+    calls = []
+
+    def fake_run(adb, serial, *args, **_kwargs):
+        calls.append((adb, serial, args))
+        return ""
+
+    monkeypatch.setattr(sony_kodi_matrix, "run", fake_run)
+    client = AdbEventClient("adb", "serial", source_port=40140)
+    client.uid = 123
+    client.execute_builtin("ActivateWindow(Home)")
+
+    assert len(calls) == 3
+    assert all(call[:2] == ("adb", "serial") for call in calls)
+    commands = [call[2][1] for call in calls]
+    assert all("-p 40140" in command for command in commands)
+    action_packet = base64.b64decode(commands[1].split()[1])
+    assert action_packet[:4] == b"XBMC"
+    assert b"ActivateWindow(Home)\0" in action_packet
 
 
 def test_diagnostics_separate_errors_from_normal_playback():
