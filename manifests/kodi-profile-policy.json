@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "name": "portable-android-kodi-profile",
+  "include": [
+    "addons/**",
+    "userdata/*.xml",
+    "userdata/*.json",
+    "userdata/*.xsp",
+    "userdata/addon_data/**",
+    "userdata/keymaps/**",
+    "userdata/library/**",
+    "userdata/playlists/**",
+    "userdata/profiles/**",
+    "userdata/Savestates/**"
+  ],
+  "exclude": [
+    "addons/packages/**",
+    "addons/temp/**",
+    "userdata/Database/**",
+    "userdata/Thumbnails/**",
+    "userdata/peripheral_data/**",
+    "userdata/temp/**",
+    "userdata/addon_data/**/cache/**",
+    "userdata/addon_data/**/temp/**",
+    "userdata/addon_data/plugin.video.umbrella/artwork.db",
+    "userdata/addon_data/plugin.video.umbrella/cache.db",
+    "userdata/addon_data/plugin.video.umbrella/cache.v",
+    "userdata/addon_data/plugin.video.umbrella/fanarttv.db",
+    "userdata/addon_data/plugin.video.umbrella/metadata.db",
+    "userdata/addon_data/plugin.video.umbrella/providers.db",
+    "userdata/addon_data/plugin.video.umbrella/search.db",
+    "userdata/addon_data/plugin.video.umbrella/traktSync.db",
+    "userdata/addon_data/plugin.video.umbrella/*_qr.png",
+    "**/*.log",
+    "**/*.log.old",
+    "**/*.tmp"
+  ],
+  "notes": [
+    "Add-on code is retained so restore is independent of repository availability.",
+    "Addons, texture, EPG, thumbnail and peripheral databases are rebuilt.",
+    "Umbrella credentials remain in addon_data/plugin.video.umbrella/settings.xml.",
+    "Library databases are intentionally deferred from schema 1 because they cannot be atomically replaced while Kodi owns them."
+  ]
+}

@@ -1,6 +1,7 @@
 .git
 .venv
 .e2e
+.kodi-private
 dist
 **/__pycache__
 **/.pytest_cache

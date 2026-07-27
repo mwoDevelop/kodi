@@ -58,3 +58,13 @@ The scenario performs two independent builds, compares every byte, serves the
 repository over HTTP, installs Umbrella and recursively resolves MwoScrapers
 from the repository metadata, validates the provider contract, and compiles the
 downstream resolver.
+
+## Private Kodi configuration
+
+`tools/kodi_profile.py` exports and restores installed add-ons, their settings
+and credentials, and the selected skin while excluding caches and generated
+databases. Unencrypted snapshots are restricted to the Git-ignored
+`.kodi-private/` directory.
+
+See [Private Kodi profile snapshots](docs/kodi-private-profile.md) for the
+security boundary, exact contents, commands, and reproducible device checks.

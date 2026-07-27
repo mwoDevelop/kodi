@@ -59,6 +59,30 @@ def playback_method(adb: str, serial: str) -> str | None:
     return match.group(1) if match else None
 
 
+def accept_quality_dialog(rpc: JsonRpc, timeout: int = 45) -> str | None:
+    started = time.monotonic()
+    while time.monotonic() - started < timeout:
+        if active_video_player(rpc) is not None:
+            return None
+        gui = rpc.call(
+            "GUI.GetProperties",
+            {"properties": ["currentwindow", "currentcontrol"]},
+        )
+        window = gui.get("currentwindow", {}) if isinstance(gui, dict) else {}
+        control = gui.get("currentcontrol", {}) if isinstance(gui, dict) else {}
+        window_label = str(window.get("label", ""))
+        control_label = str(control.get("label", ""))
+        if "select quality" in window_label.casefold() or re.search(
+            r"\b(?:480|720|1080)p?\b",
+            control_label,
+            re.IGNORECASE,
+        ):
+            rpc.call("Input.Select")
+            return control_label
+        time.sleep(0.5)
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--adb", required=True)
@@ -88,10 +112,8 @@ def main() -> int:
     if rpc.call("JSONRPC.Ping") != "pong":
         raise RuntimeError("Kodi JSON-RPC did not return pong")
     method = playback_method(args.adb, args.serial)
-    if method != "1":
-        raise RuntimeError(
-            "WatchNixtoons2 playbackMethod must be 1 (Auto Play Highest Quality)"
-        )
+    if method not in (None, "0", "1", "2"):
+        raise RuntimeError("unexpected WatchNixtoons2 playbackMethod: %r" % method)
 
     start_line = log_line_count(args.adb, args.serial) + 1
     events.execute_builtin("ActivateWindow(Home)")
@@ -121,6 +143,9 @@ def main() -> int:
         % (ADDON_ID, quote("/" + args.content_path, safe=""))
     )
     events.execute_builtin("PlayMedia(%s)" % media_url)
+    selected_quality = None
+    if method in (None, "0"):
+        selected_quality = accept_quality_dialog(rpc)
 
     started = time.monotonic()
     player_id = None
@@ -167,7 +192,13 @@ def main() -> int:
         "addon": {
             "id": ADDON_ID,
             "version": addon_version(args.adb, args.serial, ADDON_ID),
-            "playback_method": "auto_highest",
+            "playback_method": {
+                None: "default_select_dialog",
+                "0": "select_dialog",
+                "1": "auto_highest",
+                "2": "auto_lowest",
+            }[method],
+            "selected_quality": selected_quality,
         },
         "catalogue": {
             "menu": menu_label,
