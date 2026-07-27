@@ -15,6 +15,7 @@ import zipfile
 from pathlib import Path
 
 try:
+    from kodi_devices import load_registry, resolve_device
     from kodi_profile import (
         KODI_ROOT,
         KODI_PACKAGE,
@@ -31,6 +32,7 @@ try:
         verify_snapshot,
     )
 except ModuleNotFoundError:
+    from tools.kodi_devices import load_registry, resolve_device
     from tools.kodi_profile import (
         KODI_ROOT,
         KODI_PACKAGE,
@@ -92,12 +94,50 @@ def resolve_private_path(repository, value):
 def load_config(path, repository):
     path = resolve_private_path(repository, path)
     document = json.loads(path.read_text(encoding="utf-8"))
-    if document.get("schema") != 1:
+    schema = document.get("schema")
+    if schema not in (1, 2):
         raise ValueError("unsupported Kodi reinstall config")
     targets = document.get("targets")
     if not isinstance(targets, list) or not targets:
         raise ValueError("Kodi reinstall config has no targets")
-    return path, targets
+    if schema == 1:
+        return path, targets
+    devices_value = document.get(
+        "devices_file", ".kodi-private/devices.json"
+    )
+    devices_path = resolve_private_path(repository, devices_value)
+    registry = load_registry(devices_path)
+    resolved = []
+    forbidden = {"name", "serial", "expected_model"}
+    for target in targets:
+        if not isinstance(target, dict):
+            raise ValueError("Kodi reinstall target must be an object")
+        duplicate = sorted(forbidden.intersection(target))
+        if duplicate:
+            raise ValueError(
+                "schema 2 target duplicates device inventory fields: %s"
+                % ", ".join(duplicate)
+            )
+        logical_id = target.get("logical_device_id")
+        if not isinstance(logical_id, str):
+            raise ValueError("schema 2 target lacks logical_device_id")
+        device = resolve_device(registry, logical_id)
+        expected_major = device["expected"]["kodi_major"]
+        expected_version = target.get("expected_kodi_version", "")
+        match = re.match(r"^(\d+)", str(expected_version))
+        if not match or int(match.group(1)) != expected_major:
+            raise ValueError(
+                "%s Kodi major differs from device inventory" % logical_id
+            )
+        resolved.append(
+            {
+                **target,
+                "name": logical_id,
+                "serial": device["endpoints"]["adb"],
+                "expected_model": device["expected"]["model"],
+            }
+        )
+    return path, resolved
 
 
 def preflight_target(target, repository, adb, port):

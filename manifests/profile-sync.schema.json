@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mwodevelop.github.io/kodi/schemas/profile-sync.schema.json",
+  "title": "mwoDevelop Kodi routine profile revision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "revision_id",
+    "policy_sha256",
+    "kodi_major",
+    "adapters"
+  ],
+  "properties": {
+    "schema": {
+      "const": 2
+    },
+    "revision_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "policy_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "kodi_major": {
+      "type": "integer",
+      "minimum": 19
+    },
+    "adapters": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/adapter"
+      }
+    }
+  },
+  "$defs": {
+    "adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapter", "apply_mode", "managed_settings", "values"],
+      "properties": {
+        "adapter": {
+          "const": "settings_xml"
+        },
+        "addon_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "compatible_versions": {
+          "type": "string"
+        },
+        "apply_mode": {
+          "enum": ["hot_apply", "next_start", "host_only"]
+        },
+        "managed_settings": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "values": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["boolean", "integer", "string"]
+          }
+        }
+      }
+    }
+  }
+}
