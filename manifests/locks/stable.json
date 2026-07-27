@@ -2,9 +2,9 @@
   "channel": "stable",
   "components": {
     "plugin.video.umbrella": {
-      "commit": "fb689588a9b4e3502886e1ca63a48ccaa9f399c2",
-      "version": "6.7.81.13",
-      "zip_sha256": "5ddb813669fde54096caf5c3f9b86ac7a0e26bf9ae132197d996f1b18b378d58"
+      "commit": "41dc2e1f9e6b30aa12938bfe30943541eeabfaea",
+      "version": "6.7.81.14",
+      "zip_sha256": "24758a99affbc6d4a6df3d330a38d4f0a4ba21a4a939acdb10d86b4ee24aabf9"
     },
     "plugin.video.watchnixtoons2.mwodevelop": {
       "commit": "da4350eb79d032730ca240c3b824e4f3fd2ca09d",
