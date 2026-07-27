@@ -43,6 +43,8 @@ Date: 2026-07-27
   revision quarantine; device apply E2E is still pending;
 - add-on 0.1.5 read-only regression passed on BlueStacks and Sony after
   verifying the real service disable/enable lifecycle;
+- add-on 0.1.6 testing candidate reads schema 2 and applies signed schema 3
+  layers selected from server-bound target tags; device rollout is pending;
 - QNAP Container Station Compose contract with an ARMv7 image gate;
 - live QNAP preflight confirming Container Station 3, Docker 26, Compose 2,
   `overlay2`, sufficient capacity and an available Python 3.11 ARMv7 base
@@ -133,5 +135,27 @@ Linux/Flatpak host support additionally remains read-only until:
 - `special://home` and `special://profile` are qualified from inside the real
   Flatpak Kodi process;
 - repository bootstrap uses a supported Kodi UI/API path or returns
-  `BOOTSTRAP_REQUIRES_USER`;
-- revision schema 3 and administratively bound compatibility tags exist.
+  `BOOTSTRAP_REQUIRES_USER`.
+
+Revision schema 3 and administratively bound compatibility tags are now
+implemented in the generator, server and add-on. Device rollout remains the
+release gate.
+
+## Layered routine revisions
+
+Schema 2 remains readable and exports only the portable common subset.
+Schema 3 contains `base.adapters` and a canonically ordered `layers` array.
+Class layers selected by `all_target_tags` precede layers selected by
+`logical_device_id`. Target tags are assigned during server-side enrollment
+and must match the signed candidate assignment; heartbeat observations never
+select a layer.
+
+Generate schema 3 explicitly:
+
+```bash
+python tools/kodi_routine_profile.py \
+  /path/to/kodi/profile \
+  /path/to/revision.json \
+  --kodi-major 21 \
+  --revision-schema 3
+```

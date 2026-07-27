@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from tools.kodi_profile import (
+    _addon_inventory,
     _activate_skin,
     canonical_json,
     digest,
@@ -67,6 +68,39 @@ def test_kodi_upgrade_compatibility_is_same_major_and_forward_only():
     assert not kodi_versions_compatible("21.3", "21.2", allow_upgrade=True)
     assert not kodi_versions_compatible("21.3", "22.0", allow_upgrade=True)
     assert not kodi_versions_compatible("21.2", "21.3")
+
+
+def test_addon_inventory_skips_corrupt_manifest_but_leaves_payload(tmp_path):
+    addons = tmp_path / "addons"
+    good = addons / "plugin.video.good" / "addon.xml"
+    corrupt = addons / "plugin.video.corrupt" / "addon.xml"
+    good.parent.mkdir(parents=True)
+    corrupt.parent.mkdir(parents=True)
+    good.write_text(
+        '<addon id="plugin.video.good" version="1.0.0"/>',
+        encoding="utf-8",
+    )
+    corrupt.write_bytes(b"\0" * 32)
+
+    inventory = _addon_inventory(
+        tmp_path,
+        {
+            "plugin.video.good": {
+                "enabled": True,
+                "origin": "repository.example",
+            }
+        },
+    )
+
+    assert inventory == [
+        {
+            "id": "plugin.video.good",
+            "version": "1.0.0",
+            "enabled": True,
+            "origin": "repository.example",
+        }
+    ]
+    assert corrupt.read_bytes() == b"\0" * 32
 
 
 def test_private_output_must_be_below_ignored_directory(
