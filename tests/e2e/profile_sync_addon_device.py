@@ -48,6 +48,7 @@ STATE_PATH = (
 )
 REMOTE_HELPER = "/sdcard/Download/.mwo-profile-sync-e2e-helper.py"
 REMOTE_MARKER = "/sdcard/Download/.mwo-profile-sync-e2e-marker.json"
+REMOTE_COMMAND = "/sdcard/Download/.mwo-profile-sync-e2e-command.json"
 REMOTE_ORIGIN_ARCHIVE = "/sdcard/Download/" + ORIGIN_ARCHIVE
 PUBLISHER_SEED = bytes.fromhex("61" * 32)
 PROMOTER_SEED = bytes.fromhex("62" * 32)
@@ -99,24 +100,6 @@ def _execute_builtin(adb, port, serial, command):
                 connection.sendto(packet, (host, 9777))
 
 
-def _notify_addon(adb, port, serial, message, data):
-    with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
-        try:
-            jsonrpc.call(
-                "JSONRPC.NotifyAll",
-                {
-                    "sender": ADDON_ID,
-                    "message": message,
-                    "data": data,
-                },
-            )
-        except TimeoutError:
-            # NotifyAll can wait on slow Android listeners after Kodi has
-            # already dispatched the event. The state probe is the authority
-            # for whether the requested transition completed.
-            return
-
-
 def _remote_json(adb, port, serial, path):
     result = adb_command(
         adb,
@@ -144,12 +127,15 @@ def _wait_json(adb, port, serial, path, predicate, timeout=45):
 
 
 def _wait_probe_phase(adb, port, serial, phase, timeout=120):
+    order = {"configured": 1, "paired": 2, "checked": 3}
+    expected = order[phase]
     marker = _wait_json(
         adb,
         port,
         serial,
         REMOTE_MARKER,
-        lambda item: item.get("phase") in {phase, "error"},
+        lambda item: item.get("phase") == "error"
+        or order.get(item.get("phase"), 0) >= expected,
         timeout=timeout,
     )
     if marker.get("phase") == "error":
@@ -341,11 +327,8 @@ def _bootstrap_testing_repository(adb, port, serial):
 
 def _install_from_testing(adb, port, serial, expected_version):
     if _addon_version(adb, port, serial) == expected_version:
-        with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
-            jsonrpc.call(
-                "Addons.SetAddonEnabled",
-                {"addonid": ADDON_ID, "enabled": True},
-            )
+        _set_addon_enabled(adb, port, serial, False)
+        _set_addon_enabled(adb, port, serial, True)
         return
     if not _repository_installed(adb, port, serial):
         _bootstrap_testing_repository(adb, port, serial)
@@ -356,14 +339,39 @@ def _install_from_testing(adb, port, serial, expected_version):
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         if _addon_version(adb, port, serial) == expected_version:
-            with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
-                jsonrpc.call(
-                    "Addons.SetAddonEnabled",
-                    {"addonid": ADDON_ID, "enabled": True},
-                )
+            _set_addon_enabled(adb, port, serial, False)
+            _set_addon_enabled(adb, port, serial, True)
             return
         time.sleep(2)
     raise TimeoutError("testing profile-sync add-on installation timed out")
+
+
+def _set_addon_enabled(adb, port, serial, enabled):
+    deadline = time.monotonic() + 20
+    requested = False
+    while time.monotonic() < deadline:
+        try:
+            with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
+                if not requested:
+                    try:
+                        jsonrpc.call(
+                            "Addons.SetAddonEnabled",
+                            {"addonid": ADDON_ID, "enabled": enabled},
+                        )
+                    except (TimeoutError, RuntimeError):
+                        pass
+                    requested = True
+                details = jsonrpc.call(
+                    "Addons.GetAddonDetails",
+                    {"addonid": ADDON_ID, "properties": ["enabled"]},
+                )
+            if details.get("addon", {}).get("enabled") is enabled:
+                return
+            requested = False
+        except (OSError, TimeoutError, RuntimeError):
+            pass
+        time.sleep(0.5)
+    raise TimeoutError("Kodi add-on enabled state did not converge")
 
 
 def _start_probe(
@@ -373,6 +381,7 @@ def _start_probe(
     server_port,
     logical_device_id,
     expected_revision,
+    pairing_code,
 ):
     settings = {
         "server_url": "http://127.0.0.1:%d" % server_port,
@@ -384,6 +393,7 @@ def _start_probe(
     source = """import json
 import os
 import time
+import xbmc
 import xbmcaddon
 
 ADDON_ID = %s
@@ -391,7 +401,9 @@ SETTINGS = %s
 SETTING_KEYS = %s
 STATE_PATH = %s
 MARKER_PATH = %s
+COMMAND_PATH = %s
 EXPECTED_REVISION = %s
+PAIRING_CODE = %s
 
 
 def write_marker(document):
@@ -427,14 +439,27 @@ try:
     if actual != SETTINGS:
         raise RuntimeError("profile sync settings did not persist")
     write_marker({"ok": True, "phase": "configured"})
-
-    paired = wait_for(
-        lambda item: bool(
-            (item.get("enrollment") or {}).get("enrollment_id")
-        )
-        and bool(item.get("access_token"))
-        and bool(item.get("signing_seed"))
-    )
+    deadline = time.monotonic() + 120
+    next_pair_notification = 0
+    paired = None
+    while time.monotonic() < deadline:
+        candidate = read_state()
+        if (
+            (candidate.get("enrollment") or {}).get("enrollment_id")
+            and candidate.get("access_token")
+            and candidate.get("signing_seed")
+        ):
+            paired = candidate
+            break
+        if time.monotonic() >= next_pair_notification:
+            xbmc.executebuiltin(
+                "NotifyAll(%s,pair-code,{\\"code\\":\\"%%s\\"})"
+                %% PAIRING_CODE
+            )
+            next_pair_notification = time.monotonic() + 5
+        time.sleep(0.25)
+    if paired is None:
+        raise TimeoutError("profile sync pairing timed out")
     enrollment = paired["enrollment"]
     write_marker(
         {
@@ -445,6 +470,22 @@ try:
             "has_access_token": bool(paired.get("access_token")),
             "has_signing_seed": bool(paired.get("signing_seed")),
         }
+    )
+
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        try:
+            with open(COMMAND_PATH, "r", encoding="utf-8") as handle:
+                command = json.load(handle)
+        except (OSError, ValueError):
+            command = {}
+        if command.get("sync") is True:
+            break
+        time.sleep(0.25)
+    else:
+        raise TimeoutError("profile sync command timed out")
+    xbmc.executebuiltin(
+        "NotifyAll(%s,sync-now,{\\"source\\":\\"device-e2e\\"})"
     )
 
     checked = wait_for(
@@ -482,7 +523,11 @@ finally:
         repr(sorted(settings)),
         json.dumps(STATE_PATH),
         json.dumps(REMOTE_MARKER),
+        json.dumps(REMOTE_COMMAND),
         json.dumps(expected_revision),
+        json.dumps(pairing_code),
+        ADDON_ID,
+        ADDON_ID,
     )
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".py", encoding="utf-8"
@@ -494,7 +539,8 @@ finally:
             port,
             serial,
             "shell",
-            "rm -f '%s' '%s'" % (REMOTE_HELPER, REMOTE_MARKER),
+            "rm -f '%s' '%s' '%s'"
+            % (REMOTE_HELPER, REMOTE_MARKER, REMOTE_COMMAND),
         )
         adb_command(
             adb,
@@ -507,6 +553,23 @@ finally:
         )
     _execute_builtin(adb, port, serial, "RunScript(%s)" % REMOTE_HELPER)
     return _wait_probe_phase(adb, port, serial, "configured")
+
+
+def _signal_probe_sync(adb, port, serial):
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", encoding="utf-8"
+    ) as command:
+        json.dump({"sync": True}, command)
+        command.flush()
+        adb_command(
+            adb,
+            port,
+            serial,
+            "push",
+            command.name,
+            REMOTE_COMMAND,
+            text=True,
+        )
 
 
 def _latest_addons_database(listing):
@@ -653,6 +716,12 @@ def verify_device(
         _install_from_testing(
             adb, adb_port, serial, expected_version
         )
+        pairing = store.create_pairing_code(
+            logical_device_id,
+            CHANNEL,
+            code=None,
+            ttl_seconds=300,
+        )
         _start_probe(
             adb,
             adb_port,
@@ -660,19 +729,7 @@ def verify_device(
             server_port,
             logical_device_id,
             revision["revision_id"],
-        )
-        pairing = store.create_pairing_code(
-            logical_device_id,
-            CHANNEL,
-            code=None,
-            ttl_seconds=300,
-        )
-        _notify_addon(
-            adb,
-            adb_port,
-            serial,
-            "pair-code",
-            {"code": pairing["code"]},
+            pairing["code"],
         )
         state = _wait_probe_phase(
             adb, adb_port, serial, "paired"
@@ -698,16 +755,8 @@ def verify_device(
         store.assign_candidate(
             assignment, "assign-device-" + logical_device_id
         )
-        _notify_addon(
-            adb,
-            adb_port,
-            serial,
-            "sync-now",
-            {"source": "device-e2e"},
-        )
-        checked = _wait_probe_phase(
-            adb, adb_port, serial, "checked"
-        )
+        _signal_probe_sync(adb, adb_port, serial)
+        checked = _wait_probe_phase(adb, adb_port, serial, "checked")
         if (
             checked.get("assigned_revision") != revision["revision_id"]
             or "applied_revision" in checked
@@ -749,7 +798,8 @@ def verify_device(
             adb_port,
             serial,
             "shell",
-            "rm -f '%s' '%s'" % (REMOTE_HELPER, REMOTE_MARKER),
+            "rm -f '%s' '%s' '%s'"
+            % (REMOTE_HELPER, REMOTE_MARKER, REMOTE_COMMAND),
             check=False,
         )
 

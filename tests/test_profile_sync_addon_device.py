@@ -103,25 +103,3 @@ def test_latest_addons_database_is_selected_without_android_sort_v():
     assert profile_sync_addon_device._latest_addons_database(listing).endswith(
         "Addons35.db"
     )
-
-
-def test_notify_timeout_is_deferred_to_the_state_probe(monkeypatch):
-    class Client:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_):
-            return None
-
-        def call(self, *_args, **_kwargs):
-            raise TimeoutError("slow Kodi listener")
-
-    monkeypatch.setattr(
-        profile_sync_addon_device,
-        "AdbJsonRpcClient",
-        lambda *_: Client(),
-    )
-
-    profile_sync_addon_device._notify_addon(
-        "adb", 5038, "device", "sync-now", {"source": "test"}
-    )

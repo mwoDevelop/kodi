@@ -20,7 +20,8 @@ Stan realizacji 2026-07-27:
   przenośny Ed25519 na Kodi x86/ARMv7 oraz build obrazu
   `linux/amd64,linux/arm/v7`;
 - Etap 4: osobne repo dodatku, pairing, heartbeat i podpisany check
-  read-only opublikowane w `testing`; E2E zaliczone na BlueStacks i Sony TV;
+  read-only opublikowane w `testing`; E2E wersji 0.1.5 zaliczone na
+  BlueStacks i Sony TV;
 - Etap 5: transakcyjny adapter Umbrella, journal, recovery, rollback i
   kwarantanna są zaimplementowane i pokryte testami lokalnymi; urządzeniowy
   apply E2E pozostaje do wykonania;
