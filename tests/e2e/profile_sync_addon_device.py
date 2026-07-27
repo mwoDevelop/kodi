@@ -329,10 +329,15 @@ import xbmcaddon
 addon = xbmcaddon.Addon(%s)
 for key, value in %s.items():
     addon.setSetting(key, value)
+actual = {key: addon.getSetting(key) for key in %s}
+if actual != %s:
+    raise RuntimeError("profile sync settings did not persist")
 with open(%s, "w", encoding="utf-8") as handle:
     json.dump({"ok": True}, handle)
 """ % (
         json.dumps(ADDON_ID),
+        repr(settings),
+        repr(sorted(settings)),
         repr(settings),
         json.dumps(REMOTE_MARKER),
     )
