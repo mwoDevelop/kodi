@@ -2,8 +2,9 @@
 """Install, pair and check the testing profile-sync add-on on real Kodi.
 
 The flow uses Kodi's add-on manager, a temporary verified loopback server and
-ADB reverse. Enrollment secrets are read only to validate their presence and
-are never printed. Each enrollment is revoked and removed from Kodi at cleanup.
+ADB reverse. A single probe running as Kodi reports only sanitized state; it
+never copies enrollment secrets outside Kodi. Each enrollment is revoked and
+removed from Kodi at cleanup.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import socket
 import sqlite3
 import struct
@@ -27,6 +29,7 @@ from tools.kodi_devices import load_registry, resolve_device
 from tools.kodi_profile import (
     AdbEventClient,
     AdbJsonRpcClient,
+    KODI_PACKAGE,
     KODI_ROOT,
     adb_command,
     adb_output,
@@ -98,14 +101,20 @@ def _execute_builtin(adb, port, serial, command):
 
 def _notify_addon(adb, port, serial, message, data):
     with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
-        jsonrpc.call(
-            "JSONRPC.NotifyAll",
-            {
-                "sender": ADDON_ID,
-                "message": message,
-                "data": data,
-            },
-        )
+        try:
+            jsonrpc.call(
+                "JSONRPC.NotifyAll",
+                {
+                    "sender": ADDON_ID,
+                    "message": message,
+                    "data": data,
+                },
+            )
+        except TimeoutError:
+            # NotifyAll can wait on slow Android listeners after Kodi has
+            # already dispatched the event. The state probe is the authority
+            # for whether the requested transition completed.
+            return
 
 
 def _remote_json(adb, port, serial, path):
@@ -134,6 +143,23 @@ def _wait_json(adb, port, serial, path, predicate, timeout=45):
     raise TimeoutError("Kodi profile-sync marker timed out")
 
 
+def _wait_probe_phase(adb, port, serial, phase, timeout=120):
+    marker = _wait_json(
+        adb,
+        port,
+        serial,
+        REMOTE_MARKER,
+        lambda item: item.get("phase") in {phase, "error"},
+        timeout=timeout,
+    )
+    if marker.get("phase") == "error":
+        raise RuntimeError(
+            "Kodi profile-sync probe failed: %s"
+            % marker.get("error_type", "unknown")
+        )
+    return marker
+
+
 def _addon_version(adb, port, serial):
     payload = adb_command(
         adb,
@@ -147,8 +173,6 @@ def _addon_version(adb, port, serial):
     )
     if payload.returncode:
         return None
-    import re
-
     match = re.search(
         r'<addon[^>]+version="([^"]+)"',
         payload.stdout.replace("\n", " "),
@@ -178,8 +202,15 @@ def _current_control(jsonrpc):
     )
 
 
+def _control_label(value):
+    label = str(value).strip()
+    if label.startswith("[") and label.endswith("]"):
+        label = label[1:-1].strip()
+    return label.casefold()
+
+
 def _select_control(jsonrpc, labels, maximum_steps=64):
-    expected = {label.casefold() for label in labels}
+    expected = {_control_label(label) for label in labels}
     observed = []
     for _ in range(maximum_steps):
         gui = _current_control(jsonrpc)
@@ -187,7 +218,7 @@ def _select_control(jsonrpc, labels, maximum_steps=64):
         label = str(control.get("label", "")).strip()
         if label and label not in observed:
             observed.append(label)
-        if label.casefold() in expected:
+        if _control_label(label) in expected:
             jsonrpc.call("Input.Select")
             return
         jsonrpc.call("Input.Down")
@@ -196,6 +227,38 @@ def _select_control(jsonrpc, labels, maximum_steps=64):
         "Kodi file browser did not expose %s; visible controls: %s"
         % (sorted(labels), observed)
     )
+
+
+def _ensure_kodi_foreground(adb, port, serial):
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "am",
+        "start",
+        "-W",
+        "-n",
+        KODI_PACKAGE + "/.Main",
+        text=True,
+    )
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        windows = adb_output(
+            adb,
+            port,
+            serial,
+            "shell",
+            "dumpsys",
+            "window",
+        )
+        if (
+            "mCurrentFocus=" in windows
+            and KODI_PACKAGE + "/" in windows.split("mCurrentFocus=", 1)[1]
+        ):
+            return
+        time.sleep(0.5)
+    raise RuntimeError("Kodi did not become the foreground Android app")
 
 
 def _download_repository_archive(destination):
@@ -303,7 +366,124 @@ def _install_from_testing(adb, port, serial, expected_version):
     raise TimeoutError("testing profile-sync add-on installation timed out")
 
 
-def _run_helper(adb, port, serial, source):
+def _start_probe(
+    adb,
+    port,
+    serial,
+    server_port,
+    logical_device_id,
+    expected_revision,
+):
+    settings = {
+        "server_url": "http://127.0.0.1:%d" % server_port,
+        "logical_device_id": logical_device_id,
+        "channel": CHANNEL,
+        "enabled": "true",
+        "read_only": "true",
+    }
+    source = """import json
+import os
+import time
+import xbmcaddon
+
+ADDON_ID = %s
+SETTINGS = %s
+SETTING_KEYS = %s
+STATE_PATH = %s
+MARKER_PATH = %s
+EXPECTED_REVISION = %s
+
+
+def write_marker(document):
+    temporary = MARKER_PATH + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as handle:
+        json.dump(document, handle, sort_keys=True)
+    os.replace(temporary, MARKER_PATH)
+
+
+def read_state():
+    try:
+        with open(STATE_PATH, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return {}
+
+
+def wait_for(predicate, timeout=120):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        document = read_state()
+        if predicate(document):
+            return document
+        time.sleep(0.25)
+    raise TimeoutError("profile sync state transition timed out")
+
+
+addon = xbmcaddon.Addon(ADDON_ID)
+try:
+    for key, value in SETTINGS.items():
+        addon.setSetting(key, value)
+    actual = {key: addon.getSetting(key) for key in SETTING_KEYS}
+    if actual != SETTINGS:
+        raise RuntimeError("profile sync settings did not persist")
+    write_marker({"ok": True, "phase": "configured"})
+
+    paired = wait_for(
+        lambda item: bool(
+            (item.get("enrollment") or {}).get("enrollment_id")
+        )
+        and bool(item.get("access_token"))
+        and bool(item.get("signing_seed"))
+    )
+    enrollment = paired["enrollment"]
+    write_marker(
+        {
+            "ok": True,
+            "phase": "paired",
+            "status": paired.get("status"),
+            "enrollment_id": enrollment["enrollment_id"],
+            "has_access_token": bool(paired.get("access_token")),
+            "has_signing_seed": bool(paired.get("signing_seed")),
+        }
+    )
+
+    checked = wait_for(
+        lambda item: item.get("status") == "ASSIGNMENT_AVAILABLE"
+        and item.get("assigned_revision") == EXPECTED_REVISION
+    )
+    write_marker(
+        {
+            "ok": True,
+            "phase": "checked",
+            "status": checked.get("status"),
+            "enrollment_id": enrollment["enrollment_id"],
+            "assigned_revision": checked.get("assigned_revision"),
+            "has_applied_revision": "applied_revision" in checked,
+        }
+    )
+except Exception as error:
+    write_marker(
+        {
+            "ok": False,
+            "phase": "error",
+            "error_type": type(error).__name__,
+        }
+    )
+finally:
+    for key in ("server_url", "logical_device_id"):
+        addon.setSetting(key, "")
+    try:
+        os.unlink(STATE_PATH)
+    except OSError:
+        pass
+""" % (
+        json.dumps(ADDON_ID),
+        repr(settings),
+        repr(sorted(settings)),
+        json.dumps(STATE_PATH),
+        json.dumps(REMOTE_MARKER),
+        json.dumps(expected_revision),
+    )
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".py", encoding="utf-8"
     ) as helper:
@@ -326,75 +506,32 @@ def _run_helper(adb, port, serial, source):
             text=True,
         )
     _execute_builtin(adb, port, serial, "RunScript(%s)" % REMOTE_HELPER)
-    return _wait_json(
-        adb,
-        port,
-        serial,
-        REMOTE_MARKER,
-        lambda item: item.get("ok") is True,
+    return _wait_probe_phase(adb, port, serial, "configured")
+
+
+def _latest_addons_database(listing):
+    candidates = [
+        item.strip()
+        for item in listing.splitlines()
+        if re.search(r"/Addons\d+\.db$", item.strip())
+    ]
+    if not candidates:
+        raise RuntimeError("Kodi add-on database is missing")
+    return max(
+        candidates,
+        key=lambda item: int(re.search(r"Addons(\d+)\.db$", item).group(1)),
     )
-
-
-def _configure(adb, port, serial, server_port, logical_device_id):
-    settings = {
-        "server_url": "http://127.0.0.1:%d" % server_port,
-        "logical_device_id": logical_device_id,
-        "channel": CHANNEL,
-        "enabled": "true",
-        "read_only": "true",
-    }
-    source = """import json
-import xbmcaddon
-addon = xbmcaddon.Addon(%s)
-for key, value in %s.items():
-    addon.setSetting(key, value)
-actual = {key: addon.getSetting(key) for key in %s}
-if actual != %s:
-    raise RuntimeError("profile sync settings did not persist")
-with open(%s, "w", encoding="utf-8") as handle:
-    json.dump({"ok": True}, handle)
-""" % (
-        json.dumps(ADDON_ID),
-        repr(settings),
-        repr(sorted(settings)),
-        repr(settings),
-        json.dumps(REMOTE_MARKER),
-    )
-    _run_helper(adb, port, serial, source)
-
-
-def _cleanup_client(adb, port, serial):
-    source = """import json
-import os
-import xbmcaddon
-addon = xbmcaddon.Addon(%s)
-for key in ("server_url", "logical_device_id"):
-    addon.setSetting(key, "")
-try:
-    os.unlink(%s)
-except OSError:
-    pass
-with open(%s, "w", encoding="utf-8") as handle:
-    json.dump({"ok": True}, handle)
-""" % (
-        json.dumps(ADDON_ID),
-        json.dumps(STATE_PATH),
-        json.dumps(REMOTE_MARKER),
-    )
-    _run_helper(adb, port, serial, source)
 
 
 def _installed_origin(adb, port, serial, temporary):
-    remote = adb_output(
+    listing = adb_output(
         adb,
         port,
         serial,
         "shell",
-        "ls '%s/userdata/Database'/Addons*.db | sort -V | tail -1"
-        % KODI_ROOT,
-    ).strip()
-    if not remote:
-        raise RuntimeError("Kodi add-on database is missing")
+        "ls '%s/userdata/Database'/Addons*.db 2>/dev/null" % KODI_ROOT,
+    )
+    remote = _latest_addons_database(listing)
     database = Path(temporary) / "addons.db"
     adb_command(adb, port, serial, "pull", remote, str(database), text=True)
     with sqlite3.connect(database) as connection:
@@ -512,11 +649,17 @@ def verify_device(
             "tcp:%d" % server_port,
             text=True,
         )
+        _ensure_kodi_foreground(adb, adb_port, serial)
         _install_from_testing(
             adb, adb_port, serial, expected_version
         )
-        _configure(
-            adb, adb_port, serial, server_port, logical_device_id
+        _start_probe(
+            adb,
+            adb_port,
+            serial,
+            server_port,
+            logical_device_id,
+            revision["revision_id"],
         )
         pairing = store.create_pairing_code(
             logical_device_id,
@@ -531,19 +674,14 @@ def verify_device(
             "pair-code",
             {"code": pairing["code"]},
         )
-        state = _wait_json(
-            adb,
-            adb_port,
-            serial,
-            STATE_PATH,
-            lambda item: item.get("enrollment") is not None,
+        state = _wait_probe_phase(
+            adb, adb_port, serial, "paired"
         )
-        enrollment = state["enrollment"]
-        enrollment_id = enrollment["enrollment_id"]
+        enrollment_id = state["enrollment_id"]
         if (
             state.get("status") != "IDLE"
-            or not state.get("access_token")
-            or not state.get("signing_seed")
+            or not state.get("has_access_token")
+            or not state.get("has_signing_seed")
         ):
             raise RuntimeError("pairing did not create private local state")
         assignment = modules["sign_document"](
@@ -567,12 +705,8 @@ def verify_device(
             "sync-now",
             {"source": "device-e2e"},
         )
-        checked = _wait_json(
-            adb,
-            adb_port,
-            serial,
-            STATE_PATH,
-            lambda item: item.get("status") == "ASSIGNMENT_AVAILABLE",
+        checked = _wait_probe_phase(
+            adb, adb_port, serial, "checked"
         )
         if (
             checked.get("assigned_revision") != revision["revision_id"]
@@ -600,10 +734,6 @@ def verify_device(
     finally:
         if enrollment_id is not None:
             store.revoke_enrollment(enrollment_id)
-        try:
-            _cleanup_client(adb, adb_port, serial)
-        except Exception:
-            pass
         adb_command(
             adb,
             adb_port,
@@ -636,6 +766,11 @@ def main():
         "--server-repository",
         type=Path,
         default=repository.parent / "kodi-profile-sync-server",
+    )
+    parser.add_argument(
+        "--result",
+        type=Path,
+        help="write the sanitized JSON result to this path",
     )
     args = parser.parse_args()
     lock = json.loads(
@@ -700,13 +835,16 @@ def main():
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=5)
-        print(
-            json.dumps(
-                {"schema": 1, "results": results},
-                indent=2,
-                sort_keys=True,
-            )
+        result = json.dumps(
+            {"schema": 1, "results": results},
+            indent=2,
+            sort_keys=True,
         )
+        if args.result is not None:
+            destination = args.result.resolve()
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(result + "\n", encoding="utf-8")
+        print(result)
     return 0
 
 

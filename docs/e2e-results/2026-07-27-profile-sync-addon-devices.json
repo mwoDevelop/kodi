@@ -1,0 +1,25 @@
+{
+  "results": [
+    {
+      "addon_version": "0.1.4",
+      "authenticated_heartbeat": "pass",
+      "installed_origin": "repository.mwodevelop.testing",
+      "logical_device_id": "bluestacks1",
+      "pairing": "pass",
+      "read_only_no_apply": "pass",
+      "result": "pass",
+      "signed_candidate_check": "pass"
+    },
+    {
+      "addon_version": "0.1.4",
+      "authenticated_heartbeat": "pass",
+      "installed_origin": "repository.mwodevelop.testing",
+      "logical_device_id": "sony-tv",
+      "pairing": "pass",
+      "read_only_no_apply": "pass",
+      "result": "pass",
+      "signed_candidate_check": "pass"
+    }
+  ],
+  "schema": 1
+}
