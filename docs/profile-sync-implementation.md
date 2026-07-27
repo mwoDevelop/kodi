@@ -133,5 +133,27 @@ Linux/Flatpak host support additionally remains read-only until:
 - `special://home` and `special://profile` are qualified from inside the real
   Flatpak Kodi process;
 - repository bootstrap uses a supported Kodi UI/API path or returns
-  `BOOTSTRAP_REQUIRES_USER`;
-- revision schema 3 and administratively bound compatibility tags exist.
+  `BOOTSTRAP_REQUIRES_USER`.
+
+Revision schema 3 and administratively bound compatibility tags are now
+implemented in the generator, server and add-on. Device rollout remains the
+release gate.
+
+## Layered routine revisions
+
+Schema 2 remains readable and exports only the portable common subset.
+Schema 3 contains `base.adapters` and a canonically ordered `layers` array.
+Class layers selected by `all_target_tags` precede layers selected by
+`logical_device_id`. Target tags are assigned during server-side enrollment
+and must match the signed candidate assignment; heartbeat observations never
+select a layer.
+
+Generate schema 3 explicitly:
+
+```bash
+python tools/kodi_routine_profile.py \
+  /path/to/kodi/profile \
+  /path/to/revision.json \
+  --kodi-major 21 \
+  --revision-schema 3
+```

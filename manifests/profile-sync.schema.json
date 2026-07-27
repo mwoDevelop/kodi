@@ -2,39 +2,149 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://mwodevelop.github.io/kodi/schemas/profile-sync.schema.json",
   "title": "mwoDevelop Kodi routine profile revision",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "schema",
-    "revision_id",
-    "policy_sha256",
-    "kodi_major",
-    "adapters"
+  "oneOf": [
+    {
+      "$ref": "#/$defs/revisionV2"
+    },
+    {
+      "$ref": "#/$defs/revisionV3"
+    }
   ],
-  "properties": {
-    "schema": {
-      "const": 2
+  "$defs": {
+    "commonProperties": {
+      "type": "object",
+      "properties": {
+        "revision_id": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "policy_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "kodi_major": {
+          "type": "integer",
+          "minimum": 19
+        }
+      }
     },
-    "revision_id": {
-      "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$"
+    "revisionV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "revision_id",
+        "policy_sha256",
+        "kodi_major",
+        "adapters"
+      ],
+      "properties": {
+        "schema": {
+          "const": 2
+        },
+        "revision_id": {
+          "$ref": "#/$defs/commonProperties/properties/revision_id"
+        },
+        "policy_sha256": {
+          "$ref": "#/$defs/commonProperties/properties/policy_sha256"
+        },
+        "kodi_major": {
+          "$ref": "#/$defs/commonProperties/properties/kodi_major"
+        },
+        "adapters": {
+          "$ref": "#/$defs/adapters"
+        }
+      }
     },
-    "policy_sha256": {
-      "type": "string",
-      "pattern": "^[a-f0-9]{64}$"
+    "revisionV3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "revision_id",
+        "policy_sha256",
+        "kodi_major",
+        "base",
+        "layers"
+      ],
+      "properties": {
+        "schema": {
+          "const": 3
+        },
+        "revision_id": {
+          "$ref": "#/$defs/commonProperties/properties/revision_id"
+        },
+        "policy_sha256": {
+          "$ref": "#/$defs/commonProperties/properties/policy_sha256"
+        },
+        "kodi_major": {
+          "$ref": "#/$defs/commonProperties/properties/kodi_major"
+        },
+        "base": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["adapters"],
+          "properties": {
+            "adapters": {
+              "$ref": "#/$defs/adapters"
+            }
+          }
+        },
+        "layers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/layer"
+          }
+        }
+      }
     },
-    "kodi_major": {
-      "type": "integer",
-      "minimum": 19
+    "layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "selector", "adapters"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "selector": {
+          "$ref": "#/$defs/selector"
+        },
+        "adapters": {
+          "$ref": "#/$defs/adapters"
+        }
+      }
+    },
+    "selector": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "all_target_tags": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._:-]{0,63}$"
+          }
+        },
+        "logical_device_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        }
+      }
     },
     "adapters": {
       "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
       "additionalProperties": {
         "$ref": "#/$defs/adapter"
       }
-    }
-  },
-  "$defs": {
+    },
     "adapter": {
       "type": "object",
       "additionalProperties": false,
@@ -57,7 +167,8 @@
           "type": "array",
           "uniqueItems": true,
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+$"
           }
         },
         "values": {
