@@ -48,7 +48,11 @@ Date: 2026-07-27
 - QNAP Container Station Compose contract with an ARMv7 image gate;
 - live QNAP preflight confirming Container Station 3, Docker 26, Compose 2,
   `overlay2`, sufficient capacity and an available Python 3.11 ARMv7 base
-  image.
+  image;
+- immutable server 0.1.0 GHCR manifest qualified for `linux/amd64` and
+  `linux/arm/v7`;
+- isolated QNAP 6A smoke with `/ready`, database schema 2, process restart,
+  controlled unavailability/recovery and zero remaining Compose resources.
 
 ## Private state
 
@@ -120,9 +124,8 @@ seed values never leave Kodi.
 
 ## Deliberate blockers
 
-The backend is technically deployable as a multiarch Container Station
-application, but production activation on the current QNAP remains blocked
-by:
+The backend has passed an isolated multiarch Container Station smoke, but
+production activation on the current QNAP remains blocked by:
 
 - degraded RAID and missing confirmed off-NAS backup;
 - no protected production admin API/key rotation;
