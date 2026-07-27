@@ -393,7 +393,13 @@ def _addon_inventory(payload_root, state):
     if not addons.exists():
         return result
     for manifest in sorted(addons.glob("*/addon.xml")):
-        root = ET.fromstring(manifest.read_bytes())
+        try:
+            root = ET.fromstring(manifest.read_bytes())
+        except ET.ParseError:
+            # Preserve the exact file in the disaster-recovery payload, but
+            # never treat a corrupt manifest as an add-on that can be safely
+            # enabled after restore.
+            continue
         addon_id = root.attrib["id"]
         item = state.get(addon_id, {"enabled": False, "origin": ""})
         result.append(
