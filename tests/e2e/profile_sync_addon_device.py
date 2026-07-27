@@ -96,6 +96,18 @@ def _execute_builtin(adb, port, serial, command):
                 connection.sendto(packet, (host, 9777))
 
 
+def _notify_addon(adb, port, serial, message, data):
+    with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
+        jsonrpc.call(
+            "JSONRPC.NotifyAll",
+            {
+                "sender": ADDON_ID,
+                "message": message,
+                "data": data,
+            },
+        )
+
+
 def _remote_json(adb, port, serial, path):
     result = adb_command(
         adb,
@@ -265,6 +277,13 @@ def _bootstrap_testing_repository(adb, port, serial):
 
 
 def _install_from_testing(adb, port, serial, expected_version):
+    if _addon_version(adb, port, serial) == expected_version:
+        with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
+            jsonrpc.call(
+                "Addons.SetAddonEnabled",
+                {"addonid": ADDON_ID, "enabled": True},
+            )
+        return
     if not _repository_installed(adb, port, serial):
         _bootstrap_testing_repository(adb, port, serial)
     _execute_builtin(adb, port, serial, "UpdateAddonRepos")
@@ -505,12 +524,12 @@ def verify_device(
             code=None,
             ttl_seconds=300,
         )
-        _execute_builtin(
+        _notify_addon(
             adb,
             adb_port,
             serial,
-            "RunScript(special://home/addons/%s/default.py,--pair-code,%s)"
-            % (ADDON_ID, pairing["code"]),
+            "pair-code",
+            {"code": pairing["code"]},
         )
         state = _wait_json(
             adb,
@@ -541,12 +560,12 @@ def verify_device(
         store.assign_candidate(
             assignment, "assign-device-" + logical_device_id
         )
-        _execute_builtin(
+        _notify_addon(
             adb,
             adb_port,
             serial,
-            "RunScript(special://home/addons/%s/default.py,--sync-once)"
-            % ADDON_ID,
+            "sync-now",
+            {"source": "device-e2e"},
         )
         checked = _wait_json(
             adb,
