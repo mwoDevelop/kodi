@@ -4,4 +4,5 @@ __pycache__/
 .pytest_cache/
 .e2e/
 .device-backups/
+.kodi-private/
 dist/
