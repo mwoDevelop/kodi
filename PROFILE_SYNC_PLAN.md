@@ -16,8 +16,10 @@ Stan realizacji 2026-07-27:
 
 - Etap 1: zrealizowany lokalnie i pokryty testami;
 - Etap 2: zrealizowany pierwszy bezpieczny zakres routine export;
-- Etap 3: zrealizowany transakcyjny store i loopback API development;
-- Etapy 4–8: nierozpoczęte;
+- Etap 3: zrealizowany transakcyjny store, loopback API development oraz
+  przenośny Ed25519 na Kodi x86/ARMv7 i serwerze;
+- Etap 4: utworzone osobne repo i fundament dodatku, pairing/check w realizacji;
+- Etapy 5–8: nierozpoczęte;
 - produkcyjny QNAP nadal zablokowany przez warunki Etapu 0.
 
 ## 1. Cel
@@ -68,6 +70,11 @@ Kodi publisher
 QNAP jest brokerem i magazynem, ale nie zastępuje GitHub Actions ani
 repozytorium Kodi. Instalacja określana jako publisher nie wystawia usługi P2P;
 publikuje kandydatów do QNAP. Konsumenci sami pobierają aktywną wersję.
+
+Backend na QNAP jest dostarczany wyłącznie jako kontener zarządzany przez
+Container Station/Docker Compose. QPKG, instalacja Pythona bezpośrednio w QTS
+i ręcznie utrzymywany proces systemowy nie są ścieżkami wdrożeniowymi. Obraz
+jest wieloarchitekturowy, a wariant `linux/arm/v7` jest obowiązkową bramą CI.
 
 Bezpośrednia synchronizacja P2P zostaje odrzucona jako mechanizm podstawowy,
 ponieważ wymaga jednoczesnej dostępności obu urządzeń, wystawienia bezpiecznego
@@ -159,7 +166,21 @@ Rozpoznany QNAP:
 - QTS 5.2.9;
 - Container Station 3.1.2;
 - Docker 26.1.4;
+- Docker Compose 2.27.1;
 - dostępne snapshoty QTS.
+
+Live preflight 2026-07-27 potwierdził:
+
+- host `armv7l`, 4 CPU i około 8 GB RAM;
+- działający daemon Docker `26.1.4-qnap2` na zarządzanym przez Container
+  Station sockecie;
+- storage driver `overlay2`;
+- około 1,8 TB wolnego miejsca na wolumenie Container Station;
+- dostępność oficjalnego obrazu bazowego Python 3.11 dla `linux/arm/v7`;
+- obsługę aplikacji Docker Compose w Container Station.
+
+Wniosek: kontenerowy backend jest technicznie wykonalny na tym modelu.
+Produkcję blokuje stan danych, nie runtime kontenerowy.
 
 Twardy blocker produkcyjny:
 
@@ -843,7 +864,7 @@ i przechowywanie istotnych danych na QNAP. Zdegradowany QNAP nie jest
 ### Etap 3: serwer lokalny
 
 1. Wykonać MVP crypto spike: enrollment signing, weryfikacja podpisów i
-   golden vectors na Kodi ARMv7/x86.
+   golden vectors na Kodi ARMv7/x86. **Zrealizowane.**
 2. Utworzyć osobne repo serwera.
 3. Zaimplementować immutable revisions, channels i CAS.
 4. Dodać idempotency keys, upload sessions i spójność SQLite/blob store.
@@ -851,7 +872,9 @@ i przechowywanie istotnych danych na QNAP. Zdegradowany QNAP nie jest
 6. Dodać podpisy rewizji, assignmentów, raportów oraz zdarzeń kanału.
 7. Dodać SQLite migrations, backup API i bezpieczny GC.
 8. Dodać redakcję logów.
-9. Zbudować obrazy `linux/amd64` i `linux/arm/v7`.
+9. Dodać minimalny Dockerfile, health check i CI budujące obrazy
+   `linux/amd64` oraz `linux/arm/v7`; publikować manifest wieloarchitekturowy
+   i przypinać wdrożenie po digescie, nie ruchomym tagu.
 10. Uruchomić integrację lokalnie bez QNAP.
 
 ### Etap 4: dodatek Kodi
@@ -889,7 +912,8 @@ i przechowywanie istotnych danych na QNAP. Zdegradowany QNAP nie jest
 ### Etap 6: QNAP
 
 1. Utworzyć dedykowany udział danych.
-2. Wdrożyć Compose z digestem obrazu.
+2. Wdrożyć jako aplikację Container Station z Docker Compose i digestem
+   obrazu; nie instalować backendu bezpośrednio w QTS ani jako QPKG.
 3. Ograniczyć port do LAN.
 4. Skonfigurować HTTPS.
 5. Skonfigurować health check i restart policy.

@@ -11,6 +11,18 @@
       "source": "umbrella/omega/plugin.video.umbrella",
       "include": ["*"]
     },
+    "service.mwodevelop.profilesync": {
+      "repository": "mwoDevelop/service.mwodevelop.profilesync",
+      "source": "profile-sync-addon",
+      "include": [
+        "addon.xml",
+        "LICENSE",
+        "README.md",
+        "default.py",
+        "service.py",
+        "resources/**"
+      ]
+    },
     "script.module.mwoscrapers": {
       "repository": "mwoDevelop/script.module.mwoscrapers",
       "source": "mwoscrapers",
