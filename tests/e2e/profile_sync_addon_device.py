@@ -759,7 +759,7 @@ def verify_device(
         checked = _wait_probe_phase(adb, adb_port, serial, "checked")
         if (
             checked.get("assigned_revision") != revision["revision_id"]
-            or "applied_revision" in checked
+            or checked.get("has_applied_revision")
         ):
             raise RuntimeError("read-only assignment invariant failed")
         origin = _installed_origin(
