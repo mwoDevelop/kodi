@@ -122,6 +122,11 @@ def load_config(path, repository):
         if not isinstance(logical_id, str):
             raise ValueError("schema 2 target lacks logical_device_id")
         device = resolve_device(registry, logical_id)
+        if device["platform"] not in {"android", "android-emulator"}:
+            raise ValueError(
+                "%s uses unsupported reinstall platform %s"
+                % (logical_id, device["platform"])
+            )
         expected_major = device["expected"]["kodi_major"]
         expected_version = target.get("expected_kodi_version", "")
         match = re.match(r"^(\d+)", str(expected_version))

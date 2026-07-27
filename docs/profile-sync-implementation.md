@@ -4,8 +4,21 @@ Date: 2026-07-27
 
 ## Implemented
 
-- `manifests/devices.schema.json` and redacted example;
-- private device inventory validator and resolver;
+- `manifests/devices.schema.json` with compatible schema 1/2 validation and a
+  redacted Android/Flatpak schema 2 example;
+- private device inventory loader normalizing schema 1/2 to the internal v2
+  model;
+- idempotent, atomic registry 1 -> 2 migration with a private backup and
+  byte-equivalent endpoint assertion;
+- opaque per-account principal IDs, explicit platform, physical host grouping
+  and exactly one neutral ADB/SSH transport;
+- separate `AdbTransport`/`SshTransport` and
+  `AndroidKodiLifecycle`/`FlatpakKodiLifecycle` contracts;
+- read-only `tools/kodi_inventory.py` with redacted output;
+- pinned SSH host keys, private-key mode checks, disabled agent forwarding,
+  UID/home/owner validation and symlink-escape rejection;
+- Android lifecycle inventory qualified live on BlueStacks, Sony TV and
+  Bedroom TV;
 - schema 1 -> 2 reinstall migration with a private backup;
 - reinstall config resolution through `logical_device_id`;
 - schema 2 profile policy with separate `disaster_recovery` and `routine`;
@@ -41,6 +54,7 @@ The migration created:
 
 ```text
 .kodi-private/devices.json
+.kodi-private/devices.json.schema1.bak
 .kodi-private/kodi-reinstall.json
 .kodi-private/kodi-reinstall.json.schema1.bak
 .kodi-private/routine/bluestacks1.json
@@ -56,6 +70,9 @@ Main repository:
 ```bash
 .venv/bin/pytest -q
 python tools/kodi_devices.py validate
+python tools/kodi_inventory.py bluestacks1 \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --adb-server-port 5038
 python tools/kodi_routine_profile.py \
   <private-snapshot>/payload \
   .kodi-private/routine/bluestacks1.json \
@@ -109,3 +126,12 @@ by:
 - no protected production admin API/key rotation;
 - no encrypted-secret feasibility result;
 - no journaled routine apply/rollback device E2E.
+
+Linux/Flatpak host support additionally remains read-only until:
+
+- the NUC is reachable and separate SSH keys are enrolled for both accounts;
+- `special://home` and `special://profile` are qualified from inside the real
+  Flatpak Kodi process;
+- repository bootstrap uses a supported Kodi UI/API path or returns
+  `BOOTSTRAP_REQUIRES_USER`;
+- revision schema 3 and administratively bound compatibility tags exist.

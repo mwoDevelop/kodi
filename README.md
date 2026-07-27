@@ -70,5 +70,25 @@ databases. Unencrypted snapshots are restricted to the Git-ignored
 uninstall, Kodi storage cleanup, ABI-matched APK installation, snapshot
 restore, and live add-on/skin validation.
 
+The private device inventory accepts legacy schema 1 and schema 2. Migrate it
+atomically after a dry run, marking emulators explicitly:
+
+```bash
+python3 tools/kodi_devices.py migrate-registry \
+  --platform bluestacks1=android-emulator
+python3 tools/kodi_devices.py migrate-registry \
+  --platform bluestacks1=android-emulator \
+  --yes
+```
+
+Read-only platform inventory resolves the neutral transport and Kodi lifecycle
+without printing endpoints, usernames, home paths or private references:
+
+```bash
+python3 tools/kodi_inventory.py bluestacks1 \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --adb-server-port 5038
+```
+
 See [Private Kodi profile snapshots](docs/kodi-private-profile.md) for the
 security boundary, exact contents, commands, and reproducible device checks.

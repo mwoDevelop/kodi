@@ -35,11 +35,12 @@ Stan realizacji 2026-07-27:
   nietrwały smoke 6A możliwy przed naprawą RAID oraz produkcję 6B po Etapie 0
   i po spełnieniu bram bezpieczeństwa API, migracji oraz backupu;
 - rozszerzenie Linux/Flatpak: live discovery NUC zrealizowane dla kont `mwo`
-  i `alek`; rejestr urządzeń oraz hostowe narzędzia są jeszcze ADB-only i
-  wymagają neutralnego SSH i lifecycle Flatpaka przed bootstrapem obu klientów;
+  i `alek`; registry v2, neutralne ADB/SSH, lifecycle Android/Flatpak oraz
+  read-only inventory są zaimplementowane i pokryte testami, lecz live
+  kwalifikacja NUC czeka na jego dostępność oraz osobne klucze SSH;
 - rozszerzenie Android: `Bedroom TV` (`Google TV Streamer`, codename
-  `kirkwood`) odnaleziony i autoryzowany przez ADB; nie ma jeszcze wpisu w
-  prywatnym registry ani urządzeniowego E2E Profile Sync;
+  `kirkwood`) znajduje się w prywatnym registry v2 i przeszedł read-only
+  lifecycle inventory; urządzeniowe E2E Profile Sync pozostaje do wykonania;
 - Etapy 7–8: nierozpoczęte.
 
 ## 1. Cel
@@ -470,15 +471,15 @@ Docelowy dokument:
         "model": "IP3 Tech TB20C",
         "kodi_major": 21,
         "abi": ["x86_64"],
-        "flatpak_app_id": "tv.kodi.Kodi"
+        "flatpak_app_id": "tv.kodi.Kodi",
+        "kodi_data_root": ".var/app/tv.kodi.Kodi/data"
       },
       "endpoints": {
         "ssh": {
           "host": "<private-nuc-host>",
           "user_ref": "NUC_USER_MWO",
           "credential_ref": "NUC_SSH_KEY_MWO",
-          "known_hosts_ref": "NUC_KNOWN_HOSTS",
-          "expected_kodi_data_root": ".var/app/tv.kodi.Kodi/data"
+          "known_hosts_ref": "NUC_KNOWN_HOSTS"
         }
       },
       "profile_channel": "home-stable"
@@ -1341,17 +1342,18 @@ i przechowywanie istotnych danych na QNAP. Zdegradowany QNAP nie jest
 2. Zmigrować `kodi-reinstall.json` do `logical_device_id`.
    **Zrealizowane dla obecnych urządzeń Android.**
 3. Podnieść registry do schema 2 z `physical_host_id`, `principal_id`,
-   `platform` i rozłącznym transportem ADB/SSH.
+   `platform` i rozłącznym transportem ADB/SSH. **Zrealizowane.**
 4. Dodać loader schema 1 i 2, normalizację do modelu wewnętrznego v2 oraz
    idempotentną migrację z backupem, atomowym zapisem i porównaniem resolve
-   istniejących Androidów. Zapisywać wyłącznie schema 2.
+   istniejących Androidów. Zapisywać wyłącznie schema 2. **Zrealizowane.**
 5. Dodać `bedroom-tv` jako consumera Android z oczekiwanym modelem
    `Google TV Streamer`, codename `kirkwood`, Kodi major 21 i osobnym
-   enrollmentem.
+   enrollmentem. **Registry i read-only lifecycle inventory zrealizowane;
+   enrollment pozostaje.**
 6. Dodać `nuc-mwo` oraz `nuc-alek` jako consumerów ze wspólnym
    `physical_host_id: nuc-host`.
 7. Dla Bedroom TV wykryć `ro.product.cpu.abilist` oraz ABI APK; nie kodować
-   pojedynczego `armeabi-v7a` jako założenia.
+   pojedynczego `armeabi-v7a` jako założenia. **Zrealizowane.**
 8. Zachować walidację tożsamości hosta, konta, canonical home/data root, listy
    ABI i wersji przed każdą mutacją.
 9. Do czasu dispatchera Android-only reinstall ma zwracać jawny
@@ -1361,15 +1363,18 @@ i przechowywanie istotnych danych na QNAP. Zdegradowany QNAP nie jest
 
 1. Poprawić prywatny env: drugi `NUC_PASS_MWO` przemianować na
    `NUC_PASS_ALEK`; walidator ma odrzucać brakujące i zduplikowane nazwy.
+   **Zrealizowane lokalnie; plik pozostaje niewersjonowany.**
 2. Dodać neutralne `AdbTransport` i `SshTransport` oraz osobne lifecycle
-   `AndroidKodiLifecycle` i `FlatpakKodiLifecycle`.
+   `AndroidKodiLifecycle` i `FlatpakKodiLifecycle`. **Zrealizowane.**
 3. Ograniczyć transport do zweryfikowanych operacji I/O; nie udostępniać
    dowolnego shell `run`, automatycznego stop ani nieograniczonych ścieżek.
+   **Zrealizowane dla read-only inventory.**
 4. Dodać dispatcher `probe`, `inventory`, `bootstrap`, `backup`, `restore` i
    `verify`, zawsze dla jednego jawnego `logical_device_id`.
 5. Wymusić OpenSSH `BatchMode=yes`, przypięty host key i machine fingerprint,
    osobny klucz per konto, brak `sudo`/agent forwarding, timeouty oraz zakaz
-   operacji poza home wskazanego UID.
+   operacji poza home wskazanego UID. **Kontrakt i testy fake SSH
+   zrealizowane; enrollment kluczy na NUC czeka na dostępność hosta.**
 6. Ustalać UID i home przez zweryfikowane konto oraz `getent passwd`, bez
    rozwijania `~`. Wewnątrz Flatpaka wykryć rzeczywiste
    `special://home`/`special://profile`, a potem canonicalizować ścieżkę,

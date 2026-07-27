@@ -1,8 +1,11 @@
 {
-  "schema": 1,
+  "schema": 2,
   "devices": {
     "android-tv": {
       "display_name": "Living room Android TV",
+      "physical_host_id": "living-room-tv",
+      "principal_id": "principal-android-owner",
+      "platform": "android",
       "roles": ["consumer"],
       "expected": {
         "model": "<private-model>",
@@ -17,6 +20,9 @@
     },
     "emulator-master": {
       "display_name": "Kodi publisher emulator",
+      "physical_host_id": "publisher-emulator",
+      "principal_id": "principal-emulator-owner",
+      "platform": "android-emulator",
       "roles": ["consumer", "publisher"],
       "expected": {
         "model": "<private-model>",
@@ -24,6 +30,29 @@
       },
       "endpoints": {
         "adb": "<private-adb-endpoint>"
+      },
+      "profile_channel": "home-stable"
+    },
+    "linux-consumer": {
+      "display_name": "Kodi Flatpak account",
+      "physical_host_id": "linux-media-host",
+      "principal_id": "principal-linux-01",
+      "platform": "linux-flatpak",
+      "roles": ["consumer"],
+      "expected": {
+        "model": "<private-model>",
+        "kodi_major": 21,
+        "abi": ["x86_64"],
+        "flatpak_app_id": "tv.kodi.Kodi",
+        "kodi_data_root": ".var/app/tv.kodi.Kodi/data"
+      },
+      "endpoints": {
+        "ssh": {
+          "host": "<private-host>",
+          "user_ref": "KODI_LINUX_USER",
+          "credential_ref": "KODI_LINUX_SSH_KEY",
+          "known_hosts_ref": "KODI_LINUX_KNOWN_HOSTS"
+        }
       },
       "profile_channel": "home-stable"
     }
