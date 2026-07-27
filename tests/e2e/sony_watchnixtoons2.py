@@ -11,11 +11,10 @@ from pathlib import Path
 from urllib.parse import quote
 
 from sony_kodi_matrix import (
-    AdbEventClient,
-    EventClient,
     JsonRpc,
     active_video_player,
     addon_version,
+    ensure_kodi_foreground,
     kodi_version,
     log_line_count,
     log_since,
@@ -25,23 +24,6 @@ from sony_kodi_matrix import (
 )
 
 ADDON_ID = "plugin.video.watchnixtoons2.mwodevelop"
-
-
-def current_label(rpc: JsonRpc) -> str:
-    result = rpc.call("GUI.GetProperties", {"properties": ["currentcontrol"]})
-    control = result.get("currentcontrol", {}) if isinstance(result, dict) else {}
-    return str(control.get("label", ""))
-
-
-def focus_label(rpc: JsonRpc, text: str, limit: int = 30) -> str:
-    for _index in range(limit):
-        label = current_label(rpc)
-        if text.casefold() in label.casefold():
-            return label
-        rpc.call("Input.Down")
-        time.sleep(0.4)
-    raise RuntimeError("could not focus %r" % text)
-
 
 def playback_method(adb: str, serial: str) -> str | None:
     path = (
@@ -89,11 +71,6 @@ def main() -> int:
     parser.add_argument("--serial", default="192.168.1.12:5555")
     parser.add_argument("--host", default="192.168.1.12")
     parser.add_argument("--jsonrpc-port", type=int, default=9090)
-    parser.add_argument(
-        "--event-via-adb",
-        action="store_true",
-        help="send Kodi EventServer packets from inside the ADB target",
-    )
     parser.add_argument("--content-path", default="mao-episode-17-english-subbed")
     parser.add_argument("--title", default="Mao Episode 17 English Subbed")
     parser.add_argument("--observe-seconds", type=int, default=15)
@@ -104,11 +81,7 @@ def main() -> int:
     args = parser.parse_args()
 
     rpc = JsonRpc(args.host, args.jsonrpc_port)
-    events = (
-        AdbEventClient(args.adb, args.serial)
-        if args.event_via_adb
-        else EventClient(args.host)
-    )
+    ensure_kodi_foreground(args.adb, args.serial)
     if rpc.call("JSONRPC.Ping") != "pong":
         raise RuntimeError("Kodi JSON-RPC did not return pong")
     method = playback_method(args.adb, args.serial)
@@ -116,33 +89,48 @@ def main() -> int:
         raise RuntimeError("unexpected WatchNixtoons2 playbackMethod: %r" % method)
 
     start_line = log_line_count(args.adb, args.serial) + 1
-    events.execute_builtin("ActivateWindow(Home)")
-    time.sleep(2)
-    events.execute_builtin(
-        "ActivateWindow(Videos,plugin://%s/,return)" % ADDON_ID
+    root = rpc.call(
+        "Files.GetDirectory",
+        {
+            "directory": "plugin://%s/" % ADDON_ID,
+            "media": "files",
+        },
     )
-    time.sleep(10)
-    menu_label = focus_label(rpc, "Latest Releases")
-    rpc.call("Input.Select")
-    time.sleep(12)
-
-    catalogue = []
-    for _index in range(16):
-        label = current_label(rpc).strip("[] ")
-        if label and label != ".." and label not in catalogue:
-            catalogue.append(label)
-        rpc.call("Input.Down")
-        time.sleep(0.25)
+    root_items = root.get("files", []) if isinstance(root, dict) else []
+    latest = next(
+        (
+            item
+            for item in root_items
+            if "latest releases" in str(item.get("label", "")).casefold()
+        ),
+        None,
+    )
+    if not latest:
+        raise RuntimeError("Latest Releases menu was not available")
+    menu_label = str(latest["label"])
+    listing = rpc.call(
+        "Files.GetDirectory",
+        {
+            "directory": latest["file"],
+            "media": "files",
+        },
+    )
+    catalogue = [
+        str(item.get("label", "")).strip("[] ")
+        for item in (
+            listing.get("files", []) if isinstance(listing, dict) else []
+        )[:16]
+        if item.get("label")
+    ]
     if not catalogue:
         raise RuntimeError("Latest Releases catalogue was empty")
 
-    events.execute_builtin("ActivateWindow(Home)")
-    time.sleep(2)
+    ensure_kodi_foreground(args.adb, args.serial)
     media_url = (
         "plugin://%s/?action=actionResolve&url=%s"
         % (ADDON_ID, quote("/" + args.content_path, safe=""))
     )
-    events.execute_builtin("PlayMedia(%s)" % media_url)
+    rpc.call("Player.Open", {"item": {"file": media_url}})
     selected_quality = None
     if method in (None, "0"):
         selected_quality = accept_quality_dialog(rpc)

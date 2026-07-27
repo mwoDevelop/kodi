@@ -114,7 +114,7 @@ add-on is enabled and owned by the stable repository, the legacy add-on and
 testing repository are absent, and the latest matching playback log contains
 input stream, demuxer, audio decoder, and clean player-close markers.
 
-## Sony Android TV / Kodi 21.2
+## Sony Android TV / Kodi 21.3
 
 Use an isolated ADB server when another local Android client keeps replacing
 the default server:
@@ -153,7 +153,8 @@ pipeline:
 .venv/bin/python tests/e2e/sony_watchnixtoons2.py \
   --adb /home/mwo/android-sdk/platform-tools/adb \
   --serial 192.168.1.12:5555 \
-  --host 192.168.1.12 \
+  --host 127.0.0.1 \
+  --jsonrpc-port 19091 \
   --observe-seconds 15 \
   --result docs/e2e-results/sony-watchnixtoons2.json
 ```

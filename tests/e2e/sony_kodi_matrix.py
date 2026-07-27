@@ -21,6 +21,7 @@ from urllib.parse import quote_plus, urlencode
 
 
 KODI_ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
+KODI_ACTIVITY = "org.xbmc.kodi/.Main"
 ADDONS = {
     "plugin.video.umbrella",
     "plugin.video.watchnixtoons2.mwodevelop",
@@ -160,6 +161,26 @@ def run(adb: str, serial: str, *args: str, check: bool = True) -> str:
 
 def shell(adb: str, serial: str, command: str, check: bool = True) -> str:
     return run(adb, serial, "shell", command, check=check)
+
+
+def ensure_kodi_foreground(adb: str, serial: str):
+    """Give Android's video surface to Kodi before starting playback."""
+    run(adb, serial, "shell", "am", "start", "-W", "-n", KODI_ACTIVITY)
+    started = time.monotonic()
+    while time.monotonic() - started < 15:
+        windows = shell(adb, serial, "dumpsys window", check=False)
+        focus = next(
+            (
+                line
+                for line in windows.splitlines()
+                if "mCurrentFocus=" in line
+            ),
+            "",
+        )
+        if "org.xbmc.kodi/" in focus:
+            return
+        time.sleep(1)
+    raise RuntimeError("Kodi did not become the foreground Android app")
 
 
 class JsonRpc:
@@ -720,6 +741,7 @@ def main() -> int:
         if args.event_via_adb
         else EventClient(args.host)
     )
+    ensure_kodi_foreground(args.adb, args.serial)
     if rpc.call("JSONRPC.Ping") != "pong":
         raise RuntimeError("Kodi JSON-RPC did not return pong")
 
@@ -750,6 +772,7 @@ def main() -> int:
         "results": [],
     }
     for case_name in selected:
+        ensure_kodi_foreground(args.adb, args.serial)
         print("Running %s..." % case_name, flush=True)
         result = run_case(
             rpc,

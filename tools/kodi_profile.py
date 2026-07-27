@@ -86,6 +86,20 @@ def requires_direct_copy(relative):
     )
 
 
+def kodi_versions_compatible(source, target, allow_upgrade=False):
+    if source == target:
+        return True
+    source_numbers = tuple(int(item) for item in re.findall(r"\d+", source))
+    target_numbers = tuple(int(item) for item in re.findall(r"\d+", target))
+    if not source_numbers or not target_numbers:
+        return False
+    return (
+        allow_upgrade
+        and source_numbers[0] == target_numbers[0]
+        and target_numbers >= source_numbers
+    )
+
+
 def adb_command(
     adb,
     adb_server_port,
@@ -522,12 +536,12 @@ class AdbEventClient:
     ACTION_EXECBUILTIN = 0x01
     MAX_PAYLOAD_SIZE = 1024 - HEADER_SIZE
 
-    def __init__(self, adb, port, serial, source_port=40141):
+    def __init__(self, adb, port, serial, source_port=None):
         self.adb = adb
         self.port = port
         self.serial = serial
-        self.source_port = source_port
         self.uid = int(time.time()) & 0xFFFFFFFF
+        self.source_port = source_port or 40000 + self.uid % 20000
 
     def _header(self, packet_type, sequence, packet_count, payload_size):
         return (
@@ -731,7 +745,7 @@ def _wait_for_kodi_ready(adb, port, serial, timeout=90):
             port,
             serial,
             "shell",
-            "netstat -anu 2>/dev/null | grep -q '127.0.0.1:9777'",
+            "netstat -anu 2>/dev/null | grep -q ':9777'",
             check=False,
         )
         if userdata.returncode == 0 and event_server.returncode == 0:
@@ -777,12 +791,26 @@ def _activate_skin(jsonrpc, skin_id, timeout=15):
         raise RuntimeError("Kodi did not retain the restored skin")
 
 
-def _restore_snapshot_inner(adb, port, serial, snapshot, device_script):
+def _restore_snapshot_inner(
+    adb,
+    port,
+    serial,
+    snapshot,
+    device_script,
+    allow_kodi_upgrade=False,
+):
     manifest = verify_snapshot(snapshot)
     target = device_info(adb, port, serial)
     source = manifest["device"]
-    if target["kodi_version"] != source["kodi_version"]:
-        raise ValueError("Kodi version differs from snapshot")
+    if not kodi_versions_compatible(
+        source["kodi_version"],
+        target["kodi_version"],
+        allow_upgrade=allow_kodi_upgrade,
+    ):
+        raise ValueError(
+            "Kodi version is incompatible with snapshot: %s -> %s"
+            % (source["kodi_version"], target["kodi_version"])
+        )
     if not set(target["abi_list"]).intersection(source["abi_list"]):
         raise ValueError("target ABI is incompatible with snapshot")
     with tempfile.NamedTemporaryFile(suffix=".tar") as archive:
@@ -854,7 +882,14 @@ def _restore_snapshot_inner(adb, port, serial, snapshot, device_script):
     }
 
 
-def restore_snapshot(adb, port, serial, snapshot, device_script):
+def restore_snapshot(
+    adb,
+    port,
+    serial,
+    snapshot,
+    device_script,
+    allow_kodi_upgrade=False,
+):
     try:
         return _restore_snapshot_inner(
             adb,
@@ -862,6 +897,7 @@ def restore_snapshot(adb, port, serial, snapshot, device_script):
             serial,
             snapshot,
             device_script,
+            allow_kodi_upgrade,
         )
     finally:
         adb_command(
@@ -900,6 +936,11 @@ def main():
     restore = commands.add_parser("restore")
     restore.add_argument("snapshot")
     restore.add_argument(
+        "--allow-kodi-upgrade",
+        action="store_true",
+        help="allow restore to a newer Kodi release in the same major line",
+    )
+    restore.add_argument(
         "--device-script", default=str(default_device_script)
     )
     args = parser.parse_args()
@@ -928,6 +969,7 @@ def main():
             args.serial,
             args.snapshot,
             args.device_script,
+            args.allow_kodi_upgrade,
         )
     summary = {
         key: result[key]

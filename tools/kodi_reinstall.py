@@ -1,0 +1,871 @@
+#!/usr/bin/env python3
+"""Cleanly reinstall Kodi targets and restore private profile snapshots."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+import sqlite3
+import sys
+import tempfile
+import time
+import zipfile
+from pathlib import Path
+
+try:
+    from kodi_profile import (
+        KODI_ROOT,
+        KODI_PACKAGE,
+        AdbEventClient,
+        AdbJsonRpcClient,
+        _prepare_kodi_permissions,
+        _wait_for_kodi_ready,
+        adb_command,
+        adb_output,
+        device_info,
+        ensure_private_output,
+        kodi_versions_compatible,
+        restore_snapshot,
+        verify_snapshot,
+    )
+except ModuleNotFoundError:
+    from tools.kodi_profile import (
+        KODI_ROOT,
+        KODI_PACKAGE,
+        AdbEventClient,
+        AdbJsonRpcClient,
+        _prepare_kodi_permissions,
+        _wait_for_kodi_ready,
+        adb_command,
+        adb_output,
+        device_info,
+        ensure_private_output,
+        kodi_versions_compatible,
+        restore_snapshot,
+        verify_snapshot,
+    )
+
+
+KODI_STORAGE_PATHS = (
+    "/sdcard/Android/data/org.xbmc.kodi",
+    "/sdcard/Android/obb/org.xbmc.kodi",
+    "/sdcard/.kodi",
+)
+KODI_DATABASE_ROOT = KODI_ROOT + "/userdata/Database"
+SAFE_ADDON_ID = re.compile(r"^[A-Za-z0-9._-]+$")
+ORIGIN_SCRIPT = "/sdcard/Download/mwo-kodi-profile-origin-device.py"
+ORIGIN_MAPPING = "/sdcard/Download/mwo-kodi-profile-origin-mapping.json"
+ORIGIN_MARKER = "/sdcard/Download/mwo-kodi-profile-origin-result.json"
+
+
+class RepositoryIndexNotReady(RuntimeError):
+    pass
+
+
+def file_digest(path):
+    hasher = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            hasher.update(block)
+    return hasher.hexdigest()
+
+
+def apk_abis(path):
+    result = set()
+    with zipfile.ZipFile(path) as archive:
+        for name in archive.namelist():
+            parts = name.split("/", 2)
+            if len(parts) == 3 and parts[0] == "lib":
+                result.add(parts[1])
+    return sorted(result)
+
+
+def resolve_private_path(repository, value):
+    path = Path(value)
+    if not path.is_absolute():
+        path = repository / path
+    return ensure_private_output(path, repository)
+
+
+def load_config(path, repository):
+    path = resolve_private_path(repository, path)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if document.get("schema") != 1:
+        raise ValueError("unsupported Kodi reinstall config")
+    targets = document.get("targets")
+    if not isinstance(targets, list) or not targets:
+        raise ValueError("Kodi reinstall config has no targets")
+    return path, targets
+
+
+def preflight_target(target, repository, adb, port):
+    required = {
+        "name",
+        "serial",
+        "expected_model",
+        "expected_kodi_version",
+        "snapshot",
+        "apk",
+        "apk_sha256",
+    }
+    missing = sorted(required.difference(target))
+    if missing:
+        raise ValueError(
+            "%s target lacks: %s"
+            % (target.get("name", "<unnamed>"), ", ".join(missing))
+        )
+    serial = target["serial"]
+    state = adb_output(adb, port, serial, "get-state").strip()
+    if state != "device":
+        raise RuntimeError("%s is not an authorized ADB device" % serial)
+    model = adb_output(
+        adb, port, serial, "shell", "getprop ro.product.model"
+    ).strip()
+    if model != target["expected_model"]:
+        raise RuntimeError(
+            "%s resolved to unexpected model %r" % (serial, model)
+        )
+    device_abis = [
+        item
+        for item in adb_output(
+            adb,
+            port,
+            serial,
+            "shell",
+            "getprop ro.product.cpu.abilist",
+        ).strip().split(",")
+        if item
+    ]
+    required_addons = target.get("required_addons", [])
+    addon_origins = target.get("addon_origins", {})
+    restore_mode = target.get("restore_mode", "kodi-process")
+    if not isinstance(required_addons, list) or any(
+        not isinstance(item, str) or not SAFE_ADDON_ID.fullmatch(item)
+        for item in required_addons
+    ):
+        raise ValueError("%s has invalid required add-ons" % target["name"])
+    if not isinstance(addon_origins, dict):
+        raise ValueError("%s has invalid add-on origins" % target["name"])
+    if restore_mode not in ("adb-push", "kodi-process"):
+        raise ValueError("%s has invalid restore mode" % target["name"])
+    if any(
+        addon_id not in required_addons or origin not in required_addons
+        for addon_id, origin in addon_origins.items()
+    ):
+        raise ValueError(
+            "%s origin mappings must reference required add-ons"
+            % target["name"]
+        )
+    snapshot_path = resolve_private_path(repository, target["snapshot"])
+    manifest = verify_snapshot(snapshot_path)
+    allow_upgrade = bool(target.get("allow_kodi_upgrade"))
+    if not kodi_versions_compatible(
+        manifest["device"]["kodi_version"],
+        target["expected_kodi_version"],
+        allow_upgrade=allow_upgrade,
+    ):
+        raise ValueError(
+            "%s snapshot Kodi version is incompatible" % target["name"]
+        )
+    if not set(device_abis).intersection(manifest["device"]["abi_list"]):
+        raise ValueError(
+            "%s snapshot ABI is incompatible with device" % target["name"]
+        )
+    apk_path = resolve_private_path(repository, target["apk"])
+    if not apk_path.is_file():
+        raise FileNotFoundError(apk_path)
+    actual_sha256 = file_digest(apk_path)
+    if actual_sha256 != target["apk_sha256"]:
+        raise ValueError("%s APK digest differs from config" % target["name"])
+    packaged_abis = apk_abis(apk_path)
+    if packaged_abis and not set(packaged_abis).intersection(device_abis):
+        raise ValueError(
+            "%s APK ABI %s is incompatible with device ABI %s"
+            % (target["name"], packaged_abis, device_abis)
+        )
+    package = adb_output(
+        adb,
+        port,
+        serial,
+        "shell",
+        "dumpsys package %s" % KODI_PACKAGE,
+    )
+    version = re.search(r"versionName=([^\s]+)", package)
+    return {
+        "name": target["name"],
+        "serial": serial,
+        "model": model,
+        "device_abis": device_abis,
+        "apk_abis": packaged_abis,
+        "apk": apk_path,
+        "snapshot": snapshot_path,
+        "snapshot_manifest": manifest,
+        "installed_version": version.group(1) if version else None,
+        "expected_version": target["expected_kodi_version"],
+        "required_addons": required_addons,
+        "addon_origins": addon_origins,
+        "allow_kodi_upgrade": allow_upgrade,
+        "restore_mode": restore_mode,
+    }
+
+
+def uninstall_and_clean(adb, port, serial):
+    package = adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "pm path %s" % KODI_PACKAGE,
+        check=False,
+        text=True,
+    )
+    if package.stdout.strip().startswith("package:"):
+        result = adb_command(
+            adb,
+            port,
+            serial,
+            "uninstall",
+            KODI_PACKAGE,
+            check=False,
+            text=True,
+        )
+        if "Success" not in result.stdout:
+            raise RuntimeError("Kodi uninstall did not report success")
+    quoted = " ".join("'%s'" % path for path in KODI_STORAGE_PATHS)
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "rm -rf %s" % quoted,
+        check=False,
+    )
+    remaining = adb_output(
+        adb,
+        port,
+        serial,
+        "shell",
+        "for path in %s; do test ! -e \"$path\" || echo \"$path\"; done"
+        % quoted,
+    ).strip()
+    if remaining:
+        raise RuntimeError("Kodi storage cleanup left data behind")
+
+
+def install_apk(adb, port, serial, apk, expected_version):
+    result = adb_command(
+        adb,
+        port,
+        serial,
+        "install",
+        "-r",
+        "-g",
+        str(apk),
+        text=True,
+        timeout=300,
+    )
+    if "Success" not in result.stdout:
+        raise RuntimeError("Kodi APK installation did not report success")
+    _prepare_kodi_permissions(adb, port, serial)
+    installed = device_info(adb, port, serial)
+    if installed["kodi_version"] != expected_version:
+        raise RuntimeError(
+            "installed Kodi version %s differs from expected %s"
+            % (installed["kodi_version"], expected_version)
+        )
+
+
+def addon_database_path(adb, port, serial):
+    output = adb_output(
+        adb,
+        port,
+        serial,
+        "shell",
+        "ls '%s'/Addons*.db 2>/dev/null | tail -n 1"
+        % KODI_DATABASE_ROOT,
+    ).strip()
+    expected = re.compile(
+        "^%s/Addons[0-9]+[.]db$" % re.escape(KODI_DATABASE_ROOT)
+    )
+    if not expected.fullmatch(output):
+        raise RuntimeError("Kodi add-on database was not found")
+    return output
+
+def apply_addon_origins(database, origins):
+    for addon_id, origin in origins.items():
+        if not SAFE_ADDON_ID.fullmatch(addon_id):
+            raise ValueError("unsafe add-on identifier in origin mapping")
+        if not SAFE_ADDON_ID.fullmatch(origin):
+            raise ValueError("unsafe repository identifier in origin mapping")
+    connection = sqlite3.connect(database)
+    try:
+        with connection:
+            for addon_id, origin in origins.items():
+                repository = connection.execute(
+                    "SELECT checksum FROM repo WHERE addonID=?",
+                    (origin,),
+                ).fetchone()
+                if not repository or not repository[0]:
+                    raise RepositoryIndexNotReady(
+                        "%s repository index is not ready" % origin
+                    )
+                candidate = connection.execute(
+                    """
+                    SELECT 1
+                    FROM addons
+                    JOIN addonlinkrepo ON addonlinkrepo.idAddon=addons.id
+                    JOIN repo ON repo.id=addonlinkrepo.idRepo
+                    WHERE addons.addonID=? AND repo.addonID=?
+                    """,
+                    (addon_id, origin),
+                ).fetchone()
+                if not candidate:
+                    raise RepositoryIndexNotReady(
+                        "%s is not indexed by %s" % (addon_id, origin)
+                    )
+                installed = connection.execute(
+                    "SELECT origin FROM installed WHERE addonID=?",
+                    (addon_id,),
+                ).fetchone()
+                if not installed:
+                    raise RuntimeError("%s is not installed" % addon_id)
+                current = installed[0]
+                if current not in ("", origin):
+                    raise RuntimeError(
+                        "%s already belongs to a different origin" % addon_id
+                    )
+                connection.execute(
+                    "UPDATE installed SET origin=? WHERE addonID=?",
+                    (origin, addon_id),
+                )
+    finally:
+        connection.close()
+
+
+def assign_addon_origins_via_adb(adb, port, target, timeout=90):
+    origins = target["addon_origins"]
+    if not origins:
+        return
+    started = time.monotonic()
+    last_error = None
+    while time.monotonic() - started < timeout:
+        adb_command(
+            adb,
+            port,
+            target["serial"],
+            "shell",
+            "am force-stop %s" % KODI_PACKAGE,
+        )
+        database = addon_database_path(
+            adb,
+            port,
+            target["serial"],
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            local = Path(temporary) / Path(database).name
+            adb_command(
+                adb,
+                port,
+                target["serial"],
+                "pull",
+                database,
+                str(local),
+                timeout=120,
+            )
+            try:
+                apply_addon_origins(local, origins)
+            except RepositoryIndexNotReady as error:
+                last_error = error
+            else:
+                adb_command(
+                    adb,
+                    port,
+                    target["serial"],
+                    "push",
+                    str(local),
+                    database,
+                    timeout=120,
+                )
+                last_error = None
+        adb_command(
+            adb,
+            port,
+            target["serial"],
+            "shell",
+            "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
+            % KODI_PACKAGE,
+        )
+        _wait_for_kodi_ready(adb, port, target["serial"])
+        if last_error is None:
+            return
+        time.sleep(5)
+    raise RuntimeError("Kodi repository index stayed unavailable") from last_error
+
+
+def assign_addon_origins_in_kodi(
+    adb,
+    port,
+    target,
+    origin_script,
+    timeout=90,
+):
+    origins = target["addon_origins"]
+    if not origins:
+        return
+    for addon_id, origin in origins.items():
+        if not SAFE_ADDON_ID.fullmatch(addon_id):
+            raise ValueError("unsafe add-on identifier in origin mapping")
+        if not SAFE_ADDON_ID.fullmatch(origin):
+            raise ValueError("unsafe repository identifier in origin mapping")
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8") as mapping:
+        json.dump(origins, mapping, sort_keys=True)
+        mapping.flush()
+        adb_command(
+            adb,
+            port,
+            target["serial"],
+            "push",
+            str(origin_script),
+            ORIGIN_SCRIPT,
+        )
+        adb_command(
+            adb,
+            port,
+            target["serial"],
+            "push",
+            mapping.name,
+            ORIGIN_MAPPING,
+        )
+    try:
+        adb_command(
+            adb,
+            port,
+            target["serial"],
+            "shell",
+            "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
+            % KODI_PACKAGE,
+        )
+        _wait_for_kodi_ready(adb, port, target["serial"])
+        events = AdbEventClient(adb, port, target["serial"])
+        started = time.monotonic()
+        result = None
+        while time.monotonic() - started < timeout:
+            adb_command(
+                adb,
+                port,
+                target["serial"],
+                "shell",
+                "rm -f '%s'" % ORIGIN_MARKER,
+                check=False,
+            )
+            events.execute_builtin(
+                "RunScript(%s,%s,%s)"
+                % (ORIGIN_SCRIPT, ORIGIN_MAPPING, ORIGIN_MARKER)
+            )
+            attempt = time.monotonic()
+            while time.monotonic() - attempt < 30:
+                marker = adb_command(
+                    adb,
+                    port,
+                    target["serial"],
+                    "shell",
+                    "cat '%s'" % ORIGIN_MARKER,
+                    check=False,
+                    text=True,
+                )
+                if marker.returncode == 0 and marker.stdout.strip():
+                    result = json.loads(marker.stdout)
+                    break
+                time.sleep(1)
+            if result and result.get("ok"):
+                break
+            if result and result.get("error_type") != "RepositoryIndexNotReady":
+                break
+            result = None
+            events.execute_builtin("UpdateAddonRepos")
+            time.sleep(10)
+        if result is None:
+            raise TimeoutError("Kodi origin assignment did not finish")
+        if not result.get("ok"):
+            raise RuntimeError(
+                "Kodi origin assignment failed: %s"
+                % result.get("error_type", "unknown")
+            )
+        if result.get("updated") != len(origins):
+            raise RuntimeError("Kodi origin assignment count differs")
+        adb_command(
+            adb,
+            port,
+            target["serial"],
+            "shell",
+            "am force-stop %s" % KODI_PACKAGE,
+        )
+        adb_command(
+            adb,
+            port,
+            target["serial"],
+            "shell",
+            "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
+            % KODI_PACKAGE,
+        )
+        _wait_for_kodi_ready(adb, port, target["serial"])
+    finally:
+        adb_command(
+            adb,
+            port,
+            target["serial"],
+            "shell",
+            "rm -f '%s' '%s' '%s'"
+            % (ORIGIN_SCRIPT, ORIGIN_MAPPING, ORIGIN_MARKER),
+            check=False,
+        )
+
+
+def assign_addon_origins(adb, port, target, origin_script):
+    if target["restore_mode"] == "adb-push":
+        assign_addon_origins_via_adb(adb, port, target)
+    else:
+        assign_addon_origins_in_kodi(
+            adb,
+            port,
+            target,
+            origin_script,
+        )
+
+
+def installed_addon_origins(adb, port, serial, addon_ids):
+    database = addon_database_path(adb, port, serial)
+    with tempfile.TemporaryDirectory() as temporary:
+        local = Path(temporary) / Path(database).name
+        adb_command(
+            adb,
+            port,
+            serial,
+            "pull",
+            database,
+            str(local),
+            timeout=120,
+        )
+        connection = sqlite3.connect(local)
+        try:
+            return {
+                addon_id: (
+                    connection.execute(
+                        "SELECT origin FROM installed WHERE addonID=?",
+                        (addon_id,),
+                    ).fetchone()
+                    or (None,)
+                )[0]
+                for addon_id in addon_ids
+            }
+        finally:
+            connection.close()
+
+
+def validate_restored_target(adb, port, target, restore_result):
+    addons = {}
+    with AdbJsonRpcClient(adb, port, target["serial"]) as jsonrpc:
+        if jsonrpc.call("JSONRPC.Ping") != "pong":
+            raise RuntimeError("Kodi JSON-RPC did not return pong")
+        for addon_id in target["required_addons"]:
+            addon = jsonrpc.call(
+                "Addons.GetAddonDetails",
+                {
+                    "addonid": addon_id,
+                    "properties": ["enabled", "version"],
+                },
+            )["addon"]
+            if not addon["enabled"]:
+                raise RuntimeError("%s is disabled" % addon_id)
+            addons[addon_id] = addon["version"]
+        skin = jsonrpc.call(
+            "Settings.GetSettingValue",
+            {"setting": "lookandfeel.skin"},
+        )["value"]
+    expected_skin = target["snapshot_manifest"]["selected_skin"]
+    if skin != expected_skin:
+        raise RuntimeError(
+            "active skin %s differs from snapshot %s" % (skin, expected_skin)
+        )
+    origins = installed_addon_origins(
+        adb,
+        port,
+        target["serial"],
+        target["addon_origins"],
+    )
+    for addon_id, expected in target["addon_origins"].items():
+        if origins.get(addon_id) != expected:
+            raise RuntimeError("%s has an unexpected origin" % addon_id)
+    return {
+        "name": target["name"],
+        "serial": target["serial"],
+        "model": target["model"],
+        "kodi_version": target["expected_version"],
+        "snapshot_id": restore_result["snapshot_id"],
+        "restored_files": restore_result["restored_files"],
+        "skin": skin,
+        "addons": addons,
+        "result": "pass",
+    }
+
+
+def restore_snapshot_via_adb(adb, port, target):
+    manifest = target["snapshot_manifest"]
+    adb_command(
+        adb,
+        port,
+        target["serial"],
+        "shell",
+        "am force-stop %s" % KODI_PACKAGE,
+    )
+    adb_command(
+        adb,
+        port,
+        target["serial"],
+        "shell",
+        "rm -rf "
+        "'%s/addons/script.mwodevelop.profile.restore' "
+        "'%s/addons/plugin.video.mwodevelop.profile.restore'; "
+        "rm -f '%s/temp/mwo-write-test'"
+        % (KODI_ROOT, KODI_ROOT, KODI_ROOT),
+        check=False,
+    )
+    payload = target["snapshot"] / "payload"
+    adb_command(
+        adb,
+        port,
+        target["serial"],
+        "push",
+        str(payload) + "/.",
+        KODI_ROOT + "/",
+        timeout=900,
+    )
+    adb_command(
+        adb,
+        port,
+        target["serial"],
+        "shell",
+        "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
+        % KODI_PACKAGE,
+    )
+    _wait_for_kodi_ready(adb, port, target["serial"])
+    enabled = [
+        item["id"]
+        for item in manifest["addons"]
+        if item["enabled"] and item["id"] != manifest["selected_skin"]
+    ]
+    with AdbJsonRpcClient(
+        adb,
+        port,
+        target["serial"],
+    ) as jsonrpc:
+        for addon_id in enabled:
+            started = time.monotonic()
+            while True:
+                try:
+                    jsonrpc.call(
+                        "Addons.SetAddonEnabled",
+                        {"addonid": addon_id, "enabled": True},
+                    )
+                    break
+                except RuntimeError:
+                    if time.monotonic() - started >= 60:
+                        raise
+                    time.sleep(2)
+        jsonrpc.call(
+            "Addons.SetAddonEnabled",
+            {
+                "addonid": manifest["selected_skin"],
+                "enabled": True,
+            },
+        )
+    time.sleep(2)
+    skin = manifest["selected_skin"]
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", skin):
+        raise ValueError("snapshot contains an unsafe skin identifier")
+    adb_command(
+        adb,
+        port,
+        target["serial"],
+        "shell",
+        "am force-stop %s" % KODI_PACKAGE,
+    )
+    settings = KODI_ROOT + "/userdata/guisettings.xml"
+    result = adb_command(
+        adb,
+        port,
+        target["serial"],
+        "shell",
+        "sed -i -E "
+        "'s#(<setting id=\"lookandfeel.skin\"[^>]*>)[^<]*"
+        "(</setting>)#\\1%s\\2#' '%s'" % (skin, settings),
+        check=False,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("failed to persist the restored skin setting")
+    adb_command(
+        adb,
+        port,
+        target["serial"],
+        "shell",
+        "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
+        % KODI_PACKAGE,
+    )
+    _wait_for_kodi_ready(adb, port, target["serial"])
+    with AdbJsonRpcClient(
+        adb,
+        port,
+        target["serial"],
+    ) as jsonrpc:
+        selected = jsonrpc.call(
+            "Settings.GetSettingValue",
+            {"setting": "lookandfeel.skin"},
+        )["value"]
+    if selected != skin:
+        raise RuntimeError("Kodi did not load the restored skin after restart")
+    return {
+        "snapshot_id": manifest["snapshot_id"],
+        "restored_files": len(manifest["files"]),
+        "selected_skin": manifest["selected_skin"],
+        "enabled_addons_requested": len(enabled) + 1,
+    }
+
+
+def deploy_target(
+    adb,
+    port,
+    target,
+    device_script,
+    origin_script,
+    restore_only=False,
+):
+    if not restore_only:
+        uninstall_and_clean(adb, port, target["serial"])
+        install_apk(
+            adb,
+            port,
+            target["serial"],
+            target["apk"],
+            target["expected_version"],
+        )
+    if target["restore_mode"] == "adb-push":
+        restore_result = restore_snapshot_via_adb(
+            adb,
+            port,
+            target,
+        )
+    elif target["restore_mode"] == "kodi-process":
+        restore_result = restore_snapshot(
+            adb,
+            port,
+            target["serial"],
+            target["snapshot"],
+            device_script,
+            allow_kodi_upgrade=target["allow_kodi_upgrade"],
+        )
+    else:
+        raise ValueError(
+            "unsupported restore mode: %s" % target["restore_mode"]
+        )
+    assign_addon_origins(adb, port, target, origin_script)
+    return validate_restored_target(adb, port, target, restore_result)
+
+
+def main():
+    repository = Path(__file__).resolve().parents[1]
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--config",
+        default=".kodi-private/kodi-reinstall.json",
+    )
+    parser.add_argument(
+        "--adb",
+        default="/home/mwo/android-sdk/platform-tools/adb",
+    )
+    parser.add_argument("--adb-server-port", type=int, default=5038)
+    parser.add_argument(
+        "--target",
+        action="append",
+        help="target name from config; omit or use 'all' for every target",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="authorize uninstall, storage cleanup, reinstall and restore",
+    )
+    parser.add_argument(
+        "--restore-only",
+        action="store_true",
+        help="skip uninstall and APK installation, then restore and validate",
+    )
+    args = parser.parse_args()
+    _config_path, configured = load_config(args.config, repository)
+    selected_names = set(args.target or ["all"])
+    if "all" in selected_names:
+        selected = configured
+    else:
+        selected = [
+            item for item in configured if item.get("name") in selected_names
+        ]
+        found = {item["name"] for item in selected}
+        missing = sorted(selected_names.difference(found))
+        if missing:
+            raise ValueError("unknown targets: %s" % ", ".join(missing))
+    preflight = [
+        preflight_target(
+            item,
+            repository,
+            args.adb,
+            args.adb_server_port,
+        )
+        for item in selected
+    ]
+    plan = {
+        "targets": [
+            {
+                "name": item["name"],
+                "serial": item["serial"],
+                "model": item["model"],
+                "installed_version": item["installed_version"],
+                "new_version": item["expected_version"],
+                "snapshot_id": item["snapshot_manifest"]["snapshot_id"],
+                "apk_abis": item["apk_abis"],
+            }
+            for item in preflight
+        ]
+    }
+    if not args.yes:
+        print(json.dumps(plan, indent=2, sort_keys=True))
+        print("Re-run with --yes to perform the destructive reinstall.")
+        return 0
+    results = []
+    device_script = repository / "tools/kodi_profile_restore_device.py"
+    origin_script = repository / "tools/kodi_profile_origin_device.py"
+    for target in preflight:
+        action = "Restoring" if args.restore_only else "Reinstalling"
+        print("%s %s..." % (action, target["name"]), flush=True)
+        results.append(
+            deploy_target(
+                args.adb,
+                args.adb_server_port,
+                target,
+                device_script,
+                origin_script,
+                restore_only=args.restore_only,
+            )
+        )
+    print(
+        json.dumps(
+            {"schema": 1, "results": results},
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
