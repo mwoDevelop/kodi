@@ -31,7 +31,7 @@ def _single(items, description):
     return items[0]
 
 
-def _absolute_source(volume, target):
+def _absolute_source(volume, target, explicit_bind_targets):
     if volume.get("type") != "bind" or volume.get("target") != target:
         raise PolicyError("%s must be a bind mount" % target)
     source = volume.get("source")
@@ -41,9 +41,41 @@ def _absolute_source(volume, target):
         or source == "/"
     ):
         raise PolicyError("%s source must be a safe absolute path" % target)
-    if volume.get("bind", {}).get("create_host_path") is not False:
+    rendered_value = volume.get("bind", {}).get("create_host_path")
+    if rendered_value is True or target not in explicit_bind_targets:
         raise PolicyError("%s must disable automatic host path creation" % target)
     return source
+
+
+def explicit_bind_targets(compose_text):
+    """Audit canonical source YAML when old Compose omits explicit false."""
+    targets = set()
+    lines = compose_text.splitlines()
+    for index, line in enumerate(lines):
+        if line != "      - type: bind":
+            continue
+        block = []
+        for candidate in lines[index + 1 :]:
+            if candidate.startswith("      - ") or (
+                candidate and not candidate.startswith("       ")
+            ):
+                break
+            block.append(candidate)
+        target = next(
+            (
+                item.removeprefix("        target: ").strip()
+                for item in block
+                if item.startswith("        target: ")
+            ),
+            None,
+        )
+        if (
+            target
+            and "        bind:" in block
+            and "          create_host_path: false" in block
+        ):
+            targets.add(target)
+    return targets
 
 
 def validate_policy(document, mode, allow_placeholder=False):
@@ -97,8 +129,22 @@ def validate_policy(document, mode, allow_placeholder=False):
     by_target = {item.get("target"): item for item in volumes}
     if set(by_target) != {"/data", KEY_TARGET}:
         raise PolicyError("unexpected bind mount target")
-    data_source = _absolute_source(by_target["/data"], "/data")
-    key_source = _absolute_source(by_target[KEY_TARGET], KEY_TARGET)
+    explicit_bind_targets_from_source = set(
+        document.get("_mwodevelop_source_policy", {}).get(
+            "bind_create_host_path_false",
+            [],
+        )
+    )
+    data_source = _absolute_source(
+        by_target["/data"],
+        "/data",
+        explicit_bind_targets_from_source,
+    )
+    key_source = _absolute_source(
+        by_target[KEY_TARGET],
+        KEY_TARGET,
+        explicit_bind_targets_from_source,
+    )
     if by_target[KEY_TARGET].get("read_only") is not True:
         raise PolicyError("key registry must be read-only")
     tmpfs = service.get("tmpfs", [])
@@ -165,9 +211,16 @@ def render_compose(repository, mode, env_file, docker="docker"):
     if result.returncode:
         raise PolicyError("docker compose config failed")
     try:
-        return json.loads(result.stdout)
+        document = json.loads(result.stdout)
     except json.JSONDecodeError as error:
         raise PolicyError("docker compose returned invalid JSON") from error
+    compose_text = (deployment / "compose.yaml").read_text(encoding="utf-8")
+    document["_mwodevelop_source_policy"] = {
+        "bind_create_host_path_false": sorted(
+            explicit_bind_targets(compose_text)
+        )
+    }
+    return document
 
 
 def main():

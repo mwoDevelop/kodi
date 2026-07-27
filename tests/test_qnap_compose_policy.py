@@ -5,6 +5,7 @@ import pytest
 from tools.qnap_compose_policy import (
     PLACEHOLDER_IMAGE,
     PolicyError,
+    explicit_bind_targets,
     render_compose,
     validate_policy,
 )
@@ -58,6 +59,16 @@ def test_placeholder_is_rejected_for_real_deployment(repository_root):
         validate_policy(document, "smoke")
 
 
+def test_old_compose_may_omit_explicit_false_from_render(repository_root):
+    document = render(repository_root, "smoke", "smoke.env.example")
+    for volume in document["services"]["profile-sync"]["volumes"]:
+        volume["bind"] = {}
+
+    summary = validate_policy(document, "smoke", allow_placeholder=True)
+
+    assert summary["mode"] == "smoke"
+
+
 def test_smoke_rejects_production_data_path(repository_root):
     document = render(repository_root, "smoke", "smoke.env.example")
     candidate = copy.deepcopy(document)
@@ -80,6 +91,20 @@ def test_policy_rejects_container_name_and_host_network(repository_root):
         validate_policy(named, "production", allow_placeholder=True)
     with pytest.raises(PolicyError, match="host-network"):
         validate_policy(host_network, "production", allow_placeholder=True)
+
+
+def test_source_audit_requires_explicit_false():
+    valid = """
+      - type: bind
+        source: /safe
+        target: /data
+        bind:
+          create_host_path: false
+"""
+    unsafe = valid.replace("false", "true")
+
+    assert explicit_bind_targets(valid) == {"/data"}
+    assert explicit_bind_targets(unsafe) == set()
 
 
 @pytest.fixture
