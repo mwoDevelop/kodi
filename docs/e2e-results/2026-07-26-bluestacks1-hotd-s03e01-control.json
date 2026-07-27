@@ -70,7 +70,7 @@
       "resolve_seconds": 16.11,
       "resolver_diagnostics": [
         "[2026-07-26 21:33:53] [ plugin.video.umbrella: DEBUG ]: Removed 0 duplicate sources for ([COLOR FFFFFF33]House of the Dragon (S03E01)[/COLOR]) from list",
-        "[2026-07-26 21:33:54] [ plugin.video.umbrella: DEBUG ]: Refreshing Expired Real Debrid Token: | BJ7A3EWPN6FII | IT6RSUY7UAYKVRJHEGQGOMT2TZ4YNMESUYAJED3QY7HHIN5TJXXA |",
+        "<redacted Real-Debrid token refresh diagnostic>",
         "[2026-07-26 21:33:54] [ plugin.video.umbrella: DEBUG ]: Real Debrid Token Successfully Refreshed",
         "[2026-07-26 21:33:55] [ plugin.video.umbrella: DEBUG ]: Real Debrid less than 5 active torrents.",
         "[2026-07-26 21:33:57] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.add_magnet() Line # :669",

@@ -25,6 +25,17 @@ def test_redaction_removes_resolver_urls_and_tokens():
     assert "plugin.video.umbrella" not in redacted
 
 
+def test_redaction_removes_pipe_delimited_refresh_credentials():
+    line = (
+        "Refreshing Expired Real Debrid Token: | client-id | "
+        "refresh-credential |"
+    )
+    redacted = redact(line)
+    assert redacted.endswith("Token: <redacted>")
+    assert "client-id" not in redacted
+    assert "refresh-credential" not in redacted
+
+
 def test_eventserver_header_matches_kodi_packet_contract():
     client = EventClient("127.0.0.1")
     header = client._header(
