@@ -38,6 +38,19 @@ def test_select_control_walks_file_browser_by_label(monkeypatch):
     assert jsonrpc.calls[-1] == ("Input.Select", None)
 
 
+def test_select_control_accepts_bracketed_kodi_source_label(monkeypatch):
+    monkeypatch.setattr(profile_sync_addon_device.time, "sleep", lambda _: None)
+    jsonrpc = FakeJsonRpc(["[..]", "[External storage]"])
+
+    profile_sync_addon_device._select_control(
+        jsonrpc,
+        {"External storage", "Pamięć zewnętrzna"},
+    )
+
+    assert jsonrpc.position == 1
+    assert jsonrpc.calls[-1] == ("Input.Select", None)
+
+
 def test_select_control_rejects_missing_entry(monkeypatch):
     monkeypatch.setattr(profile_sync_addon_device.time, "sleep", lambda _: None)
     jsonrpc = FakeJsonRpc(["..", "External storage"])
@@ -76,3 +89,39 @@ def test_accept_addon_install_prompt_moves_from_no_to_yes(monkeypatch):
     )
     assert ("Input.Left", None) in jsonrpc.calls
     assert jsonrpc.calls[-1] == ("Input.Select", None)
+
+
+def test_latest_addons_database_is_selected_without_android_sort_v():
+    listing = "\n".join(
+        [
+            "/storage/kodi/userdata/Database/Addons9.db",
+            "/storage/kodi/userdata/Database/Addons35.db",
+            "/storage/kodi/userdata/Database/Addons12.db",
+        ]
+    )
+
+    assert profile_sync_addon_device._latest_addons_database(listing).endswith(
+        "Addons35.db"
+    )
+
+
+def test_notify_timeout_is_deferred_to_the_state_probe(monkeypatch):
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def call(self, *_args, **_kwargs):
+            raise TimeoutError("slow Kodi listener")
+
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "AdbJsonRpcClient",
+        lambda *_: Client(),
+    )
+
+    profile_sync_addon_device._notify_addon(
+        "adb", 5038, "device", "sync-now", {"source": "test"}
+    )

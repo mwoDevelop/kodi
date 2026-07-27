@@ -1,6 +1,6 @@
 # Plan synchronizacji profili, urządzeń i aktualizacji Kodi
 
-Status: plan po niezależnym review, gotowy do realizacji etapowej
+Status: plan po review, w realizacji etapowej
 
 Data: 2026-07-27
 
@@ -16,11 +16,15 @@ Stan realizacji 2026-07-27:
 
 - Etap 1: zrealizowany lokalnie i pokryty testami;
 - Etap 2: zrealizowany pierwszy bezpieczny zakres routine export;
-- Etap 3: zrealizowany transakcyjny store, loopback API development oraz
-  przenośny Ed25519 na Kodi x86/ARMv7 i serwerze;
-- Etap 4: utworzone osobne repo i fundament dodatku, pairing/check w realizacji;
-- Etapy 5–8: nierozpoczęte;
-- produkcyjny QNAP nadal zablokowany przez warunki Etapu 0.
+- Etap 3: zrealizowany transakcyjny store, loopback API development,
+  przenośny Ed25519 na Kodi x86/ARMv7 oraz build obrazu
+  `linux/amd64,linux/arm/v7`;
+- Etap 4: osobne repo dodatku, pairing, heartbeat i podpisany check
+  read-only opublikowane w `testing`; E2E zaliczone na BlueStacks i Sony TV;
+- Etap 5: apply/journal/rollback profilu niesekretnego pozostają do realizacji;
+- Etap 6: kontenerowy kontrakt Compose i live preflight QNAP zrealizowane;
+  produkcyjne wdrożenie nadal blokuje Etap 0;
+- Etapy 7–8: nierozpoczęte.
 
 ## 1. Cel
 
@@ -879,16 +883,36 @@ i przechowywanie istotnych danych na QNAP. Zdegradowany QNAP nie jest
 
 ### Etap 4: dodatek Kodi
 
-1. Utworzyć `service.mwodevelop.profilesync`.
-2. Dodać pairing i heartbeat.
-3. Dodać weryfikację TLS, podpisów i generacji kanału.
+1. Utworzyć `service.mwodevelop.profilesync`. **Zrealizowane.**
+2. Dodać pairing i heartbeat. **Zrealizowane.**
+3. Dodać weryfikację podpisów i generacji kanału; TLS pozostaje bramą
+   wdrożenia QNAP. **Podpisy i generacja zrealizowane.**
 4. Dodać active/canary assignment, check/download/staging.
+   **Check read-only zrealizowany; download/staging pozostają.**
 5. Dodać zarządzanie wymaganymi dodatkami przez repo Kodi.
 6. Dodać jawnie włączane adaptery dla ustawień niesekretnych.
 7. Dodać crash-resilient journal, pending next-start i kwarantannę.
 8. Dodać health report i kompensacyjny rollback konfiguracji.
 9. Dodać admin CLI poza Kodi.
-10. Opublikować wyłącznie w `testing`.
+10. Opublikować wyłącznie w `testing`. **Zrealizowane dla wersji 0.1.4.**
+
+Kontrolowany test 2026-07-27 potwierdził na BlueStacks i Sony TV:
+
+- instalację wersji 0.1.4 z `repository.mwodevelop.testing`;
+- jednorazowy pairing bez wynoszenia tokenu i klucza z procesu Kodi;
+- uwierzytelniony heartbeat;
+- weryfikację podpisanego przypisania candidate;
+- brak `apply` w trybie read-only.
+
+Odtwarzalny przebieg i zredagowany wynik:
+
+```bash
+PYTHONPATH=. .venv/bin/python \
+  tests/e2e/profile_sync_addon_device.py \
+  --device bluestacks1 \
+  --device sony-tv \
+  --result docs/e2e-results/2026-07-27-profile-sync-addon-devices.json
+```
 
 ### Etap 5: E2E ustawień niesekretnych
 
