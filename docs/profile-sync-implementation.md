@@ -24,6 +24,10 @@ Date: 2026-07-27
 - device E2E for add-on 0.1.4 on BlueStacks x86 and Sony ARMv7, including
   testing-repository origin, pairing, authenticated heartbeat, signed
   candidate check and the read-only no-apply invariant;
+- authenticated immutable revision download in the server;
+- add-on 0.1.5 testing candidate with a default-deny Umbrella adapter,
+  private pre-write journal, startup recovery, health check, rollback and
+  revision quarantine; device apply E2E is still pending;
 - QNAP Container Station Compose contract with an ARMv7 image gate;
 - live QNAP preflight confirming Container Station 3, Docker 26, Compose 2,
   `overlay2`, sufficient capacity and an available Python 3.11 ARMv7 base
