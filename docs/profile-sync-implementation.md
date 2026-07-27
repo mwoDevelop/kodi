@@ -43,6 +43,8 @@ Date: 2026-07-27
   revision quarantine; device apply E2E is still pending;
 - add-on 0.1.5 read-only regression passed on BlueStacks and Sony after
   verifying the real service disable/enable lifecycle;
+- add-on 0.1.6 testing candidate reads schema 2 and applies signed schema 3
+  layers selected from server-bound target tags; device rollout is pending;
 - QNAP Container Station Compose contract with an ARMv7 image gate;
 - live QNAP preflight confirming Container Station 3, Docker 26, Compose 2,
   `overlay2`, sufficient capacity and an available Python 3.11 ARMv7 base
