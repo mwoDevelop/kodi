@@ -13,7 +13,8 @@ Dokument powiązany: `UPSTREAM_SYNC_PLAN.md`
 Raporty review:
 
 - `docs/PROFILE_SYNC_PLAN_REVIEW.md`;
-- `docs/PROFILE_SYNC_QNAP_PLAN_REVIEW.md`.
+- `docs/PROFILE_SYNC_QNAP_PLAN_REVIEW.md`;
+- `docs/PROFILE_SYNC_NUC_PLAN_REVIEW.md`.
 
 Stan realizacji 2026-07-27:
 
@@ -35,7 +36,7 @@ Stan realizacji 2026-07-27:
   i po spełnieniu bram bezpieczeństwa API, migracji oraz backupu;
 - rozszerzenie Linux/Flatpak: live discovery NUC zrealizowane dla kont `mwo`
   i `alek`; rejestr urządzeń oraz hostowe narzędzia są jeszcze ADB-only i
-  wymagają transportu SSH/Flatpak przed bootstrapem obu klientów;
+  wymagają neutralnego SSH i lifecycle Flatpaka przed bootstrapem obu klientów;
 - rozszerzenie Android: `Bedroom TV` (`Google TV Streamer`, codename
   `kirkwood`) odnaleziony i autoryzowany przez ADB; nie ma jeszcze wpisu w
   prywatnym registry ani urządzeniowego E2E Profile Sync;
@@ -262,9 +263,9 @@ jest osobną instancją danych i otrzymuje własną tożsamość:
 ```text
 physical_host_id: nuc-host
   logical_device_id: nuc-mwo
-    principal_id: linux:mwo
+    principal_id: principal-nuc-01
   logical_device_id: nuc-alek
-    principal_id: linux:alek
+    principal_id: principal-nuc-02
 ```
 
 Oba endpointy zaczynają jako `consumer`. Nadanie `publisher` któremukolwiek z
@@ -336,7 +337,9 @@ kodi/
 ├── tools/
 │   ├── kodi_devices.py
 │   ├── kodi_transports.py
-│   ├── kodi_linux.py
+│   ├── kodi_lifecycle.py
+│   ├── kodi_android.py
+│   ├── kodi_flatpak.py
 │   ├── kodi_profile.py
 │   ├── kodi_reinstall.py
 │   ├── profile_sync_admin.py
@@ -367,13 +370,17 @@ Dodanie `service.mwodevelop.profilesync` nie zmienia wersji
 `repository.mwodevelop`; komponent jest po prostu kolejną pozycją w
 generowanym indeksie repozytorium.
 
-`kodi_transports.py` definiuje mały kontrakt hostowych operacji:
-`probe_identity`, `probe_kodi`, `push`, `pull`, `run` i `ensure_stopped`.
-Implementacje `AdbTransport` oraz `SshFlatpakTransport` znajdują się za tym
-kontraktem. `kodi_profile.py`, `kodi_reinstall.py` i E2E zależą od interfejsu,
-nie od konkretnego transportu. `kodi_linux.py` odpowiada tylko za rozpoznanie
-konta Flatpak, bootstrap repo/dodatku i bezpieczny hostowy restore w jego
-katalogu danych.
+Transport i lifecycle platformy są rozłączne. `kodi_transports.py` definiuje
+ograniczony kontrakt I/O i tożsamości, implementowany przez `AdbTransport` oraz
+`SshTransport`. Nie udostępnia konsumentom dowolnego `run`, nie zatrzymuje Kodi
+i nie przyjmuje niezweryfikowanych ścieżek.
+
+`kodi_lifecycle.py` definiuje `KodiPlatformLifecycle`, komponowany z wybranym
+transportem. `AndroidKodiLifecycle` i `FlatpakKodiLifecycle` odpowiadają za
+`probe_kodi`, bootstrap, backup/restore, kontrolę quiescence i verify.
+`kodi_profile.py`, dispatcher `kodi_reinstall.py` oraz E2E zależą od tych
+interfejsów, a nie od kombinacji SSH+Flatpak. Dzięki temu Linux bez Flatpaka
+może w przyszłości dodać lifecycle bez duplikowania transportu SSH.
 
 ## 7. Rejestr urządzeń
 
@@ -394,16 +401,29 @@ wprowadza:
 
 - `physical_host_id`, aby grupować konta tego samego hosta bez łączenia ich
   tożsamości;
-- `principal_id`, czyli granicę konta/instancji danych Kodi;
+- `principal_id`, czyli stabilną, nieprzezroczystą granicę konta/instancji
+  danych Kodi, niezawierającą loginu;
 - `platform`: `android`, `android-emulator` albo `linux-flatpak`;
-- rozłączną konfigurację transportu `adb` albo `ssh-flatpak`;
+- rozłączną konfigurację transportu `adb` albo `ssh`;
 - `credential_ref`, który wskazuje nazwę sekretu w prywatnym env lub klucz
   SSH, ale nigdy nie zawiera hasła;
-- jawny `kodi_data_root` dla Flatpak, sprawdzany po canonicalizacji względem
-  home zalogowanego użytkownika.
+- prywatny `user_ref` rozwiązywany dopiero na hoście;
+- oczekiwany `kodi_data_root` dla Flatpak, potwierdzany przez discovery
+  `special://home`/`special://profile` wewnątrz runtime, a następnie
+  sprawdzany po canonicalizacji względem home z `getent passwd`.
 
-Migracja schema 1 -> 2 zachowuje dotychczasowe `logical_device_id` Androida i
-nie zmienia endpointów ani ról.
+Loader czyta schema 1 oraz 2 i normalizuje oba do jednego modelu wewnętrznego
+v2. Osobna migracja 1 -> 2:
+
+- tworzy backup;
+- jest idempotentna;
+- zachowuje `logical_device_id`, role i endpointy Androida;
+- zapisuje atomowo wyłącznie schema 2;
+- przed zatwierdzeniem porównuje byte-equivalent resolve wszystkich
+  istniejących celów Android.
+
+Stary Android-only `kodi_reinstall.py` jawnie odrzuca cel Linux do chwili
+wdrożenia dispatchera transport+lifecycle.
 
 Docelowy dokument:
 
@@ -413,7 +433,7 @@ Docelowy dokument:
   "devices": {
     "sony-living-room": {
       "physical_host_id": "sony-living-room",
-      "principal_id": "android:owner",
+      "principal_id": "principal-sony-owner",
       "platform": "android",
       "roles": ["consumer"],
       "expected": {
@@ -429,7 +449,7 @@ Docelowy dokument:
     },
     "bluestacks-master": {
       "physical_host_id": "bluestacks1",
-      "principal_id": "android:owner",
+      "principal_id": "principal-bluestacks-owner",
       "platform": "android-emulator",
       "roles": ["publisher", "consumer"],
       "expected": {
@@ -443,7 +463,7 @@ Docelowy dokument:
     },
     "nuc-mwo": {
       "physical_host_id": "nuc-host",
-      "principal_id": "linux:mwo",
+      "principal_id": "principal-nuc-01",
       "platform": "linux-flatpak",
       "roles": ["consumer"],
       "expected": {
@@ -453,11 +473,12 @@ Docelowy dokument:
         "flatpak_app_id": "tv.kodi.Kodi"
       },
       "endpoints": {
-        "ssh-flatpak": {
+        "ssh": {
           "host": "<private-nuc-host>",
           "user_ref": "NUC_USER_MWO",
           "credential_ref": "NUC_SSH_KEY_MWO",
-          "kodi_data_root": "~/.var/app/tv.kodi.Kodi/data"
+          "known_hosts_ref": "NUC_KNOWN_HOSTS",
+          "expected_kodi_data_root": ".var/app/tv.kodi.Kodi/data"
         }
       },
       "profile_channel": "home-stable"
@@ -475,9 +496,15 @@ Docelowy dokument:
 ```
 
 Endpointy operacyjne nie będą duplikowane. Narzędzie hosta rozwiązuje
-`logical_device_id`, wybiera transport przez registry/factory, sprawdza
-fizyczny model, platformę, konto, Kodi major, ABI i canonical data root, a
-dopiero potem wykonuje operację.
+`logical_device_id`, wybiera osobno transport i lifecycle przez registry/
+factory, sprawdza tożsamość hosta, platformę, UID, konto, Kodi major, listę ABI,
+owner i canonical data root, a dopiero potem wykonuje operację.
+
+Tożsamość SSH wymaga przypiętego host key oraz zapamiętanego fingerprintu
+tożsamości maszyny; hostname, model i zmienny adres DHCP nie wystarczają.
+Wywołania OpenSSH używają tablicy argumentów, `BatchMode=yes`, dedykowanego
+`UserKnownHostsFile`, wyłączonego agent forwarding i braku sudo. Hasło może
+służyć wyłącznie do ręcznego bootstrapu osobnego klucza per konto.
 
 Dla urządzeń fizycznych zalecane są rezerwacje DHCP. QNAP rejestruje także
 `last_seen`, ostatni obserwowany adres i wersję klienta, ale nie traktuje
@@ -487,24 +514,31 @@ Rejestry mają różne, jawne role:
 
 - `.kodi-private/devices.json` jest administracyjnym inventory hosta dla ADB,
   SSH/Flatpak, JSON-RPC i operacji reinstall/restore;
-- rejestr QNAP przechowuje enrollment, klucze publiczne, role, capabilities i
-  heartbeat klienta, ale nie przechowuje endpointów ADB;
+- rejestr QNAP przechowuje enrollment, klucze publiczne, role oraz
+  administracyjnie przypisane, nieprzezroczyste `target_tags`; heartbeat
+  klienta może raportować obserwowane platformę, Kodi i ABI, ale self-report
+  nie wybiera warstwy ani nie stanowi autoryzacji;
 - `logical_device_id` jest stabilnym aliasem urządzenia, natomiast każda
   ponowna instalacja tworzy nowe `enrollment_id`, podniesioną
   `enrollment_generation`, token i klucz podpisujący;
 - token, klucz i enrollment nie są kopiowane ze snapshotu. Po czystej
   reinstalacji urządzenie jest ponownie parowane;
-- overlay jest wiązany przede wszystkim z `device_class` i capabilities.
+- overlay jest wiązany przede wszystkim z administracyjnie nadanym
+  `device_class`/`target_tags`.
   Wyjątek per `logical_device_id` wymaga jawnego wpisu.
 
 Na NUC wspólny `physical_host_id` służy wyłącznie do inventory, harmonogramu i
-wykrywania konfliktu operacji hostowych. QNAP nie deduplikuje enrollmentów po
+lockingu operacji współdzielonych. Nie jest tożsamością ani podstawą
+autoryzacji QNAP. Operacje profilowe mają lock per
+`(physical_host_id, principal_id)`. QNAP nie deduplikuje enrollmentów po
 hoście: `nuc-mwo` i `nuc-alek` pozostają dwiema niezależnymi instalacjami.
+Para `(physical_host_id, principal_id)` jest unikalna, a każdy
+`logical_device_id` ma najwyżej jedną aktywną generację enrollmentu.
 
 ## 8. Model profilu
 
 Obecna polityka zostanie rozszerzona, a nie zastąpiona konkurencyjnym plikiem.
-Schema v2 definiuje dwa rozłączne scope'y:
+Polityka schema v2 definiuje dwa rozłączne scope'y:
 
 - `disaster_recovery`: zachowuje kompatybilność schema 1, kod dodatków i
   hostowy restore zatrzymanego Kodi;
@@ -546,6 +580,26 @@ Routine profile revision zawiera:
 - digest polityki;
 - digest każdego pliku.
 
+Aktualna revision schema 2 i klient obsługują płaską listę adapterów, lecz nie
+potrafią reprezentować opisanych niżej warstw platformowych. Przed ich
+produkcyjnym apply powstaje revision schema 3:
+
+- reader klienta zachowuje kompatybilność odczytu schema 2;
+- schema 3 rozdziela portable base od uporządkowanych layers;
+- warstwa ma ograniczenia zgodności Kodi major, platformy, listy ABI, wersji
+  adaptera i origin/wersji zarządzanego dodatku;
+- wybór warstw wynika z podpisanego assignmentu i administracyjnych
+  `target_tags`, a nie z nieufnego heartbeat;
+- kanoniczny manifest i podpis obejmują base, warstwy, selektory i ich
+  deterministyczną kolejność;
+- schema nie zawiera loginu Unix, home, IP, `physical_host_id` ani
+  `principal_id`; wyjątek urządzenia używa wyłącznie `logical_device_id`;
+- sekrety pozostają osobnymi envelope'ami per enrollment.
+
+Do wdrożenia schema 3 klient Linux/Flatpak pozostaje read-only albo stosuje
+wyłącznie jawnie oznaczony portable common subset schema 2. Nie wolno
+interpretować nieznanych pól schema 2 jako overlayów.
+
 Manifest przechowuje również:
 
 - wersję adaptera i zakres kompatybilnych wersji dodatku;
@@ -557,15 +611,14 @@ Brak elementu w profilu nie oznacza zgody na skasowanie niezarządzanych danych.
 Kolejność nakładania jest deterministyczna:
 
 ```text
-portable -> platform/device_class overlay -> physical_host overlay
-         -> logical_device/principal overlay
+portable -> platform/device_class overlay -> logical_device overlay
 ```
 
-`physical_host` overlay może zawierać wyłącznie niesekretne cechy wspólnego
-sprzętu, na przykład wyjście audio. Ustawienia użytkownika, historia, konta
-usług i sekrety są co najmniej `logical_device/principal` scoped. Brak jawnej
-zgody polityki na współdzielenie oznacza izolację między `nuc-mwo` i
-`nuc-alek`.
+`physical_host_id` nie wybiera overlayu w MVP. Nawet ustawienia pozornie
+wspólnego sprzętu, na przykład wyjście audio, mogą należeć do użytkownika.
+Ustawienia użytkownika, historia, konta usług i sekrety są co najmniej
+`logical_device` scoped. Brak jawnej zgody polityki na współdzielenie oznacza
+izolację między `nuc-mwo` i `nuc-alek`.
 
 Nie zawiera:
 
@@ -973,17 +1026,26 @@ Jeden dodatek udostępnia:
 - status ostatniej synchronizacji;
 - raport kompatybilności.
 
-Ten sam ZIP dodatku działa na Androidzie i w Flatpak Kodi. W heartbeat klient
-raportuje platformę, ABI, Kodi major, anonimowy/stabilny identyfikator hosta
-oraz principal capability, ale nie hasło SSH ani ścieżkę home. Na NUC każda
-sesja użytkownika ma własny `special://profile`, dlatego instalacja dodatku,
-pairing i stan klienta są wykonywane osobno jako `mwo` oraz `alek`.
+Docelowo ten sam deterministyczny ZIP dodatku ma działać na Androidzie i w
+Flatpak Kodi; jest to brama kwalifikacyjna, a nie obecnie potwierdzony fakt.
+Heartbeat raportuje obserwowane platformę, listę ABI, Kodi major i wersję
+klienta. Nie wysyła loginu, home, endpointu SSH, `physical_host_id` ani
+`principal_id`. Administracyjne target tags są wiązane z enrollmentem po
+stronie serwera i podpisywane w assignment.
 
-Hostowy bootstrap może umieścić ZIP repozytorium i uruchomić kontrolowany
-import w kontekście właściwego konta, lecz dalsze instalacje i aktualizacje
-dodatków wykonuje Kodi przez `repository.mwodevelop`. Narzędzie nie uruchamia
-`flatpak update`, nie modyfikuje systemowej instalacji `tv.kodi.Kodi` i nie
-zapisuje do katalogu drugiego użytkownika.
+Na NUC każda sesja użytkownika ma własny `special://profile`, dlatego
+instalacja dodatku, pairing i stan klienta są wykonywane osobno dla kont.
+Hostowy bootstrap może umieścić dokładny, sprawdzony hash ZIP repozytorium w
+kontrolowanym inboxie właściwego użytkownika. Instalacja odbywa się wyłącznie
+przez wspierane UI/API Kodi w jego sesji graficznej. Jeżeli kwalifikacja nie
+znajdzie bezpiecznej ścieżki bez UI, narzędzie zwraca
+`BOOTSTRAP_REQUIRES_USER` z instrukcją „Install from ZIP”. Nie rozpakowuje kodu
+do `addons/` i nie modyfikuje `Addons*.db`.
+
+Dalsze instalacje i aktualizacje dodatków wykonuje Kodi przez
+`repository.mwodevelop`. Narzędzie nie uruchamia `flatpak update`, nie
+modyfikuje systemowej instalacji `tv.kodi.Kodi`, nie zakłada dostępu sesji GUI
+z SSH i nie zapisuje do katalogu drugiego użytkownika.
 
 Promocja, rollback, revocation i zarządzanie rolami należą do
 `tools/profile_sync_admin.py` lub osobnego admin UI i nie są funkcjami
@@ -1032,7 +1094,8 @@ zmiany, która uniemożliwi start samego Kodi. Dlatego:
   Zmiana wymagająca zapisu przed inicjalizacją właściciela jest `host_only`;
 - po trzech nieudanych startach rewizja trafia do kwarantanny;
 - klient nie tworzy automatycznej pętli restartów;
-- zmiany `host_only` są raportowane i pozostawiane obecnemu workflow ADB;
+- zmiany `host_only` są raportowane i przekazywane dispatcherowi hosta, który
+  wybiera ADB/Android albo SSH+Flatpak lifecycle;
 - rollback kodu dodatku nie jest częścią tej transakcji.
 
 ## 12. Kolejność synchronizacji klienta
@@ -1041,7 +1104,8 @@ Po starcie lub ręcznym wywołaniu:
 
 1. Sprawdź pairing i ważność tokenu.
 2. Wyślij heartbeat z `logical_device_id`, `enrollment_id`,
-   `enrollment_generation`, modelem, ABI, wersją Kodi i wersją dodatku.
+   `enrollment_generation`, obserwowanym modelem, listą ABI, wersją Kodi i
+   wersją dodatku. Nie używaj self-reportu jako autoryzacji lub selektora.
 3. Poczekaj na gotowość sieci bez blokowania startu Kodi i respektuj
    `xbmc.Monitor.abortRequested()`.
 4. Pobierz podpisane assignment: globalny `active` albo exact candidate
@@ -1062,7 +1126,8 @@ Po starcie lub ręcznym wywołaniu:
     aktualizacji dodatków.
 14. Pobierz bloby do stagingu i zweryfikuj kompletność oraz digests.
 15. Zastosuj `hot_apply` wyłącznie przez zakwalifikowane adaptery.
-16. Zapisz `next_start` jako pending; nie wymuszaj restartu Androida w MVP.
+16. Zapisz `next_start` jako pending; klient nie wymusza restartu platformy w
+    MVP.
 17. Zmiany `host_only` pokaż jako niezastosowane.
 18. Zweryfikuj aktywną skórkę, dodatki i podstawowe JSON-RPC.
 19. Wyślij raport sukcesu albo wykonaj kompensacyjny rollback konfiguracji.
@@ -1077,9 +1142,10 @@ Kodi.
 
 Na Linux/Flatpak runtime sync odbywa się wewnątrz procesu Kodi tak samo jak na
 Androidzie. SSH nie jest ścieżką okresowego synchronizowania plików; służy
-wyłącznie do discovery, bootstrapu, kontrolowanego restore zatrzymanego Kodi i
-E2E. Operacja hostowa identyfikuje właściciela procesu, odmawia mutacji, gdy
-Kodi danego konta działa, oraz nigdy nie zatrzymuje sesji drugiego konta.
+wyłącznie do discovery, stagingu bootstrapu, kontrolowanego restore
+zatrzymanego Kodi i E2E. Operacja hostowa identyfikuje UID oraz właściciela
+procesu i odmawia mutacji, gdy Kodi danego konta działa. Nie zatrzymuje procesu
+automatycznie i nigdy nie zatrzymuje sesji drugiego konta.
 
 Profil deklaruje kompatybilne ograniczenia wersji i origin, nie automatyczny
 downgrade. Raport rollbacku rozróżnia co najmniej:
@@ -1100,9 +1166,15 @@ MVP:
 - admin przypina exact candidate do wybranych urządzeń canary;
 - test candidate nie zmienia globalnego `active`;
 - promocja do `active` jest osobną podpisaną akcją hostową;
-- promocja wymaga raportu sukcesu z czystego BlueStacks, Sony i Bedroom TV, a
-  po wdrożeniu etapu 1B również z `nuc-alek` i `nuc-mwo`, albo jawnego,
-  audytowanego waivera dla nieobecnej klasy urządzenia;
+- polityka promocji działa na klasach kompatybilności, co najmniej:
+  `android-emulator`, `android-tv:<abi-set>` i `linux-flatpak:x86_64`;
+- wymagany zestaw klas i exact canary jest zamrażany w zdarzeniu candidate;
+  warstwa specyficzna dla urządzenia dodaje to urządzenie do bramy;
+- promocja wymaga jednego aktywnego, zakwalifikowanego raportu sukcesu z każdej
+  wymaganej klasy. `nuc-alek` jest Linux canary, a `nuc-mwo` post-canary
+  rollout; izolacja obu kont pozostaje osobnym obowiązkowym E2E;
+- urządzenie offline nie zmienia po cichu bramy. Pominięcie wymaga jawnego,
+  podpisanego i audytowanego waivera;
 - poprzedni `active` pozostaje dostępny do rollbacku.
 
 Późniejsza automatyzacja:
@@ -1136,15 +1208,19 @@ Późniejsza automatyzacja:
 
 SSH do NUC jest wyłącznie kanałem administracyjnym hosta. Docelowo każde konto
 ma osobny klucz bez hasła w command line, bez `sudo`, bez agent forwarding i z
-weryfikacją host key. Prywatny rejestr przechowuje tylko `credential_ref`.
-Hasła przejściowe pozostają w niewersjonowanym `.env`; klucze
+weryfikacją host key przez osobny plik `known_hosts`. Prywatny rejestr
+przechowuje wyłącznie referencje do osobnych plików klucza i `known_hosts`,
+nie ich zawartość. Hasła przejściowe pozostają w niewersjonowanym `.env`; klucze
 `NUC_PASS_MWO` i `NUC_PASS_ALEK` muszą być jednoznaczne i walidowane jako
 różne wpisy konfiguracyjne, nawet jeżeli wartości byłyby takie same.
 
-Bootstrap zaufania jest jawny. Produkcja używa lokalnej nazwy DNS i
-certyfikatu zaufanego przez Android albo fingerprintu certyfikatu
-zweryfikowanego poza kanałem QNAP podczas pairing. `verify=False` i trwały
-plain HTTP są zabronione; HTTP jest dozwolony tylko na loopback w testach.
+Bootstrap zaufania jest jawny. MVP używa lokalnej nazwy DNS i certyfikatu lub
+CA rzeczywiście zaufanych przez `ssl.create_default_context()` w Pythonie/
+OpenSSL uruchomionym wewnątrz Android Kodi oraz Flatpak Kodi. Test `curl` na
+hoście NUC nie jest dowodem zaufania sandboxa. Pinning fingerprintu wymaga
+osobnego etapu implementacji i negatywnych testów klienta; nie wolno opisywać
+go jako istniejącej funkcji. `verify=False` i trwały plain HTTP są zabronione;
+HTTP jest dozwolony tylko na loopback w testach.
 
 Runbook 6B definiuje i testuje:
 
@@ -1167,9 +1243,13 @@ transportu, ale sam nie zastępuje podpisu.
 
 Klucz podpisujący enrollment z MVP nie jest kluczem szyfrowania sekretów.
 Jego przenośna implementacja kryptograficzna na Kodi ARMv7/x86 jest bramą MVP,
-ale nie wymaga sprzętowej ochrony Android Keystore. Klucz każdego principala
-NUC pozostaje w jego sandboxie Flatpak i nie jest współdzielony na poziomie
-hosta.
+ale nie wymaga sprzętowej ochrony Android Keystore. Na NUC klucz każdego
+principala pozostaje w profilu dodatku należącym do jego konta systemowego i
+nie jest kopiowany między kontami. Flatpak nie chroni go przed tym samym
+użytkownikiem Unix ani administratorem hosta; granicą bezpieczeństwa jest konto
+systemowe i kontrola dostępu hosta. Profil `service.mwodevelop.profilesync`,
+jego stan, token, seed, journal i backup są bezwzględnie wykluczone ze
+snapshotów użytkownika.
 
 Etap 1:
 
@@ -1261,54 +1341,74 @@ i przechowywanie istotnych danych na QNAP. Zdegradowany QNAP nie jest
 2. Zmigrować `kodi-reinstall.json` do `logical_device_id`.
    **Zrealizowane dla obecnych urządzeń Android.**
 3. Podnieść registry do schema 2 z `physical_host_id`, `principal_id`,
-   `platform` i rozłącznym transportem ADB/SSH-Flatpak.
-4. Dodać migrację 1 -> 2 zachowującą ID, role i endpointy Androida.
+   `platform` i rozłącznym transportem ADB/SSH.
+4. Dodać loader schema 1 i 2, normalizację do modelu wewnętrznego v2 oraz
+   idempotentną migrację z backupem, atomowym zapisem i porównaniem resolve
+   istniejących Androidów. Zapisywać wyłącznie schema 2.
 5. Dodać `bedroom-tv` jako consumera Android z oczekiwanym modelem
    `Google TV Streamer`, codename `kirkwood`, Kodi major 21 i osobnym
    enrollmentem.
 6. Dodać `nuc-mwo` oraz `nuc-alek` jako consumerów ze wspólnym
    `physical_host_id: nuc-host`.
-7. Zachować walidację modelu, konta, canonical home/data root, ABI i wersji
-   przed każdą mutacją.
+7. Dla Bedroom TV wykryć `ro.product.cpu.abilist` oraz ABI APK; nie kodować
+   pojedynczego `armeabi-v7a` jako założenia.
+8. Zachować walidację tożsamości hosta, konta, canonical home/data root, listy
+   ABI i wersji przed każdą mutacją.
+9. Do czasu dispatchera Android-only reinstall ma zwracać jawny
+   `UNSUPPORTED_PLATFORM` dla Linux.
 
 ### Etap 1B: transport Linux/Flatpak i bootstrap NUC
 
 1. Poprawić prywatny env: drugi `NUC_PASS_MWO` przemianować na
    `NUC_PASS_ALEK`; walidator ma odrzucać brakujące i zduplikowane nazwy.
-2. Dodać `kodi_transports.py` z kontraktem oraz implementacjami
-   `AdbTransport` i `SshFlatpakTransport`.
-3. Dodać `kodi_linux.py` z `probe`, `inventory`, `bootstrap`, `backup`,
-   `restore` i `verify`, zawsze dla jednego jawnego `logical_device_id`.
-4. Wymusić SSH host-key pinning, brak `sudo`, brak agent forwarding, timeouty
-   oraz zakaz operacji poza home wskazanego konta.
-5. Canonicalizować i kwalifikować
-   `~/.var/app/tv.kodi.Kodi/data`; odrzucać symlinki lub ownera innego niż
-   zalogowany użytkownik.
-6. Wykrywać systemową instalację `tv.kodi.Kodi`, wersję, ABI, uprawnienia
-   sandboxa, uruchomiony proces i dodatkowe profile wewnętrzne Kodi.
-7. Dodać tryb `--dry-run` pokazujący zakres bez nazw sekretów i wartości
+2. Dodać neutralne `AdbTransport` i `SshTransport` oraz osobne lifecycle
+   `AndroidKodiLifecycle` i `FlatpakKodiLifecycle`.
+3. Ograniczyć transport do zweryfikowanych operacji I/O; nie udostępniać
+   dowolnego shell `run`, automatycznego stop ani nieograniczonych ścieżek.
+4. Dodać dispatcher `probe`, `inventory`, `bootstrap`, `backup`, `restore` i
+   `verify`, zawsze dla jednego jawnego `logical_device_id`.
+5. Wymusić OpenSSH `BatchMode=yes`, przypięty host key i machine fingerprint,
+   osobny klucz per konto, brak `sudo`/agent forwarding, timeouty oraz zakaz
+   operacji poza home wskazanego UID.
+6. Ustalać UID i home przez zweryfikowane konto oraz `getent passwd`, bez
+   rozwijania `~`. Wewnątrz Flatpaka wykryć rzeczywiste
+   `special://home`/`special://profile`, a potem canonicalizować ścieżkę,
+   wykonać `lstat` i odrzucić symlink escape lub obcego ownera.
+7. Wykrywać systemową instalację `tv.kodi.Kodi`, wersję, ABI, uprawnienia
+   sandboxa, uruchomiony proces i dodatkowe profile wewnętrzne Kodi. Domyślny
+   wpis Master User nie oznacza sam w sobie unsupported multi-profile.
+8. Dodać tryb `--dry-run` pokazujący zakres bez nazw sekretów i wartości
    ustawień.
-8. Utworzyć osobny pre-bootstrap backup niesekretnych metadanych obu kont;
+9. Utworzyć osobny pre-bootstrap backup niesekretnych metadanych obu kont;
    istniejące sekrety MWO pozostawić wyłącznie lokalnie.
-9. Zainstalować `repository.mwodevelop` i
-   `service.mwodevelop.profilesync` osobno jako `mwo` oraz `alek`, bez
-   bezpośredniego kopiowania katalogów kodu między kontami.
-10. Sparować oba klienty jako niezależne enrollmenty; bootstrap jednego konta
+10. Umieścić hash-verified ZIP repo w inboxie właściwego konta i zainstalować
+   go przez wspierane UI/API Kodi. Gdy nie ma bezpiecznej automatyzacji sesji
+   GUI, zakończyć `BOOTSTRAP_REQUIRES_USER`; nie pisać do `addons/` ani DB.
+11. Wykonać inventory origin istniejących dodatków `nuc-mwo`. Migracja origin
+    odbywa się dopiero po backupie i zgodzie, przez wspierany uninstall/
+    install/update Kodi; `nuc-alek` pozostaje pierwszym czystym canary.
+12. Zainstalować `service.mwodevelop.profilesync` osobno na obu kontach przez
+    `repository.mwodevelop`, bez kopiowania katalogów kodu.
+13. Sparować oba klienty jako niezależne enrollmenty; bootstrap jednego konta
     nie może odczytać ani zmienić tokenu drugiego.
-11. Pozostawić systemowy Flatpak Kodi poza zakresem mutacji i raportować jego
-    update jako host-admin action.
+14. Pozostawić systemowy Flatpak Kodi poza zakresem mutacji. Niezgodna wersja
+    kończy się `HOST_UPDATE_REQUIRED`, nie próbą aktualizacji hosta.
 
-### Etap 2: model profilu v2
+### Etap 2: polityka v2 i revision schema 3
 
 1. Rozszerzyć istniejącą politykę o klasy danych.
-2. Zdefiniować schemat manifestu rewizji.
-3. Oddzielić routine profile od disaster-recovery snapshot.
-4. Dodać diff logiczny bez ujawniania wartości sekretów.
-5. Dodać semantyczne adaptery per setting z default-deny.
-6. Dodać ownership, tombstones i deterministyczną kolejność overlayów.
-7. Dodać eksport deterministyczny i content-addressed blobs.
-8. Zachować zgodność odczytu snapshotów schema 1 jako osobnego scope
+2. Zachować read compatibility istniejącej płaskiej revision schema 2.
+3. Zdefiniować revision schema 3 z portable base, uporządkowanymi layers,
+   ograniczeniami zgodności i podpisanym wyborem przez administracyjne tags.
+4. Oddzielić routine profile od disaster-recovery snapshot.
+5. Dodać diff logiczny bez ujawniania wartości sekretów.
+6. Dodać semantyczne adaptery per setting z default-deny.
+7. Dodać ownership, tombstones i deterministyczną kolejność overlayów.
+8. Dodać eksport deterministyczny i content-addressed blobs.
+9. Zachować zgodność odczytu snapshotów schema 1 jako osobnego scope
    disaster recovery.
+10. Zablokować platform overlay apply na Linux do wdrożenia schema 3; schema 2
+    może dostarczać tylko portable common subset.
 
 ### Etap 3: serwer lokalny
 
@@ -1325,6 +1425,9 @@ i przechowywanie istotnych danych na QNAP. Zdegradowany QNAP nie jest
    `linux/amd64` oraz `linux/arm/v7`; publikować manifest wieloarchitekturowy
    i przypinać wdrożenie po digescie, nie ruchomym tagu.
 10. Uruchomić integrację lokalnie bez QNAP.
+11. Dodać migrację DB/API administracyjnie wiążącą compatibility class i
+    opaque `target_tags` z enrollmentem. Self-report heartbeat pozostaje
+    obserwacją, nie podstawą assignmentu.
 
 ### Etap 4: dodatek Kodi
 
@@ -1342,12 +1445,15 @@ i przechowywanie istotnych danych na QNAP. Zdegradowany QNAP nie jest
 10. Opublikować wyłącznie w `testing`. **Zrealizowane dla wersji 0.1.5.**
 11. Zakwalifikować klienta w sandboxie `tv.kodi.Kodi` na `x86_64`: sieć,
     storage, bibliotekę kryptograficzną, journal i restart dodatku.
-12. Dodać do heartbeat platform/principal capabilities bez ujawniania
-    username, home ani endpointu SSH.
+12. Dodać do heartbeat obserwowane platformę, Kodi major i listę ABI bez
+    username, home, endpointu SSH, host/principal ID. Klient nie wybiera nimi
+    własnej klasy ani warstwy.
 13. Potwierdzić osobny stan `special://profile/addon_data` dla `nuc-mwo` i
     `nuc-alek`.
 14. Odrzucać wewnętrzny multi-profile jako `UNSUPPORTED_MULTI_PROFILE`, ale
     akceptować wiele kont systemowych jako osobne procesy/instancje.
+15. Zakwalifikować trust chain przez prawdziwe `ssl.create_default_context()`
+    wewnątrz Android Kodi i Flatpak Kodi; test hostowego `curl` nie wystarcza.
 
 Kontrolowany test 2026-07-27 potwierdził na BlueStacks i Sony TV:
 
@@ -1375,34 +1481,41 @@ PYTHONPATH=. .venv/bin/python \
 3. Sony jako consumer.
 4. Candidate przypięty tylko do czystego BlueStacks i apply.
 5. Po sukcesie exact candidate przypięty tylko do Sony i apply.
-6. Dopiero po obu raportach promocja, startowy pull i apply.
-7. Potwierdzenie aktywnej skórki lub jawnego `host_only`.
-8. Potwierdzenie repo origin dodatków.
-9. Deterministyczny test adapterów z lokalnym fake add-on/API.
-10. Umbrella search bez credentiali albo z oczekiwanym brakiem autoryzacji.
-11. RD playback wyłącznie na consumerze pre-provisioned hostowym restore i
+6. Zbudować i opublikować exact bytes wyłącznie do `testing`, zanim rozpocznie
+   się urządzeniowy canary.
+7. Zamrozić w kandydacie wymagane klasy kompatybilności i canary. Promocja
+   następuje dopiero po raportach wymaganych klas albo podpisanym waiverze.
+8. Potwierdzenie aktywnej skórki lub jawnego `host_only`.
+9. Potwierdzenie repo origin dodatków.
+10. Deterministyczny test adapterów z lokalnym fake add-on/API.
+11. Umbrella search bez credentiali albo z oczekiwanym brakiem autoryzacji.
+12. RD playback wyłącznie na consumerze pre-provisioned hostowym restore i
     oznaczony jako test zależny od zewnętrznej usługi.
-12. WatchNixtoons2 katalog i playback jako uzupełniający live smoke.
-13. Uszkodzony digest/podpis/path: zero mutacji.
-14. Poprawny technicznie, lecz wadliwy profil: health failure i rollback.
-15. Test niedostępnego QNAP i VPN bez uszkodzenia Kodi.
-16. Dodać Bedroom TV jako trzeci consumer Android, wykonać read-only pairing,
+13. WatchNixtoons2 katalog i playback jako uzupełniający live smoke.
+14. Uszkodzony digest/podpis/path: zero mutacji.
+15. Poprawny technicznie, lecz wadliwy profil: health failure i rollback.
+16. Test niedostępnego QNAP i VPN bez uszkodzenia Kodi.
+17. Dodać Bedroom TV jako trzeci consumer Android, wykonać read-only pairing,
     exact candidate apply, rollback i test niedostępnego QNAP.
-17. Wykonać read-only discovery i dry-run osobno dla `nuc-mwo` oraz
+18. Wykonać read-only discovery i dry-run osobno dla `nuc-mwo` oraz
     `nuc-alek`.
-18. Użyć czystszego `nuc-alek` jako pierwszego canary Linux/Flatpak.
-19. Po sukcesie przypiąć ten sam exact candidate do `nuc-mwo`, zachowując
+19. Użyć czystszego `nuc-alek` jako canary klasy Linux/Flatpak.
+20. Po sukcesie przypiąć ten sam exact candidate do `nuc-mwo` jako
+    post-canary rollout, zachowując
     istniejące niezarządzane ustawienia i lokalne sekrety.
-20. Potwierdzić, że repo/addon origin, skórka i portable settings są poprawne
-    na obu kontach, a cache, DB i Thumbnails nie są kopiowane.
-21. Zmienić niesekretne ustawienie wyłącznie na `nuc-alek` i potwierdzić zero
+21. Potwierdzić, że repo/addon origin, skórka i portable settings są poprawne
+    na obu kontach, a synchronizator nie kopiuje ani bezpośrednio nie
+    modyfikuje cache, DB i Thumbnails.
+22. Zmienić niesekretne ustawienie wyłącznie na `nuc-alek` i potwierdzić zero
     mutacji oraz zero odczytu credentiali `nuc-mwo`.
-22. Uruchomić Kodi jednocześnie w dwóch sesjach albo zasymulować blokadę i
+23. Uruchomić Kodi jednocześnie w dwóch sesjach albo zasymulować blokadę i
     potwierdzić, że hostowa operacja jednego konta nie zatrzymuje drugiego.
-23. Potwierdzić start/cykliczny pull bez aktywnego SSH; runtime zależy tylko od
+24. Potwierdzić start/cykliczny pull bez aktywnego SSH; runtime zależy tylko od
     sieci Kodi -> QNAP.
-24. Zapisać osobne zredagowane raporty E2E zawierające platformę, exact
+25. Zapisać osobne zredagowane raporty E2E zawierające platformę, exact
     revision i enrollment, ale nie username, home, IP ani sekrety.
+26. Po przejściu wymaganych klas wykonać obserwację, ręczną promocję profilu
+    do `active`, a dopiero potem startowy pull i apply konsumentów.
 
 ### Etap 6: QNAP
 
@@ -1417,6 +1530,11 @@ Brama wejścia:
 - automatyczna kontrola wyklucza produkcyjne ścieżki, nazwę projektu, port,
   key registry oraz politykę restartu;
 - wszystkie dane, profile, tokeny i klucze są syntetyczne.
+- dla bazowego smoke Android: istnieją schema 2 registry, zakwalifikowany
+  dispatcher ADB/Android oraz read-only enrollmenty klientów Android;
+- dla rozszerzonego rerunu NUC: zakończone są Etapy 1B i 2, zakwalifikowany
+  klient Flatpak, administracyjne target tags i dwa osobne read-only
+  enrollmenty. Brak gotowości NUC nie blokuje bazowego smoke infrastruktury.
 
 Realizacja:
 
@@ -1434,22 +1552,26 @@ Realizacja:
 6. Potwierdzić architekturę obrazu, `/health`, `/ready`, wersję schematu,
    migrację SQLite, ręczny restart procesu oraz brak sekretów w inspect/logach.
 7. Utworzyć SSH local forward do loopback QNAP, następnie osobne `adb reverse`
-   dla BlueStacks, Sony i Bedroom TV oraz tymczasowy SSH remote forward na
-   loopback NUC;
+   dla BlueStacks, Sony i Bedroom TV. Każdy tunel ma własny identyfikator,
+   `ExitOnForwardFailure`, loopback-only bind oraz pewny cleanup;
    potwierdzić dokładny identyfikator smoke API na każdym kliencie.
-8. Wykonać pairing, heartbeat, signed revision download i read-only check z
-   BlueStacks, Sony, Bedroom TV, `nuc-mwo` oraz `nuc-alek` przez
-   `http://127.0.0.1` klienta.
-9. Zasymulować niedostępność QNAP i potwierdzić brak mutacji Kodi.
-10. Zapisać zredagowany raport E2E w `docs/e2e-results`.
-11. Usunąć reguły `adb reverse`, local/remote forward SSH, projekt Compose,
+8. Wykonać bazowy pairing, heartbeat, signed revision download i read-only
+   check z BlueStacks, Sony i Bedroom TV przez `http://127.0.0.1` klienta.
+9. Po bramie NUC powtórzyć smoke z osobnym SSH remote forward/control socket
+   i lokalnym portem dla każdego konta albo udokumentowanym, izolowanym relay.
+   Potwierdzić `nuc-mwo` i `nuc-alek` osobno; tunel jednego konta nie może
+   odziedziczyć poświadczeń drugiego.
+10. Zasymulować niedostępność QNAP i potwierdzić brak mutacji Kodi.
+11. Zapisać zredagowany raport E2E w `docs/e2e-results`.
+12. Usunąć reguły `adb reverse`, local/remote forward SSH, control sockety,
+    projekt Compose,
     testowe dane, pliki env i registry.
 
 Brama wyjścia:
 
 - nie pozostał kontener, sieć, volume, autostart, tunel ani katalog smoke;
-- raport zawiera digest, platformę, renderowany policy summary i wyniki obu
-  klientów bez sekretów;
+- raport zawiera digest, platformę, renderowany policy summary i wyniki
+  wszystkich klientów objętych danym przebiegiem bez sekretów;
 - wynik jest oznaczony jako test loopback, a nie walidacja TLS lub produkcji.
 
 Etap 6A można wykonać przy zdegradowanym RAID, ponieważ nie przechowuje
@@ -1522,14 +1644,15 @@ Brama wyjścia:
 2. Niezależne review implementacji względem niniejszego planu.
 3. Pełny lokalny E2E.
 4. CI bez sekretów.
-5. Canary na BlueStacks.
-6. Canary na Sony.
-7. Canary na Bedroom TV.
-8. Canary na `nuc-alek`.
-9. Canary na `nuc-mwo`.
-10. Publikacja do testing.
+5. Deterministyczny build exact bytes.
+6. Publikacja do testing.
+7. Canary klasy Android emulator na BlueStacks.
+8. Canary klasy Android TV na urządzeniu odpowiadającym faktycznej liście ABI;
+   Bedroom TV jest dodatkowym canary, gdy ma inną klasę albo device overlay.
+9. Canary klasy Linux Flatpak x86_64 na `nuc-alek`.
+10. Obowiązkowy E2E izolacji i post-canary rollout na `nuc-mwo`.
 11. Okres obserwacji.
-12. Ręczna promocja do stable.
+12. Ręczna promocja tych samych bajtów do stable.
 
 ## 17. Testy
 
@@ -1537,10 +1660,14 @@ Brama wyjścia:
 
 - walidacja rejestru urządzeń;
 - bezpieczne rozwiązywanie `logical_device_id`;
-- migracja registry schema 1 -> 2 bez zmiany istniejących ID;
-- factory transportu ADB/SSH-Flatpak i odrzucenie nieznanego transportu;
+- loader registry schema 1/2, normalizacja v2 oraz idempotentna, atomowa
+  migracja 1 -> 2 z backupem i bez zmiany istniejących ID/resolve;
+- osobne factory neutralnego transportu ADB/SSH i lifecycle Android/Flatpak;
+- Android-only reinstall odrzuca Linux przed uruchomieniem transportu;
 - canonicalizacja Flatpak data root, owner oraz ochrona przed symlink escape;
 - rozdzielenie `physical_host_id`, `principal_id` i enrollmentu;
+- unikalność `(physical_host_id, principal_id)` i jedna aktywna generacja
+  enrollmentu per `logical_device_id`;
 - walidacja unikalnych referencji credentiali bez odczytu ich wartości;
 - klasyfikacja plików polityki;
 - deterministyczny manifest;
@@ -1551,6 +1678,9 @@ Brama wyjścia:
 - role i tokeny;
 - default-deny per setting, ownership i tombstones;
 - deterministyczne overlaye;
+- revision schema 2 read compatibility, schema 3 layers i odmowa nieznanego
+  selektora;
+- target tags z enrollmentu wybierają warstwę, self-report heartbeat nie;
 - path traversal;
 - limit rozmiaru;
 - migracje SQLite;
@@ -1583,9 +1713,16 @@ Brama wyjścia:
 - rozróżnienie `/health` liveness od `/ready` DB/schema/key-registry;
 - upgrade schematu na kopii i rollback obrazu razem z DB + blobami;
 - odtworzenie danych serwera z backupu poza NAS;
-- fake SSH/Flatpak inventory i bootstrap bez dostępu do home innego konta;
-- równoległa blokada operacji hostowych per `physical_host_id` i konto;
+- fake SSH transport + Flatpak lifecycle inventory/bootstrap bez dostępu do
+  home innego konta i bez arbitrary shell/path;
+- blokada per `(physical_host_id, principal_id)` dla profilu i host-wide tylko
+  dla jawnie współdzielonej operacji;
+- OpenSSH pinned known_hosts, `BatchMode`, brak sudo/agent forwarding i
+  negatywny test zmiany host key;
+- bootstrap zwraca `BOOTSTRAP_REQUIRES_USER` zamiast zapisu do addons/DB, gdy
+  nie ma zakwalifikowanego Kodi API/UI;
 - ten sam klient ZIP i golden crypto vectors na Flatpak `x86_64`;
+- TLS sprawdzony przez Python/OpenSSL wewnątrz Android Kodi oraz Flatpak Kodi;
 - brak zależności runtime sync od dostępności SSH;
 
 ### 17.3 Device E2E
@@ -1609,7 +1746,8 @@ Brama wyjścia:
 - rollback po health check failure;
 - corrupt/signature/path failure bez żadnej mutacji;
 - repo origin `repository.mwodevelop`;
-- brak cache po apply;
+- synchronizator nie kopiuje ani bezpośrednio nie modyfikuje cache/DB/
+  Thumbnails; zmiany wykonane samodzielnie przez Kodi są dozwolone;
 - Umbrella bez sekretów i osobny RD playback po hostowym pre-provision;
 - mwoScrapers aktywny;
 - WatchNixtoons2 playback;
@@ -1658,17 +1796,21 @@ RAID nie jest kopią zapasową.
 7. Dodać Sony dopiero po sukcesie BlueStacks.
 8. Dodać Bedroom TV po sukcesie Sony i zachować osobny enrollment.
 9. Zmigrować registry do schema 2 i potwierdzić byte-equivalent resolve
-   istniejących endpointów Android.
-10. Poprawić prywatne nazwy sekretów NUC i skonfigurować przypięte host keys.
-11. Dodać `nuc-alek` jako czysty Linux canary, wykonać bootstrap, pairing i
-    niesekretny apply.
-12. Dopiero po sukcesie `nuc-alek` wykonać dry-run oraz bootstrap `nuc-mwo`,
-    zachowując istniejące niezarządzane ustawienia i sekrety.
-13. Potwierdzić niezależne enrollmenty i brak cross-account diff.
-14. Zachować hostowy restore ADB/SSH jako break-glass path.
-15. Po uruchomieniu szyfrowanych sekretów wykonać pełny restore drill osobno
+   istniejących endpointów Android, zachowując reader schema 1.
+10. Poprawić prywatne nazwy sekretów NUC, ręcznie zainstalować osobne klucze
+    SSH i skonfigurować przypięte host keys/machine identity.
+11. Dodać `nuc-alek` jako czysty Linux canary, wykonać bootstrap oraz pairing.
+    Do revision schema 3 pozostaje read-only/portable common subset.
+12. Wdrożyć revision schema 3 i administracyjne target tags, a następnie
+    wykonać niesekretny canary apply na `nuc-alek`.
+13. Dopiero po sukcesie `nuc-alek` wykonać dry-run oraz bootstrap `nuc-mwo`,
+    zinwentaryzować origin i zachować istniejące niezarządzane ustawienia oraz
+    sekrety.
+14. Potwierdzić niezależne enrollmenty i brak cross-account diff.
+15. Zachować hostowy restore ADB/SSH jako break-glass path.
+16. Po uruchomieniu szyfrowanych sekretów wykonać pełny restore drill osobno
     dla każdego principala.
-16. Dopiero po dwóch udanych restore drillach rozważyć ograniczenie starych
+17. Dopiero po dwóch udanych restore drillach rozważyć ograniczenie starych
     lokalnych snapshotów.
 
 ## 20. Ryzyka i zabezpieczenia
@@ -1684,14 +1826,18 @@ RAID nie jest kopią zapasową.
 | różne wersje dodatków | najpierw update przez repo, potem apply ustawień |
 | kod pozostaje nowszy po rollbacku profilu | kompatybilne constraints i jawny status `CODE_ADVANCED` |
 | różne ABI/Kodi | compatibility gate w manifeście |
+| heartbeat fałszuje klasę | administracyjne target tags w enrollmencie; self-report tylko obserwacyjny |
 | Android scoped storage | zapis wewnątrz procesu Kodi |
 | Flatpak ma inny data root | discovery app ID, canonical path i owner gate |
-| dwa konta NUC współdzielą host | osobne logical/principal/enrollment/token/journal |
-| wyciek danych między kontami | principal-scoped policy, osobne procesy i cross-account negative E2E |
+| dwa konta NUC współdzielą host | opaque principal w prywatnym inventory, osobne logical/enrollment/token/journal |
+| wyciek danych między kontami | logical-device scoped policy, osobne procesy i cross-account negative E2E |
 | SSH zapisuje do złego home | credential ref, user/owner check, brak sudo i path containment |
+| zmieniony host pod adresem NUC | pinned host key i machine fingerprint; model/hostname/IP nie wystarczają |
 | hostowa operacja zatrzymuje oba Kodi | blokada i lifecycle per konto, drugi proces pozostaje nietknięty |
 | Profile Sync aktualizuje Flatpak | twardy zakaz; `tv.kodi.Kodi` aktualizuje wyłącznie host admin |
 | zduplikowana nazwa sekretu `.env` | fail-fast config validation i osobne nazwy MWO/ALEK |
+| bootstrap omija Kodi | tylko hash-verified ZIP przez wspierane UI/API albo `BOOTSTRAP_REQUIRES_USER` |
+| obcy origin dodatku na `nuc-mwo` | inventory, backup i migracja przez Kodi; brak kopiowania/takeover |
 | Kodi nadpisuje plik przy zamknięciu | API/adaptery, `host_only`, brak generycznej podmiany |
 | zmiana blokuje start Kodi | limit prób, kwarantanna i hostowy break-glass |
 | ustawienia skórki zależne od ekranu | device overlays i opt-in |
@@ -1708,7 +1854,7 @@ RAID nie jest kopią zapasową.
 | niespójna kopia SQLite/blobów | Backup API, skoordynowany blob snapshot i restore drill |
 | migracja uniemożliwia rollback obrazu | schema compatibility matrix i rollback spójnego DB + blob set |
 | nieautoryzowana operacja admin | role, PoP, podpis całego dokumentu, replay protection i deny w reverse proxy |
-| wygasły lub niezaufany TLS | lokalny DNS, renewal runbook, alert i test obu Androidów |
+| wygasły lub niezaufany TLS | lokalny DNS, renewal runbook, alert i test w runtime Android Kodi oraz Flatpak Kodi |
 
 ## 21. Kryteria akceptacji
 
@@ -1729,7 +1875,7 @@ Projekt jest ukończony dopiero, gdy:
 11. profil jest wersjonowany i możliwy do cofnięcia;
 12. klient pozostaje sprawny bez QNAP;
 13. dodatki zachowują origin repozytorium;
-14. cache i bazy nie są synchronizowane;
+14. synchronizator nie kopiuje ani bezpośrednio nie modyfikuje cache i baz;
 15. synchronizator nie tworzy dodatkowego plaintextu sekretów w Git, obrazie,
     QNAP, stagingu, journalu, backupie, logach ani raportach;
 16. routine sync przechodzi E2E na BlueStacks, Sony, Bedroom TV, `nuc-alek`
@@ -1748,37 +1894,52 @@ Projekt jest ukończony dopiero, gdy:
 24. endpointy administracyjne wymagają roli, PoP i podpisu całej operacji;
 25. `/ready` potwierdza zgodność DB, schematu, blob store i key registry;
 26. update, backup i rollback obejmują zgodny zestaw obrazu, DB oraz blobów;
-27. HTTPS, DNS, firewall i odnowienie certyfikatu przechodzą test na trzech
-    Androidach i obu klientach NUC;
+27. HTTPS, DNS, firewall i odnowienie certyfikatu przechodzą test wewnątrz
+    runtime Kodi na wymaganych klasach Android oraz obu klientach NUC;
 28. `nuc-mwo` i `nuc-alek` mają wspólny `physical_host_id`, ale osobne
-    logical/principal/enrollment/token/key/journal;
-29. registry schema 2 rozwiązuje ADB oraz SSH-Flatpak przez wspólny kontrakt
-    transportu i zachowuje zgodność po migracji Androida;
+    logical/opaque-principal/enrollment/token/key/journal;
+29. registry schema 2 rozwiązuje neutralny ADB lub SSH oraz właściwy lifecycle
+    Android/Flatpak i zachowuje zgodność odczytu/migracji Androida;
 30. bootstrap oraz routine E2E przechodzą osobno na obu kontach NUC;
 31. test negatywny potwierdza brak odczytu i mutacji danych drugiego konta;
-32. systemowy `tv.kodi.Kodi` i dane cache/DB/Thumbnails nie zmieniają się w
-    wyniku synchronizacji;
+32. systemowy `tv.kodi.Kodi` nie jest mutowany, a synchronizator nie kopiuje
+    ani bezpośrednio nie modyfikuje cache/DB/Thumbnails;
 33. runtime pull na NUC działa bez aktywnego SSH, a niedostępny QNAP nie
     blokuje startu Kodi;
 34. wewnętrzny multi-profile jest odrzucany bez mutacji;
-35. wydanie stable następuje dopiero po review i okresie canary.
+35. revision schema 3 reprezentuje podpisane warstwy, a reader nadal
+    bezpiecznie obsługuje schema 2;
+36. administracyjne target tags, nie self-report heartbeat, wybierają klasy i
+    warstwy;
+37. wydanie stable następuje dopiero po publikacji testing, E2E klas i okresie
+    obserwacji.
 
 ## 22. Kolejność zależności
 
 ```text
-device registry -> profile schema v2 -> local server API
-       |                   |
-       |                   +---------------------------+
-       v                                               v
-transport interface -> ADB + SSH/Flatpak       Kodi service addon
-       |                                               |
-       +--------------------+--------------------------+
-                            |
-                            v
-                Android + per-account NUC E2E
-                            |
-                            v
-                       addon testing
+registry reader 1/2 -> atomic registry v2 migration
+                              |
+                              v
+             neutral transport (ADB/SSH)
+                              |
+                              v
+        platform lifecycle (Android/Flatpak)
+                              |
+                              +---- per-account bootstrap/enrollment
+                              |
+policy v2 -> revision schema 3 + server target tags
+                              |
+                              v
+                 addon unit/local qualification
+                              |
+                              v
+                 deterministic build -> testing
+                              |
+                              v
+              canary/E2E per compatibility class
+                              |
+                              v
+               observation -> manual stable/active
 
 naprawa RAID + backup -> QNAP production deployment
                                       |
@@ -1790,14 +1951,11 @@ naprawa RAID + backup -> QNAP production deployment
                                                   v
                                       manual profile active
 
-addon testing + Android/NUC non-secret E2E -> obserwacja
-                                            -> manual addon stable
-
 QNAP deployment + encryption feasibility -> encrypted secret sync
 ```
 
-Implementacja nie powinna rozpoczynać się od dodatku Kodi ani wdrożenia
-kontenera. Pierwszym krokiem jest rejestr urządzeń i kontrakt profilu, ponieważ
-oba są zależnościami wszystkich późniejszych elementów. Naprawa RAID może
-biec równolegle, ale pozostaje twardą bramą wyłącznie dla produkcyjnego
-wdrożenia QNAP.
+Najpierw powstaje kompatybilny registry v2, potem neutralny transport i
+lifecycle. Apply warstw platformowych czeka na revision schema 3 i serwerowe
+target tags. Publikacja `testing` poprzedza każdy urządzeniowy canary; stable
+następuje po E2E i obserwacji. Naprawa RAID może biec równolegle, ale pozostaje
+twardą bramą wyłącznie dla produkcyjnego wdrożenia QNAP.
