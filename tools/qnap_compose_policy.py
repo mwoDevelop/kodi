@@ -155,7 +155,7 @@ def render_compose(repository, mode, env_file, docker="docker"):
     ]
     if mode == "smoke":
         command.extend(["-f", str(deployment / "compose.smoke.yaml")])
-    command.extend(["config", "--format", "json"])
+    command.extend(["config", "--format", "json", "--no-normalize"])
     result = subprocess.run(
         command,
         capture_output=True,
