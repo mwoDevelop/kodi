@@ -8,9 +8,9 @@
       "zip_sha256": "41666b66945565b6a8660028df0701240463437a078fe9e3e1f90668260d560d"
     },
     "plugin.video.umbrella": {
-      "commit": "41dc2e1f9e6b30aa12938bfe30943541eeabfaea",
-      "version": "6.7.81.14",
-      "zip_sha256": "24758a99affbc6d4a6df3d330a38d4f0a4ba21a4a939acdb10d86b4ee24aabf9"
+      "commit": "4770755871d0102d0b977ffcdd21123639ef3284",
+      "version": "6.7.81.15",
+      "zip_sha256": "a7ff9596bfe2e05cb96d66c10f191c86e929e69fd562c1945db33d21b5a2eb88"
     },
     "service.mwodevelop.profilesync": {
       "commit": "30039a4c53b7fcfb89e20b097b761547a98a379d",
