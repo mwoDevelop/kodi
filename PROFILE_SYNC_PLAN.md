@@ -19,13 +19,16 @@ Raporty review:
 Stan realizacji 2026-07-27:
 
 - Etap 1: zrealizowany lokalnie i pokryty testami;
-- Etap 2: zrealizowany pierwszy bezpieczny zakres routine export;
+- Etap 2: schema 2 portable-common oraz schema 3 z deterministycznymi
+  `base/layers` są zaimplementowane; reader schema 2 pozostaje zgodny;
 - Etap 3: zrealizowany transakcyjny store, loopback API development,
   przenośny Ed25519 na Kodi x86/ARMv7 oraz build obrazu
   `linux/amd64,linux/arm/v7`;
 - Etap 4: osobne repo dodatku, pairing, heartbeat i podpisany check
-  read-only opublikowane w `testing`; E2E wersji 0.1.5 zaliczone na
-  BlueStacks i Sony TV;
+  read-only opublikowane w `testing`; wersja 0.1.6 wybiera warstwy wyłącznie
+  z podpisanego assignmentu i administracyjnych target tags; E2E wersji
+  0.1.5 zaliczone na BlueStacks i Sony TV, a E2E 0.1.6 na Bedroom TV czeka
+  na ponowne włączenie urządzenia;
 - Etap 5: transakcyjny adapter Umbrella, journal, recovery, rollback i
   kwarantanna są zaimplementowane i pokryte testami lokalnymi; urządzeniowy
   apply E2E pozostaje do wykonania;
@@ -39,8 +42,10 @@ Stan realizacji 2026-07-27:
   read-only inventory są zaimplementowane i pokryte testami, lecz live
   kwalifikacja NUC czeka na jego dostępność oraz osobne klucze SSH;
 - rozszerzenie Android: `Bedroom TV` (`Google TV Streamer`, codename
-  `kirkwood`) znajduje się w prywatnym registry v2 i przeszedł read-only
-  lifecycle inventory; urządzeniowe E2E Profile Sync pozostaje do wykonania;
+  `kirkwood`) znajduje się w prywatnym registry v2, przeszedł read-only
+  lifecycle inventory oraz odwracalny rollout Kodi 21.3, profilu, skórki i
+  dodatków. E2E Profile Sync 0.1.6 i playback po poprawce Umbrella pozostają
+  do dokończenia po ponownym włączeniu urządzenia;
 - Etapy 7–8: nierozpoczęte.
 
 ## 1. Cel
