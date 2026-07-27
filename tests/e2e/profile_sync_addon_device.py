@@ -20,6 +20,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+import zipfile
 from pathlib import Path
 
 from tools.kodi_devices import load_registry, resolve_device
@@ -34,12 +35,17 @@ from tools.kodi_profile import (
 
 ADDON_ID = "service.mwodevelop.profilesync"
 ORIGIN = "repository.mwodevelop.testing"
+ORIGIN_VERSION = "1.0.0"
+ORIGIN_ARCHIVE = "%s-%s.zip" % (ORIGIN, ORIGIN_VERSION)
+ORIGIN_URL = "https://mwodevelop.github.io/kodi/" + ORIGIN_ARCHIVE
+ORIGIN_SHA256 = "d5529a150e7b9f9491fcb19a9884e30b8d95632c258b16dc8578e8435fdcf430"
 CHANNEL = "home-stable"
 STATE_PATH = (
     KODI_ROOT + "/userdata/addon_data/" + ADDON_ID + "/state.json"
 )
 REMOTE_HELPER = "/sdcard/Download/.mwo-profile-sync-e2e-helper.py"
 REMOTE_MARKER = "/sdcard/Download/.mwo-profile-sync-e2e-marker.json"
+REMOTE_ORIGIN_ARCHIVE = "/sdcard/Download/" + ORIGIN_ARCHIVE
 PUBLISHER_SEED = bytes.fromhex("61" * 32)
 PROMOTER_SEED = bytes.fromhex("62" * 32)
 
@@ -138,25 +144,133 @@ def _addon_version(adb, port, serial):
     return match.group(1) if match else None
 
 
-def _install_from_testing(adb, port, serial, expected_version):
-    repository = (
-        KODI_ROOT + "/addons/" + ORIGIN + "/addon.xml"
-    )
-    if (
+def _repository_installed(adb, port, serial):
+    manifest = KODI_ROOT + "/addons/" + ORIGIN + "/addon.xml"
+    return (
         adb_command(
             adb,
             port,
             serial,
             "shell",
-            "test -s '%s'" % repository,
+            "test -s '%s'" % manifest,
             check=False,
         ).returncode
-        != 0
+        == 0
+    )
+
+
+def _current_control(jsonrpc):
+    return jsonrpc.call(
+        "GUI.GetProperties",
+        {"properties": ["currentwindow", "currentcontrol"]},
+    )
+
+
+def _select_control(jsonrpc, labels, maximum_steps=64):
+    expected = {label.casefold() for label in labels}
+    observed = []
+    for _ in range(maximum_steps):
+        gui = _current_control(jsonrpc)
+        control = gui.get("currentcontrol", {})
+        label = str(control.get("label", "")).strip()
+        if label and label not in observed:
+            observed.append(label)
+        if label.casefold() in expected:
+            jsonrpc.call("Input.Select")
+            return
+        jsonrpc.call("Input.Down")
+        time.sleep(0.1)
+    raise RuntimeError(
+        "Kodi file browser did not expose %s; visible controls: %s"
+        % (sorted(labels), observed)
+    )
+
+
+def _download_repository_archive(destination):
+    with urllib.request.urlopen(ORIGIN_URL, timeout=30) as response:
+        payload = response.read()
+    if hashlib.sha256(payload).hexdigest() != ORIGIN_SHA256:
+        raise RuntimeError("testing repository archive digest mismatch")
+    destination.write_bytes(payload)
+    with zipfile.ZipFile(destination) as archive:
+        manifest = archive.read(ORIGIN + "/addon.xml").decode("utf-8")
+    if (
+        'id="%s"' % ORIGIN not in manifest
+        or 'version="%s"' % ORIGIN_VERSION not in manifest
     ):
-        raise RuntimeError("testing repository is not installed on device")
+        raise RuntimeError("testing repository archive manifest mismatch")
+
+
+def _accept_addon_install_prompt(adb, port, serial, timeout=15):
+    deadline = time.monotonic() + timeout
+    with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
+        while time.monotonic() < deadline:
+            gui = _current_control(jsonrpc)
+            window = gui.get("currentwindow", {})
+            control = gui.get("currentcontrol", {})
+            if window.get("id") == 10100:
+                if str(control.get("label", "")).casefold() not in {
+                    "yes",
+                    "tak",
+                }:
+                    jsonrpc.call("Input.Left")
+                jsonrpc.call("Input.Select")
+                return True
+            time.sleep(0.25)
+    return False
+
+
+def _bootstrap_testing_repository(adb, port, serial):
+    with tempfile.TemporaryDirectory(
+        prefix="mwo-profile-sync-repository-"
+    ) as temporary:
+        archive = Path(temporary) / ORIGIN_ARCHIVE
+        _download_repository_archive(archive)
+        adb_command(
+            adb,
+            port,
+            serial,
+            "push",
+            str(archive),
+            REMOTE_ORIGIN_ARCHIVE,
+            text=True,
+        )
+    try:
+        _execute_builtin(adb, port, serial, "InstallFromZip")
+        time.sleep(1)
+        with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
+            _select_control(
+                jsonrpc,
+                {"External storage", "Pamięć zewnętrzna"},
+            )
+            time.sleep(0.5)
+            _select_control(jsonrpc, {"Download", "Pobrane"})
+            time.sleep(0.5)
+            _select_control(jsonrpc, {ORIGIN_ARCHIVE})
+        deadline = time.monotonic() + 45
+        while time.monotonic() < deadline:
+            if _repository_installed(adb, port, serial):
+                return
+            time.sleep(1)
+        raise TimeoutError("testing repository installation timed out")
+    finally:
+        adb_command(
+            adb,
+            port,
+            serial,
+            "shell",
+            "rm -f '%s'" % REMOTE_ORIGIN_ARCHIVE,
+            check=False,
+        )
+
+
+def _install_from_testing(adb, port, serial, expected_version):
+    if not _repository_installed(adb, port, serial):
+        _bootstrap_testing_repository(adb, port, serial)
     _execute_builtin(adb, port, serial, "UpdateAddonRepos")
     time.sleep(8)
     _execute_builtin(adb, port, serial, "InstallAddon(%s)" % ADDON_ID)
+    _accept_addon_install_prompt(adb, port, serial)
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         if _addon_version(adb, port, serial) == expected_version:
