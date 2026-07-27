@@ -103,3 +103,42 @@ def test_latest_addons_database_is_selected_without_android_sort_v():
     assert profile_sync_addon_device._latest_addons_database(listing).endswith(
         "Addons35.db"
     )
+
+
+def test_execute_builtin_prefers_kodi_jsonrpc(monkeypatch):
+    calls = []
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def call(self, method, params=None):
+            calls.append((method, params))
+            return "OK"
+
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "AdbJsonRpcClient",
+        lambda *_: Client(),
+    )
+    monkeypatch.setattr(
+        profile_sync_addon_device.AdbEventClient,
+        "execute_builtin",
+        lambda *_: (_ for _ in ()).throw(
+            AssertionError("EventServer fallback must not run")
+        ),
+    )
+
+    profile_sync_addon_device._execute_builtin(
+        "adb", 5037, "device", "UpdateAddonRepos"
+    )
+
+    assert calls == [
+        (
+            "XBMC.ExecuteBuiltin",
+            {"command": "UpdateAddonRepos", "wait": False},
+        )
+    ]

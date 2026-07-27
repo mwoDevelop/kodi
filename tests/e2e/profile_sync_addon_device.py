@@ -76,9 +76,22 @@ def _server_modules(repository, server_repository):
 
 def _execute_builtin(adb, port, serial, command):
     try:
+        with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
+            jsonrpc.call(
+                "XBMC.ExecuteBuiltin",
+                {"command": command, "wait": False},
+            )
+        return
+    except (OSError, RuntimeError, TimeoutError):
+        pass
+    try:
         AdbEventClient(adb, port, serial).execute_builtin(command)
         return
-    except (OSError, subprocess.CalledProcessError):
+    except (
+        OSError,
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+    ):
         pass
     host = serial.rsplit(":", 1)[0]
     client = AdbEventClient(adb, port, serial)
