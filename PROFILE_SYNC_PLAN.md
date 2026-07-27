@@ -10,7 +10,10 @@ Lokalizacja robocza: `/home/mwo/projects/kodi`
 
 Dokument powiązany: `UPSTREAM_SYNC_PLAN.md`
 
-Raport review: `docs/PROFILE_SYNC_PLAN_REVIEW.md`
+Raporty review:
+
+- `docs/PROFILE_SYNC_PLAN_REVIEW.md`;
+- `docs/PROFILE_SYNC_QNAP_PLAN_REVIEW.md`.
 
 Stan realizacji 2026-07-27:
 
@@ -25,9 +28,11 @@ Stan realizacji 2026-07-27:
 - Etap 5: transakcyjny adapter Umbrella, journal, recovery, rollback i
   kwarantanna są zaimplementowane i pokryte testami lokalnymi; urządzeniowy
   apply E2E pozostaje do wykonania;
-- Etap 6: kontenerowy kontrakt Compose i live preflight QNAP zrealizowane;
-  implementacja na QNAP jest podzielona na nietrwały smoke możliwy przed
-  naprawą RAID oraz produkcyjną aplikację Container Station po Etapie 0;
+- Etap 6: kontenerowy kontrakt Compose i live preflight QNAP zrealizowane,
+  lecz niezależny review wykazał, że bieżący Compose nie jest jeszcze gotowy
+  do uruchomienia; implementacja pozostaje podzielona na izolowany,
+  nietrwały smoke 6A możliwy przed naprawą RAID oraz produkcję 6B po Etapie 0
+  i po spełnieniu bram bezpieczeństwa API, migracji oraz backupu;
 - Etapy 7–8: nierozpoczęte.
 
 ## 1. Cel
@@ -253,8 +258,10 @@ kodi/
 ├── deploy/
 │   └── qnap-profile-sync/
 │       ├── compose.yaml
+│       ├── compose.smoke.yaml
 │       ├── README.md
-│       └── env.example
+│       ├── env.example
+│       └── smoke.env.example
 ├── tools/
 │   ├── kodi_devices.py
 │   ├── kodi_profile.py
@@ -266,6 +273,7 @@ kodi/
     ├── devices.json
     ├── kodi-reinstall.json
     ├── qnap-profile-sync.env
+    ├── qnap-profile-sync-smoke.env
     ├── profile-sync-admin/
     └── snapshots/
 ```
@@ -564,16 +572,27 @@ reverse proxy lub zewnętrznej bazy bez zmiany dodatku Kodi.
 
 ### 10.1 Postać wdrożenia w Container Station
 
-Backend jest wdrażany na QNAP jako jedna aplikacja Docker Compose zarządzana
-przez Container Station. Źródłem deklaracji jest:
+Backend działa na daemonie Container Station, ale jedynym źródłem prawdy dla
+cyklu życia aplikacji jest Compose CLI wywoływany przez SSH z narzędzia
+hostowego. GUI Container Station służy wyłącznie do obserwacji stanu; nie
+importujemy w nim ponownie tej samej aplikacji ani nie zmieniamy jej
+konfiguracji ręcznie.
+
+Źródłem deklaracji jest:
 
 ```text
 deploy/qnap-profile-sync/compose.yaml
+deploy/qnap-profile-sync/compose.smoke.yaml
 ```
 
-Nie tworzymy kontenera ręcznie w GUI. Container Station importuje tę samą
-deklarację Compose, która przechodzi walidację lokalną i w CI. Nazwa aplikacji
-to `qnap-profile-sync`, a kontenera `mwodevelop-profile-sync`.
+Nie ustawiamy stałego `container_name`. Nazwę i izolację zapewnia jawny Compose
+project name:
+
+- produkcja: `qnap-profile-sync`;
+- smoke: `qnap-profile-sync-smoke`.
+
+Obie deklaracje przechodzą walidację lokalną i w CI. Smoke używa pliku bazowego
+oraz override, produkcja wyłącznie pliku bazowego.
 
 Docelowa topologia:
 
@@ -594,9 +613,10 @@ Container Station application: qnap-profile-sync
              -> /share/ProfileSync/config/key-registry.json
 ```
 
-Kontener:
+Kontener produkcyjny:
 
-- działa jako UID/GID `10001:10001`;
+- działa jako jawnie skonfigurowany i zweryfikowany dedykowany UID/GID,
+  domyślnie `10001:10001`, jeśli nie koliduje na QNAP;
 - ma root filesystem `read_only`;
 - odrzuca wszystkie capabilities;
 - używa `no-new-privileges`;
@@ -607,6 +627,12 @@ Kontener:
 - uruchamia wyłącznie tryb ze zweryfikowanym key registry;
 - nie otrzymuje administracyjnych credentiali QNAP.
 
+Przed startem preflight uruchamia próbę zapisu i odczytu do `/data` jako
+docelowy UID/GID, sprawdza właściciela i minimalne ACL oraz potwierdza, że key
+registry jest istniejącym zwykłym plikiem. Bind mounty używają długiej składni
+z `bind.create_host_path: false`, aby literówka nie utworzyła katalogu zamiast
+pliku.
+
 ### 10.2 Artefakty i katalogi QNAP
 
 Po przejściu bramy storage powstaje dedykowany udział:
@@ -615,6 +641,7 @@ Po przejściu bramy storage powstaje dedykowany udział:
 /share/ProfileSync/
   compose/
     compose.yaml
+    compose.smoke.yaml
     deployment.env
     current-digest.txt
     previous-digest.txt
@@ -622,29 +649,42 @@ Po przejściu bramy storage powstaje dedykowany udział:
     key-registry.json
     tls-bootstrap/
   data/
-    profile-sync.sqlite
+    state.sqlite
     blobs/
     uploads/
-  backup/
+  rollback-cache/
     application/
     restore-drills/
 ```
 
 Zasady:
 
-- `deployment.env`, rejestr kluczy i bootstrap TLS mają minimalne uprawnienia
-  i nie trafiają do Git;
+- kanoniczną ścieżką bazy jest `/data/state.sqlite`, czyli
+  `/share/ProfileSync/data/state.sqlite` na hoście;
+- `deployment.env`, rejestr kluczy i publiczny bootstrap TLS mają minimalne
+  uprawnienia i nie trafiają do Git;
+- prywatny klucz TLS pozostaje własnością QNAP reverse proxy i nie trafia do
+  katalogu projektu, Compose ani backupu profilu;
 - plik Compose nie zawiera tokenów, haseł ani kluczy prywatnych;
 - obraz jest wskazywany jako `ghcr.io/...@sha256:<digest>`;
-- `data` i `config` są bind mountami, nie anonimowymi volume;
-- katalog `backup` nie jest montowany do procesu API;
-- dane Container Station i dane aplikacji nie są jedyną kopią backupu.
+- `data` i plik rejestru kluczy są bind mountami, nie anonimowymi volume;
+- `rollback-cache` nie jest montowany do procesu API i nie jest nazywany
+  backupem, ponieważ znajduje się na tej samej macierzy;
+- prawdziwy backup jest zaszyfrowanym, spójnym zestawem SQLite + blob store
+  zapisanym poza QNAP i okresowo przechodzącym restore drill;
+- przed utworzeniem katalogów skrypt rozwiązuje i zatwierdza bezwzględne
+  ścieżki, UID/GID, właścicieli i ACL; nie polega na automatycznym tworzeniu
+  bind mountów przez Dockera.
 
 ### 10.3 Dwa tryby realizacji
 
 Przed naprawą RAID dopuszczony jest tylko `qnap-smoke`:
 
 - identyczny obraz ARMv7 i te same ograniczenia bezpieczeństwa;
+- osobny Compose project `qnap-profile-sync-smoke`, brak stałego
+  `container_name`, osobny port i `restart: "no"`;
+- obowiązkowy override `compose.smoke.yaml`, który nie może wskazywać ścieżek
+  produkcyjnych;
 - baza oraz key registry wygenerowane wyłącznie dla testu;
 - dane w `tmpfs` albo w jednoznacznie oznaczonym katalogu jednorazowym;
 - brak prawdziwych profili, credentiali, kluczy produkcyjnych i autostartu;
@@ -663,42 +703,110 @@ Po uzyskaniu `[UU]`, backupu poza NAS i udanym restore drill uruchamiany jest
 - monitoring health oraz kontrolowany rollback obrazu i danych.
 
 Smoke i produkcja nie współdzielą bazy, tokenów, key registry ani nazwy
-katalogu danych. Wynik smoke nie może zostać przemianowany na produkcję.
+katalogu danych. Nie współdzielą też Compose project name, host portu ani
+polityki restartu. Wynik smoke nie może zostać przemianowany na produkcję.
+
+Transport testu 6A jest jawny i nie zależy od produkcyjnego reverse proxy:
+
+```text
+Kodi http://127.0.0.1:<device-port>
+  -> adb reverse
+host 127.0.0.1:<host-port>
+  -> SSH local forward
+QNAP 127.0.0.1:<smoke-port>
+  -> kontener smoke
+```
+
+Tunel powstaje osobno dla BlueStacks i Sony. Po jego utworzeniu test
+potwierdza po obu stronach, że wskazany lokalny port prowadzi do dokładnego
+smoke projectu. Plain HTTP jest dozwolony tylko na loopback w tym
+kontrolowanym przebiegu; wynik 6A nie jest dowodem poprawności TLS. Wszystkie
+tunele i reguły `adb reverse` są usuwane razem z aplikacją smoke.
 
 ### 10.4 Aktualizacja i rollback kontenera
 
-GitHub Actions buduje i testuje manifest wieloarchitekturowy, ale nie wdraża
-samodzielnie na QNAP. Wdrożenie wykonuje skrypt administracyjny z hosta:
+GitHub Actions buduje, testuje i publikuje manifest wieloarchitekturowy, ale
+nie wdraża samodzielnie na QNAP. Workflow używa Buildx/QEMU, testuje kod oraz
+obraz, publikuje warianty `linux/amd64` i `linux/arm/v7`, zapisuje niezmienny
+digest i weryfikuje manifest przez `docker buildx imagetools inspect`. Sam
+lokalny build z `push: false` nie spełnia bramy 6A.
+
+Preferowany jest publiczny obraz GHCR, który nie zawiera sekretów. Jeśli obraz
+pozostanie prywatny, credential jest zapisany w hostowym credential store
+Container Station i nie trafia do Compose, env, logów ani repo.
+
+Wdrożenie wykonuje skrypt administracyjny z hosta przez Compose CLI po SSH:
 
 1. odczytuje aktualny i docelowy digest;
 2. sprawdza obecność wariantu `linux/arm/v7`;
-3. wykonuje backup aplikacyjny i zapisuje poprzedni digest;
-4. uruchamia migrację/preflight na kopii danych;
-5. pobiera obraz po digescie;
-6. renderuje i waliduje Compose;
-7. odtwarza aplikację Container Station;
-8. czeka na healthcheck;
-9. wykonuje API smoke i test z obu klientów Kodi;
-10. po błędzie przywraca poprzedni digest oraz kompatybilny backup DB.
+3. odczytuje wersję schematu DB i macierz kompatybilności obrazu;
+4. wykonuje spójny backup SQLite Backup API + blob store, zapisuje poprzedni
+   digest i potwierdza możliwość odczytu kopii;
+5. uruchamia migracje forward oraz preflight nowego obrazu na odizolowanej
+   kopii danych;
+6. pobiera obraz po digescie;
+7. renderuje i waliduje Compose;
+8. odtwarza aplikację przez Compose CLI;
+9. czeka na liveness i readiness;
+10. wykonuje API smoke i test z obu klientów Kodi;
+11. po błędzie przywraca poprzedni digest razem z kompatybilną kopią DB i
+    blobów.
 
 Nie stosujemy Watchtower, ruchomych tagów, `latest`, automatycznych migracji
 bez backupu ani samoczynnej promocji profilu.
 
-Przykładowe zasoby:
+Stary obraz nigdy nie otwiera bazy po migracji, jeśli jego deklarowana macierz
+kompatybilności nie obejmuje nowego schematu. Jeżeli rollback kodu wymaga
+rollbacku danych, kontener pozostaje zatrzymany do czasu odtworzenia spójnego
+zestawu DB + bloby. Katalog `rollback-cache` skraca tę operację, ale nie
+zastępuje backupu poza NAS.
+
+### 10.5 Kontrakt API i brama ekspozycji
+
+Poniższe zasoby są kontraktem docelowym, a nie twierdzeniem, że wszystkie są
+już zaimplementowane:
 
 ```text
+Istniejące MVP:
 POST /v1/pair
 POST /v1/devices/heartbeat
+POST /v1/revisions
 POST /v1/channels/{channel}/candidates
 POST /v1/channels/{channel}/assignments
 POST /v1/channels/{channel}/promote
-POST /v1/channels/{channel}/rollback
-GET  /v1/enrollments/{enrollment_id}/assignment
-GET  /v1/enrollments/{enrollment_id}/revisions/{revision_id}
-GET  /v1/blobs/{sha256}
 POST /v1/reports
+GET  /v1/enrollments/{enrollment_id}/assignment?channel={channel}
+GET  /v1/enrollments/{enrollment_id}/revisions/{revision_id}
 GET  /health
+
+Docelowe przed 6B:
+POST /v1/channels/{channel}/rollback
+GET  /v1/blobs/{sha256}
+GET  /ready
 ```
+
+Istniejący serwer jest jawnie oznaczony jako loopback development. Podpisuje
+i weryfikuje dokumenty domenowe, lecz zapisy revision/candidate/assignment/
+promote nie mają jeszcze kompletnego uwierzytelnienia aktora i egzekwowania
+roli na warstwie HTTP. Dlatego nie są gotowe do wystawienia przez reverse
+proxy.
+
+Docelowo `/health` pozostaje liveness i poza `status/mode` zwraca identyfikator
+serwisu, wersję API oraz build. `/ready` sprawdza otwarcie DB, wspieraną wersję
+schematu, dostępność blob store i poprawny rejestr kluczy. Metadane wersji
+serwera, API, schematu i buildu pochodzą z jednego kontraktu; numer wersji nie
+jest duplikowany ręcznie między modułami.
+
+Przed 6B publish, assignment, promote, rollback, revocation i zarządzanie
+rolami wymagają uwierzytelnienia, właściwej roli oraz proof-of-possession.
+Podpis obejmuje cały kanoniczny dokument operacji, co najmniej actor,
+operation, channel, revision, expected generation, next generation,
+idempotency key i expiry. Serwer ponownie sprawdza rolę, replay, CAS oraz
+zgodność wszystkich pól z podpisem.
+
+Do czasu wdrożenia tej bramy reverse proxy nie wystawia operacji
+administracyjnych. Dopuszczalny jest jedynie izolowany smoke 6A z syntetycznym
+rejestrem i bez danych produkcyjnych; jego endpoint nie jest osiągalny z LAN.
 
 Trwałe dane są montowane z dedykowanego udziału QNAP. Nic ważnego nie jest
 przechowywane wewnątrz warstwy kontenera ani katalogu QPKG.
@@ -868,6 +976,15 @@ Bootstrap zaufania jest jawny. Produkcja używa lokalnej nazwy DNS i
 certyfikatu zaufanego przez Android albo fingerprintu certyfikatu
 zweryfikowanego poza kanałem QNAP podczas pairing. `verify=False` i trwały
 plain HTTP są zabronione; HTTP jest dozwolony tylko na loopback w testach.
+
+Runbook 6B definiuje i testuje:
+
+- stabilną lokalną nazwę DNS oraz rozwiązywanie jej z obu urządzeń;
+- łańcuch certyfikatu zaufany przez Android/Kodi i plan odnowienia;
+- prywatny klucz TLS przechowywany wyłącznie przez QNAP reverse proxy;
+- allowlistę LAN/VPN i firewall bez publicznego port-forwardingu;
+- dostęp Sony zarówno z aktywnym Nord VPN z dozwolonym LAN, jak i bez VPN;
+- alarm przed wygaśnięciem certyfikatu i test po jego odnowieniu.
 
 Każda rewizja jest podpisana kluczem publishera przypisanym do kanału. Każde
 zdarzenie promote/rollback jest podpisane osobnym kluczem promotera i zawiera
@@ -1054,42 +1171,95 @@ PYTHONPATH=. .venv/bin/python \
 
 #### Etap 6A: implementacja i nietrwały smoke
 
-1. Po restarcie QNAP ponownie potwierdzić SSH, Container Station, socket
-   Dockera, Compose, `armv7l`, wolne miejsce i aktualny `/proc/mdstat`.
-2. Opublikować zweryfikowany obraz `linux/amd64,linux/arm/v7` w GHCR i zapisać
-   jego digest.
+Brama wejścia:
+
+- po restarcie potwierdzone SSH, daemon Container Station, Compose CLI,
+  `armv7l`, wolne miejsce i aktualny `/proc/mdstat`;
+- opublikowany i sprawdzony digest GHCR zawierający `linux/arm/v7`;
+- `docker compose config` przechodzi dla base + smoke override;
+- automatyczna kontrola wyklucza produkcyjne ścieżki, nazwę projektu, port,
+  key registry oraz politykę restartu;
+- wszystkie dane, profile, tokeny i klucze są syntetyczne.
+
+Realizacja:
+
+1. Dodać workflow publikujący zweryfikowany manifest
+   `linux/amd64,linux/arm/v7`, zapisujący digest i wynik
+   `buildx imagetools inspect`.
+2. Dodać `compose.smoke.yaml`, `smoke.env.example` i walidację polityki
+   Compose w CI.
 3. Dodać skrypt hostowy `qnap_profile_sync.py` z operacjami `preflight`,
    `smoke-deploy`, `status`, `logs`, `verify`, `destroy-smoke`.
-4. Renderować istniejący Compose z osobnego, niewersjonowanego env.
-5. Uruchomić jednorazową aplikację `qnap-profile-sync-smoke` z testowym key
-   registry i nietrwałą bazą.
-6. Potwierdzić healthcheck, architekturę obrazu, migrację SQLite, restart
-   kontenera i brak sekretów w inspect/logach.
-7. Wykonać pairing, heartbeat, signed revision download i read-only check z
-   BlueStacks oraz Sony.
-8. Zasymulować niedostępność QNAP i potwierdzić brak mutacji Kodi.
-9. Zapisać zredagowany raport E2E w `docs/e2e-results`.
-10. Usunąć aplikację smoke i wszystkie jej dane testowe.
+4. Renderować base + smoke override z osobnego, niewersjonowanego env i
+   uruchamiać przez SSH jako project `qnap-profile-sync-smoke`.
+5. Uruchomić smoke z `restart: "no"`, testowym regularnym plikiem key registry,
+   osobnym portem i nietrwałą bazą.
+6. Potwierdzić architekturę obrazu, `/health`, `/ready`, wersję schematu,
+   migrację SQLite, ręczny restart procesu oraz brak sekretów w inspect/logach.
+7. Utworzyć SSH local forward do loopback QNAP, następnie osobne `adb reverse`
+   dla BlueStacks i Sony; potwierdzić dokładny identyfikator smoke API.
+8. Wykonać pairing, heartbeat, signed revision download i read-only check z
+   BlueStacks oraz Sony przez `http://127.0.0.1` urządzenia.
+9. Zasymulować niedostępność QNAP i potwierdzić brak mutacji Kodi.
+10. Zapisać zredagowany raport E2E w `docs/e2e-results`.
+11. Usunąć reguły `adb reverse`, tunel SSH, projekt Compose, testowe dane,
+    pliki env i registry.
+
+Brama wyjścia:
+
+- nie pozostał kontener, sieć, volume, autostart, tunel ani katalog smoke;
+- raport zawiera digest, platformę, renderowany policy summary i wyniki obu
+  klientów bez sekretów;
+- wynik jest oznaczony jako test loopback, a nie walidacja TLS lub produkcji.
 
 Etap 6A można wykonać przy zdegradowanym RAID, ponieważ nie przechowuje
-istotnych ani unikalnych danych.
+istotnych ani unikalnych danych. Każde wykrycie zapisu do ścieżki produkcyjnej
+natychmiast przerywa test.
 
 #### Etap 6B: produkcyjna aplikacja Container Station
 
-1. Przejść Etap 0: RAID `[UU]`, backup poza NAS i restore niewrażliwego pliku.
-2. Utworzyć udział i strukturę `/share/ProfileSync`.
-3. Utworzyć dedykowanego właściciela UID/GID oraz minimalne ACL.
-4. Wygenerować produkcyjny key registry i bootstrap zaufania poza kontenerem.
-5. Wdrożyć `qnap-profile-sync` jako aplikację Container Station z Docker
-   Compose i przypiętym digestem.
-6. Skonfigurować QNAP reverse proxy: HTTPS z LAN do loopback kontenera.
-7. Potwierdzić brak bezpośrednio wystawionego portu API poza loopback.
-8. Uruchomić migrację, healthcheck, pairing i read-only E2E obu klientów.
-9. Skonfigurować restart po restarcie QNAP i wykonać test pełnego rebootu.
-10. Skonfigurować snapshoty QTS, retencję aplikacyjną i backup poza QNAP.
-11. Wykonać restore drill serwera na oddzielnym katalogu danych.
-12. Zweryfikować aktualizację do nowego digestu i rollback do poprzedniego.
-13. Dopiero po canary dopuścić QNAP jako źródło profilu `active`.
+Brama wejścia:
+
+- Etap 0 zakończony: RAID `[UU]`, zaszyfrowany backup poza NAS i udany restore
+  niewrażliwego pliku;
+- 6A zakończony bez pozostałości;
+- API publish/admin ma role, proof-of-possession, pełne podpisane dokumenty,
+  ochronę replay/idempotency i testy negatywne;
+- istnieją wersjonowane migracje, `/ready`, Backup API, spójny backup DB +
+  bloby, macierz kompatybilności schematu oraz przećwiczony rollback;
+- runbook DNS/TLS/firewall/odnowienia przechodzi na BlueStacks i Sony.
+
+Realizacja:
+
+1. Utworzyć udział i strukturę `/share/ProfileSync`.
+2. Wybrać niekolidujący dedykowany UID/GID, utworzyć katalogi i minimalne ACL,
+   zweryfikować zapis jako ten użytkownik oraz regularny plik key registry.
+3. Wygenerować produkcyjny key registry i publiczny bootstrap zaufania poza
+   kontenerem; prywatny klucz TLS pozostawić w QNAP reverse proxy.
+4. Wdrożyć project `qnap-profile-sync` przez Compose CLI po SSH z przypiętym
+   digestem; GUI Container Station pozostawić tylko do obserwacji.
+5. Skonfigurować QNAP reverse proxy: HTTPS z LAN/VPN do loopback kontenera,
+   firewall i monitoring certyfikatu.
+6. Potwierdzić brak bezpośrednio wystawionego portu API poza loopback i brak
+   nieautoryzowanych operacji administracyjnych.
+7. Uruchomić migrację, liveness, readiness, pairing i read-only E2E obu
+   klientów.
+8. Skonfigurować `restart: unless-stopped`, wykonać pełny reboot QNAP i
+   potwierdzić dokładnie jeden project oraz brak driftu Compose.
+9. Skonfigurować snapshoty QTS, retencję aplikacyjną, rollback cache i
+   zaszyfrowany backup poza QNAP.
+10. Wykonać restore drill serwera na oddzielnym katalogu danych i zweryfikować
+    spójność DB + blobów.
+11. Zweryfikować aktualizację do nowego digestu, forward migration oraz
+    rollback obrazu razem z właściwą wersją DB + blobów.
+12. Dopiero po canary dopuścić QNAP jako źródło profilu `active`.
+
+Brama wyjścia:
+
+- reboot, update, restore i rollback mają zredagowane raporty;
+- oba urządzenia przechodzą test HTTPS i odrzucają błędny certyfikat;
+- nie ma drugiej aplikacji zarządzanej równolegle z GUI ani ruchomego tagu;
+- backup poza QNAP jest świeższy niż ostatnia promocja danych produkcyjnych.
 
 ### Etap 7: zaszyfrowane sekrety
 
@@ -1150,8 +1320,17 @@ istotnych ani unikalnych danych.
 - disk full oraz crash injection w każdej fazie apply;
 - aktualizacja klienta w trakcie apply;
 - build `linux/arm/v7`;
+- publikacja manifestu GHCR, zapis digestu i `imagetools inspect` dla
+  `linux/amd64` oraz `linux/arm/v7`;
+- `docker compose config` dla produkcji oraz base + smoke override;
+- statyczna polityka Compose: digest, loopback, read-only, cap-drop,
+  `create_host_path: false`, brak stałego `container_name` i brak autostartu
+  smoke;
+- runtime smoke Compose na katalogach tymczasowych z cleanup assertion;
 - runtime smoke na rzeczywistym QNAP ARMv7;
-- odtworzenie danych serwera z backupu.
+- rozróżnienie `/health` liveness od `/ready` DB/schema/key-registry;
+- upgrade schematu na kopii i rollback obrazu razem z DB + blobami;
+- odtworzenie danych serwera z backupu poza NAS.
 
 ### 17.3 Device E2E
 
@@ -1222,8 +1401,11 @@ RAID nie jest kopią zapasową.
 
 | Ryzyko | Zabezpieczenie |
 |---|---|
-| zdegradowany RAID QNAP | blocker wdrożenia i backup poza NAS |
+| zdegradowany RAID QNAP | blocker produkcji 6B; tylko izolowany i nietrwały smoke 6A |
 | utrata QNAP | lokalna konfiguracja działa dalej, host snapshot pozostaje |
+| smoke zapisuje stan produkcyjny | osobny project/port/path/key registry, `restart: no`, policy gate i cleanup |
+| dwa control plane Container Station | wyłącznie Compose CLI po SSH, GUI tylko do obserwacji |
+| bind mount tworzy zły katalog | preflight ścieżek/UID/ACL i `create_host_path: false` |
 | zły profil mastera | candidate, ręczna promocja i rollback |
 | różne wersje dodatków | najpierw update przez repo, potem apply ustawień |
 | kod pozostaje nowszy po rollbacku profilu | kompatybilne constraints i jawny status `CODE_ADVANCED` |
@@ -1242,7 +1424,10 @@ RAID nie jest kopią zapasową.
 | niedostępny serwer | backoff, brak mutacji, Kodi startuje normalnie |
 | VPN odcina LAN Sony | test route, timeout i odroczenie bez mutacji |
 | obraz bez ARMv7 | obowiązkowy multiarch CI i smoke na QNAP |
-| niespójna kopia SQLite | Backup API/controlled stop i restore drill |
+| niespójna kopia SQLite/blobów | Backup API, skoordynowany blob snapshot i restore drill |
+| migracja uniemożliwia rollback obrazu | schema compatibility matrix i rollback spójnego DB + blob set |
+| nieautoryzowana operacja admin | role, PoP, podpis całego dokumentu, replay protection i deny w reverse proxy |
+| wygasły lub niezaufany TLS | lokalny DNS, renewal runbook, alert i test obu Androidów |
 
 ## 21. Kryteria akceptacji
 
@@ -1252,7 +1437,8 @@ Projekt jest ukończony dopiero, gdy:
 2. adresy są w `.kodi-private/devices.json`, a nie w publicznym repo;
 3. `kodi-reinstall.json` używa `logical_device_id`;
 4. QNAP RAID jest zdrowy i istnieje backup poza QNAP;
-5. serwer działa po restarcie QNAP;
+5. produkcyjny serwer działa po restarcie QNAP i jest zarządzany wyłącznie
+   przez Compose CLI po SSH;
 6. nowy consumer może zostać sparowany bez konta administratora NAS;
 7. każdy klient ma własne `enrollment_id`, generację i klucz podpisujący, a
    restore nie klonuje jego enrollmentu;
@@ -1273,7 +1459,16 @@ Projekt jest ukończony dopiero, gdy:
 20. pełny restore sekretów przechodzi osobny E2E;
 21. istniejący upstream/testing/stable pipeline nadal przechodzi bez zmian
     semantycznych;
-22. wydanie stable następuje dopiero po review i okresie canary.
+22. obraz wdrożeniowy ma zweryfikowany manifest ARMv7 i jest przypięty po
+    digescie;
+23. smoke i produkcja mają odrębne project/path/port/key registry, a cleanup
+    smoke nie pozostawia kontenera, sieci, danych ani tunelu;
+24. endpointy administracyjne wymagają roli, PoP i podpisu całej operacji;
+25. `/ready` potwierdza zgodność DB, schematu, blob store i key registry;
+26. update, backup i rollback obejmują zgodny zestaw obrazu, DB oraz blobów;
+27. HTTPS, DNS, firewall i odnowienie certyfikatu przechodzą test na obu
+    Androidach;
+28. wydanie stable następuje dopiero po review i okresie canary.
 
 ## 22. Kolejność zależności
 
