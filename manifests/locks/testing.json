@@ -12,6 +12,11 @@
       "version": "6.7.81.14",
       "zip_sha256": "24758a99affbc6d4a6df3d330a38d4f0a4ba21a4a939acdb10d86b4ee24aabf9"
     },
+    "service.mwodevelop.profilesync": {
+      "commit": "6263d20e0fd9f96fb4a2a6c4135c80359c46c121",
+      "version": "0.1.0",
+      "zip_sha256": "b5873dd82fdd22762cee8861e771e79e100229ddd26fe85ca73945628c81149b"
+    },
     "script.module.mwoscrapers": {
       "commit": "7c21ad6a634cc2eeb67fdc84747098aa4b97b030",
       "version": "0.1.3",

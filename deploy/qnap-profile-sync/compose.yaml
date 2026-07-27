@@ -1,0 +1,32 @@
+services:
+  profile-sync:
+    image: ${PROFILE_SYNC_IMAGE:?set immutable image digest}
+    container_name: mwodevelop-profile-sync
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:${PROFILE_SYNC_PORT:-18765}:8765"
+    volumes:
+      - ${PROFILE_SYNC_DATA:?set data directory}:/data
+      - ${PROFILE_SYNC_KEY_REGISTRY:?set key registry file}:/run/profile-sync/key-registry.json:ro
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    mem_limit: 256m
+    pids_limit: 128
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=3))['status'] == 'ok'"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+

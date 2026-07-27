@@ -16,7 +16,12 @@ Date: 2026-07-27
   `kodi-profile-sync-server` checkout;
 - candidate CAS, idempotency, canary assignments and report-gated promotion;
 - loopback-only development HTTP API;
-- host-side `tools/profile_sync_admin.py`.
+- host-side `tools/profile_sync_admin.py`;
+- native Ed25519 qualified inside Kodi on BlueStacks x86 and Sony ARMv7;
+- one-time pairing, per-installation enrollment/token/key and heartbeat;
+- separate `service.mwodevelop.profilesync` repository with read-only checks;
+- deterministic publication of the service add-on in the testing lock;
+- QNAP Container Station Compose contract with an ARMv7 image gate.
 
 ## Private state
 
@@ -51,6 +56,8 @@ Server repository:
 
 ```bash
 PYTHONPATH=src ../kodi/.venv/bin/pytest -q
+PYTHONPATH=src ../kodi/.venv/bin/python \
+  tests/e2e/verified_loopback.py
 PYTHONPATH=src ../kodi/.venv/bin/python -m profile_sync_server.http \
   --database /tmp/mwo-profile-sync-smoke.sqlite \
   --port 18765 \
@@ -58,12 +65,18 @@ PYTHONPATH=src ../kodi/.venv/bin/python -m profile_sync_server.http \
 curl --fail http://127.0.0.1:18765/health
 ```
 
+Kodi crypto capability:
+
+```bash
+PYTHONPATH=. .venv/bin/python \
+  tests/e2e/profile_sync_crypto_spike.py
+```
+
 ## Deliberate blockers
 
 The server is not deployable to QNAP yet. Production remains blocked by:
 
 - degraded RAID and missing confirmed off-NAS backup;
-- no qualified enrollment signature implementation for Kodi ARMv7/x86;
-- no production pairing/key registry;
+- no protected production admin API/key rotation;
 - no encrypted-secret feasibility result;
-- no Kodi service add-on or device E2E for routine apply.
+- no journaled routine apply/rollback device E2E.

@@ -7,3 +7,6 @@
 [submodule "watchnixtoons2"]
 	path = watchnixtoons2
 	url = https://github.com/mwoDevelop/ch.repo.git
+[submodule "profile-sync-addon"]
+	path = profile-sync-addon
+	url = https://github.com/mwoDevelop/service.mwodevelop.profilesync.git

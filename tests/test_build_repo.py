@@ -38,6 +38,7 @@ def test_testing_index_and_dependency_closure(tmp_path):
         "plugin.video.umbrella",
         "plugin.video.watchnixtoons2.mwodevelop",
         "repository.mwodevelop.testing",
+        "service.mwodevelop.profilesync",
         "script.module.mwoscrapers",
         "script.mwoscrapers",
     }
@@ -70,6 +71,7 @@ def test_home_page_catalogs_both_channels(tmp_path):
     assert "MwoScrapers" in home
     assert "MwoScrapers Manager" in home
     assert "WatchNixtoons2 (mwoDevelop)" in home
+    assert "mwoDevelop Profile Sync" in home
 
 
 def test_kodi_file_source_lists_stable_repository_zip(tmp_path):
