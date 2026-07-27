@@ -66,5 +66,9 @@ and credentials, and the selected skin while excluding caches and generated
 databases. Unencrypted snapshots are restricted to the Git-ignored
 `.kodi-private/` directory.
 
+`tools/kodi_reinstall.py` adds a dry-run-first host workflow for a verified
+uninstall, Kodi storage cleanup, ABI-matched APK installation, snapshot
+restore, and live add-on/skin validation.
+
 See [Private Kodi profile snapshots](docs/kodi-private-profile.md) for the
 security boundary, exact contents, commands, and reproducible device checks.

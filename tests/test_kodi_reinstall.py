@@ -1,0 +1,182 @@
+import hashlib
+import sqlite3
+import zipfile
+from types import SimpleNamespace
+
+import pytest
+
+from tools.kodi_reinstall import (
+    KODI_STORAGE_PATHS,
+    RepositoryIndexNotReady,
+    apply_addon_origins,
+    apk_abis,
+    deploy_target,
+    file_digest,
+    uninstall_and_clean,
+)
+
+
+def test_apk_inventory_and_digest(tmp_path):
+    apk = tmp_path / "kodi.apk"
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("lib/armeabi-v7a/libkodi.so", b"arm")
+        archive.writestr("lib/x86/libkodi.so", b"x86")
+        archive.writestr("assets/addons.xml", b"<addons/>")
+
+    assert apk_abis(apk) == ["armeabi-v7a", "x86"]
+    assert file_digest(apk) == hashlib.sha256(apk.read_bytes()).hexdigest()
+
+
+def test_uninstall_cleans_only_explicit_kodi_paths(monkeypatch):
+    calls = []
+
+    def command(*args, **kwargs):
+        calls.append((args, kwargs))
+        command_text = args[4] if len(args) > 4 else ""
+        if command_text.startswith("pm path"):
+            return SimpleNamespace(stdout="package:/data/app/base.apk\n")
+        if args[3] == "uninstall":
+            return SimpleNamespace(stdout="Success\n")
+        return SimpleNamespace(stdout="")
+
+    monkeypatch.setattr("tools.kodi_reinstall.adb_command", command)
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.adb_output",
+        lambda *_args, **_kwargs: "",
+    )
+
+    uninstall_and_clean("adb", 5038, "serial")
+
+    cleanup = next(
+        args[4]
+        for args, _kwargs in calls
+        if len(args) > 4 and args[4].startswith("rm -rf")
+    )
+    assert all("'%s'" % path in cleanup for path in KODI_STORAGE_PATHS)
+    assert "/sdcard/Android/data/org.xbmc.kodi" in cleanup
+
+
+def test_uninstall_fails_if_kodi_storage_remains(monkeypatch):
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.adb_command",
+        lambda *_args, **_kwargs: SimpleNamespace(stdout=""),
+    )
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.adb_output",
+        lambda *_args, **_kwargs: KODI_STORAGE_PATHS[0],
+    )
+
+    with pytest.raises(RuntimeError, match="left data behind"):
+        uninstall_and_clean("adb", 5038, "serial")
+
+
+def test_deploy_uses_direct_adb_restore_mode(monkeypatch):
+    calls = []
+    target = {
+        "serial": "serial",
+        "apk": "kodi.apk",
+        "expected_version": "21.3",
+        "restore_mode": "adb-push",
+        "addon_origins": {},
+    }
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.uninstall_and_clean",
+        lambda *_args: calls.append("clean"),
+    )
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.install_apk",
+        lambda *_args: calls.append("install"),
+    )
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.restore_snapshot_via_adb",
+        lambda *_args: calls.append("restore") or {"snapshot_id": "id"},
+    )
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.validate_restored_target",
+        lambda *_args: calls.append("validate") or {"result": "pass"},
+    )
+
+    assert deploy_target(
+        "adb",
+        5038,
+        target,
+        "device-script",
+        "origin-script",
+    ) == {
+        "result": "pass"
+    }
+    assert calls == ["clean", "install", "restore", "validate"]
+
+
+def create_addons_database(path, installed_origin=""):
+    connection = sqlite3.connect(path)
+    with connection:
+        connection.executescript(
+            """
+            CREATE TABLE installed (addonID TEXT, origin TEXT);
+            CREATE TABLE repo (
+                id INTEGER PRIMARY KEY,
+                addonID TEXT,
+                checksum TEXT
+            );
+            CREATE TABLE addons (
+                id INTEGER PRIMARY KEY,
+                addonID TEXT
+            );
+            CREATE TABLE addonlinkrepo (idRepo INTEGER, idAddon INTEGER);
+            INSERT INTO installed VALUES ('plugin.video.umbrella', '');
+            INSERT INTO repo VALUES (
+                1, 'repository.mwodevelop', 'checksum'
+            );
+            INSERT INTO addons VALUES (1, 'plugin.video.umbrella');
+            INSERT INTO addonlinkrepo VALUES (1, 1);
+            """
+        )
+        connection.execute(
+            "UPDATE installed SET origin=?",
+            (installed_origin,),
+        )
+    connection.close()
+
+
+def test_origin_is_assigned_only_from_an_indexed_repository(tmp_path):
+    database = tmp_path / "Addons33.db"
+    create_addons_database(database)
+
+    apply_addon_origins(
+        database,
+        {"plugin.video.umbrella": "repository.mwodevelop"},
+    )
+
+    connection = sqlite3.connect(database)
+    origin = connection.execute(
+        "SELECT origin FROM installed WHERE addonID='plugin.video.umbrella'"
+    ).fetchone()[0]
+    connection.close()
+    assert origin == "repository.mwodevelop"
+
+
+def test_origin_assignment_rejects_another_origin(tmp_path):
+    database = tmp_path / "Addons33.db"
+    create_addons_database(database, "repository.someone-else")
+
+    with pytest.raises(RuntimeError, match="different origin"):
+        apply_addon_origins(
+            database,
+            {"plugin.video.umbrella": "repository.mwodevelop"},
+        )
+
+
+def test_origin_assignment_waits_for_repository_index(tmp_path):
+    database = tmp_path / "Addons33.db"
+    create_addons_database(database)
+    connection = sqlite3.connect(database)
+    with connection:
+        connection.execute("UPDATE repo SET checksum=''")
+    connection.close()
+
+    with pytest.raises(RepositoryIndexNotReady):
+        apply_addon_origins(
+            database,
+            {"plugin.video.umbrella": "repository.mwodevelop"},
+        )

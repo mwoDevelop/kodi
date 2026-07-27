@@ -10,6 +10,7 @@ from tools.kodi_profile import (
     ensure_private_output,
     glob_regex,
     included_by_policy,
+    kodi_versions_compatible,
     requires_direct_copy,
     restore_snapshot,
     secure_private_tree,
@@ -58,6 +59,14 @@ def test_toybox_edge_case_is_copied_without_tar():
     assert not requires_direct_copy(
         "addons/skin.aeon.nox.silvo/media/Textures.xbt"
     )
+
+
+def test_kodi_upgrade_compatibility_is_same_major_and_forward_only():
+    assert kodi_versions_compatible("21.3", "21.3")
+    assert kodi_versions_compatible("21.2", "21.3", allow_upgrade=True)
+    assert not kodi_versions_compatible("21.3", "21.2", allow_upgrade=True)
+    assert not kodi_versions_compatible("21.3", "22.0", allow_upgrade=True)
+    assert not kodi_versions_compatible("21.2", "21.3")
 
 
 def test_private_output_must_be_below_ignored_directory(
