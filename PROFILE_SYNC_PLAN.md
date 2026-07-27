@@ -32,11 +32,11 @@ Stan realizacji 2026-07-27:
 - Etap 5: transakcyjny adapter Umbrella, journal, recovery, rollback i
   kwarantanna są zaimplementowane i pokryte testami lokalnymi; urządzeniowy
   apply E2E pozostaje do wykonania;
-- Etap 6: kontenerowy kontrakt Compose i live preflight QNAP zrealizowane,
-  lecz niezależny review wykazał, że bieżący Compose nie jest jeszcze gotowy
-  do uruchomienia; implementacja pozostaje podzielona na izolowany,
-  nietrwały smoke 6A możliwy przed naprawą RAID oraz produkcję 6B po Etapie 0
-  i po spełnieniu bram bezpieczeństwa API, migracji oraz backupu;
+- Etap 6A: kontenerowy kontrakt Compose, walidator polityki, hostowy lifecycle,
+  manifest GHCR `linux/amd64,linux/arm/v7` oraz nietrwały live smoke QNAP
+  z restartem, awarią/odtworzeniem i pełnym cleanupem są zrealizowane;
+  produkcja 6B pozostaje zablokowana do zakończenia Etapu 0 i spełnienia bram
+  bezpieczeństwa API, migracji, TLS oraz backupu;
 - rozszerzenie Linux/Flatpak: live discovery NUC zrealizowane dla kont `mwo`
   i `alek`; registry v2, neutralne ADB/SSH, lifecycle Android/Flatpak oraz
   read-only inventory są zaimplementowane i pokryte testami, lecz live

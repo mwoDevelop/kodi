@@ -1,0 +1,10 @@
+services:
+  profile-sync:
+    restart: "no"
+    labels:
+      io.mwodevelop.profile-sync.mode: smoke
+    healthcheck:
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
