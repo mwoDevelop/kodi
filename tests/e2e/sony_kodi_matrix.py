@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import re
 import socket
@@ -398,6 +399,38 @@ def terminal_failure_state(log_text: str) -> str | None:
     return None
 
 
+def playback_log_state(log_text: str) -> str | None:
+    """Recognize playback that was too brief for JSON-RPC polling to observe."""
+    opened = log_text.rfind("VideoPlayer::OpenFile")
+    demuxed = log_text.rfind("Creating Demuxer")
+    if opened < 0 or demuxed < opened:
+        return None
+    closed = max(
+        log_text.rfind("CVideoPlayer::CloseFile"),
+        log_text.rfind("CVideoPlayer::OnExit"),
+    )
+    return "playback_stopped_early" if closed > demuxed else "playback_started"
+
+
+def successful_source_fingerprint(log_text: str) -> str | None:
+    """Return a non-reversible fingerprint of the magnet used for playback."""
+    latest_info_hash = None
+    successful_info_hash = None
+    for line in log_text.splitlines():
+        match = re.search(
+            r"(?i)magnet:\?[^\s]*\bxt=urn:btih:"
+            r"([a-f0-9]{40}|[a-z2-7]{32})(?=[^a-z0-9]|$)",
+            line,
+        )
+        if match:
+            latest_info_hash = match.group(1).lower()
+        if "Played file as resolve" in line and latest_info_hash:
+            successful_info_hash = latest_info_hash
+    if successful_info_hash is None:
+        return None
+    return hashlib.sha256(successful_info_hash.encode("ascii")).hexdigest()[:16]
+
+
 def plugin_url(case: dict, e2e_nonce: int | None = None) -> str:
     meta = {
         key: value
@@ -560,6 +593,7 @@ def run_case(
     timeout: int,
     observe_seconds: int,
     direct_play: bool = False,
+    poll_seconds: float = 0.5,
 ) -> dict:
     stop_playback(rpc)
     kodi_start_line = log_line_count(adb, serial) + 1
@@ -581,20 +615,23 @@ def run_case(
         try:
             player_id = active_video_player(rpc)
         except (OSError, RuntimeError, socket.timeout):
-            time.sleep(2)
+            time.sleep(poll_seconds)
             continue
         if player_id is None:
             if playback_started_at is not None:
                 state = "playback_stopped_early"
                 break
             if time.monotonic() >= next_failure_probe:
-                state = terminal_failure_state(
-                    log_since(adb, serial, kodi_start_line)
-                ) or state
-                if state == "unplayable":
+                kodi_probe = log_since(adb, serial, kodi_start_line)
+                state = (
+                    terminal_failure_state(kodi_probe)
+                    or playback_log_state(kodi_probe)
+                    or state
+                )
+                if state in {"unplayable", "playback_stopped_early"}:
                     break
                 next_failure_probe = time.monotonic() + 4
-            time.sleep(2)
+            time.sleep(poll_seconds)
             continue
         if playback_started_at is None:
             playback_started_at = time.monotonic()
@@ -605,7 +642,7 @@ def run_case(
         if time.monotonic() - playback_started_at >= observe_seconds:
             state = "played"
             break
-        time.sleep(2)
+        time.sleep(poll_seconds)
 
     resolve_seconds = (
         round(playback_started_at - started_at, 3)
@@ -641,6 +678,7 @@ def run_case(
         "errors": errors,
         "resolver_diagnostics": resolver_diagnostics,
         "resolver_errors": resolver_errors,
+        "source_fingerprint": successful_source_fingerprint(umbrella_log),
     }
 
 
@@ -658,6 +696,12 @@ def main() -> int:
     parser.add_argument("--case", action="append", choices=sorted(CASES))
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--observe-seconds", type=int, default=20)
+    parser.add_argument(
+        "--poll-seconds",
+        type=float,
+        default=0.5,
+        help="JSON-RPC player polling interval",
+    )
     parser.add_argument(
         "--direct-play",
         action="store_true",
@@ -717,6 +761,7 @@ def main() -> int:
             args.timeout,
             args.observe_seconds,
             args.direct_play,
+            args.poll_seconds,
         )
         report["results"].append(result)
         print(

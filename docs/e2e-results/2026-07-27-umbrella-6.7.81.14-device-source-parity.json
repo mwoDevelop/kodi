@@ -1,0 +1,88 @@
+{
+  "schema": 1,
+  "date": "2026-07-27",
+  "artifact": {
+    "addon": "plugin.video.umbrella",
+    "version": "6.7.81.14",
+    "channel": "testing"
+  },
+  "method": {
+    "autoplay": true,
+    "all_providers": true,
+    "rescrape": true,
+    "observe_seconds": 15,
+    "poll_seconds": 0.5,
+    "source_fingerprint": "first 16 hex characters of SHA-256(info_hash)",
+    "tokens_collected": false,
+    "urls_collected": false
+  },
+  "devices": {
+    "bluestacks1": {
+      "serial": "127.0.0.1:5555",
+      "model": "SM-S901E",
+      "android": "11",
+      "kodi": "21.3",
+      "vpn": false
+    },
+    "sony_tv": {
+      "serial": "192.168.1.12:5555",
+      "model": "BRAVIA 4K GB ATV3",
+      "android": "9",
+      "kodi": "21.2",
+      "vpn": "NordVPN split tunnel, Kodi included"
+    }
+  },
+  "results": [
+    {
+      "case": "breaking_bad_s01e01",
+      "source_fingerprint": "6f39c1e78d9c75c4",
+      "bluestacks1": {
+        "state": "played",
+        "resolve_seconds": 11.647,
+        "observed_seconds": 15.192
+      },
+      "sony_tv": {
+        "state": "played",
+        "resolve_seconds": 23.006,
+        "observed_seconds": 15.453
+      },
+      "same_source": true
+    },
+    {
+      "case": "house_of_the_dragon_s01e01",
+      "source_fingerprint": "475e9062f72fbd8e",
+      "bluestacks1": {
+        "state": "played",
+        "resolve_seconds": 12.139,
+        "observed_seconds": 15.185
+      },
+      "sony_tv": {
+        "state": "played",
+        "resolve_seconds": 25.111,
+        "observed_seconds": 15.516
+      },
+      "same_source": true
+    },
+    {
+      "case": "house_of_the_dragon_s03e01",
+      "source_fingerprint": "cc3f80775a9d0d97",
+      "bluestacks1": {
+        "state": "played",
+        "resolve_seconds": 13.648,
+        "observed_seconds": 15.184
+      },
+      "sony_tv": {
+        "state": "played",
+        "resolve_seconds": 22.395,
+        "observed_seconds": 15.039
+      },
+      "same_source": true
+    }
+  ],
+  "summary": {
+    "played": 6,
+    "failed": 0,
+    "same_source": 3,
+    "different_source": 0
+  }
+}

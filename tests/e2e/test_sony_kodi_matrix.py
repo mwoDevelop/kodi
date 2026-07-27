@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import struct
 
 import sony_kodi_matrix
@@ -7,8 +8,10 @@ from sony_kodi_matrix import (
     EventClient,
     diagnostic_lines,
     open_media,
+    playback_log_state,
     plugin_url,
     redact,
+    successful_source_fingerprint,
     terminal_failure_state,
 )
 
@@ -90,6 +93,30 @@ def test_terminal_failure_state_detects_kodi_unplayable_result():
     )
     assert terminal_failure_state(log) == "unplayable"
     assert terminal_failure_state("Creating Demuxer") is None
+
+
+def test_playback_log_state_detects_transient_player_between_rpc_polls():
+    started = "VideoPlayer::OpenFile\nCreating Demuxer\n"
+    assert playback_log_state(started) == "playback_started"
+    assert (
+        playback_log_state(started + "CVideoPlayer::CloseFile\n")
+        == "playback_stopped_early"
+    )
+    assert playback_log_state("VideoPlayer::OpenFile\n") is None
+
+
+def test_successful_source_fingerprint_tracks_last_magnet_before_playback():
+    failed_hash = "a" * 40
+    played_hash = "b" * 40
+    log = (
+        "Sending MAGNET: magnet:?xt=urn:btih:%s\n"
+        "no_playable_url\n"
+        "Sending MAGNET: magnet:?xt=urn:btih:%s&dn=title\n"
+        "Played file as resolve\n" % (failed_hash, played_hash)
+    )
+    expected = hashlib.sha256(played_hash.encode("ascii")).hexdigest()[:16]
+    assert successful_source_fingerprint(log) == expected
+    assert successful_source_fingerprint("Played file as resolve\n") is None
 
 
 def test_plugin_url_nonce_prevents_kodi_from_reusing_a_previous_invocation():
