@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "devices": {
+    "android-tv": {
+      "display_name": "Living room Android TV",
+      "roles": ["consumer"],
+      "expected": {
+        "model": "<private-model>",
+        "kodi_major": 21,
+        "abi": ["armeabi-v7a"]
+      },
+      "endpoints": {
+        "adb": "<private-adb-endpoint>",
+        "jsonrpc": "http://<private-host>:9090"
+      },
+      "profile_channel": "home-stable"
+    },
+    "emulator-master": {
+      "display_name": "Kodi publisher emulator",
+      "roles": ["consumer", "publisher"],
+      "expected": {
+        "model": "<private-model>",
+        "kodi_major": 21
+      },
+      "endpoints": {
+        "adb": "<private-adb-endpoint>"
+      },
+      "profile_channel": "home-stable"
+    }
+  }
+}

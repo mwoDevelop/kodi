@@ -1,44 +1,99 @@
 {
-  "schema": 1,
+  "schema": 2,
   "name": "portable-android-kodi-profile",
-  "include": [
-    "addons/**",
-    "userdata/*.xml",
-    "userdata/*.json",
-    "userdata/*.xsp",
-    "userdata/addon_data/**",
-    "userdata/keymaps/**",
-    "userdata/library/**",
-    "userdata/playlists/**",
-    "userdata/profiles/**",
-    "userdata/Savestates/**"
-  ],
-  "exclude": [
-    "addons/packages/**",
-    "addons/temp/**",
-    "userdata/Database/**",
-    "userdata/Thumbnails/**",
-    "userdata/peripheral_data/**",
-    "userdata/temp/**",
-    "userdata/addon_data/**/cache/**",
-    "userdata/addon_data/**/temp/**",
-    "userdata/addon_data/plugin.video.umbrella/artwork.db",
-    "userdata/addon_data/plugin.video.umbrella/cache.db",
-    "userdata/addon_data/plugin.video.umbrella/cache.v",
-    "userdata/addon_data/plugin.video.umbrella/fanarttv.db",
-    "userdata/addon_data/plugin.video.umbrella/metadata.db",
-    "userdata/addon_data/plugin.video.umbrella/providers.db",
-    "userdata/addon_data/plugin.video.umbrella/search.db",
-    "userdata/addon_data/plugin.video.umbrella/traktSync.db",
-    "userdata/addon_data/plugin.video.umbrella/*_qr.png",
-    "**/*.log",
-    "**/*.log.old",
-    "**/*.tmp"
-  ],
-  "notes": [
-    "Add-on code is retained so restore is independent of repository availability.",
-    "Addons, texture, EPG, thumbnail and peripheral databases are rebuilt.",
-    "Umbrella credentials remain in addon_data/plugin.video.umbrella/settings.xml.",
-    "Library databases are intentionally deferred from schema 1 because they cannot be atomically replaced while Kodi owns them."
-  ]
+  "scopes": {
+    "disaster_recovery": {
+      "include": [
+        "addons/**",
+        "userdata/*.xml",
+        "userdata/*.json",
+        "userdata/*.xsp",
+        "userdata/addon_data/**",
+        "userdata/keymaps/**",
+        "userdata/library/**",
+        "userdata/playlists/**",
+        "userdata/profiles/**",
+        "userdata/Savestates/**"
+      ],
+      "exclude": [
+        "addons/packages/**",
+        "addons/temp/**",
+        "userdata/Database/**",
+        "userdata/Thumbnails/**",
+        "userdata/peripheral_data/**",
+        "userdata/temp/**",
+        "userdata/addon_data/**/cache/**",
+        "userdata/addon_data/**/temp/**",
+        "userdata/addon_data/plugin.video.umbrella/artwork.db",
+        "userdata/addon_data/plugin.video.umbrella/cache.db",
+        "userdata/addon_data/plugin.video.umbrella/cache.v",
+        "userdata/addon_data/plugin.video.umbrella/fanarttv.db",
+        "userdata/addon_data/plugin.video.umbrella/metadata.db",
+        "userdata/addon_data/plugin.video.umbrella/providers.db",
+        "userdata/addon_data/plugin.video.umbrella/search.db",
+        "userdata/addon_data/plugin.video.umbrella/traktSync.db",
+        "userdata/addon_data/plugin.video.umbrella/*_qr.png",
+        "**/*.log",
+        "**/*.log.old",
+        "**/*.tmp"
+      ],
+      "notes": [
+        "Add-on code is retained so restore is independent of repository availability.",
+        "Addons, texture, EPG, thumbnail and peripheral databases are rebuilt.",
+        "Umbrella credentials remain in addon_data/plugin.video.umbrella/settings.xml.",
+        "Library databases are deferred because they cannot be atomically replaced while Kodi owns them."
+      ]
+    },
+    "routine": {
+      "default": "excluded",
+      "default_profile_only": true,
+      "device_local_paths": [
+        "userdata/addon_data/service.mwodevelop.profilesync/**"
+      ],
+      "adapters": [
+        {
+          "id": "kodi.core",
+          "adapter": "settings_xml",
+          "path": "userdata/guisettings.xml",
+          "apply_mode": "hot_apply",
+          "settings": {
+            "lookandfeel.skin": {
+              "type": "string",
+              "class": "portable"
+            }
+          }
+        },
+        {
+          "id": "umbrella.preferences",
+          "adapter": "settings_xml",
+          "addon_id": "plugin.video.umbrella",
+          "path": "userdata/addon_data/plugin.video.umbrella/settings.xml",
+          "apply_mode": "next_start",
+          "compatible_versions": ">=6.7.81,<7",
+          "settings": {
+            "cache.providers": {
+              "type": "integer",
+              "class": "portable"
+            },
+            "rd_cloud.enabled": {
+              "type": "boolean",
+              "class": "portable"
+            },
+            "realdebrid.filter.filename": {
+              "type": "boolean",
+              "class": "portable"
+            },
+            "scrapers.timeout": {
+              "type": "integer",
+              "class": "portable"
+            },
+            "sources.useonlyone": {
+              "type": "boolean",
+              "class": "portable"
+            }
+          }
+        }
+      ]
+    }
+  }
 }

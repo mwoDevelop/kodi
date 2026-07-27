@@ -63,12 +63,27 @@ def glob_regex(pattern):
 
 def load_policy(path):
     document = json.loads(Path(path).read_text(encoding="utf-8"))
-    if document.get("schema") != SCHEMA:
+    if document.get("schema") not in (SCHEMA, 2):
         raise ValueError("unsupported Kodi profile policy")
+    if document.get("schema") == 2:
+        scopes = document.get("scopes")
+        if not isinstance(scopes, dict) or not isinstance(
+            scopes.get("disaster_recovery"), dict
+        ):
+            raise ValueError("Kodi profile policy lacks disaster recovery scope")
     return document
 
 
+def disaster_recovery_policy(policy):
+    if policy.get("schema") == 1:
+        return policy
+    if policy.get("schema") == 2:
+        return policy["scopes"]["disaster_recovery"]
+    raise ValueError("unsupported Kodi profile policy")
+
+
 def included_by_policy(relative, policy):
+    policy = disaster_recovery_policy(policy)
     relative = PurePosixPath(relative).as_posix()
     included = any(
         glob_regex(item).fullmatch(relative) for item in policy["include"]
