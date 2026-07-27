@@ -26,7 +26,8 @@ Stan realizacji 2026-07-27:
   kwarantanna są zaimplementowane i pokryte testami lokalnymi; urządzeniowy
   apply E2E pozostaje do wykonania;
 - Etap 6: kontenerowy kontrakt Compose i live preflight QNAP zrealizowane;
-  produkcyjne wdrożenie nadal blokuje Etap 0;
+  implementacja na QNAP jest podzielona na nietrwały smoke możliwy przed
+  naprawą RAID oraz produkcyjną aplikację Container Station po Etapie 0;
 - Etapy 7–8: nierozpoczęte.
 
 ## 1. Cel
@@ -258,7 +259,8 @@ kodi/
 │   ├── kodi_devices.py
 │   ├── kodi_profile.py
 │   ├── kodi_reinstall.py
-│   └── profile_sync_admin.py
+│   ├── profile_sync_admin.py
+│   └── qnap_profile_sync.py
 ├── profile-sync-addon/             # osobne repo/submoduł
 └── .kodi-private/
     ├── devices.json
@@ -560,6 +562,128 @@ Nie jest wymagany PostgreSQL ani wielokontenerowa infrastruktura. Compose
 pozostaje deklaratywnym kontraktem wdrożenia i umożliwia późniejsze dodanie
 reverse proxy lub zewnętrznej bazy bez zmiany dodatku Kodi.
 
+### 10.1 Postać wdrożenia w Container Station
+
+Backend jest wdrażany na QNAP jako jedna aplikacja Docker Compose zarządzana
+przez Container Station. Źródłem deklaracji jest:
+
+```text
+deploy/qnap-profile-sync/compose.yaml
+```
+
+Nie tworzymy kontenera ręcznie w GUI. Container Station importuje tę samą
+deklarację Compose, która przechodzi walidację lokalną i w CI. Nazwa aplikacji
+to `qnap-profile-sync`, a kontenera `mwodevelop-profile-sync`.
+
+Docelowa topologia:
+
+```text
+Sony / BlueStacks
+        |
+        | HTTPS, tylko LAN
+        v
+QNAP reverse proxy
+        |
+        | http://127.0.0.1:18765
+        v
+Container Station application: qnap-profile-sync
+        |
+        +-- /data  -> /share/ProfileSync/data
+        |
+        +-- key registry (read-only)
+             -> /share/ProfileSync/config/key-registry.json
+```
+
+Kontener:
+
+- działa jako UID/GID `10001:10001`;
+- ma root filesystem `read_only`;
+- odrzuca wszystkie capabilities;
+- używa `no-new-privileges`;
+- ma `init`, limit pamięci 256 MB i limit 128 procesów;
+- używa `tmpfs` wyłącznie dla `/tmp`;
+- publikuje API tylko na loopback QNAP;
+- ma healthcheck HTTP i `restart: unless-stopped`;
+- uruchamia wyłącznie tryb ze zweryfikowanym key registry;
+- nie otrzymuje administracyjnych credentiali QNAP.
+
+### 10.2 Artefakty i katalogi QNAP
+
+Po przejściu bramy storage powstaje dedykowany udział:
+
+```text
+/share/ProfileSync/
+  compose/
+    compose.yaml
+    deployment.env
+    current-digest.txt
+    previous-digest.txt
+  config/
+    key-registry.json
+    tls-bootstrap/
+  data/
+    profile-sync.sqlite
+    blobs/
+    uploads/
+  backup/
+    application/
+    restore-drills/
+```
+
+Zasady:
+
+- `deployment.env`, rejestr kluczy i bootstrap TLS mają minimalne uprawnienia
+  i nie trafiają do Git;
+- plik Compose nie zawiera tokenów, haseł ani kluczy prywatnych;
+- obraz jest wskazywany jako `ghcr.io/...@sha256:<digest>`;
+- `data` i `config` są bind mountami, nie anonimowymi volume;
+- katalog `backup` nie jest montowany do procesu API;
+- dane Container Station i dane aplikacji nie są jedyną kopią backupu.
+
+### 10.3 Dwa tryby realizacji
+
+Przed naprawą RAID dopuszczony jest tylko `qnap-smoke`:
+
+- identyczny obraz ARMv7 i te same ograniczenia bezpieczeństwa;
+- baza oraz key registry wygenerowane wyłącznie dla testu;
+- dane w `tmpfs` albo w jednoznacznie oznaczonym katalogu jednorazowym;
+- brak prawdziwych profili, credentiali, kluczy produkcyjnych i autostartu;
+- po teście eksportowany jest wyłącznie zredagowany raport, a stan testowy
+  jest usuwany;
+- restart QNAP może przerwać test bez utraty istotnych danych.
+
+Po uzyskaniu `[UU]`, backupu poza NAS i udanym restore drill uruchamiany jest
+`qnap-production`:
+
+- trwałe katalogi `/share/ProfileSync`;
+- QNAP reverse proxy z HTTPS;
+- pairing z przypiętym bootstrapem zaufania;
+- `restart: unless-stopped` i automatyczny start aplikacji Container Station;
+- snapshoty, retencja i backup poza QNAP;
+- monitoring health oraz kontrolowany rollback obrazu i danych.
+
+Smoke i produkcja nie współdzielą bazy, tokenów, key registry ani nazwy
+katalogu danych. Wynik smoke nie może zostać przemianowany na produkcję.
+
+### 10.4 Aktualizacja i rollback kontenera
+
+GitHub Actions buduje i testuje manifest wieloarchitekturowy, ale nie wdraża
+samodzielnie na QNAP. Wdrożenie wykonuje skrypt administracyjny z hosta:
+
+1. odczytuje aktualny i docelowy digest;
+2. sprawdza obecność wariantu `linux/arm/v7`;
+3. wykonuje backup aplikacyjny i zapisuje poprzedni digest;
+4. uruchamia migrację/preflight na kopii danych;
+5. pobiera obraz po digescie;
+6. renderuje i waliduje Compose;
+7. odtwarza aplikację Container Station;
+8. czeka na healthcheck;
+9. wykonuje API smoke i test z obu klientów Kodi;
+10. po błędzie przywraca poprzedni digest oraz kompatybilny backup DB.
+
+Nie stosujemy Watchtower, ruchomych tagów, `latest`, automatycznych migracji
+bez backupu ani samoczynnej promocji profilu.
+
 Przykładowe zasoby:
 
 ```text
@@ -570,7 +694,7 @@ POST /v1/channels/{channel}/assignments
 POST /v1/channels/{channel}/promote
 POST /v1/channels/{channel}/rollback
 GET  /v1/enrollments/{enrollment_id}/assignment
-GET  /v1/revisions/{revision_id}
+GET  /v1/enrollments/{enrollment_id}/revisions/{revision_id}
 GET  /v1/blobs/{sha256}
 POST /v1/reports
 GET  /health
@@ -578,17 +702,6 @@ GET  /health
 
 Trwałe dane są montowane z dedykowanego udziału QNAP. Nic ważnego nie jest
 przechowywane wewnątrz warstwy kontenera ani katalogu QPKG.
-
-Aktualizacja serwera jest kontrolowaną operacją hostową:
-
-1. spójny backup DB i manifestu blobów;
-2. preflight migracji na kopii;
-3. pull obrazu po konkretnym digest;
-4. uruchomienie migracji i health check;
-5. rollback do poprzedniego digestu i kompatybilnej kopii DB po błędzie.
-
-Nie stosujemy Watchtower, ruchomych tagów ani automatycznego wdrożenia po
-samym zbudowaniu obrazu.
 
 ## 11. Dodatek Kodi
 
@@ -897,11 +1010,11 @@ i przechowywanie istotnych danych na QNAP. Zdegradowany QNAP nie jest
 7. Dodać crash-resilient journal, pending next-start i kwarantannę.
 8. Dodać health report i kompensacyjny rollback konfiguracji.
 9. Dodać admin CLI poza Kodi.
-10. Opublikować wyłącznie w `testing`. **Zrealizowane dla wersji 0.1.4.**
+10. Opublikować wyłącznie w `testing`. **Zrealizowane dla wersji 0.1.5.**
 
 Kontrolowany test 2026-07-27 potwierdził na BlueStacks i Sony TV:
 
-- instalację wersji 0.1.4 z `repository.mwodevelop.testing`;
+- instalację wersji 0.1.5 z `repository.mwodevelop.testing`;
 - jednorazowy pairing bez wynoszenia tokenu i klucza z procesu Kodi;
 - uwierzytelniony heartbeat;
 - weryfikację podpisanego przypisania candidate;
@@ -914,7 +1027,8 @@ PYTHONPATH=. .venv/bin/python \
   tests/e2e/profile_sync_addon_device.py \
   --device bluestacks1 \
   --device sony-tv \
-  --result docs/e2e-results/2026-07-27-profile-sync-addon-devices.json
+  --result \
+  docs/e2e-results/2026-07-27-profile-sync-addon-0.1.5-read-only.json
 ```
 
 ### Etap 5: E2E ustawień niesekretnych
@@ -938,18 +1052,44 @@ PYTHONPATH=. .venv/bin/python \
 
 ### Etap 6: QNAP
 
-1. Utworzyć dedykowany udział danych.
-2. Wdrożyć jako aplikację Container Station z Docker Compose i digestem
-   obrazu; nie instalować backendu bezpośrednio w QTS ani jako QPKG.
-3. Ograniczyć port do LAN.
-4. Skonfigurować HTTPS.
-5. Skonfigurować health check i restart policy.
-6. Wykonać runtime smoke ARMv7, migrację SQLite i TLS z obu klientów Kodi.
-7. Skonfigurować kontrolowany update/rollback obrazu po digescie.
-8. Skonfigurować retencję aplikacyjną.
-9. Skonfigurować snapshoty QTS.
-10. Skonfigurować backup poza QNAP.
-11. Wykonać restore drill.
+#### Etap 6A: implementacja i nietrwały smoke
+
+1. Po restarcie QNAP ponownie potwierdzić SSH, Container Station, socket
+   Dockera, Compose, `armv7l`, wolne miejsce i aktualny `/proc/mdstat`.
+2. Opublikować zweryfikowany obraz `linux/amd64,linux/arm/v7` w GHCR i zapisać
+   jego digest.
+3. Dodać skrypt hostowy `qnap_profile_sync.py` z operacjami `preflight`,
+   `smoke-deploy`, `status`, `logs`, `verify`, `destroy-smoke`.
+4. Renderować istniejący Compose z osobnego, niewersjonowanego env.
+5. Uruchomić jednorazową aplikację `qnap-profile-sync-smoke` z testowym key
+   registry i nietrwałą bazą.
+6. Potwierdzić healthcheck, architekturę obrazu, migrację SQLite, restart
+   kontenera i brak sekretów w inspect/logach.
+7. Wykonać pairing, heartbeat, signed revision download i read-only check z
+   BlueStacks oraz Sony.
+8. Zasymulować niedostępność QNAP i potwierdzić brak mutacji Kodi.
+9. Zapisać zredagowany raport E2E w `docs/e2e-results`.
+10. Usunąć aplikację smoke i wszystkie jej dane testowe.
+
+Etap 6A można wykonać przy zdegradowanym RAID, ponieważ nie przechowuje
+istotnych ani unikalnych danych.
+
+#### Etap 6B: produkcyjna aplikacja Container Station
+
+1. Przejść Etap 0: RAID `[UU]`, backup poza NAS i restore niewrażliwego pliku.
+2. Utworzyć udział i strukturę `/share/ProfileSync`.
+3. Utworzyć dedykowanego właściciela UID/GID oraz minimalne ACL.
+4. Wygenerować produkcyjny key registry i bootstrap zaufania poza kontenerem.
+5. Wdrożyć `qnap-profile-sync` jako aplikację Container Station z Docker
+   Compose i przypiętym digestem.
+6. Skonfigurować QNAP reverse proxy: HTTPS z LAN do loopback kontenera.
+7. Potwierdzić brak bezpośrednio wystawionego portu API poza loopback.
+8. Uruchomić migrację, healthcheck, pairing i read-only E2E obu klientów.
+9. Skonfigurować restart po restarcie QNAP i wykonać test pełnego rebootu.
+10. Skonfigurować snapshoty QTS, retencję aplikacyjną i backup poza QNAP.
+11. Wykonać restore drill serwera na oddzielnym katalogu danych.
+12. Zweryfikować aktualizację do nowego digestu i rollback do poprzedniego.
+13. Dopiero po canary dopuścić QNAP jako źródło profilu `active`.
 
 ### Etap 7: zaszyfrowane sekrety
 
