@@ -108,12 +108,22 @@ class FlatpakKodiLifecycle(KodiPlatformLifecycle):
         if expected_abis and identity.architecture not in expected_abis:
             raise TransportError("Linux architecture differs from inventory")
         app_id = expected["flatpak_app_id"]
-        version = self._execute(
-            ("flatpak", "info", "--show-version", app_id)
-        ).stdout.strip()
-        flatpak_arch = self._execute(
-            ("flatpak", "info", "--show-arch", app_id)
-        ).stdout.strip()
+        installed = self._execute(
+            (
+                "flatpak",
+                "list",
+                "--app",
+                "--columns=application,arch,version",
+            )
+        ).stdout.splitlines()
+        matching = [
+            line.split("\t")
+            for line in installed
+            if line.split("\t", 1)[0] == app_id
+        ]
+        if len(matching) != 1 or len(matching[0]) != 3:
+            raise TransportError("Flatpak Kodi inventory is ambiguous")
+        _, flatpak_arch, version = (item.strip() for item in matching[0])
         if not version or not flatpak_arch:
             raise TransportError("Flatpak Kodi inventory is incomplete")
         if _major(version) != expected["kodi_major"]:
