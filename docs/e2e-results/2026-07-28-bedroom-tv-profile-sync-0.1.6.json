@@ -1,0 +1,15 @@
+{
+  "results": [
+    {
+      "addon_version": "0.1.6",
+      "authenticated_heartbeat": "pass",
+      "installed_origin": "repository.mwodevelop.testing",
+      "logical_device_id": "bedroom-tv",
+      "pairing": "pass",
+      "read_only_no_apply": "pass",
+      "result": "pass",
+      "signed_candidate_check": "pass"
+    }
+  ],
+  "schema": 1
+}

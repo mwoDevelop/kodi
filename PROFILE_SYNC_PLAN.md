@@ -2,7 +2,7 @@
 
 Status: plan po review, w realizacji etapowej
 
-Data: 2026-07-27
+Data: 2026-07-28
 
 Repo nadrzędne: `mwoDevelop/kodi`
 
@@ -16,7 +16,7 @@ Raporty review:
 - `docs/PROFILE_SYNC_QNAP_PLAN_REVIEW.md`;
 - `docs/PROFILE_SYNC_NUC_PLAN_REVIEW.md`.
 
-Stan realizacji 2026-07-27:
+Stan realizacji 2026-07-28:
 
 - Etap 1: zrealizowany lokalnie i pokryty testami;
 - Etap 2: schema 2 portable-common oraz schema 3 z deterministycznymi
@@ -27,8 +27,9 @@ Stan realizacji 2026-07-27:
 - Etap 4: osobne repo dodatku, pairing, heartbeat i podpisany check
   read-only opublikowane w `testing`; wersja 0.1.6 wybiera warstwy wyłącznie
   z podpisanego assignmentu i administracyjnych target tags; E2E wersji
-  0.1.5 zaliczone na BlueStacks i Sony TV, a E2E 0.1.6 na Bedroom TV czeka
-  na ponowne włączenie urządzenia;
+  0.1.5 zaliczone na BlueStacks i Sony TV, a E2E 0.1.6 na Bedroom TV zalicza
+  instalację z repo testing, pairing, uwierzytelniony heartbeat, podpisany
+  check i invariant read-only no-apply;
 - Etap 5: transakcyjny adapter Umbrella, journal, recovery, rollback i
   kwarantanna są zaimplementowane i pokryte testami lokalnymi; urządzeniowy
   apply E2E pozostaje do wykonania;
@@ -39,13 +40,14 @@ Stan realizacji 2026-07-27:
   bezpieczeństwa API, migracji, TLS oraz backupu;
 - rozszerzenie Linux/Flatpak: live discovery NUC zrealizowane dla kont `mwo`
   i `alek`; registry v2, neutralne ADB/SSH, lifecycle Android/Flatpak oraz
-  read-only inventory są zaimplementowane i pokryte testami, lecz live
-  kwalifikacja NUC czeka na jego dostępność oraz osobne klucze SSH;
+  read-only inventory są zaimplementowane i pokryte testami; osobne klucze SSH
+  obu kont zostały zainstalowane i przeszły test izolacji między kontami, lecz
+  dalsza live kwalifikacja czeka na ponowną dostępność NUC;
 - rozszerzenie Android: `Bedroom TV` (`Google TV Streamer`, codename
   `kirkwood`) znajduje się w prywatnym registry v2, przeszedł read-only
   lifecycle inventory oraz odwracalny rollout Kodi 21.3, profilu, skórki i
-  dodatków. E2E Profile Sync 0.1.6 i playback po poprawce Umbrella pozostają
-  do dokończenia po ponownym włączeniu urządzenia;
+  dodatków. E2E Profile Sync 0.1.6 i playback WatchNixtoons2 0.26.1 zakończyły
+  się powodzeniem; playback po poprawce Umbrella pozostaje osobną bramą;
 - Etapy 7–8: nierozpoczęte.
 
 ## 1. Cel
@@ -177,7 +179,7 @@ Znane cele:
 - BlueStacks1, model `SM-S901E`;
 - Sony Android TV, model `BRAVIA 4K GB ATV3`;
 - Bedroom TV, model `Google TV Streamer`, codename `kirkwood`, Android 14,
-  Kodi 21.2, `armeabi-v7a`;
+  Kodi 21.3, `armeabi-v7a`;
 - QNAP TS-x31P2.
 
 Rzeczywiste adresy pozostają wyłącznie w `.kodi-private`.

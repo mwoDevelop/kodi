@@ -1,3 +1,7 @@
+import sqlite3
+from pathlib import Path
+from types import SimpleNamespace
+
 from tests.e2e import profile_sync_addon_device
 
 
@@ -142,3 +146,74 @@ def test_execute_builtin_prefers_kodi_jsonrpc(monkeypatch):
             {"command": "UpdateAddonRepos", "wait": False},
         )
     ]
+
+
+def test_foreground_wakes_android_without_blocking_am_start(monkeypatch):
+    commands = []
+
+    def fake_command(_adb, _port, _serial, *args, **kwargs):
+        commands.append((args, kwargs))
+
+    monkeypatch.setattr(profile_sync_addon_device, "adb_command", fake_command)
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "adb_output",
+        lambda *_args, **_kwargs: (
+            "mCurrentFocus=Window{1 u0 org.xbmc.kodi/org.xbmc.kodi.Main}"
+        ),
+    )
+
+    profile_sync_addon_device._ensure_kodi_foreground(
+        "adb", 5038, "device"
+    )
+
+    assert commands[0][0] == (
+        "shell",
+        "input",
+        "keyevent",
+        "KEYCODE_WAKEUP",
+    )
+    assert commands[1][0] == (
+        "shell",
+        "am",
+        "start",
+        "-n",
+        "org.xbmc.kodi/.Main",
+    )
+    assert "-W" not in commands[1][0]
+
+
+def test_repository_install_and_index_are_distinct_states(monkeypatch):
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "adb_output",
+        lambda *_args, **_kwargs: "/remote/Addons33.db",
+    )
+
+    def fake_command(_adb, _port, _serial, *args, **_kwargs):
+        if args[0] == "shell":
+            return SimpleNamespace(returncode=0)
+        if args[0] == "pull":
+            database = Path(args[-1])
+            with sqlite3.connect(database) as connection:
+                connection.execute(
+                    "CREATE TABLE installed (addonID TEXT)"
+                )
+                connection.execute("CREATE TABLE repo (addonID TEXT)")
+                connection.execute(
+                    "INSERT INTO installed VALUES (?)",
+                    (profile_sync_addon_device.ORIGIN,),
+                )
+            return SimpleNamespace(returncode=0)
+        raise AssertionError("unexpected ADB command: %s" % (args,))
+
+    monkeypatch.setattr(
+        profile_sync_addon_device, "adb_command", fake_command
+    )
+
+    assert profile_sync_addon_device._repository_installed(
+        "adb", 5038, "device"
+    )
+    assert not profile_sync_addon_device._repository_indexed(
+        "adb", 5038, "device"
+    )
