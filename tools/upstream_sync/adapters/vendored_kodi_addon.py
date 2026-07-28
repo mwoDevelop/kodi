@@ -6,6 +6,7 @@ import json
 import stat
 import subprocess
 import zipfile
+import xml.etree.ElementTree as ET
 
 from ..models import (
     AvailabilityState,
@@ -133,23 +134,29 @@ def _archive_url(repository, commit, archive):
 
 
 def _latest_archive(checkout, commit, addon_id):
-    prefix = addon_id + "/"
-    candidates = []
-    for path in run_git(checkout, "ls-tree", "-r", "--name-only", commit).splitlines():
-        if not path.startswith(prefix) or not path.endswith(".zip"):
-            continue
-        filename = path.rsplit("/", 1)[-1]
-        marker = addon_id + "-"
-        if not filename.startswith(marker):
-            continue
-        version = filename[len(marker) : -4]
-        try:
-            candidates.append((KodiVersion(version), version, path))
-        except ValueError:
-            continue
-    if not candidates:
-        raise ValueError("upstream add-on archive was not found")
-    _, version, path = max(candidates, key=lambda item: item[0])
+    descriptor_path = addon_id + "/addon.xml"
+    try:
+        descriptor = ET.fromstring(_git_bytes(checkout, commit, descriptor_path))
+    except ET.ParseError as error:
+        raise ValueError("upstream add-on descriptor is invalid: %s" % error) from error
+    if descriptor.attrib.get("id") != addon_id:
+        raise ValueError("upstream add-on descriptor ID does not match the manifest")
+    version = descriptor.attrib.get("version")
+    if not version:
+        raise ValueError("upstream add-on descriptor has no version")
+    KodiVersion(version)
+    path = "%s/%s-%s.zip" % (addon_id, addon_id, version)
+    result = subprocess.run(
+        ["git", "-C", str(checkout), "cat-file", "-e", "%s:%s" % (commit, path)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if result.returncode:
+        raise ValueError(
+            "archive matching the current upstream descriptor was not found: %s"
+            % path
+        )
     return version, path
 
 

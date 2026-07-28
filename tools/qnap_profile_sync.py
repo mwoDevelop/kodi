@@ -7,15 +7,24 @@ import argparse
 import json
 import re
 import shlex
+import stat
 import time
 from pathlib import Path, PurePosixPath
 
 try:
     from kodi_inventory import load_private_references
-    from qnap_compose_policy import IMAGE, render_compose, validate_policy
+    from qnap_compose_policy import (
+        IMAGE,
+        explicit_bind_targets,
+        validate_policy,
+    )
 except ModuleNotFoundError:
     from tools.kodi_inventory import load_private_references
-    from tools.qnap_compose_policy import IMAGE, render_compose, validate_policy
+    from tools.qnap_compose_policy import (
+        IMAGE,
+        explicit_bind_targets,
+        validate_policy,
+    )
 
 
 RUN_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,47}$")
@@ -76,17 +85,38 @@ class QnapSession:
         self.client.close()
 
 
+def qnap_connection_settings(references):
+    required = (
+        "QNAP_HOST",
+        "QNAP_USER",
+        "QNAP_SSH_KEY",
+        "QNAP_KNOWN_HOSTS",
+    )
+    if any(not references.get(name) for name in required):
+        raise QnapError("missing private QNAP SSH key references")
+    identity = Path(references["QNAP_SSH_KEY"]).expanduser().resolve()
+    known_hosts = Path(
+        references["QNAP_KNOWN_HOSTS"]
+    ).expanduser().resolve()
+    if not identity.is_file() or not known_hosts.is_file():
+        raise QnapError("QNAP SSH key files do not exist")
+    if stat.S_IMODE(identity.stat().st_mode) & 0o077:
+        raise QnapError("QNAP SSH private key permissions are too broad")
+    if stat.S_IMODE(known_hosts.stat().st_mode) & 0o077:
+        raise QnapError("QNAP known_hosts permissions are too broad")
+    return {
+        "hostname": references["QNAP_HOST"],
+        "username": references["QNAP_USER"],
+        "key_filename": str(identity),
+        "known_hosts": str(known_hosts),
+    }
+
+
 def connect(repository, references_file):
     references = load_private_references(
         Path(repository) / references_file
     )
-    missing = [
-        name
-        for name in ("QNAP_HOST", "QNAP_USER", "QNAP_PASS")
-        if not references.get(name)
-    ]
-    if missing:
-        raise QnapError("missing private QNAP references")
+    settings = qnap_connection_settings(references)
     try:
         import paramiko
     except ImportError as error:
@@ -94,13 +124,13 @@ def connect(repository, references_file):
             "Paramiko is required in the host virtual environment"
         ) from error
     client = paramiko.SSHClient()
-    client.load_system_host_keys()
+    client.load_host_keys(settings["known_hosts"])
     client.set_missing_host_key_policy(paramiko.RejectPolicy())
     try:
         client.connect(
-            hostname=references["QNAP_HOST"],
-            username=references["QNAP_USER"],
-            password=references["QNAP_PASS"],
+            hostname=settings["hostname"],
+            username=settings["username"],
+            key_filename=settings["key_filename"],
             timeout=8,
             banner_timeout=8,
             auth_timeout=8,
@@ -234,13 +264,7 @@ def smoke_deploy(session, repository, image, run_id):
         )
     )
     deployment = Path(repository) / "deploy" / "qnap-profile-sync"
-    import tempfile
-
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8") as handle:
-        handle.write(env)
-        handle.flush()
-        rendered = render_compose(repository, "smoke", handle.name)
-    policy = validate_policy(rendered, "smoke")
+    compose_source = (deployment / "compose.yaml").read_text(encoding="utf-8")
     quoted_root = shlex.quote(str(root))
     session.execute(
         "test ! -e {root} && mkdir -p {data}".format(
@@ -272,7 +296,21 @@ def smoke_deploy(session, repository, image, run_id):
             )
         )
         compose = compose_command(docker, root)
-        session.execute(compose + " config --quiet")
+        rendered_payload = session.execute(
+            compose + " config --format json --no-normalize"
+        )
+        try:
+            rendered = json.loads(rendered_payload)
+        except json.JSONDecodeError as error:
+            raise QnapError(
+                "remote Compose returned invalid policy JSON"
+            ) from error
+        rendered["_mwodevelop_source_policy"] = {
+            "bind_create_host_path_false": sorted(
+                explicit_bind_targets(compose_source)
+            )
+        }
+        policy = validate_policy(rendered, "smoke")
         session.execute(compose + " up -d --pull always", timeout=240)
         ready = verify(session)
     except Exception:

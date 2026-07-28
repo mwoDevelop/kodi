@@ -104,8 +104,10 @@ def ssh_responses(canonical="/home/kodi/.var/app/tv.kodi.Kodi/data"):
         "uname -m": "x86_64\n",
         "cat /etc/machine-id": "machine-id\n",
         "cat /sys/class/dmi/id/product_name": "IP3 Tech TB20C\n",
-        "flatpak info --show-version tv.kodi.Kodi": "21.3-Omega\n",
-        "flatpak info --show-arch tv.kodi.Kodi": "x86_64\n",
+        (
+            "flatpak list --app "
+            "--columns=application,arch,version"
+        ): "tv.kodi.Kodi\tx86_64\t21.3-Omega\n",
         (
             "readlink -f -- "
             "/home/kodi/.var/app/tv.kodi.Kodi/data"
