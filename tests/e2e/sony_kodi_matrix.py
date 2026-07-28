@@ -392,6 +392,11 @@ def redact(line: str) -> str:
         line,
     )
     line = re.sub(r"magnet:\?[^\s<]+", "<redacted-magnet>", line)
+    line = re.sub(
+        r"(?i)(torrent ID)\s+[A-Z0-9]+",
+        r"\1 <redacted>",
+        line,
+    )
     line = re.sub(r"plugin://[^\s\]]+", "<redacted-plugin-url>", line)
     line = re.sub(r"https?://[^\s<]+", "<redacted-url>", line)
     line = re.sub(

@@ -1,0 +1,117 @@
+{
+  "addons": {
+    "plugin.video.umbrella": "6.7.81.16",
+    "plugin.video.watchnixtoons2.mwodevelop": "0.26.1",
+    "repository.mwodevelop": "1.0.0",
+    "script.module.mwoscrapers": "0.1.5",
+    "script.mwoscrapers": "0.1.1"
+  },
+  "device": {
+    "android": "14",
+    "kodi": "21.3",
+    "manufacturer": "Google",
+    "model": "Google TV Streamer",
+    "serial": "192.168.1.18:5555"
+  },
+  "results": [
+    {
+      "case": "sintel",
+      "diagnostics": [
+        "2026-07-28 20:22:12.766 T:16411    info <general>: Loading skin file: /storage/emulated/0/Android/data/org.xbmc.kodi/files/.kodi/addons/plugin.video.umbrella/resources/skins/Default/1080i/source_progress.xml, load type: LOAD_ON_GUI_INIT",
+        "2026-07-28 20:22:25.190 T:16411    info <general>: VideoPlayer::OpenFile: <redacted-plugin-url>",
+        "2026-07-28 20:22:26.045 T:17256    info <general>: Creating Demuxer",
+        "2026-07-28 20:22:26.810 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.dolby.ac3.decoder",
+        "2026-07-28 20:22:26.810 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.dolby.eac3.decoder",
+        "2026-07-28 20:22:26.811 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.android.aac.decoder",
+        "2026-07-28 20:22:26.811 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.android.amrnb.decoder",
+        "2026-07-28 20:22:26.811 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.android.amrwb.decoder",
+        "2026-07-28 20:22:26.811 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.android.flac.decoder",
+        "2026-07-28 20:22:26.811 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.android.g711.alaw.decoder",
+        "2026-07-28 20:22:26.814 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.android.g711.mlaw.decoder",
+        "2026-07-28 20:22:26.814 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.android.mp3.decoder",
+        "2026-07-28 20:22:26.814 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.android.opus.decoder",
+        "2026-07-28 20:22:26.814 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.android.raw.decoder",
+        "2026-07-28 20:22:26.815 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.android.vorbis.decoder",
+        "2026-07-28 20:22:26.815 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.mtk.av1.decoder",
+        "2026-07-28 20:22:26.815 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.VIDEO.DECODER.AV1",
+        "2026-07-28 20:22:26.815 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.mtk.av1.decoder.lowlatency",
+        "2026-07-28 20:22:26.815 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: c2.mtk.avc.decoder",
+        "2026-07-28 20:22:26.901 T:17256    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Using codec: c2.mtk.avc.decoder",
+        "2026-07-28 20:22:26.915 T:17256    info <general>: CDVDAudioCodecAndroidMediaCodec::Open() Use default handling for non encrypted stream",
+        "2026-07-28 20:22:26.936 T:17293    info <general>: running thread: CVideoPlayerAudio::Process()",
+        "2026-07-28 20:22:27.086 T:16411    info <general>: Instancing CRendererMediaCodecSurface",
+        "2026-07-28 20:22:27.086 T:16411    info <general>: CRendererMediaCodecSurface::Configure",
+        "2026-07-28 20:22:39.715 T:16411    info <general>: CVideoPlayer::CloseFile()",
+        "2026-07-28 20:22:39.715 T:16411    info <general>: VideoPlayer: waiting for threads to exit",
+        "2026-07-28 20:22:39.722 T:17256    info <general>: CVideoPlayer::OnExit()",
+        "2026-07-28 20:22:39.839 T:17293    info <general>: thread end: CVideoPlayerAudio::OnExit()",
+        "2026-07-28 20:22:39.925 T:16411    info <general>: VideoPlayer: finished waiting",
+        "2026-07-28 20:22:39.925 T:16411    info <general>: CVideoPlayer::CloseFile()",
+        "2026-07-28 20:22:39.925 T:16411    info <general>: VideoPlayer: waiting for threads to exit",
+        "2026-07-28 20:22:39.925 T:16411    info <general>: VideoPlayer: finished waiting"
+      ],
+      "errors": [
+        "2026-07-28 20:22:24.942 T:17222   error <general>: EXCEPTION: Kodi is not playing any media file",
+        "2026-07-28 20:22:39.891 T:17289 warning <general>: OutputPicture - timeout waiting for buffer"
+      ],
+      "media_type": "movie",
+      "navigation": [],
+      "observed_seconds": 12.263,
+      "player": {
+        "percentage": 1.3933680057525635,
+        "speed": 1,
+        "time": {
+          "hours": 0,
+          "milliseconds": 374,
+          "minutes": 0,
+          "seconds": 12
+        },
+        "totaltime": {
+          "hours": 0,
+          "milliseconds": 64,
+          "minutes": 14,
+          "seconds": 48
+        }
+      },
+      "resolve_seconds": 18.452,
+      "resolver_diagnostics": [
+        "[2026-07-28 20:22:13] [ plugin.video.umbrella: DEBUG ]: Removed 0 duplicate sources for ([COLOR FFFFFF33]Sintel (2010)[/COLOR]) from list",
+        "[2026-07-28 20:22:13] [ plugin.video.umbrella: DEBUG ]: Real Debrid less than 5 active torrents.",
+        "[2026-07-28 20:22:14] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.add_magnet() Line # :684",
+        "                       msg : Real-Debrid: Sending MAGNET to cloud: <redacted-magnet>",
+        "[2026-07-28 20:22:15] [ plugin.video.umbrella: INFO ]: From func name: 2._post() Line # :139",
+        "                       msg : Real-Debrid Error:  unknown_ressource",
+        "[2026-07-28 20:22:17] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.delete_torrent() Line # :722",
+        "                       msg : Real-Debrid: Torrent ID <redacted> was removed from your active torrents",
+        "[2026-07-28 20:22:17] [ plugin.video.umbrella: WARNING ]: Real-Debrid resolver rejected source: error_code=0 reason=no_playable_url",
+        "[2026-07-28 20:22:17] [ plugin.video.umbrella: WARNING ]: Playback not supported for (sourcesAutoPlay()): None",
+        "[2026-07-28 20:22:18] [ plugin.video.umbrella: DEBUG ]: Real Debrid less than 5 active torrents.",
+        "[2026-07-28 20:22:19] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.add_magnet() Line # :684",
+        "                       msg : Real-Debrid: Sending MAGNET to cloud: <redacted-magnet>",
+        "[2026-07-28 20:22:24] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.delete_torrent() Line # :722",
+        "                       msg : Real-Debrid: Torrent ID <redacted> was removed from your active torrents",
+        "[2026-07-28 20:22:24] [ plugin.video.umbrella: DEBUG ]: Played file as resolve.",
+        "[2026-07-28 20:22:27] [ plugin.video.umbrella: DEBUG ]: OpenSubs Authorized.",
+        "[2026-07-28 20:22:28] [ plugin.video.umbrella: DEBUG ]: OpenSubs Searching: Imdb:tt1727587 Season: None Episode: None Language: en.",
+        "[2026-07-28 20:22:28] [ plugin.video.umbrella: DEBUG ]: downloaded subtitle=Sintel (2010).eng",
+        "[2026-07-28 20:22:28] [ plugin.video.umbrella: DEBUG ]: OpenSubs Download Link: None Filename: Sintel (2010).eng.",
+        "[2026-07-28 20:22:28] [ plugin.video.umbrella: WARNING ]: OpenSubs returned no usable subtitle download URL.",
+        "[2026-07-28 20:22:28] [ plugin.video.umbrella: DEBUG ]: onAVStarted callback"
+      ],
+      "resolver_errors": [
+        "[2026-07-28 20:22:17] [ plugin.video.umbrella: WARNING ]: Playback not supported for (sourcesAutoPlay()): None"
+      ],
+      "source_fingerprint": "5a6b52180d6a015e",
+      "state": "played",
+      "title": "Sintel"
+    }
+  ],
+  "schema": 1,
+  "settings": {
+    "all_providers": true,
+    "direct_play_transport": "jsonrpc",
+    "rescrape": true,
+    "selection": "autoplay",
+    "tokens_collected": false
+  }
+}

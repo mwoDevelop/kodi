@@ -87,6 +87,26 @@ rollout:
   lock, and the public `addons.xml` matches its declared checksum;
 - `repository.mwodevelop` remains version `1.0.0`.
 
+The post-promotion ownership cleanup also passed:
+
+- Kodi refreshed the stable repository to index checksum
+  `01dac2b62f0138a99832607e42c442c0365597c4d9b9190ff75ebc14ff02f168`;
+- the origin migration required the exact stable and testing index checksums
+  and matching candidate versions before changing Kodi's add-on database;
+- every installed mwoDevelop add-on on BlueStacks, Sony TV and Bedroom TV is
+  enabled and owned by `repository.mwodevelop`;
+- `repository.mwodevelop.testing` was removed from Sony TV and Bedroom TV
+  after migration and is absent on all three devices;
+- the post-cleanup Sintel playback passed again on all three devices for more
+  than 12 seconds with source fingerprint `5a6b52180d6a015e`;
+- no temporary ADB forwards or device-side migration files remain.
+
+Sanitized post-cleanup reports:
+
+- [BlueStacks](2026-07-28-bluestacks-stable-origin-cleanup.json)
+- [Sony TV](2026-07-28-sony-stable-origin-cleanup.json)
+- [Bedroom TV](2026-07-28-bedroom-stable-origin-cleanup.json)
+
 ## Defect found and fixed during rollout
 
 MwoScrapers 0.1.4 used empty XML defaults for the two endpoint settings.

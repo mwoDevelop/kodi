@@ -48,7 +48,9 @@ Stan realizacji 2026-07-28:
   lifecycle inventory oraz odwracalny rollout Kodi 21.3, profilu, skórki i
   dodatków. E2E Profile Sync 0.1.6 i playback WatchNixtoons2 0.26.1 zakończyły
   się powodzeniem. Playback po poprawce Umbrella także zaliczył bramę z
-  aktywnym NordVPN i został promowany bajt po bajcie do `stable`;
+  aktywnym NordVPN i został promowany bajt po bajcie do `stable`. Sony TV i
+  Bedroom TV zostały przepięte z repo testing na dokładny indeks stable, a
+  pomocnicze repo testing usunięto po weryfikacji zgodności kandydatów;
 - Etapy 7–8: nierozpoczęte.
 
 ## 1. Cel
