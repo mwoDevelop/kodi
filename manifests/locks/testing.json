@@ -18,10 +18,10 @@
       "zip_sha256": "faa141520e10a8a9a227457e22a56f0dc4b994caef08a54c1177c62217e6bdb7"
     },
     "script.module.mwoscrapers": {
-      "commit": "0c23f844893f0a952050b9ebbdd3d7412563b536",
-      "version": "0.1.4",
+      "commit": "6c4b7956734f902c94b51f593a989ef0b3a29510",
+      "version": "0.1.5",
       "provider_api": 1,
-      "zip_sha256": "adff90949807e2740c7d60b565ccbad322bbea83d35f1f2192478f8d478b5a72"
+      "zip_sha256": "ec9425baa334fbda2b9b106ec0aa558e5a8d37e03d5315e865fbcfb15762c58a"
     },
     "script.mwoscrapers": {
       "commit": "7c21ad6a634cc2eeb67fdc84747098aa4b97b030",
