@@ -13,8 +13,10 @@ from sony_kodi_matrix import (
     playback_log_state,
     plugin_url,
     redact,
+    start_from_beginning_if_prompted,
     successful_source_fingerprint,
     terminal_failure_state,
+    wait_for_jsonrpc,
 )
 
 
@@ -162,6 +164,65 @@ def test_open_media_uses_acknowledged_jsonrpc_player_open():
             },
         )
     ]
+
+
+def test_resume_prompt_selects_start_from_beginning(monkeypatch):
+    class FakeRpc:
+        def __init__(self):
+            self.label = "RESUME"
+            self.calls = []
+
+        def call(self, method, params=None):
+            self.calls.append((method, params))
+            if method == "GUI.GetProperties":
+                return {"currentcontrol": {"label": self.label}}
+            if method == "Input.Left":
+                self.label = "START FROM BEGINNING"
+            return "OK"
+
+    monkeypatch.setattr(sony_kodi_matrix.time, "sleep", lambda _seconds: None)
+    rpc = FakeRpc()
+
+    assert start_from_beginning_if_prompted(rpc) is True
+    assert ("Input.Left", None) in rpc.calls
+    assert ("Input.Select", None) in rpc.calls
+
+
+def test_non_resume_control_is_not_selected():
+    class FakeRpc:
+        def __init__(self):
+            self.calls = []
+
+        def call(self, method, params=None):
+            self.calls.append((method, params))
+            return {"currentcontrol": {"label": "Resolving source"}}
+
+    rpc = FakeRpc()
+
+    assert start_from_beginning_if_prompted(rpc) is False
+    assert rpc.calls == [
+        ("GUI.GetProperties", {"properties": ["currentcontrol"]})
+    ]
+
+
+def test_jsonrpc_startup_wait_retries_transient_disconnect(monkeypatch):
+    class FakeRpc:
+        def __init__(self):
+            self.calls = 0
+
+        def call(self, method, params=None):
+            assert method == "JSONRPC.Ping"
+            self.calls += 1
+            if self.calls < 3:
+                raise RuntimeError("not ready")
+            return "pong"
+
+    monkeypatch.setattr(sony_kodi_matrix.time, "sleep", lambda _seconds: None)
+    rpc = FakeRpc()
+
+    wait_for_jsonrpc(rpc, timeout=1)
+
+    assert rpc.calls == 3
 
 
 def test_foreground_start_falls_back_when_android_wait_response_hangs(monkeypatch):

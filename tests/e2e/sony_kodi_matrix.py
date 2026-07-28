@@ -589,6 +589,41 @@ def current_control_label(rpc: JsonRpc) -> str:
     return str(control.get("label", "")) if isinstance(control, dict) else ""
 
 
+def start_from_beginning_if_prompted(rpc: JsonRpc) -> bool:
+    """Dismiss Umbrella's resume bookmark dialog without altering user history."""
+    label = current_control_label(rpc).strip().casefold()
+    if "start from be" in label:
+        rpc.call("Input.Select")
+        return True
+    if "resume" not in label:
+        return False
+    rpc.call("Input.Left")
+    time.sleep(0.2)
+    label = current_control_label(rpc).strip().casefold()
+    if "start from be" not in label:
+        return False
+    rpc.call("Input.Select")
+    return True
+
+
+def wait_for_jsonrpc(rpc: JsonRpc, timeout: float = 30.0) -> None:
+    """Wait for Kodi's TCP service, which can lag behind the Android activity."""
+    started = time.monotonic()
+    last_error: Exception | None = None
+    while time.monotonic() - started < timeout:
+        try:
+            if rpc.call("JSONRPC.Ping") == "pong":
+                return
+        except (OSError, RuntimeError, socket.timeout) as error:
+            last_error = error
+        time.sleep(0.5)
+    detail = ": %s" % last_error if last_error is not None else ""
+    raise RuntimeError(
+        "Kodi JSON-RPC did not become ready within %.0f seconds%s"
+        % (timeout, detail)
+    )
+
+
 def focus_matching_control(
     rpc: JsonRpc,
     expected_label: str,
@@ -688,6 +723,7 @@ def run_case(
     last_poll_at = None
     player_was_active = False
     active_playback_seconds = 0.0
+    resume_prompt_handled = False
     rpc_unavailable_at = None
     last_properties = {}
     state = "resolve_timeout"
@@ -711,6 +747,11 @@ def run_case(
         if player_id is None:
             player_was_active = False
             last_poll_at = now
+            if not resume_prompt_handled:
+                try:
+                    resume_prompt_handled = start_from_beginning_if_prompted(rpc)
+                except (OSError, RuntimeError, socket.timeout):
+                    pass
             if now >= next_failure_probe:
                 kodi_probe = log_since(adb, serial, kodi_start_line)
                 log_state = (
@@ -774,6 +815,7 @@ def run_case(
         "state": state,
         "resolve_seconds": resolve_seconds,
         "observed_seconds": observed,
+        "resume_prompt_handled": resume_prompt_handled,
         "player": last_properties,
         "navigation": navigation,
         "diagnostics": diagnostics,
@@ -823,8 +865,7 @@ def main() -> int:
         else EventClient(args.host)
     )
     ensure_kodi_foreground(args.adb, args.serial)
-    if rpc.call("JSONRPC.Ping") != "pong":
-        raise RuntimeError("Kodi JSON-RPC did not return pong")
+    wait_for_jsonrpc(rpc)
 
     report = {
         "schema": 1,
