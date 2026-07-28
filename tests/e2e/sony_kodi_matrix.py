@@ -202,6 +202,7 @@ def ensure_kodi_foreground(adb: str, serial: str):
             timeout=10,
         )
     started = time.monotonic()
+    dream_dismissed = False
     while time.monotonic() - started < 15:
         windows = shell(adb, serial, "dumpsys window", check=False)
         focus = next(
@@ -214,6 +215,32 @@ def ensure_kodi_foreground(adb: str, serial: str):
         )
         if "org.xbmc.kodi/" in focus:
             return
+        if ":dream" in focus and not dream_dismissed:
+            # Android TV can keep its system dream overlay above an already
+            # running Kodi activity. HOME wakes the display; then bring Kodi
+            # forward again without waiting on Activity Manager.
+            run(
+                adb,
+                serial,
+                "shell",
+                "input",
+                "keyevent",
+                "KEYCODE_HOME",
+                check=False,
+                timeout=10,
+            )
+            run(
+                adb,
+                serial,
+                "shell",
+                "am",
+                "start",
+                "-n",
+                KODI_ACTIVITY,
+                check=False,
+                timeout=10,
+            )
+            dream_dismissed = True
         time.sleep(1)
     raise RuntimeError("Kodi did not become the foreground Android app")
 

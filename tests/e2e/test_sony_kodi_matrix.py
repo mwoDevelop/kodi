@@ -251,6 +251,39 @@ def test_foreground_start_falls_back_when_android_wait_response_hangs(monkeypatc
     assert calls[1][1]["timeout"] == 10
 
 
+def test_foreground_start_dismisses_android_tv_dream(monkeypatch):
+    calls = []
+    windows = iter(
+        (
+            "mCurrentFocus=Window{abc u0 Sys2023:dream}",
+            "mCurrentFocus=Window{def u0 org.xbmc.kodi/.Main}",
+        )
+    )
+
+    def fake_run(_adb, _serial, *args, **kwargs):
+        calls.append((args, kwargs))
+        return ""
+
+    monkeypatch.setattr(sony_kodi_matrix, "run", fake_run)
+    monkeypatch.setattr(
+        sony_kodi_matrix,
+        "shell",
+        lambda *_args, **_kwargs: next(windows),
+    )
+    monkeypatch.setattr(
+        sony_kodi_matrix.time,
+        "sleep",
+        lambda _seconds: None,
+    )
+
+    sony_kodi_matrix.ensure_kodi_foreground("adb", "serial")
+
+    assert any(
+        args[-3:] == ("input", "keyevent", "KEYCODE_HOME")
+        for args, _kwargs in calls
+    )
+
+
 def test_transient_android_player_gap_does_not_end_playback_too_early():
     assert not missing_player_timed_out(
         now=114.9,
