@@ -25,7 +25,7 @@ Stan realizacji 2026-07-28:
   przenośny Ed25519 na Kodi x86/ARMv7 oraz build obrazu
   `linux/amd64,linux/arm/v7`;
 - Etap 4: osobne repo dodatku, pairing, heartbeat i podpisany check
-  read-only opublikowane w `testing`; wersja 0.1.6 wybiera warstwy wyłącznie
+  read-only opublikowane w `stable`; wersja 0.1.6 wybiera warstwy wyłącznie
   z podpisanego assignmentu i administracyjnych target tags; E2E wersji
   0.1.5 zaliczone na BlueStacks i Sony TV, a E2E 0.1.6 na Bedroom TV zalicza
   instalację z repo testing, pairing, uwierzytelniony heartbeat, podpisany
@@ -47,7 +47,8 @@ Stan realizacji 2026-07-28:
   `kirkwood`) znajduje się w prywatnym registry v2, przeszedł read-only
   lifecycle inventory oraz odwracalny rollout Kodi 21.3, profilu, skórki i
   dodatków. E2E Profile Sync 0.1.6 i playback WatchNixtoons2 0.26.1 zakończyły
-  się powodzeniem; playback po poprawce Umbrella pozostaje osobną bramą;
+  się powodzeniem. Playback po poprawce Umbrella także zaliczył bramę z
+  aktywnym NordVPN i został promowany bajt po bajcie do `stable`;
 - Etapy 7–8: nierozpoczęte.
 
 ## 1. Cel
