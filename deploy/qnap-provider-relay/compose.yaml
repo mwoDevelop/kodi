@@ -1,0 +1,39 @@
+services:
+  provider-relay:
+    image: ${MWO_RELAY_IMAGE:?set immutable image digest}
+    restart: ${MWO_RELAY_RESTART:-unless-stopped}
+    init: true
+    read_only: true
+    user: "${MWO_RELAY_UID:-10001}:${MWO_RELAY_GID:-10001}"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - name: provider-relay
+        target: 8766
+        published: "${MWO_RELAY_PORT:-18766}"
+        host_ip: ${MWO_RELAY_BIND_HOST:?set explicit QNAP LAN or smoke address}
+        protocol: tcp
+    environment:
+      MWO_RELAY_HOST: 0.0.0.0
+      MWO_RELAY_PORT: "8766"
+      MWO_RELAY_TIMEOUT: "${MWO_RELAY_TIMEOUT:-12}"
+      MWO_RELAY_CACHE_TTL: "${MWO_RELAY_CACHE_TTL:-300}"
+      MWO_RELAY_CACHE_ENTRIES: "${MWO_RELAY_CACHE_ENTRIES:-256}"
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    mem_limit: 128m
+    pids_limit: 64
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8766/health', timeout=2))['status'] == 'ok'"
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    labels:
+      io.mwodevelop.provider-relay.mode: "${MWO_RELAY_MODE:-production}"

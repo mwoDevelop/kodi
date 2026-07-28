@@ -8,9 +8,9 @@
       "zip_sha256": "01a84245391da1beef7bc65982b4d47dd517595c533296473b65763e6a1e2312"
     },
     "plugin.video.umbrella": {
-      "commit": "4770755871d0102d0b977ffcdd21123639ef3284",
-      "version": "6.7.81.15",
-      "zip_sha256": "a7ff9596bfe2e05cb96d66c10f191c86e929e69fd562c1945db33d21b5a2eb88"
+      "commit": "9ccb063e65463b4116d5c9ad2f09be189b051f29",
+      "version": "6.7.81.16",
+      "zip_sha256": "e97d3cb06792663b58b30097072e36f5de04122045a2f47d44ded95d9fd22855"
     },
     "service.mwodevelop.profilesync": {
       "commit": "30039a4c53b7fcfb89e20b097b761547a98a379d",
@@ -18,10 +18,10 @@
       "zip_sha256": "faa141520e10a8a9a227457e22a56f0dc4b994caef08a54c1177c62217e6bdb7"
     },
     "script.module.mwoscrapers": {
-      "commit": "7c21ad6a634cc2eeb67fdc84747098aa4b97b030",
-      "version": "0.1.3",
+      "commit": "0c23f844893f0a952050b9ebbdd3d7412563b536",
+      "version": "0.1.4",
       "provider_api": 1,
-      "zip_sha256": "afad0ba6bc0f0c51dd58765c5040247a90c2aebe87cebccd6d3a99f4b4efb6ab"
+      "zip_sha256": "adff90949807e2740c7d60b565ccbad322bbea83d35f1f2192478f8d478b5a72"
     },
     "script.mwoscrapers": {
       "commit": "7c21ad6a634cc2eeb67fdc84747098aa4b97b030",

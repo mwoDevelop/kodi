@@ -1,6 +1,7 @@
 # Plan projektu Kodi: Umbrella, MwoScrapers i wspólne repozytorium dodatków
 
-Status: pierwsze stable opublikowane po przejściu finalnego E2E BlueStacks
+Status: stable opublikowane; kandydat Umbrella 6.7.81.16 i MwoScrapers 0.1.4
+z provider relayem przechodzi rollout testing na urządzeniach
 Data rozpoznania: 2026-07-24
 Konto docelowe GitHub: `mwoDevelop`
 Lokalny katalog nadrzędny: `/home/mwo/projects/kodi`
@@ -34,6 +35,10 @@ Coco / Viper / Magneto
       MwoScrapers
  wyszukiwanie, normalizacja wyniku
  pojedynczego providera i jego zdrowie
+          │
+          ├── bezpośrednio do publicznego API
+          │
+          └── opcjonalny, credential-free LAN relay
           │
           ▼
        Umbrella
@@ -190,6 +195,9 @@ sieci forków GitHub. Źródłami importu pozostają trzy niezależne rodziny.
 │       └── testing.json               # piny aktualnego kandydata
 ├── tools/
 ├── tests/
+├── deploy/
+│   ├── qnap-profile-sync/
+│   └── qnap-provider-relay/
 └── dist/                             # generowane; bez ręcznej edycji
 ```
 
@@ -346,6 +354,33 @@ Pierwsze wydanie nie włączy wszystkich providerów:
 - AIOStreams, Prowlarr i providery wymagające konfiguracji użytkownika będą
   opt-in;
 - ustawienia pozwolą włączyć każdy zakwalifikowany provider osobno.
+
+### 5.6 Opcjonalny provider metadata relay
+
+VPN pozostaje włączony dla Kodi i całego ruchu Real-Debrid. Jeżeli publiczny
+provider odrzuca adres wyjściowy VPN kodem HTTP 403, adapter może użyć osobno
+konfigurowanego endpointu. Domyślnie nadal łączy się bezpośrednio z publicznym
+API; Umbrella ani wspólny rejestr providerów nie znają szczegółów transportu.
+
+`relay/` w repo MwoScrapers jest osobnym, bezstanowym komponentem:
+
+- przekazuje wyłącznie niewrażliwe metadane Stremio dla zamkniętej listy
+  providerów i ścieżek filmu/odcinka;
+- odrzuca dowolne targety proxy, query stringi, credentiale w URL, za duże
+  odpowiedzi i odpowiedzi niezgodne z kontraktem;
+- ma ograniczony pamięciowo i liczbowo cache;
+- nie otrzymuje tokenu Real-Debrid, magnetów po wyborze źródła ani
+  rozwiązanego adresu playback;
+- jest publikowany jako przypięty digest GHCR dla `linux/amd64` i
+  `linux/arm/v7`.
+
+Na QNAP relay jest oddzielną aplikacją Compose bez wolumenów i sekretów,
+uruchomioną jako non-root z read-only rootfs, bez capabilities i z limitem
+pamięci/procesów. Port jest związany wyłącznie z jawnym prywatnym adresem LAN;
+nie wolno publikować go do Internetu. Aktualizacja przebiega: PR i testy
+MwoScrapers → jawny tag `relay-v*` → multiarch build → nietrwały smoke ARMv7
+na QNAP → canary urządzenia → zastąpienie produkcyjnego digestu. Automatyczny
+Watchtower i ruchomy tag `latest` pozostają zabronione.
 
 ## 6. Import i cykliczne aktualizacje providerów
 
