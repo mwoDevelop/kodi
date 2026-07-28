@@ -1,6 +1,6 @@
 # Plan projektu Kodi: Umbrella, MwoScrapers i wspólne repozytorium dodatków
 
-Status: stable opublikowane; kandydat Umbrella 6.7.81.16 i MwoScrapers 0.1.4
+Status: stable opublikowane; kandydat Umbrella 6.7.81.16 i MwoScrapers 0.1.5
 z provider relayem przechodzi rollout testing na urządzeniach
 Data rozpoznania: 2026-07-24
 Konto docelowe GitHub: `mwoDevelop`

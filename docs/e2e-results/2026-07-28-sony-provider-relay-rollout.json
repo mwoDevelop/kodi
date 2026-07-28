@@ -1,0 +1,203 @@
+{
+  "addons": {
+    "plugin.video.umbrella": "6.7.81.16",
+    "plugin.video.watchnixtoons2.mwodevelop": "0.26.1",
+    "repository.mwodevelop": "1.0.0",
+    "script.module.mwoscrapers": "0.1.5",
+    "script.mwoscrapers": "0.1.1"
+  },
+  "device": {
+    "android": "9",
+    "kodi": "21.3",
+    "manufacturer": "Sony",
+    "model": "BRAVIA 4K GB ATV3",
+    "serial": "192.168.1.12:5555"
+  },
+  "results": [
+    {
+      "case": "sintel",
+      "diagnostics": [
+        "2026-07-28 19:31:18.653 T:15110    info <general>: Loading skin file: /storage/emulated/0/Android/data/org.xbmc.kodi/files/.kodi/addons/plugin.video.umbrella/resources/skins/Default/1080i/source_progress.xml, load type: LOAD_ON_GUI_INIT",
+        "2026-07-28 19:31:32.832 T:15110    info <general>: VideoPlayer::OpenFile: <redacted-plugin-url>",
+        "2026-07-28 19:31:37.631 T:19051    info <general>: Creating Demuxer",
+        "2026-07-28 19:31:42.458 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPAC3",
+        "2026-07-28 19:31:42.459 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPADPCMIMA",
+        "2026-07-28 19:31:42.459 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPADPCMMS",
+        "2026-07-28 19:31:42.459 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.APE",
+        "2026-07-28 19:31:42.460 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPDTS",
+        "2026-07-28 19:31:42.460 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPDTSEXPRESS",
+        "2026-07-28 19:31:42.460 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPDTSHD",
+        "2026-07-28 19:31:42.460 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPEAC3",
+        "2026-07-28 19:31:42.461 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPLPCMALAW",
+        "2026-07-28 19:31:42.461 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPLPCMMLAW",
+        "2026-07-28 19:31:42.461 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPMP1",
+        "2026-07-28 19:31:42.462 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPMP2",
+        "2026-07-28 19:31:42.462 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPPCM",
+        "2026-07-28 19:31:42.462 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPWMA",
+        "2026-07-28 19:31:42.462 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPWMAPRO",
+        "2026-07-28 19:31:42.463 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.VIDEO.DECODER.AVC",
+        "2026-07-28 19:31:42.671 T:19051    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Using codec: OMX.MTK.VIDEO.DECODER.AVC",
+        "2026-07-28 19:31:42.676 T:19051    info <general>: CDVDAudioCodecAndroidMediaCodec::Open() Use default handling for non encrypted stream",
+        "2026-07-28 19:31:42.689 T:19165    info <general>: running thread: CVideoPlayerAudio::Process()",
+        "2026-07-28 19:31:42.835 T:15110    info <general>: Instancing CRendererMediaCodecSurface",
+        "2026-07-28 19:31:42.835 T:15110    info <general>: CRendererMediaCodecSurface::Configure",
+        "2026-07-28 19:32:10.631 T:15110    info <general>: CVideoPlayer::CloseFile()",
+        "2026-07-28 19:32:10.632 T:19051    info <general>: CVideoPlayer::OnExit()",
+        "2026-07-28 19:32:10.637 T:15110    info <general>: VideoPlayer: waiting for threads to exit",
+        "2026-07-28 19:32:10.721 T:19165    info <general>: thread end: CVideoPlayerAudio::OnExit()",
+        "2026-07-28 19:32:11.002 T:15110    info <general>: VideoPlayer: finished waiting",
+        "2026-07-28 19:32:11.002 T:15110    info <general>: CVideoPlayer::CloseFile()",
+        "2026-07-28 19:32:11.010 T:15110    info <general>: VideoPlayer: waiting for threads to exit",
+        "2026-07-28 19:32:11.010 T:15110    info <general>: VideoPlayer: finished waiting"
+      ],
+      "errors": [
+        "2026-07-28 19:31:31.305 T:18863   error <general>: EXCEPTION: Kodi is not playing any media file",
+        "2026-07-28 19:31:31.706 T:18863   error <general>: EXCEPTION: Kodi is not playing any media file",
+        "2026-07-28 19:31:32.107 T:18863   error <general>: EXCEPTION: Kodi is not playing any media file",
+        "2026-07-28 19:31:32.708 T:18863   error <general>: EXCEPTION: Kodi is not playing any media file",
+        "2026-07-28 19:31:48.004 T:15218    info <general>: ES: Client mwoDevelop profile sync add-on E2E from ::ffff:192.168.1.138 timed out",
+        "2026-07-28 19:32:10.780 T:19162 warning <general>: OutputPicture - timeout waiting for buffer",
+        "2026-07-28 19:32:11.492 T:18863   error <general>: EXCEPTION: Kodi is not playing any media file"
+      ],
+      "media_type": "movie",
+      "navigation": [],
+      "observed_seconds": 12.041,
+      "player": {
+        "percentage": 3.083336353302002,
+        "speed": 1,
+        "time": {
+          "hours": 0,
+          "milliseconds": 382,
+          "minutes": 0,
+          "seconds": 27
+        },
+        "totaltime": {
+          "hours": 0,
+          "milliseconds": 64,
+          "minutes": 14,
+          "seconds": 48
+        }
+      },
+      "resolve_seconds": 46.481,
+      "resolver_diagnostics": [
+        "[2026-07-28 19:31:19] [ plugin.video.umbrella: DEBUG ]: Removed 0 duplicate sources for ([COLOR FFFFFF33]Sintel (2010)[/COLOR]) from list",
+        "[2026-07-28 19:31:19] [ plugin.video.umbrella: DEBUG ]: Real Debrid less than 5 active torrents.",
+        "[2026-07-28 19:31:20] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.add_magnet() Line # :684",
+        "                       msg : Real-Debrid: Sending MAGNET to cloud: <redacted-magnet>",
+        "[2026-07-28 19:31:23] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.delete_torrent() Line # :722",
+        "                       msg : Real-Debrid: Torrent ID 74IEZI5W6566U was removed from your active torrents",
+        "[2026-07-28 19:31:23] [ plugin.video.umbrella: WARNING ]: Real-Debrid resolver rejected source: error_code=0 reason=no_playable_url",
+        "[2026-07-28 19:31:23] [ plugin.video.umbrella: WARNING ]: Playback not supported for (sourcesAutoPlay()): None",
+        "[2026-07-28 19:31:24] [ plugin.video.umbrella: DEBUG ]: Real Debrid less than 5 active torrents.",
+        "[2026-07-28 19:31:25] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.add_magnet() Line # :684",
+        "                       msg : Real-Debrid: Sending MAGNET to cloud: <redacted-magnet>",
+        "[2026-07-28 19:31:30] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.delete_torrent() Line # :722",
+        "                       msg : Real-Debrid: Torrent ID BRPVD5HN4566M was removed from your active torrents",
+        "[2026-07-28 19:31:31] [ plugin.video.umbrella: DEBUG ]: Played file as resolve.",
+        "[2026-07-28 19:31:44] [ plugin.video.umbrella: DEBUG ]: OpenSubs Authorized.",
+        "[2026-07-28 19:31:44] [ plugin.video.umbrella: DEBUG ]: OpenSubs Searching: Imdb:tt1727587 Season: None Episode: None Language: en.",
+        "[2026-07-28 19:31:44] [ plugin.video.umbrella: DEBUG ]: downloaded subtitle=Sintel (2010).eng",
+        "[2026-07-28 19:31:45] [ plugin.video.umbrella: DEBUG ]: OpenSubs Download Link: None Filename: Sintel (2010).eng.",
+        "[2026-07-28 19:31:45] [ plugin.video.umbrella: WARNING ]: OpenSubs returned no usable subtitle download URL.",
+        "[2026-07-28 19:31:45] [ plugin.video.umbrella: DEBUG ]: onAVStarted callback",
+        "[2026-07-28 19:32:11] [ plugin.video.umbrella: DEBUG ]: onPlayBackStopped callback"
+      ],
+      "resolver_errors": [
+        "[2026-07-28 19:31:23] [ plugin.video.umbrella: WARNING ]: Playback not supported for (sourcesAutoPlay()): None"
+      ],
+      "source_fingerprint": "5a6b52180d6a015e",
+      "state": "played",
+      "title": "Sintel"
+    },
+    {
+      "case": "breaking_bad_s01e01",
+      "diagnostics": [
+        "2026-07-28 19:32:20.300 T:15110    info <general>: Loading skin file: /storage/emulated/0/Android/data/org.xbmc.kodi/files/.kodi/addons/plugin.video.umbrella/resources/skins/Default/1080i/source_progress.xml, load type: LOAD_ON_GUI_INIT",
+        "2026-07-28 19:32:29.792 T:15110    info <general>: VideoPlayer::OpenFile: <redacted-url>",
+        "2026-07-28 19:32:34.547 T:19639    info <general>: Creating Demuxer",
+        "2026-07-28 19:32:41.664 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPAC3",
+        "2026-07-28 19:32:41.665 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPADPCMIMA",
+        "2026-07-28 19:32:41.666 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPADPCMMS",
+        "2026-07-28 19:32:41.666 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.APE",
+        "2026-07-28 19:32:41.667 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPDTS",
+        "2026-07-28 19:32:41.667 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPDTSEXPRESS",
+        "2026-07-28 19:32:41.668 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPDTSHD",
+        "2026-07-28 19:32:41.668 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPEAC3",
+        "2026-07-28 19:32:41.669 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPLPCMALAW",
+        "2026-07-28 19:32:41.670 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPLPCMMLAW",
+        "2026-07-28 19:32:41.670 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPMP1",
+        "2026-07-28 19:32:41.670 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPMP2",
+        "2026-07-28 19:32:41.671 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPPCM",
+        "2026-07-28 19:32:41.671 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPWMA",
+        "2026-07-28 19:32:41.672 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.AUDIO.DECODER.DSPWMAPRO",
+        "2026-07-28 19:32:41.672 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Testing codec: OMX.MTK.VIDEO.DECODER.AVC",
+        "2026-07-28 19:32:41.975 T:19639    info <general>: CDVDVideoCodecAndroidMediaCodec::Open Using codec: OMX.MTK.VIDEO.DECODER.AVC",
+        "2026-07-28 19:32:41.985 T:19639    info <general>: CDVDAudioCodecAndroidMediaCodec: Unknown hints.codec(86020)",
+        "2026-07-28 19:32:41.989 T:19780    info <general>: running thread: CVideoPlayerAudio::Process()",
+        "2026-07-28 19:32:42.202 T:15110    info <general>: Instancing CRendererMediaCodecSurface",
+        "2026-07-28 19:32:42.203 T:15110    info <general>: CRendererMediaCodecSurface::Configure",
+        "2026-07-28 19:32:54.489 T:15110    info <general>: CVideoPlayer::CloseFile()",
+        "2026-07-28 19:32:54.490 T:15110    info <general>: VideoPlayer: waiting for threads to exit",
+        "2026-07-28 19:32:54.495 T:19639    info <general>: CVideoPlayer::OnExit()",
+        "2026-07-28 19:32:54.505 T:19780    info <general>: thread end: CVideoPlayerAudio::OnExit()",
+        "2026-07-28 19:32:54.820 T:15110    info <general>: VideoPlayer: finished waiting",
+        "2026-07-28 19:32:54.820 T:15110    info <general>: CVideoPlayer::CloseFile()",
+        "2026-07-28 19:32:54.820 T:15110    info <general>: VideoPlayer: waiting for threads to exit",
+        "2026-07-28 19:32:54.820 T:15110    info <general>: VideoPlayer: finished waiting"
+      ],
+      "errors": [
+        "2026-07-28 19:32:54.564 T:19779 warning <general>: OutputPicture - timeout waiting for buffer"
+      ],
+      "media_type": "episode",
+      "navigation": [],
+      "observed_seconds": 12.208,
+      "player": {
+        "percentage": 0.3346022069454193,
+        "speed": 1,
+        "time": {
+          "hours": 0,
+          "milliseconds": 666,
+          "minutes": 0,
+          "seconds": 11
+        },
+        "totaltime": {
+          "hours": 0,
+          "milliseconds": 528,
+          "minutes": 58,
+          "seconds": 6
+        }
+      },
+      "resolve_seconds": 27.0,
+      "resolver_diagnostics": [
+        "[2026-07-28 19:32:20] [ plugin.video.umbrella: DEBUG ]: Removed 0 duplicate sources for ([COLOR FFFFFF33]Breaking Bad (S01E01)[/COLOR]) from list",
+        "[2026-07-28 19:32:21] [ plugin.video.umbrella: DEBUG ]: Real Debrid less than 5 active torrents.",
+        "[2026-07-28 19:32:22] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.add_magnet() Line # :684",
+        "                       msg : Real-Debrid: Sending MAGNET to cloud: <redacted-magnet>",
+        "[2026-07-28 19:32:27] [ plugin.video.umbrella: DEBUG ]: From func name: resources.lib.debrid.realdebrid.delete_torrent() Line # :722",
+        "                       msg : Real-Debrid: Torrent ID EL3IDPAGMCHNY was removed from your active torrents",
+        "[2026-07-28 19:32:27] [ plugin.video.umbrella: DEBUG ]: singleItemPlaylist() started.",
+        "[2026-07-28 19:32:28] [ plugin.video.umbrella: DEBUG ]: singleItemPlaylist() url: <redacted-url>",
+        "[2026-07-28 19:32:28] [ plugin.video.umbrella: DEBUG ]: singleItemPlaylist() returning true.",
+        "[2026-07-28 19:32:29] [ plugin.video.umbrella: DEBUG ]: Played file as resolve.",
+        "[2026-07-28 19:32:43] [ plugin.video.umbrella: DEBUG ]: OpenSubs Authorized.",
+        "[2026-07-28 19:32:44] [ plugin.video.umbrella: DEBUG ]: OpenSubs Searching: Imdb:tt0903747 Season: 1 Episode: 1 Language: en.",
+        "[2026-07-28 19:32:44] [ plugin.video.umbrella: DEBUG ]: downloaded subtitle=Breaking Bad Season 1 Episode 01 - Pilot",
+        "[2026-07-28 19:32:44] [ plugin.video.umbrella: DEBUG ]: OpenSubs Download Link: None Filename: Breaking Bad Season 1 Episode 01 - Pilot.",
+        "[2026-07-28 19:32:44] [ plugin.video.umbrella: WARNING ]: OpenSubs returned no usable subtitle download URL.",
+        "[2026-07-28 19:32:45] [ plugin.video.umbrella: DEBUG ]: onAVStarted callback"
+      ],
+      "resolver_errors": [],
+      "source_fingerprint": "6f39c1e78d9c75c4",
+      "state": "played",
+      "title": "Pilot"
+    }
+  ],
+  "schema": 1,
+  "settings": {
+    "all_providers": true,
+    "direct_play_transport": "jsonrpc",
+    "rescrape": true,
+    "selection": "autoplay",
+    "tokens_collected": false
+  }
+}
