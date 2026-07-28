@@ -343,9 +343,11 @@ def apply_addon_origins(
     origins,
     previous_origins=None,
     repository_checksums=None,
+    version_transitions=None,
 ):
     previous_origins = previous_origins or {}
     repository_checksums = repository_checksums or {}
+    version_transitions = version_transitions or {}
     for addon_id, origin in origins.items():
         if not SAFE_ADDON_ID.fullmatch(addon_id):
             raise ValueError("unsafe add-on identifier in origin mapping")
@@ -361,6 +363,20 @@ def apply_addon_origins(
             raise ValueError("unsafe checksum repository identifier")
         if not re.fullmatch(r"[0-9a-f]{64}", checksum):
             raise ValueError("invalid repository checksum")
+    for addon_id, transition in version_transitions.items():
+        if addon_id not in previous_origins:
+            raise ValueError("version transition has no previous origin")
+        if (
+            not isinstance(transition, dict)
+            or set(transition) != {"from", "to"}
+            or not all(
+                isinstance(value, str)
+                and value
+                and len(value) <= 128
+                for value in transition.values()
+            )
+        ):
+            raise ValueError("invalid version transition")
     connection = sqlite3.connect(database)
     try:
         with connection:
@@ -445,9 +461,15 @@ def apply_addon_origins(
                             % (addon_id, previous)
                         )
                     if previous_candidate[0] != candidate[0]:
-                        raise RuntimeError(
-                            "%s repository candidates differ" % addon_id
-                        )
+                        expected = version_transitions.get(addon_id)
+                        actual = {
+                            "from": previous_candidate[0],
+                            "to": candidate[0],
+                        }
+                        if expected != actual:
+                            raise RuntimeError(
+                                "%s repository candidates differ" % addon_id
+                            )
                 connection.execute(
                     "UPDATE installed SET origin=? WHERE addonID=?",
                     (origin, addon_id),
@@ -492,6 +514,7 @@ def assign_addon_origins_via_adb(adb, port, target, timeout=90):
                     origins,
                     target.get("addon_previous_origins"),
                     target.get("addon_repository_checksums"),
+                    target.get("addon_version_transitions"),
                 )
             except RepositoryIndexNotReady as error:
                 last_error = error
@@ -538,13 +561,15 @@ def assign_addon_origins_in_kodi(
             raise ValueError("unsafe repository identifier in origin mapping")
     previous_origins = target.get("addon_previous_origins", {})
     repository_checksums = target.get("addon_repository_checksums", {})
+    version_transitions = target.get("addon_version_transitions", {})
     document = origins
-    if previous_origins or repository_checksums:
+    if previous_origins or repository_checksums or version_transitions:
         document = {
-            "schema": 2,
+            "schema": 3 if version_transitions else 2,
             "origins": origins,
             "previous_origins": previous_origins,
             "repository_checksums": repository_checksums,
+            "version_transitions": version_transitions,
         }
     with tempfile.NamedTemporaryFile("w", encoding="utf-8") as mapping:
         json.dump(document, mapping, sort_keys=True)

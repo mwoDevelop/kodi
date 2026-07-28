@@ -251,6 +251,50 @@ def test_origin_migration_rejects_different_candidate_version(tmp_path):
         )
 
 
+def test_origin_migration_allows_exact_explicit_canary_transition(tmp_path):
+    database = tmp_path / "Addons33.db"
+    create_addons_database(database, "repository.mwodevelop")
+    connection = sqlite3.connect(database)
+    with connection:
+        connection.execute(
+            "INSERT INTO repo VALUES (2, ?, ?)",
+            ("repository.mwodevelop.testing", "b" * 64),
+        )
+        connection.execute(
+            "INSERT INTO addons VALUES (2, ?, ?)",
+            ("plugin.video.umbrella", "6.7.81.17"),
+        )
+        connection.execute("INSERT INTO addonlinkrepo VALUES (2, 2)")
+        connection.execute(
+            "UPDATE repo SET checksum=? WHERE id=1",
+            ("a" * 64,),
+        )
+    connection.close()
+
+    apply_addon_origins(
+        database,
+        {"plugin.video.umbrella": "repository.mwodevelop.testing"},
+        {"plugin.video.umbrella": "repository.mwodevelop"},
+        {
+            "repository.mwodevelop": "a" * 64,
+            "repository.mwodevelop.testing": "b" * 64,
+        },
+        {
+            "plugin.video.umbrella": {
+                "from": "6.7.81.16",
+                "to": "6.7.81.17",
+            }
+        },
+    )
+
+    connection = sqlite3.connect(database)
+    origin = connection.execute(
+        "SELECT origin FROM installed WHERE addonID='plugin.video.umbrella'"
+    ).fetchone()[0]
+    connection.close()
+    assert origin == "repository.mwodevelop.testing"
+
+
 def test_origin_migration_rejects_unexpected_repository_checksum(tmp_path):
     database = tmp_path / "Addons33.db"
     create_addons_database(database)

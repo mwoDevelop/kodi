@@ -44,9 +44,11 @@ def _apply(
     origins,
     previous_origins=None,
     repository_checksums=None,
+    version_transitions=None,
 ):
     previous_origins = previous_origins or {}
     repository_checksums = repository_checksums or {}
+    version_transitions = version_transitions or {}
     connection = sqlite3.connect(database)
     try:
         with connection:
@@ -130,9 +132,15 @@ def _apply(
                             "add-on is absent from previous index"
                         )
                     if previous_candidate[0] != candidate[0]:
-                        raise RuntimeError(
-                            "repository candidates differ"
-                        )
+                        expected = version_transitions.get(addon_id)
+                        actual = {
+                            "from": previous_candidate[0],
+                            "to": candidate[0],
+                        }
+                        if expected != actual:
+                            raise RuntimeError(
+                                "repository candidates differ"
+                            )
                 connection.execute(
                     "UPDATE installed SET origin=? WHERE addonID=?",
                     (origin, addon_id),
@@ -148,11 +156,18 @@ def main():
             document = json.load(handle)
         previous_origins = {}
         repository_checksums = {}
-        if isinstance(document, dict) and document.get("schema") == 2:
+        version_transitions = {}
+        if (
+            isinstance(document, dict)
+            and document.get("schema") in (2, 3)
+        ):
             origins = document.get("origins")
             previous_origins = document.get("previous_origins", {})
             repository_checksums = document.get(
                 "repository_checksums", {}
+            )
+            version_transitions = document.get(
+                "version_transitions", {}
             )
         else:
             origins = document
@@ -162,6 +177,8 @@ def main():
             raise ValueError("previous origin mapping is invalid")
         if not isinstance(repository_checksums, dict):
             raise ValueError("repository checksum mapping is invalid")
+        if not isinstance(version_transitions, dict):
+            raise ValueError("version transition mapping is invalid")
         for addon_id, previous in previous_origins.items():
             if addon_id not in origins:
                 raise ValueError("previous origin has no target")
@@ -172,11 +189,26 @@ def main():
                 raise ValueError("unsafe checksum repository identifier")
             if not re.fullmatch(r"[0-9a-f]{64}", checksum):
                 raise ValueError("invalid repository checksum")
+        for addon_id, transition in version_transitions.items():
+            if addon_id not in previous_origins:
+                raise ValueError("version transition has no previous origin")
+            if (
+                not isinstance(transition, dict)
+                or set(transition) != {"from", "to"}
+                or not all(
+                    isinstance(value, str)
+                    and value
+                    and len(value) <= 128
+                    for value in transition.values()
+                )
+            ):
+                raise ValueError("invalid version transition")
         _apply(
             _database(),
             origins,
             previous_origins,
             repository_checksums,
+            version_transitions,
         )
         _write_marker(
             marker_path,
