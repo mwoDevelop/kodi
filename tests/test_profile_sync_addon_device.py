@@ -217,3 +217,32 @@ def test_repository_install_and_index_are_distinct_states(monkeypatch):
     assert not profile_sync_addon_device._repository_indexed(
         "adb", 5038, "device"
     )
+
+
+def test_repository_channel_selects_stable_origin(monkeypatch):
+    original = {
+        "ORIGIN": profile_sync_addon_device.ORIGIN,
+        "ORIGIN_ARCHIVE": profile_sync_addon_device.ORIGIN_ARCHIVE,
+        "ORIGIN_URL": profile_sync_addon_device.ORIGIN_URL,
+        "ORIGIN_SHA256": profile_sync_addon_device.ORIGIN_SHA256,
+        "REMOTE_ORIGIN_ARCHIVE": (
+            profile_sync_addon_device.REMOTE_ORIGIN_ARCHIVE
+        ),
+    }
+    for name, value in original.items():
+        monkeypatch.setattr(profile_sync_addon_device, name, value)
+
+    profile_sync_addon_device._configure_repository_channel("stable")
+
+    assert profile_sync_addon_device.ORIGIN == "repository.mwodevelop"
+    assert (
+        profile_sync_addon_device.ORIGIN_ARCHIVE
+        == "repository.mwodevelop-1.0.0.zip"
+    )
+    assert profile_sync_addon_device.ORIGIN_URL.endswith(
+        "/repository.mwodevelop-1.0.0.zip"
+    )
+    assert (
+        profile_sync_addon_device.REMOTE_ORIGIN_ARCHIVE
+        == "/sdcard/Download/repository.mwodevelop-1.0.0.zip"
+    )

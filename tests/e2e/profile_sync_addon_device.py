@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install, pair and check the testing profile-sync add-on on real Kodi.
+"""Install, pair and check the profile-sync add-on on real Kodi.
 
 The flow uses Kodi's add-on manager, a temporary verified loopback server and
 ADB reverse. A single probe running as Kodi reports only sanitized state; it
@@ -37,11 +37,21 @@ from tools.kodi_profile import (
 
 
 ADDON_ID = "service.mwodevelop.profilesync"
-ORIGIN = "repository.mwodevelop.testing"
 ORIGIN_VERSION = "1.0.0"
+REPOSITORY_CHANNELS = {
+    "stable": {
+        "origin": "repository.mwodevelop",
+        "sha256": "0bde0bf4b61a178cacc07d8ffc2b5006b8374b1ec2c1a12d610ea02c2e6dc287",
+    },
+    "testing": {
+        "origin": "repository.mwodevelop.testing",
+        "sha256": "d5529a150e7b9f9491fcb19a9884e30b8d95632c258b16dc8578e8435fdcf430",
+    },
+}
+ORIGIN = REPOSITORY_CHANNELS["testing"]["origin"]
 ORIGIN_ARCHIVE = "%s-%s.zip" % (ORIGIN, ORIGIN_VERSION)
 ORIGIN_URL = "https://mwodevelop.github.io/kodi/" + ORIGIN_ARCHIVE
-ORIGIN_SHA256 = "d5529a150e7b9f9491fcb19a9884e30b8d95632c258b16dc8578e8435fdcf430"
+ORIGIN_SHA256 = REPOSITORY_CHANNELS["testing"]["sha256"]
 CHANNEL = "home-stable"
 STATE_PATH = (
     KODI_ROOT + "/userdata/addon_data/" + ADDON_ID + "/state.json"
@@ -52,6 +62,21 @@ REMOTE_COMMAND = "/sdcard/Download/.mwo-profile-sync-e2e-command.json"
 REMOTE_ORIGIN_ARCHIVE = "/sdcard/Download/" + ORIGIN_ARCHIVE
 PUBLISHER_SEED = bytes.fromhex("61" * 32)
 PROMOTER_SEED = bytes.fromhex("62" * 32)
+
+
+def _configure_repository_channel(channel):
+    global ORIGIN
+    global ORIGIN_ARCHIVE
+    global ORIGIN_URL
+    global ORIGIN_SHA256
+    global REMOTE_ORIGIN_ARCHIVE
+
+    configuration = REPOSITORY_CHANNELS[channel]
+    ORIGIN = configuration["origin"]
+    ORIGIN_ARCHIVE = "%s-%s.zip" % (ORIGIN, ORIGIN_VERSION)
+    ORIGIN_URL = "https://mwodevelop.github.io/kodi/" + ORIGIN_ARCHIVE
+    ORIGIN_SHA256 = configuration["sha256"]
+    REMOTE_ORIGIN_ARCHIVE = "/sdcard/Download/" + ORIGIN_ARCHIVE
 
 
 def _server_modules(repository, server_repository):
@@ -491,6 +516,9 @@ MARKER_PATH = %s
 COMMAND_PATH = %s
 EXPECTED_REVISION = %s
 PAIRING_CODE = %s
+COMMAND_ENTRYPOINT = (
+    "special://home/addons/" + ADDON_ID + "/default.py"
+)
 
 
 def write_marker(document):
@@ -527,7 +555,10 @@ try:
         raise RuntimeError("profile sync settings did not persist")
     write_marker({"ok": True, "phase": "configured"})
     deadline = time.monotonic() + 120
+    direct_pair_at = time.monotonic() + 10
     next_pair_notification = 0
+    pair_transport = "service_notification"
+    direct_pair_sent = False
     paired = None
     while time.monotonic() < deadline:
         candidate = read_state()
@@ -538,6 +569,16 @@ try:
         ):
             paired = candidate
             break
+        if (
+            not direct_pair_sent
+            and time.monotonic() >= direct_pair_at
+        ):
+            xbmc.executebuiltin(
+                "RunScript(%%s,--pair-code,%%s)"
+                %% (COMMAND_ENTRYPOINT, PAIRING_CODE)
+            )
+            direct_pair_sent = True
+            pair_transport = "direct_command"
         if time.monotonic() >= next_pair_notification:
             xbmc.executebuiltin(
                 "NotifyAll(%s,pair-code,{\\"code\\":\\"%%s\\"})"
@@ -556,6 +597,7 @@ try:
             "enrollment_id": enrollment["enrollment_id"],
             "has_access_token": bool(paired.get("access_token")),
             "has_signing_seed": bool(paired.get("signing_seed")),
+            "pair_transport": pair_transport,
         }
     )
 
@@ -575,10 +617,27 @@ try:
         "NotifyAll(%s,sync-now,{\\"source\\":\\"device-e2e\\"})"
     )
 
-    checked = wait_for(
-        lambda item: item.get("status") == "ASSIGNMENT_AVAILABLE"
-        and item.get("assigned_revision") == EXPECTED_REVISION
-    )
+    sync_transport = "service_notification"
+    checked = None
+    direct_sync_at = time.monotonic() + 10
+    while time.monotonic() < direct_sync_at:
+        candidate = read_state()
+        if (
+            candidate.get("status") == "ASSIGNMENT_AVAILABLE"
+            and candidate.get("assigned_revision") == EXPECTED_REVISION
+        ):
+            checked = candidate
+            break
+        time.sleep(0.25)
+    if checked is None:
+        xbmc.executebuiltin(
+            "RunScript(%%s,--sync-once)" %% COMMAND_ENTRYPOINT
+        )
+        sync_transport = "direct_command"
+        checked = wait_for(
+            lambda item: item.get("status") == "ASSIGNMENT_AVAILABLE"
+            and item.get("assigned_revision") == EXPECTED_REVISION
+        )
     write_marker(
         {
             "ok": True,
@@ -587,6 +646,8 @@ try:
             "enrollment_id": enrollment["enrollment_id"],
             "assigned_revision": checked.get("assigned_revision"),
             "has_applied_revision": "applied_revision" in checked,
+            "pair_transport": pair_transport,
+            "sync_transport": sync_transport,
         }
     )
 except Exception as error:
@@ -862,8 +923,10 @@ def verify_device(
             "addon_version": expected_version,
             "installed_origin": origin,
             "pairing": "pass",
+            "pair_transport": checked.get("pair_transport"),
             "authenticated_heartbeat": "pass",
             "signed_candidate_check": "pass",
+            "sync_transport": checked.get("sync_transport"),
             "read_only_no_apply": "pass",
             "result": "pass",
         }
@@ -909,9 +972,20 @@ def main():
         type=Path,
         help="write the sanitized JSON result to this path",
     )
+    parser.add_argument(
+        "--repository-channel",
+        choices=sorted(REPOSITORY_CHANNELS),
+        default="testing",
+        help="repository channel used to install and verify the add-on",
+    )
     args = parser.parse_args()
+    _configure_repository_channel(args.repository_channel)
     lock = json.loads(
-        (repository / "manifests/locks/testing.json").read_text()
+        (
+            repository
+            / "manifests/locks"
+            / ("%s.json" % args.repository_channel)
+        ).read_text()
     )
     expected_version = lock["components"][ADDON_ID]["version"]
     registry = load_registry(repository / ".kodi-private/devices.json")
