@@ -72,6 +72,21 @@ Each playback created the input stream and demuxer and advanced for at least
 - [Sony TV](2026-07-28-sony-provider-relay-rollout.json)
 - [Bedroom TV](2026-07-28-bedroom-provider-relay-rollout.json)
 
+## Stable promotion
+
+The exact public testing candidate was promoted byte-for-byte after the device
+rollout:
+
+- promotion gate `30383783693` fetched and checked testing index
+  `9bca766697af33afe56e1e1c83a3bdb48b4cfe6111a13542dfa9566ba378a01c`;
+- promotion PR #55 changed only `manifests/locks/stable.json` and passed
+  repository E2E in run `30383969637`;
+- stable deployment `30384195482` passed repository E2E, built only
+  lock-addressed bytes and deployed GitHub Pages;
+- the public stable ZIP digests for all five components match the promoted
+  lock, and the public `addons.xml` matches its declared checksum;
+- `repository.mwodevelop` remains version `1.0.0`.
+
 ## Defect found and fixed during rollout
 
 MwoScrapers 0.1.4 used empty XML defaults for the two endpoint settings.
