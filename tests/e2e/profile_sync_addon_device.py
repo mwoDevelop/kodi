@@ -84,6 +84,10 @@ def _execute_builtin(adb, port, serial, command):
         return
     except (OSError, RuntimeError, TimeoutError):
         pass
+    _execute_event_builtin(adb, port, serial, command)
+
+
+def _execute_event_builtin(adb, port, serial, command):
     try:
         AdbEventClient(adb, port, serial).execute_builtin(command)
         return
@@ -179,9 +183,41 @@ def _addon_version(adb, port, serial):
     return match.group(1) if match else None
 
 
+def _addon_database_contains(adb, port, serial, table, addon_id):
+    if table not in {"installed", "repo"}:
+        raise ValueError("unsupported Kodi add-on database table")
+    listing = adb_output(
+        adb,
+        port,
+        serial,
+        "shell",
+        "ls '%s/userdata/Database'/Addons*.db 2>/dev/null" % KODI_ROOT,
+    )
+    remote = _latest_addons_database(listing)
+    with tempfile.TemporaryDirectory(
+        prefix="mwo-testing-repository-index-"
+    ) as temporary:
+        database = Path(temporary) / "addons.db"
+        adb_command(
+            adb,
+            port,
+            serial,
+            "pull",
+            remote,
+            str(database),
+            text=True,
+        )
+        with sqlite3.connect(database) as connection:
+            row = connection.execute(
+                "SELECT 1 FROM %s WHERE addonID=?" % table,
+                (addon_id,),
+            ).fetchone()
+    return row is not None
+
+
 def _repository_installed(adb, port, serial):
     manifest = KODI_ROOT + "/addons/" + ORIGIN + "/addon.xml"
-    return (
+    files_present = (
         adb_command(
             adb,
             port,
@@ -192,6 +228,13 @@ def _repository_installed(adb, port, serial):
         ).returncode
         == 0
     )
+    return files_present and _addon_database_contains(
+        adb, port, serial, "installed", ORIGIN
+    )
+
+
+def _repository_indexed(adb, port, serial):
+    return _addon_database_contains(adb, port, serial, "repo", ORIGIN)
 
 
 def _current_control(jsonrpc):
@@ -234,12 +277,24 @@ def _ensure_kodi_foreground(adb, port, serial):
         port,
         serial,
         "shell",
+        "input",
+        "keyevent",
+        "KEYCODE_WAKEUP",
+        check=False,
+        text=True,
+        timeout=10,
+    )
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
         "am",
         "start",
-        "-W",
         "-n",
         KODI_PACKAGE + "/.Main",
         text=True,
+        timeout=15,
     )
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
@@ -256,6 +311,17 @@ def _ensure_kodi_foreground(adb, port, serial):
             and KODI_PACKAGE + "/" in windows.split("mCurrentFocus=", 1)[1]
         ):
             return
+        adb_command(
+            adb,
+            port,
+            serial,
+            "shell",
+            "input",
+            "keyevent",
+            "KEYCODE_WAKEUP",
+            check=False,
+            timeout=10,
+        )
         time.sleep(0.5)
     raise RuntimeError("Kodi did not become the foreground Android app")
 
@@ -310,7 +376,9 @@ def _bootstrap_testing_repository(adb, port, serial):
             text=True,
         )
     try:
-        _execute_builtin(adb, port, serial, "InstallFromZip")
+        # Kodi 21 acknowledges InstallFromZip through JSON-RPC without opening
+        # the file browser. EventServer executes this GUI-only builtin.
+        _execute_event_builtin(adb, port, serial, "InstallFromZip")
         time.sleep(1)
         with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
             _select_control(
@@ -346,7 +414,13 @@ def _install_from_testing(adb, port, serial, expected_version):
     if not _repository_installed(adb, port, serial):
         _bootstrap_testing_repository(adb, port, serial)
     _execute_builtin(adb, port, serial, "UpdateAddonRepos")
-    time.sleep(8)
+    deadline = time.monotonic() + 45
+    while time.monotonic() < deadline:
+        if _repository_indexed(adb, port, serial):
+            break
+        time.sleep(1)
+    else:
+        raise TimeoutError("testing repository indexing timed out")
     _execute_builtin(adb, port, serial, "InstallAddon(%s)" % ADDON_ID)
     _accept_addon_install_prompt(adb, port, serial)
     deadline = time.monotonic() + 90

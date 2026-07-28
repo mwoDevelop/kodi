@@ -39,6 +39,18 @@ Sanitized machine-readable reports:
 - [Sony TV](2026-07-28-sony-watchnixtoons2-0.26.1.json)
 - [Bedroom TV](2026-07-28-bedroom-tv-watchnixtoons2-0.26.1.json)
 
+## Bedroom TV profile rollout
+
+The same device also received Profile Sync `0.1.6` from
+`repository.mwodevelop.testing`. The add-on E2E paired the device with an
+ephemeral local backend, completed an authenticated heartbeat, verified a
+signed candidate and confirmed that read-only mode did not apply the candidate.
+The installed origin in Kodi's add-on database was
+`repository.mwodevelop.testing`.
+
+Sanitized machine-readable report:
+[Bedroom TV Profile Sync](2026-07-28-bedroom-tv-profile-sync-0.1.6.json).
+
 ## Cyclic update proof
 
 The first remote cycle prepared a content-addressed candidate in a read-only

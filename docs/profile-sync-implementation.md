@@ -1,6 +1,6 @@
 # Profile sync implementation status
 
-Date: 2026-07-27
+Date: 2026-07-28
 
 ## Implemented
 
@@ -44,7 +44,9 @@ Date: 2026-07-27
 - add-on 0.1.5 read-only regression passed on BlueStacks and Sony after
   verifying the real service disable/enable lifecycle;
 - add-on 0.1.6 testing candidate reads schema 2 and applies signed schema 3
-  layers selected from server-bound target tags; device rollout is pending;
+  layers selected from server-bound target tags; Bedroom TV passed
+  testing-repository install, pairing, authenticated heartbeat, signed
+  candidate verification and the read-only no-apply invariant;
 - QNAP Container Station Compose contract with an ARMv7 image gate;
 - live QNAP preflight confirming Container Station 3, Docker 26, Compose 2,
   `overlay2`, sufficient capacity and an available Python 3.11 ARMv7 base
@@ -134,15 +136,17 @@ production activation on the current QNAP remains blocked by:
 
 Linux/Flatpak host support additionally remains read-only until:
 
-- the NUC is reachable and separate SSH keys are enrolled for both accounts;
+- the NUC is reachable again; separate SSH keys are already enrolled for both
+  accounts and passed positive plus cross-account rejection checks;
 - `special://home` and `special://profile` are qualified from inside the real
   Flatpak Kodi process;
 - repository bootstrap uses a supported Kodi UI/API path or returns
   `BOOTSTRAP_REQUIRES_USER`.
 
 Revision schema 3 and administratively bound compatibility tags are now
-implemented in the generator, server and add-on. Device rollout remains the
-release gate.
+implemented in the generator, server and add-on. Read-only rollout passed on
+Bedroom TV; journaled apply/rollback and the remaining target matrix remain
+release gates.
 
 ## Layered routine revisions
 
