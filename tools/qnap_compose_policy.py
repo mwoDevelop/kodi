@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 from pathlib import Path, PurePosixPath
 
@@ -188,9 +189,7 @@ def validate_policy(document, mode, allow_placeholder=False):
 def render_compose(repository, mode, env_file, docker="docker"):
     repository = Path(repository).resolve()
     deployment = repository / "deploy" / "qnap-profile-sync"
-    command = [
-        docker,
-        "compose",
+    arguments = [
         "--project-name",
         "qnap-profile-sync" if mode == "production"
         else "qnap-profile-sync-smoke",
@@ -200,14 +199,27 @@ def render_compose(repository, mode, env_file, docker="docker"):
         str(deployment / "compose.yaml"),
     ]
     if mode == "smoke":
-        command.extend(["-f", str(deployment / "compose.smoke.yaml")])
-    command.extend(["config", "--format", "json", "--no-normalize"])
+        arguments.extend(["-f", str(deployment / "compose.smoke.yaml")])
+    arguments.extend(["config", "--format", "json", "--no-normalize"])
+    command = [docker, "compose", *arguments]
     result = subprocess.run(
         command,
         capture_output=True,
         text=True,
         check=False,
     )
+    if result.returncode and docker == "docker":
+        standalone = shutil.which("docker-compose")
+        bundled = Path("/usr/libexec/docker/cli-plugins/docker-compose")
+        if not standalone and bundled.is_file():
+            standalone = str(bundled)
+        if standalone:
+            result = subprocess.run(
+                [standalone, *arguments],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
     if result.returncode:
         raise PolicyError("docker compose config failed")
     try:
