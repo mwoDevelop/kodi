@@ -2,25 +2,30 @@
   "channel": "stable",
   "components": {
     "plugin.video.umbrella": {
-      "commit": "41dc2e1f9e6b30aa12938bfe30943541eeabfaea",
-      "version": "6.7.81.14",
-      "zip_sha256": "24758a99affbc6d4a6df3d330a38d4f0a4ba21a4a939acdb10d86b4ee24aabf9"
+      "commit": "9ccb063e65463b4116d5c9ad2f09be189b051f29",
+      "version": "6.7.81.16",
+      "zip_sha256": "e97d3cb06792663b58b30097072e36f5de04122045a2f47d44ded95d9fd22855"
     },
     "plugin.video.watchnixtoons2.mwodevelop": {
-      "commit": "da4350eb79d032730ca240c3b824e4f3fd2ca09d",
-      "version": "0.25.2",
-      "zip_sha256": "41666b66945565b6a8660028df0701240463437a078fe9e3e1f90668260d560d"
+      "commit": "83560a2a5ccf7ab56724183959688a42b63b9615",
+      "version": "0.26.1",
+      "zip_sha256": "01a84245391da1beef7bc65982b4d47dd517595c533296473b65763e6a1e2312"
     },
     "script.module.mwoscrapers": {
-      "commit": "7c21ad6a634cc2eeb67fdc84747098aa4b97b030",
+      "commit": "6c4b7956734f902c94b51f593a989ef0b3a29510",
       "provider_api": 1,
-      "version": "0.1.3",
-      "zip_sha256": "afad0ba6bc0f0c51dd58765c5040247a90c2aebe87cebccd6d3a99f4b4efb6ab"
+      "version": "0.1.5",
+      "zip_sha256": "ec9425baa334fbda2b9b106ec0aa558e5a8d37e03d5315e865fbcfb15762c58a"
     },
     "script.mwoscrapers": {
       "commit": "7c21ad6a634cc2eeb67fdc84747098aa4b97b030",
       "version": "0.1.1",
       "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
+    },
+    "service.mwodevelop.profilesync": {
+      "commit": "30039a4c53b7fcfb89e20b097b761547a98a379d",
+      "version": "0.1.6",
+      "zip_sha256": "faa141520e10a8a9a227457e22a56f0dc4b994caef08a54c1177c62217e6bdb7"
     }
   },
   "schema": 1
