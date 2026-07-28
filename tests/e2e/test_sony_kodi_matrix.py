@@ -1,12 +1,14 @@
 import base64
 import hashlib
 import struct
+import subprocess
 
 import sony_kodi_matrix
 from sony_kodi_matrix import (
     AdbEventClient,
     EventClient,
     diagnostic_lines,
+    missing_player_timed_out,
     open_media,
     playback_log_state,
     plugin_url,
@@ -160,3 +162,47 @@ def test_open_media_uses_acknowledged_jsonrpc_player_open():
             },
         )
     ]
+
+
+def test_foreground_start_falls_back_when_android_wait_response_hangs(monkeypatch):
+    calls = []
+
+    def fake_run(adb, serial, *args, **kwargs):
+        calls.append((args, kwargs))
+        if "-W" in args:
+            raise subprocess.TimeoutExpired([adb, "-s", serial, *args], 15)
+        return ""
+
+    monkeypatch.setattr(sony_kodi_matrix, "run", fake_run)
+    monkeypatch.setattr(
+        sony_kodi_matrix,
+        "shell",
+        lambda *_args, **_kwargs: (
+            "mCurrentFocus=Window{abc u0 org.xbmc.kodi/.Main}"
+        ),
+    )
+
+    sony_kodi_matrix.ensure_kodi_foreground("adb", "serial")
+
+    assert "-W" in calls[0][0]
+    assert "-W" not in calls[1][0]
+    assert calls[1][1]["check"] is False
+    assert calls[1][1]["timeout"] == 10
+
+
+def test_transient_android_player_gap_does_not_end_playback_too_early():
+    assert not missing_player_timed_out(
+        now=114.9,
+        last_player_seen_at=100.0,
+        playback_log_seen_at=None,
+    )
+    assert missing_player_timed_out(
+        now=115.0,
+        last_player_seen_at=100.0,
+        playback_log_seen_at=None,
+    )
+    assert not missing_player_timed_out(
+        now=114.9,
+        last_player_seen_at=None,
+        playback_log_seen_at=100.0,
+    )

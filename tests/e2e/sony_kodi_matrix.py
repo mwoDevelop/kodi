@@ -146,15 +146,23 @@ TERMINAL_FAILURE_MARKERS = (
     "Playlist Player: skipping unplayable item",
     "Attempt to set unplayable index",
 )
+PLAYER_DISAPPEAR_GRACE_SECONDS = 15.0
 
 
-def run(adb: str, serial: str, *args: str, check: bool = True) -> str:
+def run(
+    adb: str,
+    serial: str,
+    *args: str,
+    check: bool = True,
+    timeout: float | None = 30.0,
+) -> str:
     completed = subprocess.run(
         [adb, "-s", serial, *args],
         check=check,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
+        timeout=timeout,
     )
     return completed.stdout or ""
 
@@ -165,7 +173,34 @@ def shell(adb: str, serial: str, command: str, check: bool = True) -> str:
 
 def ensure_kodi_foreground(adb: str, serial: str):
     """Give Android's video surface to Kodi before starting playback."""
-    run(adb, serial, "shell", "am", "start", "-W", "-n", KODI_ACTIVITY)
+    try:
+        run(
+            adb,
+            serial,
+            "shell",
+            "am",
+            "start",
+            "-W",
+            "-n",
+            KODI_ACTIVITY,
+            timeout=15,
+        )
+    except subprocess.TimeoutExpired:
+        # Some Android TV 14 builds start Kodi successfully but never complete
+        # Activity Manager's ``-W`` response over wireless ADB.  Retry without
+        # waiting and rely on the foreground-window poll below as the source of
+        # truth.
+        run(
+            adb,
+            serial,
+            "shell",
+            "am",
+            "start",
+            "-n",
+            KODI_ACTIVITY,
+            check=False,
+            timeout=10,
+        )
     started = time.monotonic()
     while time.monotonic() - started < 15:
         windows = shell(adb, serial, "dumpsys window", check=False)
@@ -181,6 +216,21 @@ def ensure_kodi_foreground(adb: str, serial: str):
             return
         time.sleep(1)
     raise RuntimeError("Kodi did not become the foreground Android app")
+
+
+def missing_player_timed_out(
+    now: float,
+    last_player_seen_at: float | None,
+    playback_log_seen_at: float | None,
+    grace_seconds: float = PLAYER_DISAPPEAR_GRACE_SECONDS,
+) -> bool:
+    """Return true only after Kodi's transient Android player gap is exhausted."""
+    evidence_at = (
+        last_player_seen_at
+        if last_player_seen_at is not None
+        else playback_log_seen_at
+    )
+    return evidence_at is not None and now - evidence_at >= grace_seconds
 
 
 class JsonRpc:
@@ -633,39 +683,69 @@ def run_case(
     else:
         navigation = open_case_through_gui(rpc, events, case)
     playback_started_at = None
+    playback_log_seen_at = None
+    last_player_seen_at = None
+    last_poll_at = None
+    player_was_active = False
+    active_playback_seconds = 0.0
+    rpc_unavailable_at = None
     last_properties = {}
     state = "resolve_timeout"
     next_failure_probe = time.monotonic() + 4
 
     while time.monotonic() - started_at < timeout:
+        now = time.monotonic()
         try:
             player_id = active_video_player(rpc)
         except (OSError, RuntimeError, socket.timeout):
+            if rpc_unavailable_at is None:
+                rpc_unavailable_at = now
+            elif now - rpc_unavailable_at >= PLAYER_DISAPPEAR_GRACE_SECONDS:
+                raise RuntimeError(
+                    "Kodi JSON-RPC remained unavailable for %.0f seconds"
+                    % PLAYER_DISAPPEAR_GRACE_SECONDS
+                )
             time.sleep(poll_seconds)
             continue
+        rpc_unavailable_at = None
         if player_id is None:
-            if playback_started_at is not None:
-                state = "playback_stopped_early"
-                break
-            if time.monotonic() >= next_failure_probe:
+            player_was_active = False
+            last_poll_at = now
+            if now >= next_failure_probe:
                 kodi_probe = log_since(adb, serial, kodi_start_line)
-                state = (
+                log_state = (
                     terminal_failure_state(kodi_probe)
                     or playback_log_state(kodi_probe)
-                    or state
                 )
-                if state in {"unplayable", "playback_stopped_early"}:
+                if log_state == "unplayable":
+                    state = log_state
                     break
-                next_failure_probe = time.monotonic() + 4
+                if log_state in {"playback_started", "playback_stopped_early"}:
+                    if playback_log_seen_at is None:
+                        playback_log_seen_at = now
+                    state = log_state
+                next_failure_probe = now + 4
+            if missing_player_timed_out(
+                now,
+                last_player_seen_at,
+                playback_log_seen_at,
+            ):
+                state = "playback_stopped_early"
+                break
             time.sleep(poll_seconds)
             continue
         if playback_started_at is None:
-            playback_started_at = time.monotonic()
+            playback_started_at = now
+        if player_was_active and last_poll_at is not None:
+            active_playback_seconds += now - last_poll_at
+        last_player_seen_at = now
+        last_poll_at = now
+        player_was_active = True
         try:
             last_properties = playback_properties(rpc, player_id)
         except (OSError, RuntimeError, socket.timeout):
             pass
-        if time.monotonic() - playback_started_at >= observe_seconds:
+        if active_playback_seconds >= observe_seconds:
             state = "played"
             break
         time.sleep(poll_seconds)
@@ -675,11 +755,7 @@ def run_case(
         if playback_started_at is not None
         else None
     )
-    observed = (
-        round(time.monotonic() - playback_started_at, 3)
-        if playback_started_at is not None
-        else 0
-    )
+    observed = round(active_playback_seconds, 3)
     stop_playback(rpc)
     time.sleep(2)
     kodi_log = log_since(adb, serial, kodi_start_line)
