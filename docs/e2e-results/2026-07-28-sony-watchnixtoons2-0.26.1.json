@@ -1,0 +1,81 @@
+{
+  "addon": {
+    "id": "plugin.video.watchnixtoons2.mwodevelop",
+    "playback_method": "default_select_dialog",
+    "selected_quality": "480 (SD)",
+    "version": "0.26.1"
+  },
+  "catalogue": {
+    "menu": "[B][COLOR mediumaquamarine]Latest Releases[/COLOR][/B]",
+    "sample": [
+      "Flaming Dodgeball Girl Danko Episode 4 English Subbed",
+      "Elegy for the Henchmen: Fist of the North Star Episode 16 English Subbed",
+      "Liar Game Episode 15 English Dubbed",
+      "Skeleton Knight in Another World Season 2 Episode 4 English Dubbed",
+      "Teen Titans Go! Season 9 Episode 42 The Joker\u2019s on You",
+      "Rick and Morty Season 9 Episode 10 Field of Dreams",
+      "Liar Game Episode 17 English Subbed",
+      "Grand Blue Dreaming Season 3 Episode 4 English Subbed",
+      "Oh Boy, Was I Wrong About Her Episode 4 English Subbed",
+      "A Livid Lady\u2019s Guide to Getting Even: How I Crushed My Homeland with My Mighty Grimoires Episode 4 English Subbed",
+      "Love Unseen Beneath the Clear Night Sky Episode 4 English Subbed",
+      "The Forsaken Saintess and her Foodie Roadtrip in Another World Episode 4 English Subbed",
+      "Skeleton Knight in Another World Season 2 Episode 4 English Subbed",
+      "The Insipid Prince\u2019s Furtive Grab for The Throne Episode 4 English Subbed",
+      "The World Is Dancing Episode 5 English Subbed",
+      "Mushoku Tensei: Jobless Reincarnation Season 3 Episode 3 English Dubbed"
+    ],
+    "sample_count": 16
+  },
+  "device": {
+    "kodi": "21.3",
+    "model": "BRAVIA 4K GB ATV3",
+    "serial": "192.168.1.12:5555"
+  },
+  "playback": {
+    "content_path": "mao-episode-17-english-subbed",
+    "final": {
+      "percentage": 0.8297001719474792,
+      "speed": 1,
+      "time": {
+        "hours": 0,
+        "milliseconds": 604,
+        "minutes": 0,
+        "seconds": 12
+      },
+      "totaltime": {
+        "hours": 0,
+        "milliseconds": 103,
+        "minutes": 25,
+        "seconds": 19
+      }
+    },
+    "initial": {
+      "percentage": 0.0,
+      "speed": 1,
+      "time": {
+        "hours": 0,
+        "milliseconds": 0,
+        "minutes": 0,
+        "seconds": 0
+      },
+      "totaltime": {
+        "hours": 0,
+        "milliseconds": 103,
+        "minutes": 25,
+        "seconds": 19
+      }
+    },
+    "log_evidence": [
+      "2026-07-28 17:40:37.085 T:15110    info <general>: VideoPlayer::OpenFile: <redacted-plugin-url>",
+      "2026-07-28 17:40:37.088 T:17801    info <general>: Creating InputStream",
+      "2026-07-28 17:40:38.872 T:17801    info <general>: Creating Demuxer",
+      "2026-07-28 17:40:40.796 T:17801    info <general>: CDVDAudioCodecFFmpeg::Open() Successful opened audio decoder aac"
+    ],
+    "observed_seconds": 12,
+    "resolve_seconds": 5.056,
+    "title": "Mao Episode 17 English Subbed"
+  },
+  "result": "pass",
+  "schema": 1
+}
