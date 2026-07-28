@@ -338,12 +338,29 @@ def addon_database_path(adb, port, serial):
         raise RuntimeError("Kodi add-on database was not found")
     return output
 
-def apply_addon_origins(database, origins):
+def apply_addon_origins(
+    database,
+    origins,
+    previous_origins=None,
+    repository_checksums=None,
+):
+    previous_origins = previous_origins or {}
+    repository_checksums = repository_checksums or {}
     for addon_id, origin in origins.items():
         if not SAFE_ADDON_ID.fullmatch(addon_id):
             raise ValueError("unsafe add-on identifier in origin mapping")
         if not SAFE_ADDON_ID.fullmatch(origin):
             raise ValueError("unsafe repository identifier in origin mapping")
+    for addon_id, origin in previous_origins.items():
+        if addon_id not in origins:
+            raise ValueError("previous origin has no target origin")
+        if not SAFE_ADDON_ID.fullmatch(origin):
+            raise ValueError("unsafe previous repository identifier")
+    for origin, checksum in repository_checksums.items():
+        if not SAFE_ADDON_ID.fullmatch(origin):
+            raise ValueError("unsafe checksum repository identifier")
+        if not re.fullmatch(r"[0-9a-f]{64}", checksum):
+            raise ValueError("invalid repository checksum")
     connection = sqlite3.connect(database)
     try:
         with connection:
@@ -356,9 +373,17 @@ def apply_addon_origins(database, origins):
                     raise RepositoryIndexNotReady(
                         "%s repository index is not ready" % origin
                     )
+                expected_checksum = repository_checksums.get(origin)
+                if (
+                    expected_checksum is not None
+                    and repository[0] != expected_checksum
+                ):
+                    raise RepositoryIndexNotReady(
+                        "%s repository index checksum differs" % origin
+                    )
                 candidate = connection.execute(
                     """
-                    SELECT 1
+                    SELECT addons.version
                     FROM addons
                     JOIN addonlinkrepo ON addonlinkrepo.idAddon=addons.id
                     JOIN repo ON repo.id=addonlinkrepo.idRepo
@@ -378,9 +403,51 @@ def apply_addon_origins(database, origins):
                     raise RuntimeError("%s is not installed" % addon_id)
                 current = installed[0]
                 if current not in ("", origin):
-                    raise RuntimeError(
-                        "%s already belongs to a different origin" % addon_id
+                    previous = previous_origins.get(addon_id)
+                    if current != previous:
+                        raise RuntimeError(
+                            "%s already belongs to a different origin"
+                            % addon_id
+                        )
+                    previous_repository = connection.execute(
+                        "SELECT checksum FROM repo WHERE addonID=?",
+                        (previous,),
+                    ).fetchone()
+                    if not previous_repository or not previous_repository[0]:
+                        raise RepositoryIndexNotReady(
+                            "%s repository index is not ready" % previous
+                        )
+                    expected_previous_checksum = repository_checksums.get(
+                        previous
                     )
+                    if (
+                        expected_previous_checksum is not None
+                        and previous_repository[0]
+                        != expected_previous_checksum
+                    ):
+                        raise RepositoryIndexNotReady(
+                            "%s repository index checksum differs" % previous
+                        )
+                    previous_candidate = connection.execute(
+                        """
+                        SELECT addons.version
+                        FROM addons
+                        JOIN addonlinkrepo
+                          ON addonlinkrepo.idAddon=addons.id
+                        JOIN repo ON repo.id=addonlinkrepo.idRepo
+                        WHERE addons.addonID=? AND repo.addonID=?
+                        """,
+                        (addon_id, previous),
+                    ).fetchone()
+                    if not previous_candidate:
+                        raise RepositoryIndexNotReady(
+                            "%s is not indexed by %s"
+                            % (addon_id, previous)
+                        )
+                    if previous_candidate[0] != candidate[0]:
+                        raise RuntimeError(
+                            "%s repository candidates differ" % addon_id
+                        )
                 connection.execute(
                     "UPDATE installed SET origin=? WHERE addonID=?",
                     (origin, addon_id),
@@ -420,7 +487,12 @@ def assign_addon_origins_via_adb(adb, port, target, timeout=90):
                 timeout=120,
             )
             try:
-                apply_addon_origins(local, origins)
+                apply_addon_origins(
+                    local,
+                    origins,
+                    target.get("addon_previous_origins"),
+                    target.get("addon_repository_checksums"),
+                )
             except RepositoryIndexNotReady as error:
                 last_error = error
             else:
@@ -464,8 +536,18 @@ def assign_addon_origins_in_kodi(
             raise ValueError("unsafe add-on identifier in origin mapping")
         if not SAFE_ADDON_ID.fullmatch(origin):
             raise ValueError("unsafe repository identifier in origin mapping")
+    previous_origins = target.get("addon_previous_origins", {})
+    repository_checksums = target.get("addon_repository_checksums", {})
+    document = origins
+    if previous_origins or repository_checksums:
+        document = {
+            "schema": 2,
+            "origins": origins,
+            "previous_origins": previous_origins,
+            "repository_checksums": repository_checksums,
+        }
     with tempfile.NamedTemporaryFile("w", encoding="utf-8") as mapping:
-        json.dump(origins, mapping, sort_keys=True)
+        json.dump(document, mapping, sort_keys=True)
         mapping.flush()
         adb_command(
             adb,

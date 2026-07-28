@@ -121,14 +121,17 @@ def create_addons_database(path, installed_origin=""):
             );
             CREATE TABLE addons (
                 id INTEGER PRIMARY KEY,
-                addonID TEXT
+                addonID TEXT,
+                version TEXT
             );
             CREATE TABLE addonlinkrepo (idRepo INTEGER, idAddon INTEGER);
             INSERT INTO installed VALUES ('plugin.video.umbrella', '');
             INSERT INTO repo VALUES (
                 1, 'repository.mwodevelop', 'checksum'
             );
-            INSERT INTO addons VALUES (1, 'plugin.video.umbrella');
+            INSERT INTO addons VALUES (
+                1, 'plugin.video.umbrella', '6.7.81.16'
+            );
             INSERT INTO addonlinkrepo VALUES (1, 1);
             """
         )
@@ -179,4 +182,84 @@ def test_origin_assignment_waits_for_repository_index(tmp_path):
         apply_addon_origins(
             database,
             {"plugin.video.umbrella": "repository.mwodevelop"},
+        )
+
+
+def test_origin_migration_requires_matching_indexed_versions(tmp_path):
+    database = tmp_path / "Addons33.db"
+    create_addons_database(database, "repository.mwodevelop.testing")
+    connection = sqlite3.connect(database)
+    with connection:
+        connection.execute(
+            "INSERT INTO repo VALUES (?, ?, ?)",
+            (2, "repository.mwodevelop.testing", "b" * 64),
+        )
+        connection.execute(
+            "INSERT INTO addons VALUES (?, ?, ?)",
+            (2, "plugin.video.umbrella", "6.7.81.16"),
+        )
+        connection.execute("INSERT INTO addonlinkrepo VALUES (2, 2)")
+        connection.execute(
+            "UPDATE repo SET checksum=? WHERE id=1",
+            ("a" * 64,),
+        )
+    connection.close()
+
+    apply_addon_origins(
+        database,
+        {"plugin.video.umbrella": "repository.mwodevelop"},
+        {
+            "plugin.video.umbrella": "repository.mwodevelop.testing"
+        },
+        {
+            "repository.mwodevelop": "a" * 64,
+            "repository.mwodevelop.testing": "b" * 64,
+        },
+    )
+
+    connection = sqlite3.connect(database)
+    origin = connection.execute(
+        "SELECT origin FROM installed WHERE addonID='plugin.video.umbrella'"
+    ).fetchone()[0]
+    connection.close()
+    assert origin == "repository.mwodevelop"
+
+
+def test_origin_migration_rejects_different_candidate_version(tmp_path):
+    database = tmp_path / "Addons33.db"
+    create_addons_database(database, "repository.mwodevelop.testing")
+    connection = sqlite3.connect(database)
+    with connection:
+        connection.execute(
+            "INSERT INTO repo VALUES (?, ?, ?)",
+            (2, "repository.mwodevelop.testing", "b" * 64),
+        )
+        connection.execute(
+            "INSERT INTO addons VALUES (?, ?, ?)",
+            (2, "plugin.video.umbrella", "6.7.81.15"),
+        )
+        connection.execute("INSERT INTO addonlinkrepo VALUES (2, 2)")
+    connection.close()
+
+    with pytest.raises(RuntimeError, match="candidates differ"):
+        apply_addon_origins(
+            database,
+            {"plugin.video.umbrella": "repository.mwodevelop"},
+            {
+                "plugin.video.umbrella": "repository.mwodevelop.testing"
+            },
+        )
+
+
+def test_origin_migration_rejects_unexpected_repository_checksum(tmp_path):
+    database = tmp_path / "Addons33.db"
+    create_addons_database(database)
+
+    with pytest.raises(RepositoryIndexNotReady, match="checksum differs"):
+        apply_addon_origins(
+            database,
+            {"plugin.video.umbrella": "repository.mwodevelop"},
+            repository_checksums={
+                "repository.mwodevelop": "a" * 64,
+            },
         )

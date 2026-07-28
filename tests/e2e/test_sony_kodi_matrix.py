@@ -39,6 +39,12 @@ def test_redaction_removes_pipe_delimited_refresh_credentials():
     assert "refresh-credential" not in redacted
 
 
+def test_redaction_removes_real_debrid_torrent_identifier():
+    redacted = redact("Real-Debrid: Torrent ID MYYKMTBV447VE was removed")
+    assert redacted == "Real-Debrid: Torrent ID <redacted> was removed"
+    assert "MYYKMTBV447VE" not in redacted
+
+
 def test_eventserver_header_matches_kodi_packet_contract():
     client = EventClient("127.0.0.1")
     header = client._header(
