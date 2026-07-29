@@ -13,6 +13,7 @@ ADAPTERS = {
     "provider_feed",
     "kodi_repository",
 }
+POLICY_PROFILES = {"component_code", "provider_observation"}
 
 
 def _safe_relative(value, field):
@@ -46,6 +47,8 @@ def load_manifest(path):
             raise ValueError("invalid component name: %r" % name)
         if config.get("adapter") not in ADAPTERS:
             raise ValueError("unknown adapter for %s" % name)
+        if config.get("policy_profile") not in POLICY_PROFILES:
+            raise ValueError("unknown policy profile for %s" % name)
         if config.get("schedule_slot") not in slots:
             raise ValueError("unknown schedule slot for %s" % name)
         if not isinstance(config.get("enabled"), bool):

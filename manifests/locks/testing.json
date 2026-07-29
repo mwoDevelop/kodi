@@ -1,32 +1,32 @@
 {
-  "schema": 1,
   "channel": "testing",
   "components": {
-    "plugin.video.watchnixtoons2.mwodevelop": {
-      "commit": "83560a2a5ccf7ab56724183959688a42b63b9615",
-      "version": "0.26.1",
-      "zip_sha256": "01a84245391da1beef7bc65982b4d47dd517595c533296473b65763e6a1e2312"
-    },
     "plugin.video.umbrella": {
       "commit": "4b714050ac64ddb6fb22ced6bb008a322bc8dc5a",
       "version": "6.7.81.18",
       "zip_sha256": "ddac042c68d95128e1d075b71c48c052dd84906599bdc42236d7bcda3d3113cb"
     },
+    "plugin.video.watchnixtoons2.mwodevelop": {
+      "commit": "83560a2a5ccf7ab56724183959688a42b63b9615",
+      "version": "0.26.1",
+      "zip_sha256": "01a84245391da1beef7bc65982b4d47dd517595c533296473b65763e6a1e2312"
+    },
+    "script.module.mwoscrapers": {
+      "commit": "212847c04f083f728f977fa883ca51bbc213972c",
+      "provider_api": 1,
+      "version": "0.1.6",
+      "zip_sha256": "8626a85a4ca6359ed1642511aae067c540d6a3f7efd36cca2afdeecf2f199910"
+    },
+    "script.mwoscrapers": {
+      "commit": "212847c04f083f728f977fa883ca51bbc213972c",
+      "version": "0.1.1",
+      "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
+    },
     "service.mwodevelop.profilesync": {
       "commit": "30039a4c53b7fcfb89e20b097b761547a98a379d",
       "version": "0.1.6",
       "zip_sha256": "faa141520e10a8a9a227457e22a56f0dc4b994caef08a54c1177c62217e6bdb7"
-    },
-    "script.module.mwoscrapers": {
-      "commit": "6c4b7956734f902c94b51f593a989ef0b3a29510",
-      "version": "0.1.5",
-      "provider_api": 1,
-      "zip_sha256": "ec9425baa334fbda2b9b106ec0aa558e5a8d37e03d5315e865fbcfb15762c58a"
-    },
-    "script.mwoscrapers": {
-      "commit": "7c21ad6a634cc2eeb67fdc84747098aa4b97b030",
-      "version": "0.1.1",
-      "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
     }
-  }
+  },
+  "schema": 1
 }

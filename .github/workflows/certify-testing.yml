@@ -1,0 +1,123 @@
+name: certify testing on Kodi devices
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot_id:
+        description: Exact published testing snapshot ID
+        required: true
+        type: string
+      android_tv:
+        description: Logical Android TV canary
+        required: false
+        default: sony-tv
+        type: string
+
+concurrency:
+  group: certify-${{ inputs.snapshot_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  device-matrix:
+    if: >-
+      github.repository == 'mwoDevelop/kodi' &&
+      github.ref == 'refs/heads/main'
+    environment: testing-certification
+    runs-on: [self-hosted, kodi-device-e2e]
+    outputs:
+      repository_commit: ${{ steps.identity.outputs.repository_commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Download immutable public testing snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          case "$SNAPSHOT_ID" in
+            *[!0-9a-f]*|'') exit 1 ;;
+          esac
+          test "${#SNAPSHOT_ID}" -eq 64
+          gh release download "testing-snapshot-$SNAPSHOT_ID" \
+            --pattern snapshot.tar
+          python tools/snapshot_bundle.py verify snapshot.tar > snapshot.json
+          test "$(python -c 'import json; print(json.load(open("snapshot.json"))["snapshot_id"])')" = "$SNAPSHOT_ID"
+      - name: Use the exact scripts committed into the snapshot
+        id: identity
+        run: |
+          commit="$(python -c 'import json; print(json.load(open("snapshot.json"))["repository_commit"])')"
+          git cat-file -e "$commit^{commit}"
+          git checkout --detach "$commit"
+          echo "repository_commit=$commit" >> "$GITHUB_OUTPUT"
+      - name: Run the required emulator and Android TV canaries
+        env:
+          ANDROID_TV: ${{ inputs.android_tv }}
+        run: |
+          python tools/certify_device_matrix.py \
+            --snapshot snapshot.tar \
+            --device bluestacks1 \
+            --device "$ANDROID_TV" \
+            --output device-matrix.json
+      - name: Create a short-lived replay-resistant attestation
+        env:
+          REPOSITORY_COMMIT: ${{ steps.identity.outputs.repository_commit }}
+        run: |
+          nonce="$(openssl rand -hex 32)"
+          issued_at="$(date --utc +%Y-%m-%dT%H:%M:%SZ)"
+          expires_at="$(date --utc --date='+7 days' +%Y-%m-%dT%H:%M:%SZ)"
+          python tools/device_attestation.py create \
+            --snapshot snapshot.tar \
+            --matrix device-matrix.json \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-commit "$REPOSITORY_COMMIT" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
+            --workflow-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --runner-name "$RUNNER_NAME" \
+            --nonce "$nonce" \
+            --issued-at "$issued_at" \
+            --expires-at "$expires_at" \
+            --output device-attestation.json
+          python tools/device_attestation.py verify \
+            --snapshot snapshot.tar \
+            --attestation device-attestation.json > /dev/null
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: device-attestation-${{ inputs.snapshot_id }}
+          path: device-attestation.json
+          retention-days: 90
+
+  publish-attestation:
+    needs: device-matrix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.device-matrix.outputs.repository_commit }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: device-attestation-${{ inputs.snapshot_id }}
+      - name: Verify and attach once to the immutable snapshot release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          gh release download "testing-snapshot-$SNAPSHOT_ID" \
+            --pattern snapshot.tar
+          python tools/device_attestation.py verify \
+            --snapshot snapshot.tar \
+            --attestation device-attestation.json > /dev/null
+          mkdir -p existing
+          if gh release download "testing-snapshot-$SNAPSHOT_ID" \
+            --pattern device-attestation.json --dir existing 2>/dev/null; then
+            cmp device-attestation.json existing/device-attestation.json
+          else
+            gh release upload "testing-snapshot-$SNAPSHOT_ID" \
+              device-attestation.json
+          fi

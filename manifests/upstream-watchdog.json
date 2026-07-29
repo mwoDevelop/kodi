@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "max_age_hours": 36,
+  "workflows": [
+    {
+      "repository": "mwoDevelop/kodi",
+      "workflow": "reconcile-upstreams.yml"
+    },
+    {
+      "repository": "mwoDevelop/script.module.mwoscrapers",
+      "workflow": "discover-provider-upstreams.yml"
+    },
+    {
+      "repository": "mwoDevelop/umbrellaplug.github.io",
+      "workflow": "propose-upstream-update.yml"
+    },
+    {
+      "repository": "mwoDevelop/ch.repo",
+      "workflow": "mwodevelop-watchnixtoons2-update.yml"
+    }
+  ]
+}

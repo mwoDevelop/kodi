@@ -1,9 +1,12 @@
 import hashlib
 import json
+import datetime as dt
 
 import pytest
 
 from tools import promote_channel
+from tools.device_attestation import create as create_attestation
+from tools.snapshot_bundle import create_bundle
 
 
 def _lock(path, channel, digest):
@@ -90,3 +93,92 @@ def test_inject_rejects_nonidentical_stable_build(tmp_path):
 
     with pytest.raises(ValueError, match="differs from exact testing ZIP"):
         promote_channel.inject_candidate(tmp_path / "dist", candidate_dir)
+
+
+def _snapshot_and_attestation(tmp_path):
+    dist = tmp_path / "dist"
+    (dist / "testing/omega").mkdir(parents=True)
+    (dist / "testing/omega/addons.xml").write_text("<addons/>\n")
+    (dist / "artifact-manifest.sha256").write_text("payload manifest\n")
+    promotion = tmp_path / "promotion"
+    (promotion / "testing/omega").mkdir(parents=True)
+    (promotion / "testing/omega/addons.xml").write_text("<addons/>\n")
+    (promotion / "artifact-manifest.sha256").write_text("promotion manifest\n")
+    testing_lock = tmp_path / "testing.json"
+    testing_lock.write_text(
+        json.dumps({"schema": 1, "channel": "testing", "components": {}})
+    )
+    snapshot = tmp_path / "snapshot.tar"
+    create_bundle(
+        dist,
+        testing_lock,
+        "d" * 40,
+        snapshot,
+        promotion_dist=promotion,
+    )
+    matrix = tmp_path / "matrix.json"
+    check = {
+        "name": "repository-install",
+        "result": "passed",
+        "evidence_sha256": "1" * 64,
+    }
+    matrix.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "result": "passed",
+                "devices": [
+                    {
+                        "logical_device_id": "bluestacks1",
+                        "device_class": "android-emulator",
+                        "kodi_version": "21.2",
+                        "addons": {"plugin.video.umbrella": "1.0.0"},
+                        "checks": [check],
+                    },
+                    {
+                        "logical_device_id": "sony-tv",
+                        "device_class": "android-tv",
+                        "kodi_version": "21.2",
+                        "addons": {"plugin.video.umbrella": "1.0.0"},
+                        "checks": [check],
+                    },
+                ],
+            }
+        )
+    )
+    issued = dt.datetime.now(dt.timezone.utc)
+    attestation = tmp_path / "device-attestation.json"
+    create_attestation(
+        snapshot,
+        matrix,
+        "mwoDevelop/kodi",
+        "d" * 40,
+        "123",
+        1,
+        "kodi-release-runner",
+        "ab" * 32,
+        issued.isoformat(),
+        (issued + dt.timedelta(days=1)).isoformat(),
+        attestation,
+    )
+    return snapshot, attestation
+
+
+def test_snapshot_lock_is_content_addressed_and_applies_only_once(tmp_path):
+    snapshot, attestation = _snapshot_and_attestation(tmp_path)
+    stable_lock = tmp_path / "stable.json"
+    stable_lock.write_text(
+        json.dumps({"schema": 1, "channel": "stable", "components": {}})
+    )
+    bundle = tmp_path / "candidate"
+
+    candidate = promote_channel.prepare_snapshot_lock(
+        snapshot, attestation, stable_lock, bundle
+    )
+    promote_channel.apply_snapshot_lock_candidate(bundle, stable_lock)
+    promoted = json.loads(stable_lock.read_text())
+
+    assert promoted["schema"] == 2
+    assert promoted["source_snapshot_id"] == candidate["snapshot_id"]
+    with pytest.raises(ValueError, match="changed after candidate preparation"):
+        promote_channel.apply_snapshot_lock_candidate(bundle, stable_lock)

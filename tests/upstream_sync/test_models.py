@@ -27,9 +27,26 @@ def test_magneto_reachable_replacement_is_a_provenance_pr():
         content=ContentState.UNCHANGED,
         provenance=ProvenanceState.CHANGED,
         availability=AvailabilityState.DEGRADED,
+        observed_availability=AvailabilityState.HEALTHY,
         history=HistoryState.NOT_APPLICABLE,
     )
-    assert decide_action(result) == PolicyAction.OPEN_OR_UPDATE_PR
+    assert (
+        decide_action(result, "provider_observation")
+        == PolicyAction.PROVENANCE_ONLY_CANDIDATE
+    )
+
+
+def test_provider_changed_bytes_are_quarantined():
+    result = Discovery(
+        component="coco",
+        content=ContentState.CHANGED,
+        provenance=ProvenanceState.CHANGED,
+        observed_availability=AvailabilityState.HEALTHY,
+        history=HistoryState.NOT_APPLICABLE,
+    )
+    assert (
+        decide_action(result, "provider_observation") == PolicyAction.QUARANTINE
+    )
 
 
 def test_rewrite_stops_before_prepare():
@@ -59,4 +76,7 @@ def test_transient_error_does_not_mutate_source_state():
         availability=AvailabilityState.TRANSIENT_ERROR,
         history=HistoryState.NOT_APPLICABLE,
     )
-    assert decide_action(result) == PolicyAction.OPEN_OR_UPDATE_ISSUE
+    assert (
+        decide_action(result, "provider_observation")
+        == PolicyAction.OPEN_OR_UPDATE_ISSUE
+    )

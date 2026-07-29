@@ -3,25 +3,27 @@ name: promote stable
 on:
   workflow_dispatch:
     inputs:
-      testing_index_sha256:
-        description: Exact SHA-256 published in testing/omega/addons.xml.sha256
+      snapshot_id:
+        description: Exact certified testing snapshot ID
         required: true
         type: string
-
-permissions:
-  contents: write
-  pull-requests: write
 
 concurrency:
   group: promote-stable-lock
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
-  promote:
+  verify:
     environment: stable
     runs-on: ubuntu-latest
-    env:
-      KODI_COMPONENT_ROOT: ${{ github.workspace }}/locked-components
+    permissions:
+      contents: read
+    outputs:
+      base_commit: ${{ steps.candidate.outputs.base_commit }}
+      candidate_id: ${{ steps.candidate.outputs.candidate_id }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -29,53 +31,108 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - run: python -m pip install pytest
-      - run: python tools/checkout_locked_components.py --output "$KODI_COMPONENT_ROOT"
-      - name: Fetch exact public testing candidate
-        run: >-
-          python tools/promote_channel.py fetch
-          --base https://mwodevelop.github.io/kodi/
-          --testing-lock manifests/locks/testing.json
-          --expected-index-sha256 "${{ inputs.testing_index_sha256 }}"
-          --output candidate
-      - name: Pin candidate as stable
-        run: >-
-          python tools/promote_channel.py lock
-          --testing-lock manifests/locks/testing.json
-          --stable-lock manifests/locks/stable.json
-          --candidate candidate
-      - run: tests/e2e/run.sh
-      - run: python tools/build_repo.py --output dist
-      - name: Copy exact candidate ZIPs into stable
-        run: python tools/promote_channel.py inject --dist dist --candidate candidate
-      - name: Commit immutable stable lock
+      - name: Download exact immutable snapshot and device attestation
         env:
           GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
         run: |
-          if git diff --quiet -- manifests/locks/stable.json; then
-            echo "Stable already contains this exact testing candidate."
-            exit 0
-          fi
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          branch="bot/promote-stable-${{ inputs.testing_index_sha256 }}"
-          branch="${branch:0:45}"
-          git switch -c "$branch"
-          git add manifests/locks/stable.json
-          git commit -m "Promote verified testing candidate"
-          git push --force-with-lease origin "$branch"
-          existing="$(gh pr list --head "$branch" --base main --state open --json number --jq '.[0].number // empty')"
-          if [ -n "$existing" ]; then
-            gh pr comment "$existing" --body "Candidate revalidated against exact public testing bytes."
-          else
-            gh pr create \
-              --base main \
-              --head "$branch" \
-              --title "Promote verified testing candidate to stable" \
-              --body "Manual promotion PR. Component ZIPs were fetched from public testing, checked against the testing lock and injected byte-for-byte. Merging changes only the stable lock; repository.mwodevelop remains version 1.0.0."
-          fi
+          case "$SNAPSHOT_ID" in
+            *[!0-9a-f]*|'') exit 1 ;;
+          esac
+          test "${#SNAPSHOT_ID}" -eq 64
+          gh release download "testing-snapshot-$SNAPSHOT_ID" \
+            --pattern snapshot.tar --pattern device-attestation.json
+      - name: Verify snapshot is still the current public testing candidate
+        env:
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          python tools/snapshot_bundle.py verify snapshot.tar > snapshot.json
+          test "$(python -c 'import json; print(json.load(open("snapshot.json"))["snapshot_id"])')" = "$SNAPSHOT_ID"
+          curl --fail --silent --show-error \
+            https://mwodevelop.github.io/kodi/testing/omega/addons.xml \
+            --output public-testing-addons.xml
+          python - <<'PY'
+          import hashlib
+          import json
+          metadata = json.load(open("snapshot.json"))
+          payload = open("public-testing-addons.xml", "rb").read()
+          if hashlib.sha256(payload).hexdigest() != metadata["testing_index_sha256"]:
+              raise SystemExit("selected snapshot is no longer current testing")
+          PY
+      - name: Prepare content-addressed stable lock candidate
+        run: >-
+          python tools/promote_channel.py snapshot-lock
+          --snapshot snapshot.tar
+          --attestation device-attestation.json
+          --stable-lock manifests/locks/stable.json
+          --output stable-candidate
+      - name: Export candidate identity
+        id: candidate
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+          value = json.loads(Path("stable-candidate/candidate.json").read_text())
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+              output.write("base_commit=%s\n" % subprocess.check_output(
+                  ["git", "rev-parse", "HEAD"], text=True
+              ).strip())
+              output.write("candidate_id=%s\n" % value["candidate_id"])
+          PY
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: stable-promotion-candidate
-          path: candidate
+          name: stable-lock-candidate
+          path: stable-candidate/
           retention-days: 90
+
+  propose:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.verify.outputs.base_commit }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: stable-lock-candidate
+          path: stable-candidate
+      - name: Apply only the verified stable lock
+        run: >-
+          python tools/promote_channel.py apply-lock-candidate
+          --bundle stable-candidate
+          --stable-lock manifests/locks/stable.json
+      - name: Open reviewed stable promotion PR
+        env:
+          BASE_COMMIT: ${{ needs.verify.outputs.base_commit }}
+          CANDIDATE_ID: ${{ needs.verify.outputs.candidate_id }}
+          GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_ID: ${{ inputs.snapshot_id }}
+        run: |
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE_COMMIT"
+          git config user.name "mwoDevelop promotion bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          branch="automation/promote-stable-${SNAPSHOT_ID:0:12}"
+          git checkout -B "$branch"
+          git add manifests/locks/stable.json
+          git diff --cached --quiet && { echo "Stable already uses this snapshot"; exit 0; }
+          git commit -m "Promote certified snapshot to stable" \
+            -m "Snapshot-ID: $SNAPSHOT_ID" \
+            -m "Candidate-ID: $CANDIDATE_ID"
+          git push --force-with-lease origin "$branch"
+          existing="$(gh pr list --head "$branch" --base main --state open --json number --jq '.[0].number // empty')"
+          body="Manual exact-snapshot promotion. Snapshot: \`$SNAPSHOT_ID\`. Candidate-ID: \`$CANDIDATE_ID\`. Deployment copies the prepared payload without rebuilding component ZIPs."
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --title "Promote certified snapshot to stable" --body "$body"
+          else
+            gh pr create --base main --head "$branch" \
+              --title "Promote certified snapshot to stable" --body "$body"
+          fi
+          gh workflow run test.yml --ref "$branch"

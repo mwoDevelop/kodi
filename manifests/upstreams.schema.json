@@ -38,6 +38,7 @@
         "required": [
           "enabled",
           "adapter",
+          "policy_profile",
           "schedule_slot",
           "local_path",
           "target",
@@ -53,6 +54,12 @@
               "vendored_kodi_addon",
               "provider_feed",
               "kodi_repository"
+            ]
+          },
+          "policy_profile": {
+            "enum": [
+              "component_code",
+              "provider_observation"
             ]
           },
           "schedule_slot": {
