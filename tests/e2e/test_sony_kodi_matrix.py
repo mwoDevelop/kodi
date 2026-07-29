@@ -1,12 +1,15 @@
 import base64
 import hashlib
+import json
 import struct
 import subprocess
+from urllib.parse import parse_qs, urlparse
 
 import sony_kodi_matrix
 from sony_kodi_matrix import (
     AdbEventClient,
     EventClient,
+    addon_version,
     diagnostic_lines,
     missing_player_timed_out,
     open_media,
@@ -18,6 +21,23 @@ from sony_kodi_matrix import (
     terminal_failure_state,
     wait_for_jsonrpc,
 )
+
+
+def test_addon_version_falls_back_to_kodi_for_scoped_storage(monkeypatch):
+    monkeypatch.setattr(sony_kodi_matrix, "shell", lambda *_args, **_kwargs: "")
+
+    class Rpc:
+        def call(self, method, params=None):
+            assert method == "Addons.GetAddonDetails"
+            assert params == {
+                "addonid": "plugin.video.umbrella",
+                "properties": ["version"],
+            }
+            return {"addon": {"version": "6.7.81.18"}}
+
+    assert addon_version(
+        "adb", "serial", "plugin.video.umbrella", Rpc()
+    ) == "6.7.81.18"
 
 
 def test_redaction_removes_resolver_urls_and_tokens():
@@ -133,6 +153,8 @@ def test_plugin_url_nonce_prevents_kodi_from_reusing_a_previous_invocation():
     url = plugin_url(sony_kodi_matrix.CASES["sintel"], e2e_nonce=123456)
     assert "e2e_nonce=123456" in url
     assert "action=play_Item" in url
+    meta = json.loads(parse_qs(urlparse(url).query)["meta"][0])
+    assert meta["premiered"] == "2010-01-01"
 
 
 def test_house_of_the_dragon_season_three_case_has_episode_metadata():
@@ -249,6 +271,20 @@ def test_foreground_start_falls_back_when_android_wait_response_hangs(monkeypatc
     assert "-W" not in calls[1][0]
     assert calls[1][1]["check"] is False
     assert calls[1][1]["timeout"] == 10
+
+
+def test_foreground_accepts_kodi_on_second_android_display(monkeypatch):
+    monkeypatch.setattr(sony_kodi_matrix, "run", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(
+        sony_kodi_matrix,
+        "shell",
+        lambda *_args, **_kwargs: (
+            "mCurrentFocus=Window{abc u0 com.example/.Main}\n"
+            "mCurrentFocus=Window{def u0 org.xbmc.kodi/.Main}"
+        ),
+    )
+
+    sony_kodi_matrix.ensure_kodi_foreground("adb", "serial")
 
 
 def test_foreground_start_dismisses_android_tv_dream(monkeypatch):

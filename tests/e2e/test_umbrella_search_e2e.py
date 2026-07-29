@@ -43,6 +43,110 @@ def test_keyboard_window_ids_cover_kodi_omega_variants():
 	assert 10138 in umbrella_search_e2e.KEYBOARD_WINDOWS
 
 
+def test_shutdown_menu_is_dismissed_before_search(monkeypatch):
+	class ModalRpc:
+		def __init__(self):
+			self.calls = []
+
+		def call(self, method, params=None):
+			self.calls.append((method, params))
+			return "OK"
+
+	rpc = ModalRpc()
+	monkeypatch.setattr(
+		umbrella_search_e2e,
+		"wait_for_window",
+		lambda *_args, **_kwargs: {"id": 10000, "label": "Home"},
+	)
+
+	result = umbrella_search_e2e.dismiss_known_startup_window(
+		rpc,
+		{"id": umbrella_search_e2e.SHUTDOWN_MENU_WINDOW},
+		timeout=1,
+		transitions=[],
+	)
+
+	assert result["id"] == 10000
+	assert rpc.calls == [("Input.Back", None)]
+
+
+def test_known_pvr_info_dialog_is_dismissed(monkeypatch):
+	class ModalRpc:
+		def __init__(self):
+			self.calls = []
+
+		def call(self, method, params=None):
+			self.calls.append((method, params))
+			if method == "XBMC.GetInfoLabels":
+				return {"Control.GetLabel(1)": "No PVR add-on enabled"}
+			return "OK"
+
+	rpc = ModalRpc()
+	monkeypatch.setattr(
+		umbrella_search_e2e,
+		"wait_for_window",
+		lambda *_args, **_kwargs: {"id": 10000, "label": "Home"},
+	)
+
+	result = umbrella_search_e2e.dismiss_known_startup_window(
+		rpc,
+		{"id": umbrella_search_e2e.OK_DIALOG_WINDOW},
+		timeout=1,
+		transitions=[],
+	)
+
+	assert result["id"] == 10000
+	assert [method for method, _params in rpc.calls] == [
+		"XBMC.GetInfoLabels",
+		"Input.Select",
+	]
+
+
+def test_unexpected_ok_dialog_is_not_dismissed():
+	class ModalRpc:
+		def __init__(self):
+			self.calls = []
+
+		def call(self, method, params=None):
+			self.calls.append((method, params))
+			return {"Control.GetLabel(1)": "Resolver failed"}
+
+	rpc = ModalRpc()
+	window = {"id": umbrella_search_e2e.OK_DIALOG_WINDOW}
+
+	assert umbrella_search_e2e.dismiss_known_startup_window(
+		rpc, window, timeout=1, transitions=[]
+	) == window
+	assert [method for method, _params in rpc.calls] == [
+		"XBMC.GetInfoLabels"
+	]
+
+
+def test_known_pvr_dialog_can_use_android_back_fallback(monkeypatch):
+	class ModalRpc:
+		def call(self, method, params=None):
+			assert method == "XBMC.GetInfoLabels"
+			return {"Control.GetLabel(1)": "No PVR add-on enabled"}
+
+	calls = []
+	monkeypatch.setattr(
+		umbrella_search_e2e,
+		"wait_for_window",
+		lambda *_args, **_kwargs: {"id": 10000, "label": "Home"},
+	)
+
+	result = umbrella_search_e2e.dismiss_known_startup_window(
+		ModalRpc(),
+		{"id": umbrella_search_e2e.OK_DIALOG_WINDOW},
+		timeout=1,
+		transitions=[],
+		modal_back=lambda: calls.append("back"),
+	)
+
+	assert result["id"] == 10000
+	assert calls == ["back"]
+
+
 def test_submit_keyboard_waits_for_done_before_selecting():
 	class KeyboardRpc:
 		def __init__(self):

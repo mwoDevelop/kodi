@@ -31,10 +31,10 @@ Stan realizacji 2026-07-28:
   X88 Pro 20 zalicza instalację z repo, pairing, uwierzytelniony heartbeat,
   podpisany check i invariant read-only no-apply;
 - Etap 5: transakcyjny adapter Umbrella, journal, recovery, rollback i
-  kwarantanna są zaimplementowane i pokryte testami lokalnymi; na X88 Pro 20
-  zainstalowany stable 0.1.6 przeszedł odwracalny in-process canary
-  successful-apply, kontrolowaną awarię, rollback, kwarantannę, cleanup
-  journalu i przywrócenie ustawień. Pełny signed assignment -> apply przez
+  kwarantanna są zaimplementowane i pokryte testami lokalnymi; stable 0.1.6
+  przeszedł odwracalny in-process canary successful-apply, kontrolowaną
+  awarię, rollback, kwarantannę, cleanup journalu i przywrócenie ustawień na
+  BlueStacks, Sony TV i X88 Pro 20. Pełny signed assignment -> apply przez
   produkcyjny backend pozostaje do wykonania;
 - Etap 6A: kontenerowy kontrakt Compose, walidator polityki, hostowy lifecycle,
   manifest GHCR `linux/amd64,linux/arm/v7` oraz nietrwały live smoke QNAP
