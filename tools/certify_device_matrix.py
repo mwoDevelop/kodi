@@ -57,6 +57,20 @@ def _allowed_origins(testing, stable):
     }
 
 
+def _latest_addons_database(listing):
+    candidates = [
+        item.strip()
+        for item in listing.splitlines()
+        if re.search(r"/Addons\d+\.db$", item.strip())
+    ]
+    if not candidates:
+        raise RuntimeError("Kodi add-on database is missing")
+    return max(
+        candidates,
+        key=lambda item: int(re.search(r"Addons(\d+)\.db$", item).group(1)),
+    )
+
+
 def _addon_state(
     adb, server_port, endpoint, expected, stable, temporary
 ):
@@ -77,15 +91,15 @@ def _addon_state(
                 % (addon_id, match.group(1) if match else None, pin["version"])
             )
         versions[addon_id] = match.group(1)
-    database_remote = _adb(
-        adb,
-        server_port,
-        endpoint,
-        "shell",
-        "sh",
-        "-c",
-        "ls '%s/userdata/Database'/Addons*.db | sort -V | tail -1" % KODI_ROOT,
-    ).strip()
+    database_remote = _latest_addons_database(
+        _adb(
+            adb,
+            server_port,
+            endpoint,
+            "shell",
+            "ls '%s/userdata/Database'/Addons*.db 2>/dev/null" % KODI_ROOT,
+        )
+    )
     database = Path(temporary) / "addons.db"
     _run(
         [
