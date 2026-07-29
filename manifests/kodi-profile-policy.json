@@ -9,6 +9,7 @@
         "userdata/*.json",
         "userdata/*.xsp",
         "userdata/addon_data/**",
+        "userdata/favourite-artwork/**",
         "userdata/keymaps/**",
         "userdata/library/**",
         "userdata/playlists/**",
@@ -41,7 +42,8 @@
         "Add-on code is retained so restore is independent of repository availability.",
         "Addons, texture, EPG, thumbnail and peripheral databases are rebuilt.",
         "Umbrella credentials remain in addon_data/plugin.video.umbrella/settings.xml.",
-        "Library databases are deferred because they cannot be atomically replaced while Kodi owns them."
+        "Library databases are deferred because they cannot be atomically replaced while Kodi owns them.",
+        "WatchNixtoons2 favourite artwork is materialized under userdata/favourite-artwork so it survives cache-free restores."
       ]
     },
     "routine": {

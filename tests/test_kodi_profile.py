@@ -62,7 +62,9 @@ def test_kodi_ready_uses_jsonrpc_when_scoped_storage_hides_userdata(
     assert any(":9777" in item for item in commands)
 
 
-def test_event_client_uses_ipv6_loopback_for_ipv6_only_listener(monkeypatch):
+def test_event_client_uses_ipv4_mapped_loopback_for_android_ipv6_listener(
+    monkeypatch,
+):
     commands = []
     monkeypatch.setattr(
         "tools.kodi_profile.adb_output",
@@ -81,8 +83,8 @@ def test_event_client_uses_ipv6_loopback_for_ipv6_only_listener(monkeypatch):
     )
 
     assert len(commands) == 3
-    assert all("nc -6 -u " in command for command in commands)
-    assert all(" ::1 9777" in command for command in commands)
+    assert all("nc -4 -u " in command for command in commands)
+    assert all(" 127.0.0.1 9777" in command for command in commands)
 
 
 def test_event_client_sends_from_host_when_tv_has_no_netcat(monkeypatch):
@@ -147,6 +149,9 @@ def test_profile_policy_includes_settings_and_excludes_cache():
     )
     assert not included_by_policy(
         "userdata/Thumbnails/a/asset.jpg", policy
+    )
+    assert included_by_policy(
+        "userdata/favourite-artwork/portable.jpg", policy
     )
     assert not included_by_policy(
         "addons/packages/plugin.zip", policy
