@@ -149,11 +149,48 @@ def _apply(
         connection.close()
 
 
+def _read_origins(database, addon_ids):
+    if not isinstance(addon_ids, list) or not addon_ids:
+        raise ValueError("add-on identifier list is empty")
+    if not all(
+        isinstance(addon_id, str)
+        and SAFE_ADDON_ID.fullmatch(addon_id)
+        for addon_id in addon_ids
+    ):
+        raise ValueError("unsafe add-on identifier")
+    connection = sqlite3.connect(database)
+    try:
+        return {
+            addon_id: (
+                connection.execute(
+                    "SELECT origin FROM installed WHERE addonID=?",
+                    (addon_id,),
+                ).fetchone()
+                or (None,)
+            )[0]
+            for addon_id in addon_ids
+        }
+    finally:
+        connection.close()
+
+
 def main():
     mapping_path, marker_path = sys.argv[1:3]
+    operation = sys.argv[3] if len(sys.argv) > 3 else "assign"
     try:
         with open(mapping_path, encoding="utf-8") as handle:
             document = json.load(handle)
+        if operation == "read":
+            _write_marker(
+                marker_path,
+                {
+                    "ok": True,
+                    "origins": _read_origins(_database(), document),
+                },
+            )
+            return
+        if operation != "assign":
+            raise ValueError("unsupported operation")
         previous_origins = {}
         repository_checksums = {}
         version_transitions = {}

@@ -1,6 +1,6 @@
 # Profile sync implementation status
 
-Date: 2026-07-28
+Date: 2026-07-29
 
 ## Implemented
 
@@ -17,8 +17,8 @@ Date: 2026-07-28
 - read-only `tools/kodi_inventory.py` with redacted output;
 - pinned SSH host keys, private-key mode checks, disabled agent forwarding,
   UID/home/owner validation and symlink-escape rejection;
-- Android lifecycle inventory qualified live on BlueStacks, Sony TV and
-  Bedroom TV;
+- Android lifecycle inventory qualified live on BlueStacks, Sony TV,
+  Bedroom TV and X88 Pro 20;
 - schema 1 -> 2 reinstall migration with a private backup;
 - reinstall config resolution through `logical_device_id`;
 - schema 2 profile policy with separate `disaster_recovery` and `routine`;
@@ -47,6 +47,10 @@ Date: 2026-07-28
   layers selected from server-bound target tags; Bedroom TV passed
   testing-repository install, pairing, authenticated heartbeat, signed
   candidate verification and the read-only no-apply invariant;
+- X88 Pro 20 passed clean Kodi 21.3 restore, stable-origin verification,
+  Profile Sync 0.1.6 pairing/read-only E2E and a reversible in-process apply
+  canary covering successful apply, injected failure, rollback, quarantine,
+  journal cleanup and byte-exact restoration of managed settings;
 - QNAP Container Station Compose contract with an ARMv7 image gate;
 - live QNAP preflight confirming Container Station 3, Docker 26, Compose 2,
   `overlay2`, sufficient capacity and an available Python 3.11 ARMv7 base
@@ -129,10 +133,13 @@ seed values never leave Kodi.
 The backend has passed an isolated multiarch Container Station smoke, but
 production activation on the current QNAP remains blocked by:
 
-- degraded RAID and missing confirmed off-NAS backup;
+- missing confirmed encrypted off-NAS backup and successful restore drill;
 - no protected production admin API/key rotation;
 - no encrypted-secret feasibility result;
-- no journaled routine apply/rollback device E2E.
+
+Live preflight on 2026-07-29 reports RAID `[UU]` with no recovery in progress.
+This satisfies the array-health prerequisite, but does not replace the
+independent backup gate.
 
 Linux/Flatpak host support additionally remains read-only until:
 
@@ -145,8 +152,9 @@ Linux/Flatpak host support additionally remains read-only until:
 
 Revision schema 3 and administratively bound compatibility tags are now
 implemented in the generator, server and add-on. Read-only rollout passed on
-Bedroom TV; journaled apply/rollback and the remaining target matrix remain
-release gates.
+Bedroom TV and X88 Pro 20. X88 additionally passed the isolated journaled
+apply/rollback canary; signed backend assignment-to-apply and the remaining
+target matrix remain release gates.
 
 ## Layered routine revisions
 

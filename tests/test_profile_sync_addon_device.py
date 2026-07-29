@@ -219,6 +219,77 @@ def test_repository_install_and_index_are_distinct_states(monkeypatch):
     )
 
 
+def test_repository_install_uses_jsonrpc_when_scoped_storage_is_opaque(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "adb_command",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=1),
+    )
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def call(self, method, params=None):
+            assert method == "Addons.GetAddonDetails"
+            assert params["addonid"] == profile_sync_addon_device.ORIGIN
+            return {
+                "addon": {
+                    "enabled": True,
+                    "version": profile_sync_addon_device.ORIGIN_VERSION,
+                }
+            }
+
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "AdbJsonRpcClient",
+        lambda *_args: Client(),
+    )
+
+    assert profile_sync_addon_device._repository_installed(
+        "adb", 5037, "device"
+    )
+
+
+def test_addon_version_uses_jsonrpc_when_manifest_is_opaque(monkeypatch):
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "adb_command",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="cat: Permission denied",
+        ),
+    )
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def call(self, method, params=None):
+            assert method == "Addons.GetAddonDetails"
+            assert params["addonid"] == profile_sync_addon_device.ADDON_ID
+            return {"addon": {"version": "0.1.6"}}
+
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "AdbJsonRpcClient",
+        lambda *_args: Client(),
+    )
+
+    assert (
+        profile_sync_addon_device._addon_version("adb", 5037, "device")
+        == "0.1.6"
+    )
+
+
 def test_repository_channel_selects_stable_origin(monkeypatch):
     original = {
         "ORIGIN": profile_sync_addon_device.ORIGIN,

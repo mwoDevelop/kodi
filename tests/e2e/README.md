@@ -215,3 +215,23 @@ BlueStacks:
   --media-type tv \
   --result docs/e2e-results/bluestacks1-umbrella-search.json
 ```
+
+## Profile Sync apply/rollback canary
+
+Run a reversible real-device canary of the installed stable Profile Sync
+applier:
+
+```bash
+PYTHONPATH=. .venv/bin/python \
+  tests/e2e/profile_sync_apply_device.py \
+  --device x88pro20 \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --adb-server-port 5037 \
+  --result .kodi-private/e2e/x88pro20-profile-sync-apply.json
+```
+
+The probe performs one successful managed Umbrella setting apply, restores
+the original value, injects a failure after the first write of a second
+transaction, and requires rollback, quarantine, journal cleanup and exact
+settings restoration. Private Profile Sync state is restored byte-for-byte
+inside Kodi and never leaves the device.

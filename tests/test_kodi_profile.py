@@ -4,8 +4,10 @@ from pathlib import Path
 import pytest
 
 from tools.kodi_profile import (
+    AdbEventClient,
     _addon_inventory,
     _activate_skin,
+    _wait_for_kodi_ready,
     canonical_json,
     digest,
     ensure_private_output,
@@ -17,6 +19,66 @@ from tools.kodi_profile import (
     secure_private_tree,
     verify_snapshot,
 )
+
+
+def test_kodi_ready_uses_jsonrpc_when_scoped_storage_hides_userdata(
+    monkeypatch,
+):
+    class Result:
+        def __init__(self, returncode):
+            self.returncode = returncode
+
+    commands = []
+
+    def command(*args, **_kwargs):
+        commands.append(args[-1])
+        if "guisettings.xml" in args[-1]:
+            return Result(1)
+        if ":9777" in args[-1]:
+            return Result(0)
+        raise AssertionError(args)
+
+    class JsonRpc:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def call(self, method):
+            assert method == "JSONRPC.Ping"
+            return "pong"
+
+    monkeypatch.setattr("tools.kodi_profile.adb_command", command)
+    monkeypatch.setattr("tools.kodi_profile.AdbJsonRpcClient", JsonRpc)
+
+    _wait_for_kodi_ready("adb", 5037, "serial", timeout=1)
+
+    assert any("guisettings.xml" in item for item in commands)
+    assert any(":9777" in item for item in commands)
+
+
+def test_event_client_uses_ipv6_loopback_for_ipv6_only_listener(monkeypatch):
+    commands = []
+    monkeypatch.setattr(
+        "tools.kodi_profile.adb_output",
+        lambda *_args, **_kwargs: "udp6 0 0 :::9777 :::*",
+    )
+    monkeypatch.setattr(
+        "tools.kodi_profile.adb_command",
+        lambda *args, **_kwargs: commands.append(args[-1]),
+    )
+
+    AdbEventClient("adb", 5037, "serial").execute_builtin(
+        "Notification(test,ready)"
+    )
+
+    assert len(commands) == 3
+    assert all("nc -6 -u " in command for command in commands)
+    assert all(" ::1 9777" in command for command in commands)
 
 
 def test_profile_policy_includes_settings_and_excludes_cache():
