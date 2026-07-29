@@ -6,10 +6,16 @@ import hashlib
 import json
 import re
 import shutil
+import sys
 from pathlib import Path
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from tools.snapshot_bundle import canonical_json, verify_bundle
+from tools.device_attestation import verify as verify_device_attestation
 
 def sha256_bytes(payload):
     return hashlib.sha256(payload).hexdigest()
@@ -113,6 +119,76 @@ def inject_candidate(dist, candidate_dir):
         shutil.copyfile(source, target)
 
 
+def prepare_snapshot_lock(snapshot, attestation_path, current_stable, output):
+    metadata = verify_bundle(snapshot)
+    attestation = verify_device_attestation(attestation_path, snapshot)
+    attestation_digest = sha256_bytes(canonical_json(attestation))
+    testing = metadata["testing_lock"]
+    stable = json.loads(json.dumps(testing))
+    stable.update(
+        {
+            "schema": 2,
+            "channel": "stable",
+            "source_snapshot_id": metadata["snapshot_id"],
+            "source_index_sha256": metadata["testing_index_sha256"],
+            "source_artifact_manifest_sha256": metadata[
+                "promotion_artifact_manifest_sha256"
+            ],
+            "attestation_sha256": attestation_digest,
+        }
+    )
+    current = json.loads(Path(current_stable).read_text(encoding="utf-8"))
+    identity = {
+        "schema": 1,
+        "base_lock_sha256": sha256_bytes(canonical_json(current)),
+        "proposed_lock_sha256": sha256_bytes(canonical_json(stable)),
+        "snapshot_id": metadata["snapshot_id"],
+        "attestation_sha256": attestation_digest,
+    }
+    candidate = {**identity, "candidate_id": sha256_bytes(canonical_json(identity))}
+    output = Path(output)
+    if output.exists():
+        raise ValueError("stable lock candidate output already exists")
+    output.mkdir(parents=True)
+    (output / "candidate.json").write_bytes(canonical_json(candidate))
+    (output / "stable-lock.json").write_text(
+        json.dumps(stable, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return candidate
+
+
+def apply_snapshot_lock_candidate(bundle, stable_lock):
+    bundle = Path(bundle)
+    candidate = json.loads((bundle / "candidate.json").read_text(encoding="utf-8"))
+    proposed = json.loads((bundle / "stable-lock.json").read_text(encoding="utf-8"))
+    identity = {
+        key: candidate[key]
+        for key in (
+            "schema",
+            "base_lock_sha256",
+            "proposed_lock_sha256",
+            "snapshot_id",
+            "attestation_sha256",
+        )
+    }
+    if candidate.get("candidate_id") != sha256_bytes(canonical_json(identity)):
+        raise ValueError("stable lock candidate identity mismatch")
+    current = json.loads(Path(stable_lock).read_text(encoding="utf-8"))
+    if sha256_bytes(canonical_json(current)) != candidate["base_lock_sha256"]:
+        raise ValueError("stable lock changed after candidate preparation")
+    if sha256_bytes(canonical_json(proposed)) != candidate["proposed_lock_sha256"]:
+        raise ValueError("proposed stable lock digest mismatch")
+    if (
+        proposed.get("source_snapshot_id") != candidate["snapshot_id"]
+        or proposed.get("attestation_sha256") != candidate["attestation_sha256"]
+    ):
+        raise ValueError("stable lock lost snapshot provenance")
+    Path(stable_lock).write_text(
+        json.dumps(proposed, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return candidate
+
+
 def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -128,6 +204,14 @@ def main():
     inject_parser = subparsers.add_parser("inject")
     inject_parser.add_argument("--dist", required=True)
     inject_parser.add_argument("--candidate", required=True)
+    snapshot_lock = subparsers.add_parser("snapshot-lock")
+    snapshot_lock.add_argument("--snapshot", required=True)
+    snapshot_lock.add_argument("--attestation", required=True)
+    snapshot_lock.add_argument("--stable-lock", required=True)
+    snapshot_lock.add_argument("--output", required=True)
+    apply_lock = subparsers.add_parser("apply-lock-candidate")
+    apply_lock.add_argument("--bundle", required=True)
+    apply_lock.add_argument("--stable-lock", required=True)
     args = parser.parse_args()
     if args.command == "fetch":
         fetch_candidate(
@@ -138,8 +222,14 @@ def main():
         )
     elif args.command == "lock":
         write_stable_lock(args.testing_lock, args.stable_lock, args.candidate)
-    else:
+    elif args.command == "inject":
         inject_candidate(args.dist, args.candidate)
+    elif args.command == "snapshot-lock":
+        prepare_snapshot_lock(
+            args.snapshot, args.attestation, args.stable_lock, args.output
+        )
+    else:
+        apply_snapshot_lock_candidate(args.bundle, args.stable_lock)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,319 @@
+#!/usr/bin/env python3
+"""Run the redacted release canary matrix against already rolled-out testing."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import sqlite3
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from tools.kodi_devices import load_registry, resolve_device
+from tools.kodi_inventory import inventory_device
+from tools.snapshot_bundle import canonical_json, verify_bundle
+
+
+KODI_ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
+TESTING_ORIGIN = "repository.mwodevelop.testing"
+
+
+def _run(argv, env=None):
+    return subprocess.run(
+        argv,
+        check=True,
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+
+
+def _evidence(value):
+    return hashlib.sha256(canonical_json(value)).hexdigest()
+
+
+def _adb(adb, server_port, endpoint, *args):
+    return _run(
+        [adb, "-P", str(server_port), "-s", endpoint, *args]
+    ).stdout
+
+
+def _addon_state(adb, server_port, endpoint, expected, temporary):
+    versions = {}
+    for addon_id, pin in sorted(expected.items()):
+        payload = _adb(
+            adb,
+            server_port,
+            endpoint,
+            "shell",
+            "cat",
+            "%s/addons/%s/addon.xml" % (KODI_ROOT, addon_id),
+        )
+        match = re.search(r'<addon\b[^>]*\bversion="([^"]+)"', payload)
+        if not match or match.group(1) != pin["version"]:
+            raise RuntimeError(
+                "%s has version %r, expected %s"
+                % (addon_id, match.group(1) if match else None, pin["version"])
+            )
+        versions[addon_id] = match.group(1)
+    database_remote = _adb(
+        adb,
+        server_port,
+        endpoint,
+        "shell",
+        "sh",
+        "-c",
+        "ls '%s/userdata/Database'/Addons*.db | sort -V | tail -1" % KODI_ROOT,
+    ).strip()
+    database = Path(temporary) / "addons.db"
+    _run(
+        [
+            adb,
+            "-P",
+            str(server_port),
+            "-s",
+            endpoint,
+            "pull",
+            database_remote,
+            str(database),
+        ]
+    )
+    placeholders = ",".join("?" for _ in expected)
+    with sqlite3.connect(database) as connection:
+        origins = dict(
+            connection.execute(
+                "SELECT addonID, origin FROM installed WHERE addonID IN (%s)"
+                % placeholders,
+                tuple(sorted(expected)),
+            )
+        )
+    required = {addon_id: TESTING_ORIGIN for addon_id in expected}
+    if origins != required:
+        raise RuntimeError("installed add-on origins are not the testing repository")
+    return {"versions": versions, "origins": origins}
+
+
+def _functional_checks(
+    adb, server_port, endpoint, logical_id, port, temporary, observe_seconds
+):
+    env = {
+        **os.environ,
+        "ADB_SERVER_SOCKET": "tcp:localhost:%s" % server_port,
+        "PYTHONPATH": str(ROOT),
+    }
+    _run(
+        [
+            adb,
+            "-P",
+            str(server_port),
+            "-s",
+            endpoint,
+            "forward",
+            "tcp:%s" % port,
+            "tcp:9090",
+        ]
+    )
+    commands = [
+        (
+            "umbrella-search",
+            [
+                sys.executable,
+                str(ROOT / "tests/e2e/umbrella_search_e2e.py"),
+                "--adb",
+                adb,
+                "--serial",
+                endpoint,
+                "--host",
+                "127.0.0.1",
+                "--jsonrpc-port",
+                str(port),
+                "--term",
+                "Sintel",
+                "--media-type",
+                "movie",
+            ],
+        ),
+        (
+            "umbrella-resolver-playback",
+            [
+                sys.executable,
+                str(ROOT / "tests/e2e/sony_kodi_matrix.py"),
+                "--adb",
+                adb,
+                "--serial",
+                endpoint,
+                "--host",
+                "127.0.0.1",
+                "--jsonrpc-port",
+                str(port),
+                "--event-via-adb",
+                "--direct-play",
+                "--case",
+                "sintel",
+                "--observe-seconds",
+                str(observe_seconds),
+            ],
+        ),
+        (
+            "watchnixtoons2-playback",
+            [
+                sys.executable,
+                str(ROOT / "tests/e2e/sony_watchnixtoons2.py"),
+                "--adb",
+                adb,
+                "--serial",
+                endpoint,
+                "--host",
+                "127.0.0.1",
+                "--jsonrpc-port",
+                str(port),
+                "--observe-seconds",
+                str(observe_seconds),
+            ],
+        ),
+    ]
+    checks = []
+    try:
+        for name, command in commands:
+            report = Path(temporary) / ("%s-%s.json" % (logical_id, name))
+            _run([*command, "--result", str(report)], env=env)
+            checks.append(
+                {
+                    "name": name,
+                    "result": "passed",
+                    "evidence_sha256": hashlib.sha256(
+                        report.read_bytes()
+                    ).hexdigest(),
+                }
+            )
+            report.unlink()
+    finally:
+        subprocess.run(
+            [
+                adb,
+                "-P",
+                str(server_port),
+                "-s",
+                endpoint,
+                "forward",
+                "--remove",
+                "tcp:%s" % port,
+            ],
+            check=False,
+            capture_output=True,
+        )
+    return checks
+
+
+def certify(
+    snapshot,
+    devices_file,
+    references_file,
+    selected,
+    adb,
+    server_port,
+    observe_seconds,
+):
+    metadata = verify_bundle(snapshot)
+    expected = metadata["testing_lock"]["components"]
+    registry = load_registry(devices_file)
+    results = []
+    with tempfile.TemporaryDirectory(prefix="kodi-certification-") as temporary:
+        for index, logical_id in enumerate(selected):
+            device = resolve_device(registry, logical_id)
+            if device["platform"] not in {"android", "android-emulator"}:
+                raise ValueError(
+                    "functional certification currently requires an Android target"
+                )
+            endpoint = device["endpoints"]["adb"]
+            _run([adb, "-P", str(server_port), "connect", endpoint])
+            inventory = inventory_device(
+                ROOT,
+                logical_id,
+                devices_file=str(Path(devices_file).relative_to(ROOT)),
+                references_file=str(Path(references_file).relative_to(ROOT)),
+                adb=adb,
+                adb_server_port=server_port,
+            )
+            state = _addon_state(
+                adb, server_port, endpoint, expected, temporary
+            )
+            checks = [
+                {
+                    "name": "device-inventory",
+                    "result": "passed",
+                    "evidence_sha256": _evidence(inventory),
+                },
+                {
+                    "name": "testing-versions-and-origins",
+                    "result": "passed",
+                    "evidence_sha256": _evidence(state),
+                },
+            ]
+            checks.extend(
+                _functional_checks(
+                    adb,
+                    server_port,
+                    endpoint,
+                    logical_id,
+                    19190 + index,
+                    temporary,
+                    observe_seconds,
+                )
+            )
+            results.append(
+                {
+                    "logical_device_id": logical_id,
+                    "device_class": (
+                        "android-emulator"
+                        if device["platform"] == "android-emulator"
+                        else "android-tv"
+                    ),
+                    "kodi_version": inventory["kodi_version"],
+                    "addons": state["versions"],
+                    "checks": checks,
+                }
+            )
+    return {"schema": 1, "result": "passed", "devices": results}
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--snapshot", required=True)
+    parser.add_argument(
+        "--devices", default=str(ROOT / ".kodi-private/devices.json")
+    )
+    parser.add_argument("--references", default=str(ROOT / ".env"))
+    parser.add_argument("--device", action="append")
+    parser.add_argument(
+        "--adb", default="/home/mwo/android-sdk/platform-tools/adb"
+    )
+    parser.add_argument("--adb-server-port", type=int, default=5038)
+    parser.add_argument("--observe-seconds", type=int, default=15)
+    parser.add_argument("--output", required=True)
+    args = parser.parse_args()
+    report = certify(
+        args.snapshot,
+        args.devices,
+        args.references,
+        args.device or ["bluestacks1", "sony-tv"],
+        args.adb,
+        args.adb_server_port,
+        args.observe_seconds,
+    )
+    Path(args.output).write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    print(json.dumps(report, indent=2, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()

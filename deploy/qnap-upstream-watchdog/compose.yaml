@@ -1,0 +1,26 @@
+services:
+  upstream-watchdog:
+    image: ${UPSTREAM_WATCHDOG_IMAGE:?set immutable image digest}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /run/watchdog:size=1m,mode=0700,uid=10001,gid=10001
+      - /tmp:size=4m,mode=1777
+    mem_limit: 64m
+    pids_limit: 32
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json; assert json.load(open('/run/watchdog/status.json'))['healthy']"
+      interval: 5m
+      timeout: 5s
+      retries: 2
+      start_period: 30s

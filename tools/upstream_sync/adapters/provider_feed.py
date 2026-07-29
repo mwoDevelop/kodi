@@ -38,51 +38,49 @@ class ProviderFeedAdapter:
             self.context.checkout / self.context.config["state_path"], "sources"
         )
         observed = {}
-        messages = []
-        availability = AvailabilityState.HEALTHY
-        content = ContentState.UNCHANGED
-        provenance = ProvenanceState.UNCHANGED
+        results = []
         for name, source in sorted(sources.items()):
             current = accepted.get(name)
             if not current:
-                content = ContentState.UNKNOWN
-                provenance = ProvenanceState.UNKNOWN
-                messages.append("%s: no reviewed observation" % name)
+                results.append(
+                    Discovery(
+                        component=name,
+                        content=ContentState.UNKNOWN,
+                        provenance=ProvenanceState.UNKNOWN,
+                        availability=AvailabilityState.DEGRADED,
+                        observed_availability=AvailabilityState.DEGRADED,
+                        history=HistoryState.NOT_APPLICABLE,
+                        messages=("no reviewed observation",),
+                    )
+                )
                 continue
-            try:
-                item = _discover_source(source)
+            result, item = _discover_one(name, source, current)
+            results.append(result)
+            if item:
                 observed[name] = item
-                if (
-                    item["version"] != current["version"]
-                    or item["sha256"] != current["sha256"]
-                ):
-                    content = ContentState.CHANGED
-                if (
-                    item["commit"] != current["commit"]
-                    or item["url"] != current["url"]
-                ):
-                    provenance = ProvenanceState.CHANGED
-                    try:
-                        read_url(current["url"])
-                    except SourceUnavailable:
-                        availability = AvailabilityState.DEGRADED
-                        messages.append("%s: reviewed URL is unavailable" % name)
-                    except TransientSourceError:
-                        availability = AvailabilityState.TRANSIENT_ERROR
-                        messages.append(
-                            "%s: reviewed URL failed transiently" % name
-                        )
-            except SourceUnavailable as error:
-                availability = AvailabilityState.UNAVAILABLE
-                content = ContentState.UNKNOWN
-                messages.append("%s: %s" % (name, error))
-            except TransientSourceError as error:
-                if availability != AvailabilityState.UNAVAILABLE:
-                    availability = AvailabilityState.TRANSIENT_ERROR
-                content = ContentState.UNKNOWN
-                messages.append("%s: %s" % (name, error))
         accepted_digest = _digest_sources(accepted)
         observed_digest = _digest_sources(observed) if observed else None
+        content = _rollup(
+            [item.content for item in results],
+            (ContentState.CHANGED, ContentState.UNKNOWN, ContentState.UNCHANGED),
+        )
+        provenance = _rollup(
+            [item.provenance for item in results],
+            (
+                ProvenanceState.CHANGED,
+                ProvenanceState.UNKNOWN,
+                ProvenanceState.UNCHANGED,
+            ),
+        )
+        availability = _rollup(
+            [item.availability for item in results],
+            (
+                AvailabilityState.UNAVAILABLE,
+                AvailabilityState.TRANSIENT_ERROR,
+                AvailabilityState.DEGRADED,
+                AvailabilityState.HEALTHY,
+            ),
+        )
         return Discovery(
             component=self.context.name,
             accepted=Identity(sha256=accepted_digest),
@@ -92,8 +90,107 @@ class ProviderFeedAdapter:
             availability=availability,
             history=HistoryState.NOT_APPLICABLE,
             changed_paths=None,
-            messages=tuple(messages),
+            messages=tuple(
+                "%s: %s" % (item.component, message)
+                for item in results
+                for message in item.messages
+            ),
+            sources=tuple(results),
         )
+
+
+def _discover_one(name, source, current):
+    accepted = Identity(
+        version=current["version"],
+        commit=current["commit"],
+        url=current["url"],
+        sha256=current["sha256"],
+    )
+    try:
+        item = _discover_source(source)
+    except SourceUnavailable as error:
+        return (
+            Discovery(
+                component=name,
+                accepted=accepted,
+                content=ContentState.UNKNOWN,
+                provenance=ProvenanceState.UNKNOWN,
+                availability=AvailabilityState.UNAVAILABLE,
+                accepted_availability=None,
+                observed_availability=AvailabilityState.UNAVAILABLE,
+                history=HistoryState.NOT_APPLICABLE,
+                messages=(str(error),),
+            ),
+            None,
+        )
+    except TransientSourceError as error:
+        return (
+            Discovery(
+                component=name,
+                accepted=accepted,
+                content=ContentState.UNKNOWN,
+                provenance=ProvenanceState.UNKNOWN,
+                availability=AvailabilityState.TRANSIENT_ERROR,
+                observed_availability=AvailabilityState.TRANSIENT_ERROR,
+                history=HistoryState.NOT_APPLICABLE,
+                messages=(str(error),),
+            ),
+            None,
+        )
+    content = (
+        ContentState.CHANGED
+        if item["version"] != current["version"]
+        or item["sha256"] != current["sha256"]
+        else ContentState.UNCHANGED
+    )
+    provenance = (
+        ProvenanceState.CHANGED
+        if item["commit"] != current["commit"] or item["url"] != current["url"]
+        else ProvenanceState.UNCHANGED
+    )
+    accepted_availability = AvailabilityState.HEALTHY
+    messages = []
+    if provenance == ProvenanceState.CHANGED:
+        try:
+            read_url(current["url"])
+        except SourceUnavailable:
+            accepted_availability = AvailabilityState.UNAVAILABLE
+            messages.append("reviewed URL is unavailable")
+        except TransientSourceError:
+            accepted_availability = AvailabilityState.TRANSIENT_ERROR
+            messages.append("reviewed URL failed transiently")
+    availability = (
+        AvailabilityState.HEALTHY
+        if accepted_availability == AvailabilityState.HEALTHY
+        else AvailabilityState.DEGRADED
+    )
+    return (
+        Discovery(
+            component=name,
+            accepted=accepted,
+            observed=Identity(
+                version=item["version"],
+                commit=item["commit"],
+                url=item["url"],
+                sha256=item["sha256"],
+            ),
+            content=content,
+            provenance=provenance,
+            availability=availability,
+            accepted_availability=accepted_availability,
+            observed_availability=AvailabilityState.HEALTHY,
+            history=HistoryState.NOT_APPLICABLE,
+            messages=tuple(messages),
+        ),
+        item,
+    )
+
+
+def _rollup(values, precedence):
+    for state in precedence:
+        if state in values:
+            return state
+    return precedence[-1]
 
 
 def _load(path, field):

@@ -1,14 +1,37 @@
 # Plan cyklicznej synchronizacji źródeł mwoDevelop Kodi
 
-Status: plan po niezależnym review, do realizacji
+Status: realizacja w toku; plan domknięcia do pełnego release
 
-Data: 2026-07-25
+Data bazowa: 2026-07-25
+
+Ostatnia aktualizacja: 2026-07-29
 
 Repo nadrzędne: `mwoDevelop/kodi`
 
 Lokalizacja robocza: `/home/mwo/projects/kodi`
 
-Raport review i decyzje: `docs/UPSTREAM_SYNC_PLAN_REVIEW.md`.
+Raporty review i decyzje:
+
+- `docs/UPSTREAM_SYNC_PLAN_REVIEW.md` — review architektury bazowej;
+- `docs/UPSTREAM_SYNC_FULL_RELEASE_REVIEW_2026-07-29.md` — niezależny review
+  planu domknięcia do pełnego release.
+
+## 0. Stan realizacji na 2026-07-29
+
+| Obszar | Stan | Dowód / luka |
+|---|---|---|
+| Control plane | zaimplementowany, rollout w toku | advisory source actions są oddzielone od content-addressed `testing_lock_candidate`; lokalny pełny zestaw 172 testów i deterministyczny E2E są zielone |
+| WatchNixtoons2 | hardening scalony | writer waliduje exact tree/base/autora, odświeża target przed pushem i jawnie zapewnia check exact head SHA; live retry/no-op przeszedł |
+| Umbrella | writer scalony | content-addressed replay patch stacku, protected paths i osobny writer są na `main`; live discovery zakończyło się no-op |
+| mwoScrapers/providerzy | writer scalony | policy działa per provider; observation state jest poza ZIP-em; provenance-only PR przeszedł rzeczywisty prepare → writer → CI → merge → no-op; moduł wydany jako `0.1.6` |
+| Testing/stable | implementacja lokalna zielona, rollout w toku | testing-lock reconciler, snapshot schema 2, atestacja i composer stable bez rebuilda są gotowe; pozostał merge repo głównego, urządzeniowa certyfikacja i promocja |
+| Ochrona branchy | aktywna, wymaga utwardzenia review | wszystkie cztery default branche wymagają PR i check `e2e`/`test`, lecz obecnie wymagają zero approvals |
+| E2E urządzeń | runner i schemat gotowe, wykonanie pozostało | workflow wiąże emulator i Android TV z exact snapshotem, nonce, commitem, runnerem, wersjami i digestami; pozostał realny rollout nowego testing |
+| Pełny release mechanizmu | kandydat implementacyjny | blokują go już tylko merge/CI repo głównego, rulesety z jednym approval, realna macierz urządzeń, atestacja, promocja i obserwacja |
+
+Pełny release w tym dokumencie oznacza wydanie operacyjnie kompletnego
+mechanizmu synchronizacji. Nie oznacza bezwarunkowego automatycznego scalania
+obcego kodu ani automatycznej promocji kanału `stable`.
 
 ## 1. Cel
 
@@ -60,44 +83,50 @@ Poza zakresem automatyzacji pozostają:
 - wykonywanie kodu pobranego z upstream w jobie mającym prawo zapisu;
 - zmiana sekretów Real-Debrid lub konfiguracji użytkownika Kodi.
 
-## 3. Stan początkowy i problemy do usunięcia
+## 3. Aktualny stan i problemy do usunięcia
 
 ### 3.1 Umbrella
 
-Istniejący workflow działa codziennie, wykonuje rebase downstreamowej historii
-na `upstream/master`, force-pushuje gałąź i tworzy PR. Wymaga poprawy, ponieważ:
+Repo ma jeden `downstream-patches.yml`, skrypt `tools/rebuild_downstream.py`
+oraz testy odtwarzające zaakceptowany upstream i downstreamowy patch stack.
+Centralny discovery poprawnie klasyfikuje aktualny stan jako no-op.
 
-- kolejne rebase'y przepisują identyfikatory downstreamowych commitów;
-- istniejący `downstream-patches.yml` nie może zostać zastąpiony drugim,
-  konkurencyjnym manifestem stanu;
-- retry istniejącej gałęzi synchronizacyjnej nie jest w pełni idempotentny;
-- PR tworzony przez standardowy `GITHUB_TOKEN` może wymagać ręcznego
-  uruchomienia CI;
-- workflow ma jednocześnie uprawnienia zapisu do contents, PR-ów i issues.
+Brakuje jednak odpowiednika bezpiecznego workflow WatchNixtoons2:
+
+- przygotowania content-addressed candidate bundle bez prawa zapisu;
+- replay patch stacku na dokładnym upstream SHA;
+- zaufanego writera walidującego bundle i allowlistę;
+- odnawialnego brancha i PR-a bez rebase/force-pushowania gałęzi produktowej;
+- quarantine dla konfliktu, rewrite oraz zmian chronionych ścieżek;
+- rzeczywistego cyklu update i drugiego, idempotentnego no-op.
 
 ### 3.2 WatchNixtoons2
 
-Istniejący workflow raz w tygodniu scala `upstream/master` bezpośrednio do
-naszego `master` i wykonuje push bez PR. Należy go wycofać, ponieważ:
+Workflow `mwodevelop-watchnixtoons2-update.yml` działa codziennie i rozdziela:
 
-- omija review;
-- push wykonany przez `GITHUB_TOKEN` nie gwarantuje uruchomienia kolejnego CI;
-- używa ruchomego `actions/checkout@v4`;
-- scalenie katalogu upstream nie aktualizuje automatycznie publikowanego
-  `mwodevelop/plugin.video.watchnixtoons2.mwodevelop`;
-- nasz dodatek jest kontrolowanym importem archiwum z innym ID, a nie zwykłym
-  checkoutem oryginalnego katalogu.
+- discovery/prepare bez sekretów zapisu;
+- walidowany, content-addressed candidate;
+- zaufany writer, który nie wykonuje kodu kandydata;
+- stały branch `automation/watchnixtoons2-upstream`;
+- PR oraz wymagany check `test`.
+
+Rzeczywista aktualizacja do downstreamowej wersji `0.26.1` została scalona,
+a kolejne harmonogramy zakończyły się no-op. Do pełnego release pozostaje
+utrzymanie tego adaptera jako referencyjnego wzorca, monitoring opóźnionych
+runów oraz włączenie jego merge do centralnej aktualizacji locka `testing`.
 
 ### 3.3 mwoScrapers
 
-Rozdzielenie audytu przypiętych artefaktów od discovery jest prawidłowe, ale:
+Rozdzielenie audytu przypiętych artefaktów od discovery działa. Aktualny stan
+Coco, Magneto i Viper jest raportowany bez importowania obcego kodu. Nadal
+brakuje:
 
-- audyt przerwał się na niedostępnym URL-u Magneto;
-- discovery nie zgłosiło zmiany, ponieważ wersja i SHA-256 artefaktu pozostały
-  takie same, mimo że zmienił się osiągalny commit/URL;
-- awaria jednego źródła powinna być raportowana razem z wynikami pozostałych;
-- potrzebne jest rozróżnienie zmiany zawartości, zmiany provenance oraz
-  pogorszenia dostępności przypiętego źródła.
+- małego, walidowanego PR-a dla zmiany wyłącznie provenance przy identycznym
+  SHA-256 zaakceptowanych bajtów;
+- trwałej disposition dla kandydatów odrzuconych lub quarantined;
+- pełnej kwalifikacji zmienionych bajtów bez automatycznego importu;
+- połączenia zaakceptowanego merge grupy moduł + wrapper z PR-em locka
+  `testing`.
 
 Monitorowane Coco, Viper i Magneto nie są tym samym co kod aktualnie
 zaakceptowanych providerów Torrentio i Comet. Monitoring źródła nie oznacza
@@ -105,20 +134,28 @@ akceptacji ani importu jego kodu.
 
 ### 3.4 Repozytorium Kodi
 
-Kanały `testing` i `stable` mają niezależne locki i deterministyczne artefakty.
-Ten model pozostaje obowiązujący:
+Kanały `testing` i `stable` mają niezależne locki, deterministyczne artefakty
+i rozdzielone workflow publikacji. Promocja stable wskazuje dokładny testing
+candidate i zmienia stable lock przez PR. Ten model pozostaje obowiązujący:
 
 - komponent nie publikuje się sam do repo Kodi;
-- merge w repo nadrzędnym może opublikować wyłącznie `testing`;
+- merge locka w repo nadrzędnym może opublikować wyłącznie `testing`;
 - `stable` jest ręczną promocją dokładnie tych samych bajtów;
 - promocja nie przebudowuje ZIP-ów.
 
+Brakującym elementem jest writer, który po zaakceptowanym merge komponentu
+otwiera lub aktualizuje minimalny PR do `manifests/locks/testing.json`,
+walidując commit, wersję, SHA ZIP-a i atomowość release group.
+
+Workflow promocji stable musi dodatkowo jawnie uruchamiać allowlistowany check
+na branchu PR-a, zamiast zakładać, że PR utworzony przez `GITHUB_TOKEN`
+samoczynnie wygeneruje zdarzenie CI.
+
 ### 3.5 Ochrona branchy, submoduły i promocja stable
 
-W chwili sporządzenia review żadne z czterech repo nie ma aktywnego branch
-protection ani rulesetu. Jednocześnie obecny `promote-stable.yml` commituje
-`stable.json` i pushuje bezpośrednio do `kodi/main`. Włączenie wymogu PR bez
-wcześniejszej migracji promocji zablokowałoby działający proces.
+Rulesety są już aktywne na `kodi/main` i `ch.repo/master`, a promocja stable
+została zmigrowana na PR. Każdy kolejny branch produktowy objęty writerem musi
+otrzymać wymagany PR i właściwe required checks przed włączeniem zapisu.
 
 Repo nadrzędne zawiera trzy submoduły, ale release source of truth stanowią
 locki kanałów. Lokalny E2E nie może zakładać, że gitlink submodułu zawiera
@@ -151,7 +188,7 @@ tools/
     ├── versioning.py
     └── adapters/
         ├── __init__.py
-        ├── git_fork.py
+        ├── git_patch_stack.py
         ├── vendored_kodi_addon.py
         ├── provider_feed.py
         └── kodi_repository.py
@@ -160,7 +197,7 @@ tests/
 └── upstream_sync/
     ├── fixtures/
     ├── test_engine.py
-    ├── test_git_fork.py
+    ├── test_git_patch_stack.py
     ├── test_vendored_kodi_addon.py
     ├── test_provider_feed.py
     ├── test_kodi_repository.py
@@ -215,13 +252,31 @@ commit udostępnia identyczne bajty. Wspólny model zawiera niezależne osie:
 - prepare: `not_started`, `prepared`, `conflict`, `quarantined`;
 - validation: `not_started`, `valid`, `invalid`.
 
-Policy engine wyprowadza z nich akcję:
+Jedna globalna akcja `open_or_update_pr` jest niewystarczająca: PR komponentu
+i PR locka testing mają innych właścicieli i inne granice zaufania. Wynik
+zawiera zatem typowaną intencję oraz jej właściciela:
 
 - `noop`;
-- `open_or_update_pr`;
+- `component_candidate` — repo-local writer komponentu;
+- `provenance_only_candidate` — repo-local writer observation state;
+- `testing_lock_candidate` — writer w `kodi`;
 - `open_or_update_issue`;
 - `quarantine`;
 - `stop`.
+
+Policy nie jest wyprowadzane wyłącznie z osi content/provenance. Zaufany,
+walidowany profil polityki adaptera deklaruje dozwolone przejścia, np.:
+
+- `git_patch_stack + content changed + fast_forward` → component candidate;
+- `vendored_kodi_addon + content changed + fast_forward` → component
+  candidate;
+- `provider_feed + changed bytes` → quarantine;
+- `provider_feed + identical accepted bytes + healthy new provenance` →
+  provenance-only candidate.
+
+Core wykonuje tę tabelę bez instrukcji zależnych od nazw komponentów.
+Adapter/provider nie może sam rozszerzyć praw zapisu poza profil zadeklarowany
+w zaufanym manifeście.
 
 Każdy wynik zawiera stare i nowe identyfikatory, wersję, SHA-256, listę
 zmienionych ścieżek albo `unknown` oraz informację, czy upstream dotknął
@@ -229,6 +284,11 @@ zmienionych ścieżek albo `unknown` oraz informację, czy upstream dotknął
 `transient_error`; deterministyczne `404/410` może od razu oznaczać
 `unavailable`. Inne awarie przechodzą do `degraded` dopiero po kolejnych
 runach, bez mutowania accepted state.
+
+`provider_feed` zwraca osobny wynik i akcję dla każdego źródła oraz roll-up
+wyłącznie do raportowania. Osiągalność accepted URL i observed URL jest
+osobna; awaria jednego providera nie może zmienić disposition ani zatrzymać
+bezpiecznej akcji innego.
 
 ### 4.4 Manifest źródeł
 
@@ -241,11 +301,15 @@ Minimalna postać wpisu:
   "components": {
     "umbrella": {
       "enabled": true,
-      "adapter": "git_fork",
-      "target_repo": "mwoDevelop/umbrellaplug.github.io",
-      "target_branch": "main",
-      "upstream_repo": "umbrellaplug/umbrellaplug.github.io",
-      "upstream_branch": "master",
+      "adapter": "git_patch_stack",
+      "target": {
+        "repository": "mwoDevelop/umbrellaplug.github.io",
+        "branch": "main"
+      },
+      "upstream": {
+        "repository": "umbrellaplug/umbrellaplug.github.io",
+        "branch": "master"
+      },
       "schedule_slot": "daily",
       "version_policy": "umbrella_downstream"
     }
@@ -277,15 +341,16 @@ Stan zaakceptowany jest przechowywany razem z komponentem:
 - WatchNixtoons2: istniejący `mwodevelop/upstream.json`, rozszerzony o format
   schematu, SHA źródłowego commita/feedu, licencję i inventory importu;
 - mwoScrapers: `resources/provider-provenance.yml` dla aktywnych portów oraz
-  strukturalny `resources/upstream-observations.lock.json` dla ostatniego
+  strukturalny `.upstream/upstream-observations.lock.json` dla ostatniego
   zreviewowanego stanu zewnętrznych artefaktów;
 - Rapideo i podobne importy: provenance obok importowanego dodatku.
 
-`upstreams.lock.yml` zostanie zmigrowany do walidowanego
-`upstream-observations.lock.json` zamiast parsera regexowego zależnego od
-kolejności pól. Observation lock zapisuje osobno repository, ref, commit,
-version, URL i SHA-256. Nie stanowi dowodu importu ani akceptacji kodu. Czas
-sprawdzenia należy do raportu, nie do locka, aby no-op nie powodował churnu.
+Observation lock zostaje przeniesiony poza `resources/**` i jawnie wyłączony
+z `components.json`, aby provenance-only PR nie zmieniał publikowanego ZIP-a.
+Zapisuje osobno repository, ref, commit, version, URL i SHA-256. Nie stanowi
+dowodu importu ani akceptacji kodu. Czas sprawdzenia należy do raportu, nie do
+locka, aby no-op nie powodował churnu. Test wydania wymaga identycznego
+`zip_sha256` przed i po bezpiecznej zmianie provenance-only.
 
 ### 4.6 Tożsamość i cykl życia kandydata
 
@@ -344,14 +409,18 @@ wchodzą do dokumentu kanonicznego; mogą występować w job summary.
 
 Writer:
 
-1. uruchamia wyłącznie zaufany kod z default branch `kodi`;
+1. uruchamia wyłącznie zaufane narzędzie z zaakceptowanego base SHA default
+   brancha własnego repo;
 2. ponownie sprawdza schemat, allowlistę, rozmiary i wszystkie SHA;
 3. bezpiecznie materializuje bundle bez symlinków, submodułów i wyjścia poza
    root;
 4. nie wykonuje żadnego pliku kandydata;
-5. uzyskuje token App dopiero po walidacji bundle;
+5. używa repo-local `GITHUB_TOKEN` dopiero po walidacji bundle;
 6. zapisuje commit z trailerami `Candidate-ID`, `Upstream-SHA` i
    `Manifest-SHA256`.
+
+GitHub App nie uczestniczy w write path v1. Kod writera komponentu nie jest
+pobierany ani wykonywany z repo `kodi`.
 
 Bundle jest przekazywany między jobami jako artefakt o krótkiej retencji.
 Artefakt nie jest źródłem wydania; po merge źródłem pozostaje commit
@@ -394,19 +463,24 @@ cron / workflow_dispatch / reconcile awaryjny
                              ręczna promocja do `stable`
 ```
 
-W MVP jeden centralny workflow w `kodi` uruchamia wszystkie tanie discovery
-raz dziennie i wykonuje reconcile komponentów z lockiem testing. Dostępny jest
-również ręczny `workflow_dispatch`. Repo komponentów nie otrzymują prywatnego
-klucza App i nie wysyłają `repository_dispatch`.
+Control plane w `kodi` wykonuje read-only discovery wszystkich źródeł i
+reconcile commitów komponentów z lockiem testing. Write path jest lokalny dla
+repozytorium, które ma zostać zmienione:
 
-Natychmiastowe zdarzenie może zostać dodane później przez webhook GitHub App
-lub centralny relay. Dispatch jest wtedy wyłącznie wskazówką do ponownego
-odczytania allowlistowanego target branch/SHA, nigdy zaufanym poleceniem
-publikacji.
+- workflow komponentu może tworzyć PR w tym samym repo przy użyciu własnego,
+  minimalnego `GITHUB_TOKEN`;
+- workflow `kodi` może tworzyć PR locka testing w `kodi`;
+- żaden komponent nie otrzymuje sekretu pozwalającego pisać do innego repo;
+- root control plane nie wykonuje kodu kandydata w jobie zapisującym.
+
+To podejście jest już sprawdzone w WatchNixtoons2 i zostaje wzorcem dla
+Umbrelli. GitHub App lub webhook może później skrócić opóźnienie, ale nie jest
+warunkiem pełnego release v1. Polling target branch pozostaje źródłem prawdy,
+a dispatch jest tylko wskazówką do ponownego odczytu allowlistowanego SHA.
 
 ## 6. Synchronizacja Umbrelli
 
-Adapter: `git_fork`.
+Adapter: `git_patch_stack`.
 
 ### 6.1 Docelowe branche
 
@@ -415,11 +489,11 @@ Adapter: `git_fork`.
   aktualizowany automatycznie przez App;
 - `main` — zaakceptowany downstream;
 - tymczasowe lokalne repo rekonstrukcji — bez tokenu zapisu;
-- `bot/sync-umbrella` — jedna odnawialna gałąź z finalnym, spłaszczonym
+- `automation/umbrella-upstream` — jedna odnawialna gałąź z finalnym, spłaszczonym
   commitem mającym parent aktualnego `main`;
 - opcjonalne branche manualne do rozwiązywania konfliktów.
 
-Brak automatycznego serwerowego mirrora pozwala nie przyznawać App uprawnienia
+Brak automatycznego serwerowego mirrora pozwala nie przyznawać tokenowi prawa
 `Workflows`. Jeżeli upstream zmieni `.github/workflows/**`, `.gitmodules` albo
 inny chroniony plik repo, automat kończy się quarantine przed pushem.
 
@@ -457,16 +531,17 @@ historii. Temp tree jest rekonstrukcją: nowy czysty upstream + kontrolowana
 transformacja + aktywne poprawki. Zdalny kandydat jest natomiast pojedynczym
 commitem potomnym bieżącego `main`, więc nie przenosi do pushowanej historii
 commitów zmieniających workflow. Dzięki temu typowa zmiana pierwszej linii
-`addon.xml` nie staje się ręcznym konfliktem przy każdym wydaniu, a App nie
+`addon.xml` nie staje się ręcznym konfliktem przy każdym wydaniu, a writer nie
 wymaga uprawnienia `Workflows`.
 
 Force-push z `force-with-lease` jest dozwolony wyłącznie na rozpoznawalną
-gałąź `bot/*`, nigdy na `main`, `master` ani branch mirrora.
+gałąź `automation/*`, nigdy na `main`, `master` ani branch mirrora.
 
 ### 6.3 Jeden manifest zmian downstream
 
 Nie powstaje konkurencyjny `.mwodevelop/downstream-changes.yml`. Istniejący
-`downstream-patches.yml` zostanie jawnie zmigrowany do nowego schematu. Dla
+`downstream-patches.yml` pozostaje jedynym manifestem i jest walidowany według
+aktualnego schematu. Dla
 każdej zmiany zawiera:
 
 - stabilny identyfikator;
@@ -480,7 +555,7 @@ każdej zmiany zawiera:
 
 Manifest zapisuje też zaakceptowaną bazę upstream, digest transformacji
 mechanicznej i digest uporządkowanej serii. Bootstrap musi zweryfikować, że
-obecny `6.7.81.9` daje się odtworzyć z bazy `6.7.81` albo jawnie opisać
+obecny `6.7.81.18` daje się odtworzyć z zaakceptowanej bazy upstream albo jawnie opisać
 nieodtwarzalne historyczne commity przed pierwszym live sync.
 
 Commity zarządzające `.github/workflows/**` i inną polityką repo zostają
@@ -538,10 +613,16 @@ overlay albo generated.
 9. Znormalizować tryby plików oraz odrzucić symlinki i submoduły.
 10. Zaktualizować `upstream.json`, inventory, licencję i wersję downstream.
 11. Uruchomić testy strukturalne, importowe i deterministyczny build.
-12. Otworzyć lub zaktualizować `bot/sync-watchnixtoons2`.
+12. Otworzyć lub zaktualizować
+    `automation/watchnixtoons2-upstream`.
 
-Obecny workflow bezpośrednio pushujący do `master` zostanie usunięty dopiero
-po przejściu dry-run oraz kontrolowanego testu nowego adaptera.
+Legacy workflow bezpośrednio pushujący do `master` został usunięty. Referencyjny
+workflow prepare/writer pozostaje jedynym cyklicznym write path dla dodatku.
+Przed uznaniem go za ukończony writer musi dodatkowo porównywać exact tree,
+parent/base SHA, trailery i autora istniejącego brancha z candidate bundle,
+ponownie odczytywać target bezpośrednio przed pushem oraz wykonywać
+`ensure-required-check` po każdym utworzeniu lub odświeżeniu PR-a, także gdy
+branch nie wymagał ponownego pushu.
 
 ## 8. Synchronizacja mwoScrapers i providerów
 
@@ -654,19 +735,22 @@ uruchomiony wcześniej w trybie read-only.
 
 Po merge komponentu centralny reconcile:
 
-1. porównuje target branch komponentu z `manifests/locks/testing.json`;
-2. wymaga, aby commit był osiągalny z chronionego target branch i pochodził z
+1. uruchamia osobny release-lock discovery, niezależny od upstream source
+   policy;
+2. porównuje publikowane drzewo target branch komponentu z exact artefaktem
+   wskazanym przez `manifests/locks/testing.json`;
+3. wymaga, aby commit był osiągalny z chronionego target branch i pochodził z
    zaakceptowanego PR-a;
-3. sprawdza, czy zmienione bajty mają wersję większą od aktualnie publikowanej;
-4. pobiera dokładny commit komponentu;
-5. buduje ZIP deterministycznie;
-6. oblicza SHA-256;
-7. otwiera jeden PR `bot/bump-testing-<component>`;
-8. aktualizuje wyłącznie locki i niezbędne manifesty;
-9. materializuje wszystkie exact locki do izolowanego katalogu, niezależnie od
+4. buduje dokładny target commit i porównuje ZIP SHA z lockiem;
+5. kończy no-op, jeśli commit się zmienił, ale publikowane bajty są identyczne;
+6. jeśli bajty się zmieniły, wymaga wersji większej od testing i stable;
+7. emituje typowaną akcję `testing_lock_candidate`;
+8. otwiera jeden PR `automation/testing-lock-<component>`;
+9. aktualizuje wyłącznie locki i niezbędne manifesty;
+10. materializuje wszystkie exact locki do izolowanego katalogu, niezależnie od
    gitlinków submodułów;
-10. uruchamia pełne testy repo Kodi;
-11. po merge publikuje atomowy snapshot `testing`.
+11. uruchamia pełne testy repo Kodi;
+12. po merge publikuje atomowy snapshot `testing`.
 
 Jeden PR dotyczy jednego niezależnego komponentu. mwoScrapers i wrapper są
 wyjątkiem i zawsze występują razem. Jeżeli zmiana Umbrelli wymaga nowej wersji
@@ -712,21 +796,35 @@ nowego indeksu. Jeżeli w przyszłości indeks stable będzie generowany podczas
 promocji, musi być deterministyczny, a ZIP-y nadal muszą być kopiowane
 bajtowo bez zmian.
 
+Docelowy bundle schema 2 rozdziela `channels/testing`, `promotion/stable` i
+`site-shared`. Deployment stable składa Pages wyłącznie przez kopiowanie
+zweryfikowanych, przygotowanych plików wybranego stable snapshotu oraz
+aktualnie publikowanego testing snapshotu. Nie uruchamia
+`checkout_locked_components.py`, `build_repo.py` ani kodu komponentów.
+Zapobiega to zarówno rebuildowi stable, jak i cofnięciu nowszego testing przy
+promocji starszego, nadal certyfikowanego snapshotu.
+
 „Immutable” oznacza zakaz nadpisania nazwy assetu/tagu oraz obowiązkową
 weryfikację SHA przy każdym użyciu; workflow może utworzyć brakujący asset,
-ale nie może zastąpić istniejącego. Retention usuwa tylko niepromowane assety
-spełniające jednocześnie oba limity wieku i liczby.
+ale nie może zastąpić istniejącego. V1 nie usuwa snapshotów automatycznie.
+Ewentualna przyszła retencja może usuwać tylko niepromowane assety spełniające
+jednocześnie oba limity wieku i liczby.
 
-MVP serializuje certyfikację: tylko jeden snapshot ma stan `certifying`.
+V1 serializuje certyfikację: tylko jeden snapshot ma stan `certifying`.
 Następny kandydat komponentu może zostać zbudowany i zgłoszony w swoim repo,
 ale centralny PR locka nie jest otwierany i publiczny testing nie jest
-zastępowany do czasu promocji albo jawnego odrzucenia aktualnego snapshotu.
-Pozwala to przypisać BlueStacks E2E do całego delta stable→testing.
+zastępowany do czasu certyfikacji albo jawnego odrzucenia aktualnego
+snapshotu. Zmiany generatora i inne pushe do `main`, które zmieniłyby output,
+również respektują tę blokadę: mogą przejść CI, ale publikacja jest odroczona
+i wznawiana po zwolnieniu slotu.
 
 Stan `certifying` jest reprezentowany przez GitHub Deployment dla środowiska
 `testing-certification`, powiązany z dokładnym commit SHA i snapshot ID.
-Centralny reconcile wymaga maszynowego statusu `success` po promocji albo
-`failure/inactive` po odrzuceniu, wystawionego przez chroniony workflow.
+Wspólna concurrency group i ponowna kontrola Deployment przed publikacją
+zapobiegają wyścigowi. Cykl certyfikacji ma stany
+`published_testing → certifying → certified/rejected`; kolejkę zwalnia
+`certified` albo `rejected`. `stable_promoted` jest niezależnym, późniejszym
+stanem i nie blokuje kolejnych kandydatów.
 Ręczne zamknięcie issue nie zwalnia kolejki. Jedno zarządzane issue jest tylko
 widokiem dla człowieka i jest synchronizowane ze statusem Deployment.
 
@@ -738,25 +836,33 @@ Atestacja E2E zapisuje co najmniej:
 - zainstalowane ID, wersje i `installed.origin`;
 - wynik instalacji/aktualizacji i testów funkcjonalnych;
 - digest użytego ZIP-a repo;
-- czas i identyfikator kontrolowanego urządzenia.
+- czas i identyfikator kontrolowanego urządzenia;
+- jednorazowy challenge/nonce uruchomienia;
+- exact head SHA i SHA-256 skryptów testowych;
+- tożsamość chronionego runnera oraz czas ważności.
 
-Atestacja ma JSON Schema i kanoniczny digest. Test urządzenia działa bez
-uprawnień zapisu i produkuje Actions artifact. Oddzielny job w chronionym
-environment weryfikuje snapshot ID, schemat, wynik oraz digest, a następnie
-dołącza atestację do Release asset. Lokalny JSON jest raportem diagnostycznym,
-dopóki nie przejdzie kontrolowanego importu/review przez ten workflow. Writer
-atestacji nie wykonuje kodu dodatku.
+Produkcyjna atestacja v1 powstaje na chronionym self-hosted runnerze z etykietą
+`kodi-device-e2e`, uruchamianym przez `workflow_dispatch` z dokładnym
+`snapshot_id`. Runner pobiera nonce z runu, ma read-only dostęp do snapshotu i
+LAN/ADB, ale nie ma `contents: write` ani Pages. Atestacja ma JSON Schema i
+kanoniczny digest. Oddzielny job w chronionym environment weryfikuje nonce,
+snapshot/head SHA, schemat, czas ważności, wynik i digest, odrzuca replay, a
+następnie dołącza content-addressed atestację do Release. Lokalny JSON poza
+tym workflow pozostaje wyłącznie raportem diagnostycznym. Writer atestacji
+nie wykonuje kodu dodatku.
 
 Promocja stable wskazuje dokładny `snapshot_id` i wymaga jego pozytywnej
 atestacji. Nie może użyć „aktualnego testing”, jeżeli jest to inny snapshot.
 Nowy schemat stable locka zapisuje również `source_snapshot_id`,
 `source_index_sha256`, `source_artifact_manifest_sha256` i digest atestacji.
+Migracja stable lock schema 1 → 2 jest osobnym PR-em przed pierwszą promocją
+v1.
 
 ### 10.2 Rozdzielenie uprawnień publikacyjnych
 
 Publikacja snapshotu składa się z trzech osobnych jobów:
 
-1. `build-and-test` — `contents: read`, bez App key i sekretów publikacji;
+1. `build-and-test` — `contents: read`, bez tokenu zapisu i sekretów publikacji;
    materializuje komponenty, wykonuje testy i tworzy content-addressed bundle;
 2. `snapshot-writer` — `actions: read` i `contents: write`, nie checkoutuje
    ani nie wykonuje kodu komponentów; pobiera bundle, ponownie weryfikuje
@@ -782,9 +888,9 @@ komponentu:
 
 - Umbrella: `upstream_version.downstream_revision`; dla nowego upstreamu
   revision zaczyna się od `1`, a kolejna nasza zmiana zwiększa wyłącznie
-  revision. Obecne `6.7.81.9` jest bazowym przypadkiem migracyjnym.
+  revision. Obecne `6.7.81.18` jest bazowym przypadkiem migracyjnym.
 - WatchNixtoons2: ta sama polityka `upstream_version.downstream_revision`;
-  obecne `0.25.2` mapuje upstream `0.25` i downstream revision `2`.
+  obecne `0.26.1` mapuje upstream `0.26` i downstream revision `1`.
 - mwoScrapers: własny SemVer; zaakceptowana zmiana kodu zwiększa co najmniej
   patch.
 - wrapper: wersja rośnie tylko przy zmianie jego bajtów, metadata albo
@@ -798,6 +904,11 @@ automat nie zgaduje wersji.
 Porównanie nie może być leksykalne ani oparte bezpośrednio na PEP 440. Moduł
 `versioning.py` implementuje i testuje porządek zgodny z Kodi, w tym wersje
 czteroczłonowe i przykłady `~alpha/~beta`.
+
+V1 nie wykonuje automatycznego bumpa upstreamowych prerelease
+`~alpha/~beta`. Wykrywa je, waliduje porządek Kodi i kieruje do quarantine z
+ręczną decyzją o downstreamowej wersji. Automatyczne mapowanie prerelease
+wymaga osobnej polityki i fixture po v1.
 
 Wspólne wymagania:
 
@@ -813,46 +924,50 @@ Wspólne wymagania:
 
 ## 12. Uwierzytelnianie i uprawnienia
 
-Powstanie GitHub App przeznaczona wyłącznie do synchronizacji. Zostanie
-zainstalowana tylko w repozytoriach objętych procesem. Jej client ID i klucz
-prywatny znajdują się wyłącznie w chronionym środowisku repo `kodi`; nie są
-kopiowane do repo komponentów.
+Pełny release v1 używa repo-local `GITHUB_TOKEN` z minimalnymi uprawnieniami.
+Każdy writer może pisać wyłącznie do repo, w którym działa:
 
-Minimalne planowane uprawnienia:
+- discovery i testy: `contents: read`;
+- writer brancha/PR-a: `contents: write`, `pull-requests: write` oraz
+  `actions: write` wyłącznie do jawnego uruchomienia allowlistowanego workflow
+  testowego na branchu kandydata;
+- reporter problemów: dodatkowo `issues: write`;
+- deploy: tylko uprawnienia potrzebne danemu kanałowi.
 
-- Metadata: read;
-- Contents: read/write;
-- Pull requests: read/write;
-- Issues: read/write, jeśli alerty pozostają w issues.
+Writer jest osobnym jobem, działa z zaufanego workflow na default branch,
+waliduje candidate bundle i nie wykonuje plików kandydata. Zmiana
+`.github/workflows/**`, submodułów lub innych chronionych ścieżek pochodząca
+z upstream zatrzymuje automat.
 
-Nie przyznajemy uprawnienia do secrets, deployments ani administration.
-Zmiana `.github/workflows/**` pochodząca z upstream zatrzymuje automat i wymaga
-ręcznego review; bot nie potrzebuje prawa do modyfikowania workflow.
+Ponieważ push/PR wykonany standardowym `GITHUB_TOKEN` nie uruchamia
+automatycznie kolejnych workflow z powodów ochrony przed rekurencją, writer po
+utworzeniu albo aktualizacji PR-a wykonuje `ensure-required-check`: jawnie
+wywołuje przez `workflow_dispatch` dokładnie wskazany, allowlistowany workflow
+testowy, również gdy retry nie zmienił brancha. Root `test.yml`, Umbrella
+`downstream-tests.yml` i mwoScrapers `test.yml` muszą otrzymać trigger
+`workflow_dispatch` przed włączeniem odpowiadających writerów. Writer zapisuje
+head SHA przed dispatch, a potem wymaga, aby run rozwiązał ref do tego samego
+SHA i required context pochodził z allowlistowanego workflow. Nie wolno
+przyjmować wyniku prepare jako zamiennika required check PR-a.
 
-Powyższa lista dotyczy App synchronizacyjnej. W repo `kodi` wbudowany
-`GITHUB_TOKEN` dostaje `deployments: read` w reconcile oraz `deployments:
-write` wyłącznie w chronionych workflow `promote/reject`, aby utrzymać
-maszynowy stan certyfikacji. Snapshot writer otrzymuje `contents: write`, ale
-jest osobnym jobem, który nie wykonuje kodu komponentów.
+Przed włączeniem writera branch produktowy musi wymagać PR-a i odpowiedniego
+required check. W v1 PR kodu komponentu, testing locka oraz stable promotion
+wymaga dodatkowo minimum jednego approval właściciela/CODEOWNER; obecne
+rulesety z `required_approving_review_count: 0` zostają utwardzone przed
+release. Token automatyzacji nie dostaje bypassu rulesetu. PAT nie będzie
+używany.
 
-App synchronizacyjna nie może omijać branch protection. Wszystkie cztery
-repozytoria muszą otrzymać ruleset wymagający PR-a i required checks przed
-cutover writera. Wyjątki dotyczące promocji stable nie są przyznawane tej App.
-
-Sekrety App:
-
-- są dostępne tylko w chronionym jobie zapisującym;
-- nie są dostępne w discovery ani testach kodu upstream;
-- nie są przekazywane do procesów uruchamiających kod dodatku;
-- nie są wypisywane w logach;
-- token instalacyjny jest krótkotrwały.
-
-PAT nie będzie używany.
+GitHub App pozostaje opcjonalnym rozszerzeniem po v1, jeśli potrzebny będzie
+cross-repo dispatch lub krótszy czas reakcji. Nie może stać się warunkiem
+poprawności: po zdarzeniu system ponownie odczytuje target branch i dokładny
+SHA. Jeżeli App zostanie wdrożona, jej klucz pozostaje wyłącznie w chronionym
+środowisku control plane, a uprawnienia ograniczają się do metadata,
+contents/PR/issues bez secrets, deployments, Pages, administration i bypassu.
 
 ### 12.1 Zgodna z rulesetem promocja stable
 
-Przed ochroną `kodi/main` obecny bezpośredni push z `promote-stable.yml`
-zostanie zastąpiony dwoma krokami:
+Ochrona `kodi/main` jest już aktywna. Obecny model PR zostaje domknięty dwoma
+izolowanymi krokami:
 
 1. ręcznie uruchamiany workflow pobiera wskazany immutable `snapshot_id`,
    weryfikuje atestację E2E i otwiera PR aktualizujący stable lock;
@@ -860,11 +975,13 @@ zostanie zastąpiony dwoma krokami:
    snapshot asset, ponownie weryfikuje manifest i publikuje przygotowany
    `promotion/stable` payload zawierający te same ZIP-y bez rebuilda.
 
-`publish-testing` musi pomijać deploy przy pushu zmieniającym wyłącznie stable
-lock, aby nie ścigał się z deploymentem stable. Jeżeli techniczne ograniczenia
-uniemożliwią wariant PR, dopuszczalna alternatywa to osobna App promocji z
-wąskim bypass rulesetu wyłącznie w chronionym environment z ręcznym approval.
-Nie wolno użyć App synchronizacyjnej ani szerokiego bypassu.
+Job weryfikujący snapshot/testujący payload ma wyłącznie read-only token.
+Oddzielny writer dostaje contents/PR/actions write dopiero po walidacji
+content-addressed bundle i nie wykonuje kodu komponentów.
+
+`publish-testing` pomija deploy przy pushu zmieniającym wyłącznie stable lock,
+aby nie ścigał się z deploymentem stable. Obowiązuje wariant PR bez bypassu
+rulesetu; ewentualna przyszła App nie może być użyta do ominięcia tej bramy.
 
 ## 13. Bezpieczeństwo GitHub Actions
 
@@ -883,16 +1000,20 @@ Nie wolno użyć App synchronizacyjnej ani szerokiego bypassu.
     komponentu.
 11. Build/test, snapshot writer i Pages deploy są osobnymi jobami o
     rozłącznych tokenach.
-12. App synchronizacyjna nie ma `Workflows`, `Deployments`, `Pages` ani
+12. Token repo-local writera nie ma `Workflows`, `Deployments`, `Pages` ani
     bypassu rulesetu.
+13. Zależności Python używane w build/test są instalowane z wersjonowanego
+    locka z hashami; `pip install pytest` bez przypięcia nie jest dopuszczony
+    w release workflow.
 
 ## 14. Harmonogram i idempotencja
 
-GitHub cron jest statyczny i nie jest generowany z manifestu. W MVP jeden
+GitHub cron jest statyczny i nie jest generowany z manifestu.
 `reconcile-upstreams.yml` uruchamia codziennie o 04:20 UTC discovery wszystkich
-tanich źródeł, a następnie reconcile. Manifest może wyłączać komponent, lecz
-nie tworzy dynamicznego crona. Godzina nie jest traktowana jako SLA GitHub
-Actions.
+tanich źródeł i reconcile. WatchNixtoons2 ma osobny repo-local slot 04:35 UTC;
+analogiczny slot Umbrelli zostanie rozłożony w czasie. Manifest może wyłączać
+komponent, lecz nie tworzy dynamicznego crona. Godzina nie jest traktowana
+jako SLA GitHub Actions.
 
 Jeżeli później koszt źródeł będzie różny, workflow może zawierać kilka
 statycznych slotów, a `schedule_slot` w manifeście przypisze komponent do
@@ -931,13 +1052,19 @@ Alerty:
 - raport nie zawiera całych URL-i z wrażliwym query stringiem;
 - powtarzalna awaria centralnego reconcile nie wpływa na istniejące `stable`.
 
+Alert „brak udanego harmonogramu przez 36 godzin” nie może być wystawiany
+przez monitorowany cron. V1 uruchamia niezależny watchdog poza GitHub Actions
+(preferowany kontener na QNAP), który odpytuje GitHub API o ostatni udany run
+każdego workflow. In-repo watchdog może być dodatkowym sygnałem, ale jego
+wspólna domena awarii jest jawnie udokumentowana.
+
 ## 16. Testy
 
 ### 16.1 Testy jednostkowe
 
 - walidacja manifestu i allowlisty;
 - klasyfikacja niezależnych osi discovery i decyzji policy engine;
-- wersjonowanie zgodne z Kodi, w tym `6.7.81.9`, następny upstream, rebuild
+- wersjonowanie zgodne z Kodi, w tym `6.7.81.18`, następny upstream, rebuild
   tej samej wersji, `~alpha/~beta` i emergency forward-revert;
 - nazwy branchy i PR-ów;
 - `candidate_id`, disposition i supersede;
@@ -970,9 +1097,10 @@ Na tymczasowych lokalnych repozytoriach Git:
 - upstream zmienia `.github/workflows/**`;
 - rekonstrukcja Umbrelli daje finalny commit z parentem target `main` i
   bajtowo identycznym chronionym tree;
-- push Umbrelli działa tokenem App bez uprawnienia `Workflows`;
+- push brancha automatyzacji Umbrelli działa repo-local tokenem bez
+  uprawnienia `Workflows`;
 - ruleset blokuje bezpośredni push do branchy produktowych;
-- promocja stable działa bez bypassu App synchronizacyjnej;
+- promocja stable działa bez bypassu tokenu automatyzacji;
 - job wykonujący kod komponentu nie ma tokenu `contents: write`;
 - snapshot writer odrzuca podmianę istniejącego Release asset;
 - ręczne zamknięcie issue nie zwalnia blokady certyfikacji;
@@ -1030,14 +1158,14 @@ Przed włączeniem harmonogramu każdy adapter przechodzi:
 5. pełne CI komponentu;
 6. PR locka testing;
 7. publiczny smoke test repo Kodi;
-8. E2E instalacji/aktualizacji w `BlueStacks1`;
+8. E2E instalacji/aktualizacji na minimalnej macierzy canary z sekcji 21;
 9. zapis atestacji dla całego `snapshot_id`;
 10. odtworzenie testu po odświeżeniu repo Kodi.
 
-BlueStacks E2E jest obowiązkową bramą przed stable, ale nie zwykłym jobem PR na
-GitHub-hosted runnerze. Może być wykonany lokalnie przez zapisany skrypt albo
-na dedykowanym self-hosted runnerze dostępnym wyłącznie dla chronionego
-workflow i bez wykonywania niezaakceptowanego kodu z PR.
+Urządzeniowe E2E jest obowiązkową bramą przed stable i działa na chronionym
+self-hosted runnerze dostępnym wyłącznie dla workflow certyfikacji już
+opublikowanego testing snapshotu. Lokalny skrypt pozostaje narzędziem
+diagnostycznym i drillowym; sam nie może wystawić zaufanej atestacji.
 
 ## 17. Rollback i zatrzymanie
 
@@ -1060,7 +1188,10 @@ Po publikacji do testing:
 - poprzedni stable pozostaje niezmieniony;
 - odrzucenie `snapshot_id` zwalnia kolejkę certyfikacji;
 - ręczny workflow może ponownie wdrożyć wcześniejszy immutable snapshot asset
-  na Pages po sprawdzeniu jego manifestu;
+  na Pages po sprawdzeniu jego manifestu jako containment;
+- containment blokuje kolejne publikacje, ale nie obniża wersji już
+  zainstalowanej w Kodi; równolegle zawsze powstaje emergency forward-revert
+  z wyższą wersją;
 - niepromowane snapshoty są zachowywane co najmniej 90 dni i co najmniej
   dziesięć ostatnich.
 
@@ -1073,6 +1204,20 @@ Po publikacji do stable:
   retencji ani usunięciu.
 
 ## 18. Etapy realizacji
+
+Status etapów:
+
+| Etap | Stan | Najważniejszy brak |
+|---|---|---|
+| 0 — baseline | zakończony | utrzymywać tylko aktualny raport |
+| 1 — read-only | zakończony | typowane akcje, policy per adapter i per-provider wynik są przetestowane live |
+| 2 — bezpieczeństwo/writer | prawie zakończony | przypięte zależności i exact-head dispatch są gotowe; approval=1 zostanie włączony po merge implementacji |
+| 3 — Umbrella | zakończony implementacyjnie | writer jest na `main`, testy 43/43 i live no-op przeszły |
+| 4 — WatchNixtoons2 | zakończony implementacyjnie | exact tree/base/autor i ensure-required-check są na `master`; live no-op przeszedł |
+| 5 — mwoScrapers | zakończony implementacyjnie | `0.1.6`, observation state poza ZIP, bezpieczny writer i rzeczywisty provenance PR przeszły |
+| 6 — testing/stable | implementacja zakończona, rollout w toku | lokalny reconciler i exact-snapshot composer są zielone; pozostał publiczny snapshot, atestacja i promocja |
+| 7 — adapter Kodi/Rapideo | odroczony | nie blokuje pełnego release v1 |
+| 8 — rollout/E2E | w toku | kompletna macierz i powiązanie dowodów ze snapshotem |
 
 ### Etap 0 — zapis baseline
 
@@ -1095,8 +1240,9 @@ Rezultat:
 - testy jednostkowe i fixture'y;
 - raport JSON/Markdown.
 
-Kryterium zakończenia: wszystkie źródła można sklasyfikować bez zapisu do
-GitHub i bez sekretów.
+Kryterium zakończenia: wszystkie źródła można sklasyfikować per źródło bez
+zapisu do GitHub i bez sekretów, a każda akcja ma jednoznaczny typ,
+właściciela i dozwolony zakres mutacji.
 
 ### Etap 2 — bezpieczeństwo wydania, uwierzytelnianie i writer
 
@@ -1109,17 +1255,19 @@ Rezultat:
 - schemat i chroniony writer atestacji E2E;
 - materializowanie exact locków niezależnie od submodułów;
 - czasowe wyłączenie legacy writerów przed aktywacją rulesetów;
-- GitHub App z minimalnymi uprawnieniami;
-- klucz App wyłącznie w chronionym środowisku `kodi`;
+- repo-local writer z minimalnym `GITHUB_TOKEN`;
 - candidate bundle i kontrola `candidate_id`;
 - walidowany job tworzący branch, PR i issue;
-- rulesety wszystkich branchy produktowych bez bypassu App synchronizacyjnej;
+- rulesety wszystkich branchy produktowych bez bypassu tokenu automatyzacji;
+- minimum jeden approval dla PR-ów v1;
+- allowlistowany `workflow_dispatch` testów i walidacja exact head SHA;
+- lock zależności Python z hashami;
 - pełne SHA zewnętrznych Actions;
 - test idempotencji PR-a.
 
-Kryterium zakończenia: PR utworzony przez App uruchamia wymagane CI, a token
-nie jest dostępny w testach kandydata; ręczna promocja stable nadal działa
-przy aktywnym rulesecie i nie przebudowuje snapshotu.
+Kryterium zakończenia: PR utworzony przez repo-local writer uruchamia wymagane
+CI, a token zapisu nie jest dostępny w testach kandydata; ręczna promocja
+stable nadal działa przy aktywnym rulesecie i nie przebudowuje snapshotu.
 
 ### Etap 3 — migracja Umbrelli
 
@@ -1131,7 +1279,7 @@ Rezultat:
 - replay aktywnego patch stacku zamiast rebase całego downstreamu;
 - finalny spłaszczony commit z parentem `main` i identycznym protected tree;
 - test rewrite, konfliktu, no-op i retry;
-- test przejścia z bazowego `6.7.81.9` na następny fixture upstream;
+- test przejścia z bazowego `6.7.81.18` na następny fixture upstream;
 - wyłączenie starego workflow po przejściu kontrolowanego sync.
 
 Kryterium zakończenia: dwa kolejne runy dla tego samego SHA dają jeden PR i
@@ -1146,7 +1294,9 @@ Rezultat:
 - seria izolowanych downstream patchy;
 - bezpieczna walidacja ZIP;
 - PR aktualizacyjny;
-- usunięcie bezpośredniego pushowania upstream do `master`.
+- usunięcie bezpośredniego pushowania upstream do `master`;
+- walidacja exact tree, parenta/base, autora i trailerów brancha;
+- trwałe disposition oraz `ensure-required-check` także przy retry.
 
 Kryterium zakończenia: aktualny dodatek daje się odtworzyć z przypiętego
 archiwum i naszych transformacji, z wyjątkiem jawnie opisanych plików
@@ -1160,6 +1310,13 @@ Rezultat:
 - rozpoznawanie availability/provenance drift;
 - migracja regexowego YAML locka do walidowanego JSON;
 - rozdzielenie observed i accepted import state;
+- per-provider wynik oraz profile policy: changed bytes zawsze quarantine;
+- przeniesienie observation lock poza publikowane `resources/**`;
+- test, że provenance-only nie zmienia ZIP SHA;
+- bootstrap modułu i wrappera do jednego commita zgodnie z
+  `atomic_commit:true`; samo wyniesienie observation state zmienia tree
+  modułu, dlatego otrzymuje uczciwą wersję `0.1.6`, podczas gdy niezmieniony
+  wrapper zachowuje `0.1.1`;
 - PR aktualizujący pin przy identycznym SHA i nowym osiągalnym URL-u;
 - quarantine nowych bajtów bez kwalifikacji/licencji;
 - test przypadku Magneto;
@@ -1178,8 +1335,11 @@ Rezultat:
 - materializacja exact locków;
 - deterministyczny build;
 - immutable snapshot ID i Release asset;
-- workflow retencji bez prawa usunięcia promowanych snapshotów;
+- brak automatycznego usuwania snapshotów w v1; przyszła retencja nie może
+  usunąć promowanych;
 - serializowana certyfikacja całego delta stable→testing;
+- rozdzielone `certified/rejected` od `stable_promoted`;
+- stable lock schema 2 i deploy przygotowanego exact payload bez rebuilda;
 - publikacja wyłącznie testing oraz no-op deploy dla identycznych bajtów;
 - test niezmienności stable.
 
@@ -1202,17 +1362,19 @@ raportowana z pełnym provenance.
 
 Rezultat:
 
-- jeden centralny harmonogram aktywny;
+- centralny harmonogram discovery oraz harmonogramy komponentowych writerów;
 - zapisany odtwarzalny test lokalny;
-- rzeczywisty E2E testing w BlueStacks1;
+- rzeczywisty E2E testing na wymaganych klasach urządzeń;
 - atestacja pełnego snapshotu;
 - instrukcja obsługi konfliktów i rewrite;
 - dokument operacyjny dla ręcznej promocji stable.
 
-Kryterium zakończenia MVP: co najmniej jeden rzeczywisty cykl adapterów
-Umbrella, WatchNixtoons2 i provider feed, drugi run no-op oraz pozytywny E2E
-całego snapshotu repo Kodi i dodatków. Adapter Rapideo i cache artefaktów nie
-blokują MVP.
+Kryterium zakończenia MVP: każdy adapter przechodzi pełny staging drill
+kandydat → PR → CI → retry/no-op, produkcyjne źródła przechodzą live
+discovery/no-op, a cały snapshot repo Kodi i dodatków ma pozytywne E2E.
+Naturalna produkcyjna zmiana upstream jest post-release canary, aby jej brak
+nie blokował wydania bez końca. Adapter Rapideo i cache artefaktów nie blokują
+MVP.
 
 ## 19. Bramy odbioru MVP i rozwiązania docelowego
 
@@ -1222,23 +1384,29 @@ MVP jest ukończony, gdy:
 2. każda zmiana kodu/provenance proponowana do akceptacji trafia do PR-a, a
    anomalie i brak licencji nie mutują branchy;
 3. CI kandydata nie ma sekretów zapisu ani publikacji;
-4. `candidate_id`, disposition i retry nie tworzą duplikatów PR-ów/issues;
+4. `candidate_id`, exact tree/base/autor, disposition i retry nie tworzą
+   duplikatów PR-ów/issues ani osieroconych required checks;
 5. rewrite i konflikt zatrzymują automat;
 6. Umbrella ma jeden manifest patchy i odtwarzalną relację z upstreamem;
 7. WatchNixtoons2 jest odtwarzalny z archiwum, transformacji i patchy;
 8. mwoScrapers wykrywa martwy pin nawet przy identycznym SHA artefaktu;
 9. observed provider state nie zmienia accepted import state bez kwalifikacji;
-10. wrapper i moduł są koordynowane przez release group;
+10. wrapper i moduł są koordynowane przez release group oraz przypięte do
+    jednego atomic commit;
 11. local i CI materializują exact locki niezależnie od gitlinków;
 12. zmiana komponentu aktualizuje `testing` przez osobny PR;
-13. cały testing ma immutable snapshot ID i atestację;
+13. cały testing ma immutable snapshot ID i odporną na replay atestację z
+    chronionego runnera;
 14. build jest deterministyczny, a identyczny output nie jest ponownie
     wdrażany;
 15. istniejące `stable` pozostaje bajtowo niezmienne;
-16. promocja stable pozostaje ręczna i pobiera exact snapshot bez rebuilda;
-17. branch rulesety blokują bezpośredni push App synchronizacyjnej;
+16. promocja stable pozostaje ręczna, pobiera exact snapshot bez rebuilda i
+    nie cofa aktualnego testing;
+17. branch rulesety blokują bezpośredni push tokenu automatyzacji i wymagają
+    approval oraz checka exact head SHA;
 18. pełny scenariusz jest zapisany w `tests/e2e/upstream_sync/run.sh`;
-19. rzeczywiste repo Kodi oraz dodatki przechodzą test w BlueStacks1.
+19. rzeczywiste repo Kodi oraz dodatki przechodzą test na wymaganej macierzy
+    canary opisanej w sekcji 21.
 
 Rozwiązanie docelowe dodatkowo może spełnić:
 
@@ -1247,24 +1415,271 @@ Rozwiązanie docelowe dodatkowo może spełnić:
 - bezpieczny webhook/relay skracający czas reakcji bez dystrybucji klucza App;
 - równoległą certyfikację wielu adresowalnych snapshotów zamiast kolejki MVP.
 
-## 20. Kolejność pierwszych zmian
+## 20. Kolejność domknięcia
 
-Pierwsza seria implementacyjna powinna być mała i łatwa do review:
+1. Domknąć komponentowy cykl Umbrelli według sprawdzonego wzorca
+   WatchNixtoons2.
+2. Utwardzić referencyjny writer WatchNixtoons2.
+3. Rozdzielić typowane source actions od release-lock reconcile.
+4. Przenieść provider observation state poza ZIP, znormalizować release group
+   i dodać bezpieczny writer provenance-only/quarantine.
+5. Zaimplementować osobny `testing_lock_candidate` writer w `kodi`.
+6. Powiązać testing snapshot z autentyczną atestacją urządzeniową.
+7. Zmigrować stable lock i deployment do exact snapshot bez rebuilda.
+8. Wykonać staging drill każdego adaptera oraz live no-op.
+9. Przeprowadzić okres obserwacji, containment/forward-revert i próbę awarii.
+10. Utworzyć release mechanizmu synchronizacji i wykonać ręczną promocję
+   dokładnego, certyfikowanego snapshotu do stable.
 
-1. zapisać baseline oraz dodać manifest, schemat, modele i pełny dry-run;
-2. zbudować adaptery i testy lokalnie bez writera;
-3. zmigrować promocję stable, exact-lock E2E i triggery publikacji tak, aby
-   można było bezpiecznie włączyć rulesety;
-4. skonfigurować GitHub App, candidate bundle, writer i rulesety;
-5. wykonać kontrolowany cutover Umbrelli, WatchNixtoons2 i mwoScrapers zgodnie
-   z etapami 3–5, po jednym komponencie;
-6. uruchomić centralne PR-y locka testing i serializowaną certyfikację
-   snapshotu;
-7. dopiero po rzeczywistym E2E włączyć centralny harmonogram.
+Writer legacy i nowy writer nie mogą działać równolegle dla tego samego
+komponentu. Cutover jest atomowy: wyłączenie starego schedule, potwierdzenie
+rulesetu i dopiero włączenie nowego write path.
 
-Do chwili przejścia dry-run i testów integracyjnych obecne workflow nie są
-usuwane. Nie mogą jednak działać równolegle z nowym writerem dla tego samego
-komponentu; przełączenie odbywa się atomowo przez wyłączenie starego schedule
-i włączenie nowego. Legacy workflow WatchNixtoons2 pushujący bezpośrednio do
-`master` zostaje wyłączony przed aktywacją rulesetu, nawet jeśli jego nowy
-writer zostanie włączony dopiero w późniejszym etapie.
+## 21. Plan domknięcia do pełnego release
+
+### 21.1 Pakiet A — Umbrella PR automation
+
+1. Dodać job `prepare`, który pobiera dokładny upstream SHA i aktualny
+   downstream base, uruchamia `tools/rebuild_downstream.py` w izolowanym
+   katalogu oraz tworzy kanoniczny candidate bundle.
+2. Walidować patch stack, protected tree, chronione ścieżki, symlinki,
+   submoduły, limity rozmiaru i wersję wynikową.
+3. Dodać osobny writer, który stosuje wyłącznie allowlistowane pliki, używa
+   `force-with-lease` na stałym branchu automatyzacji oraz otwiera/aktualizuje
+   jeden PR.
+4. Dodać `workflow_dispatch` do zaufanego downstream testu, a writer po
+   utworzeniu/aktualizacji PR-a zapewnia check dla exact head SHA także przy
+   retry bez nowego pushu.
+5. Konflikt, rewrite, zmiana workflow albo niejednoznaczna wersja mają
+   kończyć się quarantine i jednym zarządzanym issue bez mutacji branchy.
+6. Utwardzić aktywny ruleset Umbrella `main`: wymagany downstream test oraz
+   minimum jeden approval.
+7. Przejść fixture fast-forward, conflict, rewrite, retry i no-op, staging
+   drill przez rzeczywisty PR oraz live discovery/no-op.
+
+Kryterium odbioru: ten sam zestaw wejść daje ten sam `candidate_id`, tree i
+PR; write token nie jest dostępny w prepare/test, a `main` zmienia się
+wyłącznie przez zielony PR.
+
+### 21.2 Pakiet B — hardening WatchNixtoons2
+
+1. Walidować istniejący branch automatyzacji po exact tree, parent/base SHA,
+   autorze i wszystkich trailerach, nie tylko po `Candidate-ID`.
+2. Bezpośrednio przed pushem ponownie odczytać `master`; zmiana base odrzuca
+   bundle i rozpoczyna nowe prepare.
+3. Zapisywać disposition `rejected/superseded/quarantined` i nie proponować
+   ponownie tego samego ID bez zmiany wejść.
+4. Dodać `ensure-required-check`, które po każdym utworzeniu lub odświeżeniu
+   PR-a weryfikuje check exact head SHA i w razie braku dispatchuje test,
+   również gdy branch nie został ponownie wypchnięty.
+5. Dodać fixture dla podmienionego brancha, nieudanego `gh pr create`, retry
+   bez pushu i przesunięcia target base.
+
+Kryterium odbioru: ręczna modyfikacja brancha zatrzymuje automat, retry
+odtwarza brakujący PR/check, a ten sam bezpieczny kandydat nie generuje
+churnu.
+
+### 21.3 Pakiet C — provider provenance i quarantine
+
+1. Zmienić discovery na wyniki per provider z osobną osią osiągalności
+   accepted/observed URL oraz typowaną policy.
+2. Wymusić w profilu `provider_feed`: nowe bajty zawsze quarantine; PR jest
+   możliwy wyłącznie dla identycznego zaakceptowanego SHA i zdrowego nowego
+   provenance.
+3. Przenieść `upstream-observations.lock.json` do `.upstream/` poza
+   publikowane `resources/**` i zaktualizować manifest/schema/testy.
+4. Dodać writer obsługujący wyłącznie zmianę URL/commita przy identycznym
+   SHA-256 wcześniej zaakceptowanego artefaktu.
+5. Writer może zmienić tylko observation lock i raport provenance; nie może
+   zmieniać aktywnego kodu providera ani `provider-provenance.yml`.
+6. Nowe bajty, brak licencji, rewrite albo niedostępne źródło tworzą
+   content-addressed quarantined candidate i issue, nigdy PR importujący kod.
+7. Zapisać disposition, aby odrzucony kandydat nie był proponowany ponownie
+   bez zmiany upstream/base/config.
+8. Znormalizować locki modułu i wrappera do jednego osiągalnego commita
+   repozytorium zgodnie z `atomic_commit:true`; tree wrappera pozostaje
+   identyczne, natomiast moduł po wyniesieniu observation state jest wydany
+   jako `0.1.6`.
+9. Testować wszystkich providerów mimo awarii jednego oraz atomowo walidować
+   grupę mwoScrapers module + wrapper.
+
+Kryterium odbioru: kontrolowana zmiana provenance tworzy jeden mały PR,
+powtórzenie jest no-op, późniejsze observation-only zmiany nie zmieniają ZIP
+modułu `0.1.6`, a nowe bajty providera nie mogą trafić do brancha produktowego
+bez ręcznej kwalifikacji.
+
+### 21.4 Pakiet D — centralny testing-lock reconciler
+
+1. Pozostawić upstream discovery jako advisory/reporting i dodać oddzielny,
+   typowany release-lock discovery generujący wyłącznie
+   `testing_lock_candidate`.
+2. Dla target commit zbudować publikowany artefakt; jeśli jego SHA jest
+   identyczne z lockiem, zakończyć no-op mimo nowszego commita.
+3. Dla zmienionych bajtów sprawdzić osiągalność z chronionego default branch,
+   zaakceptowany PR, monotoniczną wersję, deterministyczny ZIP i SHA-256.
+4. Aktualizować tylko exact lock i niezbędne metadata. Dla mwoScrapers
+   aktualizować moduł i wrapper atomowo zgodnie z `release-groups.json`.
+5. Używać stałego brancha per komponent/release group, `candidate_id`,
+   `force-with-lease` oraz najwyżej jednego otwartego PR-a.
+6. Dodać `workflow_dispatch` do root `test.yml`; po utworzeniu/aktualizacji
+   PR-a jawnie uruchomić allowlistowany `e2e` i zweryfikować exact head SHA.
+7. Writer jest osobnym jobem z contents/PR/actions write; read-only discovery
+   nie otrzymuje rozszerzonych uprawnień.
+8. Merge PR-a locka publikuje immutable testing snapshot, o ile slot
+   certyfikacji jest wolny; w przeciwnym razie publikacja jest kolejkowana.
+9. No-op nie tworzy PR-a, commita, nowego assetu ani deploymentu.
+
+Kryterium odbioru: merge komponentu prowadzi automatycznie najwyżej do
+zielonego PR-a testing locka. Nie może sam zmienić stable ani przebudować
+komponentu podczas promocji.
+
+### 21.5 Pakiet E — atestacja i macierz E2E
+
+Każdy release candidate musi mieć wspólny `snapshot_id` oraz wyniki:
+
+- lokalnych testów jednostkowych, integracyjnych i deterministycznego builda;
+- instalacji repo ZIP oraz aktualizacji dodatków z kanału testing;
+- uruchomienia Umbrella, mwoScrapers i WatchNixtoons2;
+- kontrolowanego wyszukiwania/odtwarzania Umbrella na co najmniej jednym
+  emulatorze i jednym urządzeniu Android TV;
+- testu Linux/Flatpak, jeżeli NUC jest osiągalny;
+- wariantu VPN na Sony TV albo Bedroom TV, gdy urządzenie jest osiągalne;
+- kontroli `installed.origin`, wersji dodatku i digestu repo ZIP.
+
+Test produkcyjny uruchamia chroniony self-hosted runner
+`kodi-device-e2e` dopiero dla opublikowanego testing snapshotu. Workflow
+generuje jednorazowy nonce i wiąże atestację z `snapshot_id`, exact head SHA,
+SHA skryptów, tożsamością runnera/urządzenia i czasem ważności. Osobny writer
+odrzuca replay oraz raport dla innego snapshotu. Surowe logi Kodi nie są
+uploadowane; raport przechodzi allowlistę pól i secret scan.
+
+Minimalna brama canary dla pełnego release to:
+
+1. BlueStacks jako odtwarzalny emulator;
+2. jedno osiągalne urządzenie ARM Android TV;
+3. NUC/Flatpak albo jawnie zapisane czasowe odstępstwo z terminem ponownego
+   testu.
+
+Niedostępność zewnętrznego providera lub Real-Debrid jest rozróżniana od
+błędu dodatku przez retry, log resolvera i porównanie z urządzeniem
+kontrolnym. Tokeny, credentiale i cache nie trafiają do artefaktu E2E.
+
+Kryterium odbioru: atestacja JSON wskazuje dokładny snapshot, urządzenie,
+wersję Kodi, wersje dodatków, nonce, exact skrypty, wyniki i digesty; nie
+można jej ponownie użyć ani przypisać do innego snapshotu.
+
+### 21.6 Pakiet F — polityka merge i promocji
+
+Klasy zmian:
+
+| Klasa | Automatyczne przygotowanie | Automerge po spełnieniu bram | Stable |
+|---|---|---|---|
+| kod Umbrella/WatchNixtoons2 | tak | nie w release v1 | ręcznie |
+| nowe bajty providera | quarantine | nigdy | nie dotyczy |
+| provenance-only, identyczny SHA | tak | nie w release v1 | nie publikuje ZIP-a |
+| testing-lock po zaakceptowanym merge komponentu | tak | nie w release v1 | ręcznie |
+| konflikt/rewrite/chroniona ścieżka | issue | nigdy | nie dotyczy |
+
+W release v1 wszystkie PR-y wymagają minimum jednego approval i świadomego
+merge. Auto-merge nie jest częścią v1. Można go zaprojektować po co najmniej
+30 dniach obserwacji, trzech poprawnych zmianach danej klasy oraz teście
+retry/no-op, wyłącznie dla provenance-only i testing-lock. Wymaga to osobnego
+review polityki oraz path-scoped ruleset/CODEOWNERS, aby nie osłabić approval
+dla kodu i stable.
+
+Promocja stable zawsze pozostaje ręczna i wskazuje dokładny testing
+`snapshot_id`, digest locka i pozytywną atestację. Wersja dodatku repozytorium
+Kodi nie jest podnoszona wyłącznie z powodu wydania mechanizmu synchronizacji.
+Workflow promocji po utworzeniu lub zmianie brancha jawnie uruchamia
+allowlistowany `e2e` przez `workflow_dispatch`; merge jest możliwy dopiero po
+required checku związanym z dokładnym head SHA i jednym approval.
+
+### 21.7 Pakiet G — exact-snapshot stable
+
+1. Wprowadzić snapshot bundle schema 2 z osobnymi
+   `channels/testing`, `promotion/stable` i `site-shared`.
+2. Zmigrować stable lock do schema 2 z `source_snapshot_id`,
+   `source_index_sha256`, `source_artifact_manifest_sha256` i digestem
+   zaufanej atestacji.
+3. `promote-stable` przyjmuje `snapshot_id`, pobiera dokładny Release asset,
+   weryfikuje inventory/digest/atestację i tworzy content-addressed bundle
+   zmiany locka bez wykonywania kodu komponentów w jobie zapisującym.
+4. `deploy-stable` pobiera wybrany stable snapshot oraz identyfikator aktualnie
+   publikowanego testing snapshotu, kopiuje ich przygotowane payloady i
+   publikuje Pages bez `checkout_locked_components.py` oraz `build_repo.py`.
+5. Composer musi zachować nowszy testing przy promocji starszego,
+   certyfikowanego stable snapshotu i odrzucić brak/kolizję pliku.
+6. Dodać test dowodzący identyczności component ZIP-ów, indeksów stable i
+   manifestu oraz brak drugiego builda w workflow deploymentu.
+7. W v1 nie usuwać automatycznie snapshotów. Retencję wdrożyć dopiero z
+   dowodem, że asset promowany nigdy nie może zostać usunięty.
+
+Kryterium odbioru: stable Pages zawiera exact przygotowany payload wskazanego
+certyfikowanego snapshotu, testing nie cofa się, a żaden krok promocji ani
+deploymentu nie przebudowuje komponentu.
+
+### 21.8 Pakiet H — obserwowalność, rollback i runbook
+
+1. Zarządzane issue ma być zamykane po odzyskaniu zdrowia lub no-op bez
+   aktywnego problemu.
+2. Job summary zawiera accepted/observed SHA, klasyfikację, akcję,
+   `candidate_id`, PR i snapshot.
+3. Niezależny watchdog poza GitHub Actions (preferowany kontener QNAP)
+   odpytuje heartbeat workflowów i tworzy alert po 36 godzinach.
+4. Dokument operacyjny opisuje conflict, rewrite, supersede, reject,
+   zatrzymanie jednego komponentu, forward-revert oraz containment przez
+   ponowne wdrożenie wcześniejszego immutable snapshotu.
+5. Próba awarii potwierdza, że błąd jednego adaptera nie blokuje raportu
+   pozostałych i nie zmienia stable.
+6. Próba containment potwierdza blokadę kolejnych publikacji i brak
+   nadpisania ZIP-a, a próba forward-revert używa wyższej wersji.
+
+### 21.9 Kolejność rollout i wydanie
+
+1. `shadow`: wszystkie adaptery wykonują discovery/prepare bez zapisu przez
+   minimum dwa harmonogramy.
+2. `canary writer`: kolejno WatchNixtoons2 (już osiągnięte), Umbrella,
+   provider provenance i testing-lock reconciler.
+3. Dla każdego adaptera wykonać staging drill z kontrolowanym źródłem/forkiem,
+   rzeczywistym PR-em/writerem i retry/no-op. Produkcyjne źródła przechodzą
+   live discovery/no-op; pierwsza naturalna zmiana jest post-release canary i
+   nie blokuje v1 bezterminowo.
+4. Zbudować pełny testing snapshot i wykonać macierz E2E.
+5. Odczekać co najmniej 24 godziny lub dwa kolejne harmonogramy bez nowej
+   regresji, zależnie od tego, co trwa dłużej.
+6. Wykonać próbę quarantine, zatrzymania komponentu,
+   containment i forward-revert.
+7. Utworzyć tag i GitHub Release `upstream-sync-v1.0.0` w `mwoDevelop/kodi`
+   z release notes, digestami, raportem testów, atestacją E2E i runbookiem.
+8. Ręcznie promować dokładny certyfikowany snapshot do stable i wykonać
+   post-release smoke na minimalnej macierzy canary.
+
+### 21.10 Definition of Done pełnego release
+
+Pełny release jest ukończony dopiero, gdy:
+
+1. Umbrella i WatchNixtoons2 potrafią przygotować idempotentny PR bez
+   bezpośredniego pushu do brancha produktowego oraz walidują exact
+   tree/base/autora/check;
+2. provider provenance-only ma bezpieczny PR, nie zmienia ZIP SHA, a nowe
+   bajty trafiają wyłącznie do quarantine;
+3. merge każdego wspieranego komponentu tworzy albo aktualizuje właściwy PR
+   testing locka przez osobny typ akcji;
+4. mwoScrapers module i wrapper mają wspólny atomic commit;
+5. wszystkie wymagane branche mają rulesety, minimum jeden approval i
+   required check exact head SHA;
+6. testing snapshot jest immutable, content-addressed i ma odporną na replay
+   atestację z chronionego runnera;
+7. macierz canary przechodzi instalację, aktualizację i test funkcjonalny;
+8. drugi harmonogram dla niezmienionych wejść jest no-op;
+9. konflikt, rewrite, niedostępność i błąd jednego źródła nie mutują accepted
+   state ani stable;
+10. promocja stable używa exact przygotowanego payloadu, bez rebuilda i bez
+    cofnięcia testing;
+11. certyfikacja zwalnia kolejkę niezależnie od późniejszej promocji stable;
+12. containment, forward-revert, zatrzymanie komponentu, zewnętrzny watchdog
+    i runbook zostały sprawdzone;
+13. release workflow używa przypiętych zależności Python z hashami;
+14. istnieje tag/release `upstream-sync-v1.0.0` z dowodami testów;
+15. po promocji post-release smoke jest zielony, a otwarte problemy blokujące
+    mają liczbę zero.

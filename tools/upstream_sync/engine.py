@@ -67,10 +67,44 @@ def discover_all(root, manifest_path, registry=None, enabled_only=True):
             continue
         context = Context(root, name, config)
         discovery = registry.create(config["adapter"], context).discover()
+        policy_profile = config["policy_profile"]
+        source_actions = [
+            {
+                **source.to_dict(),
+                "action": decide_action(source, policy_profile).value,
+            }
+            for source in discovery.sources
+        ]
+        if source_actions:
+            precedence = {
+                "stop": 6,
+                "quarantine": 5,
+                "open_or_update_issue": 4,
+                "provenance_only_candidate": 3,
+                "component_candidate": 2,
+                "testing_lock_candidate": 1,
+                "noop": 0,
+            }
+            action = max(source_actions, key=lambda item: precedence[item["action"]])[
+                "action"
+            ]
+        else:
+            action = decide_action(discovery, policy_profile).value
         results.append(
             {
                 **discovery.to_dict(),
-                "action": decide_action(discovery).value,
+                "action": action,
+                "action_owner": (
+                    "component"
+                    if action
+                    in ("component_candidate", "provenance_only_candidate")
+                    else "control_plane"
+                    if action == "testing_lock_candidate"
+                    else "human"
+                    if action in ("open_or_update_issue", "quarantine", "stop")
+                    else "none"
+                ),
+                "source_actions": source_actions,
                 "config_sha256": context.config_digest,
             }
         )

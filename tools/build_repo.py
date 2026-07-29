@@ -329,7 +329,8 @@ def build(output, lock_overrides=None):
 
     for channel, config in sorted(channels.items()):
         lock = lock_overrides.get(channel) or load_json(config["lock"])
-        if lock.get("schema") != 1 or lock.get("channel") != channel:
+        supported_schema = (1, 2) if channel == "stable" else (1,)
+        if lock.get("schema") not in supported_schema or lock.get("channel") != channel:
             raise ValueError("invalid %s channel lock" % channel)
         channel_root = output / channel / "omega"
         channel_root.mkdir(parents=True)

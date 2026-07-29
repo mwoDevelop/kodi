@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from tools.snapshot_bundle import create_bundle, verify_bundle
+from tools.snapshot_bundle import create_bundle, extract_section, verify_bundle
 
 
 def _fixture(tmp_path):
@@ -47,3 +47,30 @@ def test_snapshot_verification_rejects_tampering(tmp_path):
 
     with pytest.raises((ValueError, OSError)):
         verify_bundle(bundle)
+
+
+def test_snapshot_keeps_distinct_prebuilt_promotion_payload(tmp_path):
+    dist, lock = _fixture(tmp_path)
+    promotion = tmp_path / "promotion"
+    (promotion / "testing" / "omega").mkdir(parents=True)
+    (promotion / "testing" / "omega" / "addons.xml").write_text(
+        "<testing/>\n", encoding="utf-8"
+    )
+    (promotion / "stable" / "omega").mkdir(parents=True)
+    (promotion / "stable" / "omega" / "addons.xml").write_text(
+        "<stable/>\n", encoding="utf-8"
+    )
+    (promotion / "artifact-manifest.sha256").write_text(
+        "1" * 64 + "  stable/omega/addons.xml\n", encoding="ascii"
+    )
+    bundle = tmp_path / "snapshot.tar"
+    metadata = create_bundle(
+        dist, lock, "c" * 40, bundle, promotion_dist=promotion
+    )
+
+    extracted = tmp_path / "extracted"
+    verified = extract_section(bundle, "promotion", extracted)
+
+    assert verified["snapshot_id"] == metadata["snapshot_id"]
+    assert (extracted / "stable/omega/addons.xml").read_text() == "<stable/>\n"
+    assert not (extracted / "payload").exists()

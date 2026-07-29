@@ -9,6 +9,7 @@
     "umbrella": {
       "enabled": true,
       "adapter": "git_patch_stack",
+      "policy_profile": "component_code",
       "schedule_slot": "daily",
       "local_path": "umbrella",
       "target": {
@@ -29,6 +30,7 @@
     "watchnixtoons2": {
       "enabled": true,
       "adapter": "vendored_kodi_addon",
+      "policy_profile": "component_code",
       "schedule_slot": "daily",
       "local_path": "watchnixtoons2",
       "target": {
@@ -49,14 +51,15 @@
     "provider_observations": {
       "enabled": true,
       "adapter": "provider_feed",
+      "policy_profile": "provider_observation",
       "schedule_slot": "daily",
       "local_path": "mwoscrapers",
       "target": {
         "repository": "mwoDevelop/script.module.mwoscrapers",
         "branch": "main"
       },
-      "sources_path": "resources/upstream-sources.json",
-      "state_path": "resources/upstream-observations.lock.json",
+      "sources_path": ".upstream/upstream-sources.json",
+      "state_path": ".upstream/upstream-observations.lock.json",
       "version_policy": "observation_only"
     }
   }

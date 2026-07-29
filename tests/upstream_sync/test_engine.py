@@ -35,6 +35,7 @@ def test_engine_is_extended_through_registry(tmp_path):
             "sample": {
                 "enabled": True,
                 "adapter": "git_patch_stack",
+                "policy_profile": "component_code",
                 "schedule_slot": "daily",
                 "local_path": "component",
                 "target": {"repository": "owner/repo", "branch": "main"},
@@ -49,7 +50,8 @@ def test_engine_is_extended_through_registry(tmp_path):
 
     report = discover_all(tmp_path, path, registry=registry)
 
-    assert report["sources"][0]["action"] == "open_or_update_pr"
+    assert report["sources"][0]["action"] == "component_candidate"
+    assert report["sources"][0]["action_owner"] == "component"
     assert report["sources"][0]["changed_paths"] == ["addon.xml"]
     assert "sample" in render_markdown(report)
 
@@ -63,6 +65,7 @@ def test_disabled_component_is_skipped(tmp_path):
             "sample": {
                 "enabled": False,
                 "adapter": "git_patch_stack",
+                "policy_profile": "component_code",
                 "schedule_slot": "daily",
                 "local_path": "component",
                 "target": {"repository": "owner/repo", "branch": "main"},

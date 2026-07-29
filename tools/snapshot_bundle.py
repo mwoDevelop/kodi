@@ -10,8 +10,8 @@ import tarfile
 from pathlib import Path, PurePosixPath
 
 
-SCHEMA = 1
-GENERATOR_VERSION = 1
+SCHEMA = 2
+GENERATOR_VERSION = 2
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -29,7 +29,7 @@ def file_digest(path):
     return digest(Path(path).read_bytes())
 
 
-def snapshot_document(dist, testing_lock, repository_commit):
+def snapshot_document(dist, promotion_dist, testing_lock, repository_commit):
     dist = Path(dist)
     lock = json.loads(Path(testing_lock).read_text(encoding="utf-8"))
     if lock.get("schema") != 1 or lock.get("channel") != "testing":
@@ -46,6 +46,9 @@ def snapshot_document(dist, testing_lock, repository_commit):
         ),
         "artifact_manifest_sha256": file_digest(
             dist / "artifact-manifest.sha256"
+        ),
+        "promotion_artifact_manifest_sha256": file_digest(
+            Path(promotion_dist) / "artifact-manifest.sha256"
         ),
     }
     return {**identity, "snapshot_id": digest(canonical_json(identity))}
@@ -67,14 +70,19 @@ def _inventory(dist):
     return result
 
 
-def create_bundle(dist, testing_lock, repository_commit, output):
+def create_bundle(dist, testing_lock, repository_commit, output, promotion_dist=None):
     output = Path(output)
     if output.exists():
         raise ValueError("snapshot output already exists")
-    document = snapshot_document(dist, testing_lock, repository_commit)
+    promotion_dist = Path(promotion_dist or dist)
+    document = snapshot_document(
+        dist, promotion_dist, testing_lock, repository_commit
+    )
     metadata = {
         **document,
         "files": _inventory(dist),
+        "promotion_files": _inventory(promotion_dist),
+        "testing_lock": json.loads(Path(testing_lock).read_text(encoding="utf-8")),
     }
     payload = canonical_json(metadata)
     with output.open("wb") as raw:
@@ -92,11 +100,20 @@ def create_bundle(dist, testing_lock, repository_commit, output):
                 info.mtime = 0
                 with source.open("rb") as handle:
                     archive.addfile(info, handle)
+            for relative in sorted(metadata["promotion_files"]):
+                source = promotion_dist / relative
+                info = tarfile.TarInfo("promotion/" + relative)
+                info.size = source.stat().st_size
+                info.mode = 0o644
+                info.mtime = 0
+                with source.open("rb") as handle:
+                    archive.addfile(info, handle)
     return metadata
 
 
 def verify_bundle(bundle):
     seen = {}
+    promotion_seen = {}
     metadata = None
     with tarfile.open(bundle, mode="r:") as archive:
         for member in archive:
@@ -112,12 +129,27 @@ def verify_bundle(bundle):
                     "sha256": digest(payload),
                     "size": len(payload),
                 }
+            elif member.name.startswith("promotion/"):
+                promotion_seen[member.name[len("promotion/") :]] = {
+                    "sha256": digest(payload),
+                    "size": len(payload),
+                }
             else:
                 raise ValueError("unexpected snapshot member: %s" % member.name)
     if not metadata or metadata.get("schema") != SCHEMA:
         raise ValueError("snapshot metadata is missing or unsupported")
     if metadata.get("files") != seen:
         raise ValueError("snapshot payload inventory mismatch")
+    if metadata.get("promotion_files") != promotion_seen:
+        raise ValueError("snapshot promotion inventory mismatch")
+    lock = metadata.get("testing_lock")
+    if (
+        not isinstance(lock, dict)
+        or lock.get("schema") != 1
+        or lock.get("channel") != "testing"
+        or digest(canonical_json(lock)) != metadata.get("testing_lock_sha256")
+    ):
+        raise ValueError("snapshot testing lock mismatch")
     identity = {
         key: metadata[key]
         for key in (
@@ -127,6 +159,7 @@ def verify_bundle(bundle):
             "testing_lock_sha256",
             "testing_index_sha256",
             "artifact_manifest_sha256",
+            "promotion_artifact_manifest_sha256",
         )
     }
     if any(
@@ -135,12 +168,37 @@ def verify_bundle(bundle):
             "testing_lock_sha256",
             "testing_index_sha256",
             "artifact_manifest_sha256",
+            "promotion_artifact_manifest_sha256",
         )
     ):
         raise ValueError("snapshot identity contains an invalid digest")
     expected = digest(canonical_json(identity))
     if metadata.get("snapshot_id") != expected:
         raise ValueError("snapshot ID mismatch")
+    return metadata
+
+
+def extract_section(bundle, section, output):
+    metadata = verify_bundle(bundle)
+    field = "promotion_files" if section == "promotion" else "files"
+    prefix = "promotion/" if section == "promotion" else "payload/"
+    output = Path(output)
+    if output.exists():
+        raise ValueError("snapshot extraction output already exists")
+    output.mkdir(parents=True)
+    with tarfile.open(bundle, mode="r:") as archive:
+        for member in archive:
+            if not member.name.startswith(prefix):
+                continue
+            relative = member.name[len(prefix) :]
+            if relative not in metadata[field]:
+                raise ValueError("snapshot contains an undeclared file")
+            target = output.joinpath(*PurePosixPath(relative).parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            handle = archive.extractfile(member)
+            target.write_bytes(handle.read() if handle else b"")
+    if _inventory(output) != metadata[field]:
+        raise ValueError("extracted snapshot inventory mismatch")
     return metadata
 
 
@@ -151,9 +209,14 @@ def main():
     create.add_argument("--dist", required=True)
     create.add_argument("--testing-lock", required=True)
     create.add_argument("--repository-commit", required=True)
+    create.add_argument("--promotion-dist")
     create.add_argument("--output", required=True)
     verify = commands.add_parser("verify")
     verify.add_argument("bundle")
+    extract = commands.add_parser("extract")
+    extract.add_argument("bundle")
+    extract.add_argument("--section", choices=("payload", "promotion"), required=True)
+    extract.add_argument("--output", required=True)
     args = parser.parse_args()
     if args.command == "create":
         metadata = create_bundle(
@@ -161,9 +224,12 @@ def main():
             args.testing_lock,
             args.repository_commit,
             args.output,
+            promotion_dist=args.promotion_dist,
         )
-    else:
+    elif args.command == "verify":
         metadata = verify_bundle(args.bundle)
+    else:
+        metadata = extract_section(args.bundle, args.section, args.output)
     print(json.dumps(metadata, indent=2, sort_keys=True))
 
 
