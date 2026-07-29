@@ -21,7 +21,7 @@ from urllib.parse import quote_plus, urlencode
 
 
 KODI_ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
-KODI_ACTIVITY = "org.xbmc.kodi/.Main"
+KODI_ACTIVITY = "org.xbmc.kodi/.Splash"
 ADDONS = {
     "plugin.video.umbrella",
     "plugin.video.watchnixtoons2.mwodevelop",
