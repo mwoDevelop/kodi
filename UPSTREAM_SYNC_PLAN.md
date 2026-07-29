@@ -881,6 +881,13 @@ migracji workflow porównuje wynikowy `artifact-manifest.sha256` z publicznym
 snapshotem i pomija deploy, jeśli bajty są identyczne. Zmiany generatora nadal
 wywołują build, więc rzeczywista zmiana outputu nie zostanie przeoczona.
 
+Zmiana samego kodu certyfikacji może jednak wymagać nowej, niezmiennej
+tożsamości kandydata mimo identycznych bajtów publicznego repo. W takim
+przypadku operator jawnie uruchamia `workflow_dispatch` z
+`force_snapshot=true`: workflow tworzy i publikuje nowy content-addressed
+snapshot związany z aktualnym commitem, ale nadal pomija redeploy Pages.
+Zwykły push z identycznym outputem pozostaje pełnym no-op publikacyjnym.
+
 ## 11. Wersjonowanie
 
 Każdy adapter ma deklaratywną, testowaną politykę wersji właściwą dla
