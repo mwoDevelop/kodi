@@ -1,4 +1,5 @@
 {
+  "attestation_sha256": "5eafc42e81ccd08781f2d8069a8312324d85d940e364b4b01a3b2aa85c48b493",
   "channel": "stable",
   "components": {
     "plugin.video.umbrella": {
@@ -12,13 +13,13 @@
       "zip_sha256": "01a84245391da1beef7bc65982b4d47dd517595c533296473b65763e6a1e2312"
     },
     "script.module.mwoscrapers": {
-      "commit": "6c4b7956734f902c94b51f593a989ef0b3a29510",
+      "commit": "212847c04f083f728f977fa883ca51bbc213972c",
       "provider_api": 1,
-      "version": "0.1.5",
-      "zip_sha256": "ec9425baa334fbda2b9b106ec0aa558e5a8d37e03d5315e865fbcfb15762c58a"
+      "version": "0.1.6",
+      "zip_sha256": "8626a85a4ca6359ed1642511aae067c540d6a3f7efd36cca2afdeecf2f199910"
     },
     "script.mwoscrapers": {
-      "commit": "6c4b7956734f902c94b51f593a989ef0b3a29510",
+      "commit": "212847c04f083f728f977fa883ca51bbc213972c",
       "version": "0.1.1",
       "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
     },
@@ -28,5 +29,8 @@
       "zip_sha256": "faa141520e10a8a9a227457e22a56f0dc4b994caef08a54c1177c62217e6bdb7"
     }
   },
-  "schema": 1
+  "schema": 2,
+  "source_artifact_manifest_sha256": "73adb3c580786f6072a2a15aa904d98f8acf41c945cb1409f1cdf25f9a91180d",
+  "source_index_sha256": "7b0cf2c7563f7f57810fd80759c481acc9fde62e9f2e8a5e1fc59d1067812bba",
+  "source_snapshot_id": "82ff8e948aa0aa05e3c486707602c29e7bb5adde333d537298e7839d202b87a1"
 }
