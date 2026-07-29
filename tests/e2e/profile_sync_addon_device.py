@@ -34,6 +34,7 @@ from tools.kodi_profile import (
     adb_command,
     adb_output,
 )
+from tools.kodi_reinstall import installed_addon_origins
 
 
 ADDON_ID = "service.mwodevelop.profilesync"
@@ -199,13 +200,25 @@ def _addon_version(adb, port, serial):
         check=False,
         text=True,
     )
-    if payload.returncode:
+    if not payload.returncode:
+        match = re.search(
+            r'<addon[^>]+version="([^"]+)"',
+            payload.stdout.replace("\n", " "),
+        )
+        if match:
+            return match.group(1)
+    try:
+        with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
+            details = jsonrpc.call(
+                "Addons.GetAddonDetails",
+                {
+                    "addonid": ADDON_ID,
+                    "properties": ["version"],
+                },
+            )
+        return details.get("addon", {}).get("version")
+    except (OSError, RuntimeError, TimeoutError):
         return None
-    match = re.search(
-        r'<addon[^>]+version="([^"]+)"',
-        payload.stdout.replace("\n", " "),
-    )
-    return match.group(1) if match else None
 
 
 def _addon_database_contains(adb, port, serial, table, addon_id):
@@ -253,9 +266,33 @@ def _repository_installed(adb, port, serial):
         ).returncode
         == 0
     )
-    return files_present and _addon_database_contains(
-        adb, port, serial, "installed", ORIGIN
-    )
+    if files_present:
+        try:
+            if _addon_database_contains(
+                adb, port, serial, "installed", ORIGIN
+            ):
+                return True
+        except (RuntimeError, subprocess.CalledProcessError):
+            # Kodi may expose the add-on directory while keeping the database
+            # behind Android scoped storage. Fall through to the supported
+            # in-process API instead of treating this as "not installed".
+            pass
+    try:
+        with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
+            details = jsonrpc.call(
+                "Addons.GetAddonDetails",
+                {
+                    "addonid": ORIGIN,
+                    "properties": ["enabled", "version"],
+                },
+            )
+        addon = details.get("addon", {})
+        return (
+            addon.get("enabled") is True
+            and addon.get("version") == ORIGIN_VERSION
+        )
+    except (OSError, RuntimeError, TimeoutError):
+        return False
 
 
 def _repository_indexed(adb, port, serial):
@@ -441,7 +478,14 @@ def _install_from_testing(adb, port, serial, expected_version):
     _execute_builtin(adb, port, serial, "UpdateAddonRepos")
     deadline = time.monotonic() + 45
     while time.monotonic() < deadline:
-        if _repository_indexed(adb, port, serial):
+        try:
+            indexed = _repository_indexed(adb, port, serial)
+        except (RuntimeError, subprocess.CalledProcessError):
+            # Scoped storage can make Kodi's database opaque to the ADB shell.
+            # The subsequent InstallAddon + exact-version check remains the
+            # authoritative in-process repository test.
+            indexed = None
+        if indexed is not False:
             break
         time.sleep(1)
     else:
@@ -735,21 +779,36 @@ def _latest_addons_database(listing):
 
 
 def _installed_origin(adb, port, serial, temporary):
-    listing = adb_output(
-        adb,
-        port,
-        serial,
-        "shell",
-        "ls '%s/userdata/Database'/Addons*.db 2>/dev/null" % KODI_ROOT,
-    )
-    remote = _latest_addons_database(listing)
-    database = Path(temporary) / "addons.db"
-    adb_command(adb, port, serial, "pull", remote, str(database), text=True)
-    with sqlite3.connect(database) as connection:
-        row = connection.execute(
-            "SELECT origin FROM installed WHERE addonID=?", (ADDON_ID,)
-        ).fetchone()
-    return row[0] if row else None
+    try:
+        listing = adb_output(
+            adb,
+            port,
+            serial,
+            "shell",
+            "ls '%s/userdata/Database'/Addons*.db 2>/dev/null" % KODI_ROOT,
+        )
+        remote = _latest_addons_database(listing)
+        database = Path(temporary) / "addons.db"
+        adb_command(
+            adb, port, serial, "pull", remote, str(database), text=True
+        )
+        with sqlite3.connect(database) as connection:
+            row = connection.execute(
+                "SELECT origin FROM installed WHERE addonID=?", (ADDON_ID,)
+            ).fetchone()
+        return row[0] if row else None
+    except (RuntimeError, subprocess.CalledProcessError):
+        origins = installed_addon_origins(
+            adb,
+            port,
+            serial,
+            [ADDON_ID],
+            origin_script=(
+                Path(__file__).resolve().parents[2]
+                / "tools/kodi_profile_origin_device.py"
+            ),
+        )
+        return origins.get(ADDON_ID)
 
 
 def _wait_server(base, process):

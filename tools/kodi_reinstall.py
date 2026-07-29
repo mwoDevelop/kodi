@@ -687,8 +687,95 @@ def assign_addon_origins(adb, port, target, origin_script):
         )
 
 
-def installed_addon_origins(adb, port, serial, addon_ids):
-    database = addon_database_path(adb, port, serial)
+def installed_addon_origins_in_kodi(
+    adb,
+    port,
+    serial,
+    addon_ids,
+    origin_script,
+    timeout=45,
+):
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8") as mapping:
+        json.dump(sorted(addon_ids), mapping)
+        mapping.flush()
+        adb_command(
+            adb,
+            port,
+            serial,
+            "push",
+            str(origin_script),
+            ORIGIN_SCRIPT,
+        )
+        adb_command(adb, port, serial, "push", mapping.name, ORIGIN_MAPPING)
+    try:
+        events = AdbEventClient(adb, port, serial)
+        adb_command(
+            adb,
+            port,
+            serial,
+            "shell",
+            "rm -f '%s'" % ORIGIN_MARKER,
+            check=False,
+        )
+        events.execute_builtin(
+            "RunScript(%s,%s,%s,read)"
+            % (ORIGIN_SCRIPT, ORIGIN_MAPPING, ORIGIN_MARKER)
+        )
+        started = time.monotonic()
+        while time.monotonic() - started < timeout:
+            marker = adb_command(
+                adb,
+                port,
+                serial,
+                "shell",
+                "cat '%s'" % ORIGIN_MARKER,
+                check=False,
+                text=True,
+            )
+            if marker.returncode == 0 and marker.stdout.strip():
+                result = json.loads(marker.stdout)
+                if not result.get("ok"):
+                    raise RuntimeError(
+                        "Kodi origin read failed: %s"
+                        % result.get("error_type", "unknown")
+                    )
+                origins = result.get("origins")
+                if not isinstance(origins, dict):
+                    raise RuntimeError("Kodi origin read returned no mapping")
+                return origins
+            time.sleep(1)
+        raise TimeoutError("Kodi origin read did not finish")
+    finally:
+        adb_command(
+            adb,
+            port,
+            serial,
+            "shell",
+            "rm -f '%s' '%s' '%s'"
+            % (ORIGIN_SCRIPT, ORIGIN_MAPPING, ORIGIN_MARKER),
+            check=False,
+        )
+
+
+def installed_addon_origins(
+    adb,
+    port,
+    serial,
+    addon_ids,
+    origin_script=None,
+):
+    try:
+        database = addon_database_path(adb, port, serial)
+    except RuntimeError:
+        if origin_script is None:
+            raise
+        return installed_addon_origins_in_kodi(
+            adb,
+            port,
+            serial,
+            addon_ids,
+            origin_script,
+        )
     with tempfile.TemporaryDirectory() as temporary:
         local = Path(temporary) / Path(database).name
         adb_command(
@@ -716,7 +803,13 @@ def installed_addon_origins(adb, port, serial, addon_ids):
             connection.close()
 
 
-def validate_restored_target(adb, port, target, restore_result):
+def validate_restored_target(
+    adb,
+    port,
+    target,
+    restore_result,
+    origin_script=None,
+):
     addons = {}
     with AdbJsonRpcClient(adb, port, target["serial"]) as jsonrpc:
         if jsonrpc.call("JSONRPC.Ping") != "pong":
@@ -746,6 +839,7 @@ def validate_restored_target(adb, port, target, restore_result):
         port,
         target["serial"],
         target["addon_origins"],
+        origin_script=origin_script,
     )
     for addon_id, expected in target["addon_origins"].items():
         if origins.get(addon_id) != expected:
@@ -923,7 +1017,13 @@ def deploy_target(
             "unsupported restore mode: %s" % target["restore_mode"]
         )
     assign_addon_origins(adb, port, target, origin_script)
-    return validate_restored_target(adb, port, target, restore_result)
+    return validate_restored_target(
+        adb,
+        port,
+        target,
+        restore_result,
+        origin_script,
+    )
 
 
 def main():

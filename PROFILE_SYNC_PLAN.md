@@ -2,7 +2,7 @@
 
 Status: plan po review, w realizacji etapowej
 
-Data: 2026-07-28
+Data: 2026-07-29
 
 Repo nadrzędne: `mwoDevelop/kodi`
 
@@ -27,12 +27,15 @@ Stan realizacji 2026-07-28:
 - Etap 4: osobne repo dodatku, pairing, heartbeat i podpisany check
   read-only opublikowane w `stable`; wersja 0.1.6 wybiera warstwy wyłącznie
   z podpisanego assignmentu i administracyjnych target tags; E2E wersji
-  0.1.5 zaliczone na BlueStacks i Sony TV, a E2E 0.1.6 na Bedroom TV zalicza
-  instalację z repo testing, pairing, uwierzytelniony heartbeat, podpisany
-  check i invariant read-only no-apply;
+  0.1.5 zaliczone na BlueStacks i Sony TV, a E2E 0.1.6 na Bedroom TV i
+  X88 Pro 20 zalicza instalację z repo, pairing, uwierzytelniony heartbeat,
+  podpisany check i invariant read-only no-apply;
 - Etap 5: transakcyjny adapter Umbrella, journal, recovery, rollback i
-  kwarantanna są zaimplementowane i pokryte testami lokalnymi; urządzeniowy
-  apply E2E pozostaje do wykonania;
+  kwarantanna są zaimplementowane i pokryte testami lokalnymi; na X88 Pro 20
+  zainstalowany stable 0.1.6 przeszedł odwracalny in-process canary
+  successful-apply, kontrolowaną awarię, rollback, kwarantannę, cleanup
+  journalu i przywrócenie ustawień. Pełny signed assignment -> apply przez
+  produkcyjny backend pozostaje do wykonania;
 - Etap 6A: kontenerowy kontrakt Compose, walidator polityki, hostowy lifecycle,
   manifest GHCR `linux/amd64,linux/arm/v7` oraz nietrwały live smoke QNAP
   z restartem, awarią/odtworzeniem i pełnym cleanupem są zrealizowane;
@@ -51,6 +54,14 @@ Stan realizacji 2026-07-28:
   aktywnym NordVPN i został promowany bajt po bajcie do `stable`. Sony TV i
   Bedroom TV zostały przepięte z repo testing na dokładny indeks stable, a
   pomocnicze repo testing usunięto po weryfikacji zgodności kandydatów;
+- rozszerzenie Android: `X88 Pro 20` znajduje się w prywatnym registry v2.
+  Czysta aktualizacja Kodi 21.2 -> 21.3, restore profilu przez proces Kodi,
+  stabilne originy pięciu dodatków, Profile Sync 0.1.6 oraz playback Umbrella
+  i WatchNixtoons2 przeszły E2E. Rollout ujawnił i pokrył regresyjnie scoped
+  storage oraz EventServer nasłuchujący wyłącznie na IPv6. Oficjalny NordVPN
+  9.9.2 i wariant Android TV mają na tym niecertyfikowanym boxie twardy
+  blocker braku Hardware-Backed KeyStore; test z aktywnym NordVPN wymaga
+  poprawionego firmware/sprzętu albo tunelu na routerze;
 - Etapy 7–8: nierozpoczęte.
 
 ## 1. Cel
@@ -183,6 +194,8 @@ Znane cele:
 - Sony Android TV, model `BRAVIA 4K GB ATV3`;
 - Bedroom TV, model `Google TV Streamer`, codename `kirkwood`, Android 14,
   Kodi 21.3, `armeabi-v7a`;
+- X88 Pro 20, model `X88Pro20`, Android 11, Kodi 21.3,
+  `arm64-v8a/armeabi-v7a`;
 - QNAP TS-x31P2.
 
 Rzeczywiste adresy pozostają wyłącznie w `.kodi-private`.
@@ -221,7 +234,7 @@ Rozpoznany QNAP:
 - Docker Compose 2.27.1;
 - dostępne snapshoty QTS.
 
-Live preflight 2026-07-27 potwierdził:
+Live preflight 2026-07-29 potwierdził:
 
 - host `armv7l`, 4 CPU i około 8 GB RAM;
 - działający daemon Docker `26.1.4-qnap2` na zarządzanym przez Container
@@ -234,17 +247,18 @@ Live preflight 2026-07-27 potwierdził:
 Wniosek: kontenerowy backend jest technicznie wykonalny na tym modelu.
 Produkcję blokuje stan danych, nie runtime kontenerowy.
 
-Twardy blocker produkcyjny:
+Stan macierzy po restarcie i naprawie:
 
 ```text
-md1: RAID1 [2/1] [U_]
-state: clean, degraded
+RAID1 [UU]
+recovery: none
 ```
 
-Brakuje drugiego członu RAID1. Do czasu odbudowania RAID i potwierdzenia
-zewnętrznego backupu na QNAP można uruchamiać jedynie jednorazowe, odtwarzalne
-smoke bez trwałych istotnych danych. Nie może być magazynem deweloperskim,
-produkcyjnym ani jedyną kopią profili lub sekretów.
+Warunek zdrowej macierzy jest spełniony, ale samo `[UU]` nie jest backupem.
+Do czasu utworzenia zaszyfrowanej kopii poza QNAP i udanego restore drillu
+produkcja 6B oraz trwałe przechowywanie profili i sekretów pozostają
+zablokowane. Dopuszczony pozostaje jednorazowy, odtwarzalny smoke bez trwałych
+istotnych danych.
 
 ### 4.4 NUC Linux/Flatpak
 
@@ -1320,8 +1334,8 @@ potwierdzą:
 | NUC runtime sync | start Kodi / co 6 h | dodatek -> QNAP, bez SSH |
 | publisher MVP | ręcznie | candidate |
 | publisher później | maks. raz/dobę po zmianie | candidate |
-| snapshot QNAP | po naprawie RAID | Smart Versioning |
-| backup poza QNAP | po naprawie RAID, codziennie | HBS lub równoważny backup |
+| snapshot QNAP | przed produkcją 6B | Smart Versioning |
+| backup poza QNAP | przed produkcją 6B, potem codziennie | HBS lub równoważny backup |
 
 Synchronizacja profili nie uruchamia `reconcile-upstreams` i nie modyfikuje
 locków kodu.
@@ -1334,16 +1348,18 @@ odroczenie, a nie przerwanie pracy Kodi.
 
 ### Etap 0: storage i warunki bezpieczeństwa
 
-1. Przywrócić RAID1 QNAP do `[UU]`.
+1. Przywrócić RAID1 QNAP do `[UU]`. **Zrealizowane.**
 2. Potwierdzić stan przez `/proc/mdstat`, `mdadm` i `qcli_storage`.
+   **Bieżący preflight 2026-07-29 potwierdza `[UU]` i brak recovery; przed
+   produkcją powtórzyć pełną bramę narzędziową.**
 3. Skonfigurować drugi backup poza tą macierzą.
 4. Potwierdzić restore testowy niewrażliwego pliku.
 5. Dopiero wtedy dopuścić QNAP jako magazyn produkcyjny.
 
 Registry, schema, serwer na hoście, dodatek i lokalne E2E mogą powstawać
 równolegle z naprawą storage. Zablokowane jest wyłącznie wdrożenie produkcyjne
-i przechowywanie istotnych danych na QNAP. Zdegradowany QNAP nie jest
-środowiskiem trwałego development storage.
+i przechowywanie istotnych danych na QNAP. Zdrowa macierz bez niezależnej,
+sprawdzonej kopii nadal nie jest wystarczającym magazynem produkcyjnym.
 
 ### Etap 1: rejestr urządzeń
 
@@ -1512,24 +1528,28 @@ PYTHONPATH=. .venv/bin/python \
 16. Test niedostępnego QNAP i VPN bez uszkodzenia Kodi.
 17. Dodać Bedroom TV jako trzeci consumer Android, wykonać read-only pairing,
     exact candidate apply, rollback i test niedostępnego QNAP.
-18. Wykonać read-only discovery i dry-run osobno dla `nuc-mwo` oraz
+18. Dodać X88 Pro 20 jako czwarty consumer Android; read-only pairing,
+    playback oraz odwracalny in-process successful-apply/failure/rollback
+    canary są zrealizowane. Signed assignment -> apply przez backend i test
+    niedostępnego QNAP pozostają bramą.
+19. Wykonać read-only discovery i dry-run osobno dla `nuc-mwo` oraz
     `nuc-alek`.
-19. Użyć czystszego `nuc-alek` jako canary klasy Linux/Flatpak.
-20. Po sukcesie przypiąć ten sam exact candidate do `nuc-mwo` jako
+20. Użyć czystszego `nuc-alek` jako canary klasy Linux/Flatpak.
+21. Po sukcesie przypiąć ten sam exact candidate do `nuc-mwo` jako
     post-canary rollout, zachowując
     istniejące niezarządzane ustawienia i lokalne sekrety.
-21. Potwierdzić, że repo/addon origin, skórka i portable settings są poprawne
+22. Potwierdzić, że repo/addon origin, skórka i portable settings są poprawne
     na obu kontach, a synchronizator nie kopiuje ani bezpośrednio nie
     modyfikuje cache, DB i Thumbnails.
-22. Zmienić niesekretne ustawienie wyłącznie na `nuc-alek` i potwierdzić zero
+23. Zmienić niesekretne ustawienie wyłącznie na `nuc-alek` i potwierdzić zero
     mutacji oraz zero odczytu credentiali `nuc-mwo`.
-23. Uruchomić Kodi jednocześnie w dwóch sesjach albo zasymulować blokadę i
+24. Uruchomić Kodi jednocześnie w dwóch sesjach albo zasymulować blokadę i
     potwierdzić, że hostowa operacja jednego konta nie zatrzymuje drugiego.
-24. Potwierdzić start/cykliczny pull bez aktywnego SSH; runtime zależy tylko od
+25. Potwierdzić start/cykliczny pull bez aktywnego SSH; runtime zależy tylko od
     sieci Kodi -> QNAP.
-25. Zapisać osobne zredagowane raporty E2E zawierające platformę, exact
+26. Zapisać osobne zredagowane raporty E2E zawierające platformę, exact
     revision i enrollment, ale nie username, home, IP ani sekrety.
-26. Po przejściu wymaganych klas wykonać obserwację, ręczną promocję profilu
+27. Po przejściu wymaganych klas wykonać obserwację, ręczną promocję profilu
     do `active`, a dopiero potem startowy pull i apply konsumentów.
 
 ### Etap 6: QNAP
@@ -1567,11 +1587,13 @@ Realizacja:
 6. Potwierdzić architekturę obrazu, `/health`, `/ready`, wersję schematu,
    migrację SQLite, ręczny restart procesu oraz brak sekretów w inspect/logach.
 7. Utworzyć SSH local forward do loopback QNAP, następnie osobne `adb reverse`
-   dla BlueStacks, Sony i Bedroom TV. Każdy tunel ma własny identyfikator,
+   dla BlueStacks, Sony, Bedroom TV i X88 Pro 20. Każdy tunel ma własny
+   identyfikator,
    `ExitOnForwardFailure`, loopback-only bind oraz pewny cleanup;
    potwierdzić dokładny identyfikator smoke API na każdym kliencie.
 8. Wykonać bazowy pairing, heartbeat, signed revision download i read-only
-   check z BlueStacks, Sony i Bedroom TV przez `http://127.0.0.1` klienta.
+   check z BlueStacks, Sony, Bedroom TV i X88 Pro 20 przez
+   `http://127.0.0.1` klienta.
 9. Po bramie NUC powtórzyć smoke z osobnym SSH remote forward/control socket
    i lokalnym portem dla każdego konta albo udokumentowanym, izolowanym relay.
    Potwierdzić `nuc-mwo` i `nuc-alek` osobno; tunel jednego konta nie może
@@ -1589,7 +1611,7 @@ Brama wyjścia:
   wszystkich klientów objętych danym przebiegiem bez sekretów;
 - wynik jest oznaczony jako test loopback, a nie walidacja TLS lub produkcji.
 
-Etap 6A można wykonać przy zdegradowanym RAID, ponieważ nie przechowuje
+Etap 6A jest dopuszczony bez produkcyjnego backupu, ponieważ nie przechowuje
 istotnych ani unikalnych danych. Każde wykrycie zapisu do ścieżki produkcyjnej
 natychmiast przerywa test.
 
@@ -1605,7 +1627,7 @@ Brama wejścia:
 - istnieją wersjonowane migracje, `/ready`, Backup API, spójny backup DB +
   bloby, macierz kompatybilności schematu oraz przećwiczony rollback;
 - runbook DNS/TLS/firewall/odnowienia przechodzi na BlueStacks, Sony, Bedroom
-  TV i obu klientach NUC.
+  TV, X88 Pro 20 i obu klientach NUC.
 
 Realizacja:
 
@@ -1621,7 +1643,8 @@ Realizacja:
 6. Potwierdzić brak bezpośrednio wystawionego portu API poza loopback i brak
    nieautoryzowanych operacji administracyjnych.
 7. Uruchomić migrację, liveness, readiness, pairing i read-only E2E wszystkich
-   pięciu klientów: BlueStacks, Sony, Bedroom TV, `nuc-mwo` i `nuc-alek`.
+   sześciu klientów: BlueStacks, Sony, Bedroom TV, X88 Pro 20, `nuc-mwo`
+   i `nuc-alek`.
 8. Skonfigurować `restart: unless-stopped`, wykonać pełny reboot QNAP i
    potwierdzić dokładnie jeden project oraz brak driftu Compose.
 9. Skonfigurować snapshoty QTS, retencję aplikacyjną, rollback cache i
@@ -1745,6 +1768,7 @@ Brama wyjścia:
 - BlueStacks publisher -> BlueStacks consumer;
 - BlueStacks publisher -> Sony consumer;
 - BlueStacks publisher -> Bedroom TV consumer;
+- BlueStacks publisher -> X88 Pro 20 consumer;
 - BlueStacks publisher -> `nuc-alek` consumer;
 - BlueStacks publisher -> `nuc-mwo` consumer;
 - izolacja `nuc-mwo` <-> `nuc-alek` na wspólnym hoście;
@@ -1756,6 +1780,9 @@ Brama wyjścia:
 - start Kodi z dostępnym QNAP;
 - start Kodi bez QNAP;
 - start Sony z Nord VPN oraz z niedostępnym route do LAN;
+- start X88 Pro 20 z tunelem NordVPN na wspieranym firmware/sprzęcie albo
+  routerze; obecna aplikacja blokuje niecertyfikowany box bez
+  Hardware-Backed KeyStore;
 - zmiana aktywnej rewizji;
 - pending next-start i zmiana `host_only`;
 - rollback po health check failure;
@@ -1832,7 +1859,7 @@ RAID nie jest kopią zapasową.
 
 | Ryzyko | Zabezpieczenie |
 |---|---|
-| zdegradowany RAID QNAP | blocker produkcji 6B; tylko izolowany i nietrwały smoke 6A |
+| RAID `[UU]`, ale brak sprawdzonego backupu poza QNAP | blocker produkcji 6B; tylko izolowany i nietrwały smoke 6A |
 | utrata QNAP | lokalna konfiguracja działa dalej, host snapshot pozostaje |
 | smoke zapisuje stan produkcyjny | osobny project/port/path/key registry, `restart: no`, policy gate i cleanup |
 | dwa control plane Container Station | wyłącznie Compose CLI po SSH, GUI tylko do obserwacji |
@@ -1893,8 +1920,8 @@ Projekt jest ukończony dopiero, gdy:
 14. synchronizator nie kopiuje ani bezpośrednio nie modyfikuje cache i baz;
 15. synchronizator nie tworzy dodatkowego plaintextu sekretów w Git, obrazie,
     QNAP, stagingu, journalu, backupie, logach ani raportach;
-16. routine sync przechodzi E2E na BlueStacks, Sony, Bedroom TV, `nuc-alek`
-    i `nuc-mwo`;
+16. routine sync przechodzi E2E na BlueStacks, Sony, Bedroom TV, X88 Pro 20,
+    `nuc-alek` i `nuc-mwo`;
 17. corrupt digest, podpis lub ścieżka powoduje zero mutacji;
 18. health failure po apply powoduje kompensacyjny rollback lub jawny
     `ROLLBACK_REQUIRES_HOST`;
@@ -1910,7 +1937,8 @@ Projekt jest ukończony dopiero, gdy:
 25. `/ready` potwierdza zgodność DB, schematu, blob store i key registry;
 26. update, backup i rollback obejmują zgodny zestaw obrazu, DB oraz blobów;
 27. HTTPS, DNS, firewall i odnowienie certyfikatu przechodzą test wewnątrz
-    runtime Kodi na wymaganych klasach Android oraz obu klientach NUC;
+    runtime Kodi na wymaganych klasach Android, w tym X88 Pro 20, oraz obu
+    klientach NUC;
 28. `nuc-mwo` i `nuc-alek` mają wspólny `physical_host_id`, ale osobne
     logical/opaque-principal/enrollment/token/key/journal;
 29. registry schema 2 rozwiązuje neutralny ADB lub SSH oraz właściwy lifecycle

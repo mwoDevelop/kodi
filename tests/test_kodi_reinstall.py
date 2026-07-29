@@ -12,6 +12,7 @@ from tools.kodi_reinstall import (
     apk_abis,
     deploy_target,
     file_digest,
+    installed_addon_origins,
     uninstall_and_clean,
 )
 
@@ -68,6 +69,29 @@ def test_uninstall_fails_if_kodi_storage_remains(monkeypatch):
 
     with pytest.raises(RuntimeError, match="left data behind"):
         uninstall_and_clean("adb", 5038, "serial")
+
+
+def test_origin_read_falls_back_to_in_kodi_for_scoped_storage(monkeypatch):
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.addon_database_path",
+        lambda *_args: (_ for _ in ()).throw(
+            RuntimeError("Kodi add-on database was not found")
+        ),
+    )
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.installed_addon_origins_in_kodi",
+        lambda *_args, **_kwargs: {
+            "plugin.video.umbrella": "repository.mwodevelop"
+        },
+    )
+
+    assert installed_addon_origins(
+        "adb",
+        5037,
+        "serial",
+        ["plugin.video.umbrella"],
+        origin_script="origin-script",
+    ) == {"plugin.video.umbrella": "repository.mwodevelop"}
 
 
 def test_deploy_uses_direct_adb_restore_mode(monkeypatch):

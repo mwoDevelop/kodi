@@ -588,6 +588,26 @@ class AdbEventClient:
             ) + chunk
 
     def execute_builtin(self, command):
+        listeners = adb_output(
+            self.adb,
+            self.port,
+            self.serial,
+            "shell",
+            "netstat -anu 2>/dev/null | grep ':9777'",
+        )
+        has_ipv4 = any(
+            line.lstrip().startswith("udp ")
+            for line in listeners.splitlines()
+        )
+        has_ipv6 = any(
+            line.lstrip().startswith("udp6 ")
+            for line in listeners.splitlines()
+        )
+        nc_family = ""
+        destination = "127.0.0.1"
+        if has_ipv6 and not has_ipv4:
+            nc_family = "-6 "
+            destination = "::1"
         hello = (
             b"mwoDevelop Kodi profile restore\0"
             + bytes((0,))
@@ -605,8 +625,13 @@ class AdbEventClient:
                 encoded = base64.b64encode(packet).decode("ascii")
                 remote = (
                     "echo %s | base64 -d | "
-                    "nc -u -w 1 -p %d -q 1 127.0.0.1 9777"
-                    % (encoded, self.source_port)
+                    "nc %s-u -w 1 -p %d -q 1 %s 9777"
+                    % (
+                        encoded,
+                        nc_family,
+                        self.source_port,
+                        destination,
+                    )
                 )
                 adb_command(
                     self.adb,
@@ -769,8 +794,19 @@ def _wait_for_kodi_ready(adb, port, serial, timeout=90):
             "netstat -anu 2>/dev/null | grep -q ':9777'",
             check=False,
         )
-        if userdata.returncode == 0 and event_server.returncode == 0:
-            return
+        if event_server.returncode == 0:
+            if userdata.returncode == 0:
+                return
+            # Android scoped storage can deny the shell user access to
+            # Android/data even though Kodi has completed initialization.
+            # A successful in-process JSON-RPC ping proves that Kodi's
+            # userdata and services are ready without weakening the check.
+            try:
+                with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
+                    if jsonrpc.call("JSONRPC.Ping") == "pong":
+                        return
+            except (OSError, RuntimeError, ValueError):
+                pass
         time.sleep(2)
     raise TimeoutError(
         "Kodi services did not finish first-run initialization; "
