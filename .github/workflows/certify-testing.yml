@@ -56,9 +56,18 @@ jobs:
       - name: Run the required emulator and Android TV canaries
         env:
           ANDROID_TV: ${{ inputs.android_tv }}
+          KODI_ADB: ${{ vars.KODI_ADB }}
+          KODI_DEVICES_FILE: ${{ vars.KODI_DEVICES_FILE }}
+          KODI_REFERENCES_FILE: ${{ vars.KODI_REFERENCES_FILE }}
         run: |
+          test -n "$KODI_ADB"
+          test -n "$KODI_DEVICES_FILE"
+          test -n "$KODI_REFERENCES_FILE"
           python tools/certify_device_matrix.py \
             --snapshot snapshot.tar \
+            --adb "$KODI_ADB" \
+            --devices "$KODI_DEVICES_FILE" \
+            --references "$KODI_REFERENCES_FILE" \
             --device bluestacks1 \
             --device "$ANDROID_TV" \
             --output device-matrix.json

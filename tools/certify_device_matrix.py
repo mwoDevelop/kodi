@@ -238,8 +238,8 @@ def certify(
             inventory = inventory_device(
                 ROOT,
                 logical_id,
-                devices_file=str(Path(devices_file).relative_to(ROOT)),
-                references_file=str(Path(references_file).relative_to(ROOT)),
+                devices_file=str(Path(devices_file)),
+                references_file=str(Path(references_file)),
                 adb=adb,
                 adb_server_port=server_port,
             )
