@@ -46,7 +46,20 @@ def _adb(adb, server_port, endpoint, *args):
     ).stdout
 
 
-def _addon_state(adb, server_port, endpoint, expected, temporary):
+def _allowed_origins(testing, stable):
+    return {
+        addon_id: (
+            {TESTING_ORIGIN, "repository.mwodevelop"}
+            if stable.get(addon_id, {}).get("zip_sha256") == pin["zip_sha256"]
+            else {TESTING_ORIGIN}
+        )
+        for addon_id, pin in testing.items()
+    }
+
+
+def _addon_state(
+    adb, server_port, endpoint, expected, stable, temporary
+):
     versions = {}
     for addon_id, pin in sorted(expected.items()):
         payload = _adb(
@@ -95,9 +108,13 @@ def _addon_state(adb, server_port, endpoint, expected, temporary):
                 tuple(sorted(expected)),
             )
         )
-    required = {addon_id: TESTING_ORIGIN for addon_id in expected}
-    if origins != required:
-        raise RuntimeError("installed add-on origins are not the testing repository")
+    allowed = _allowed_origins(expected, stable)
+    if set(origins) != set(expected) or any(
+        origins[addon_id] not in allowed[addon_id] for addon_id in expected
+    ):
+        raise RuntimeError(
+            "changed add-ons are not owned by testing or an origin is missing"
+        )
     return {"versions": versions, "origins": origins}
 
 
@@ -224,6 +241,9 @@ def certify(
 ):
     metadata = verify_bundle(snapshot)
     expected = metadata["testing_lock"]["components"]
+    stable = json.loads(
+        (ROOT / "manifests/locks/stable.json").read_text(encoding="utf-8")
+    )["components"]
     registry = load_registry(devices_file)
     results = []
     with tempfile.TemporaryDirectory(prefix="kodi-certification-") as temporary:
@@ -244,7 +264,7 @@ def certify(
                 adb_server_port=server_port,
             )
             state = _addon_state(
-                adb, server_port, endpoint, expected, temporary
+                adb, server_port, endpoint, expected, stable, temporary
             )
             checks = [
                 {
