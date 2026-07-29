@@ -8,10 +8,12 @@ import hashlib
 import json
 import os
 import re
+import socket
 import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +25,7 @@ from tools.snapshot_bundle import canonical_json, verify_bundle
 
 
 KODI_ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
+KODI_ACTIVITY = "org.xbmc.kodi/.Main"
 TESTING_ORIGIN = "repository.mwodevelop.testing"
 
 
@@ -68,6 +71,40 @@ def _latest_addons_database(listing):
     return max(
         candidates,
         key=lambda item: int(re.search(r"Addons(\d+)\.db$", item).group(1)),
+    )
+
+
+def _forwarded_port(output):
+    value = output.strip()
+    if not value.isdigit() or not 1 <= int(value) <= 65535:
+        raise RuntimeError("ADB did not return a valid dynamic forward port")
+    return int(value)
+
+
+def _wait_for_jsonrpc(host, port, timeout=45.0):
+    request = (
+        b'{"jsonrpc":"2.0","id":1,"method":"JSONRPC.Ping"}\n'
+    )
+    deadline = time.monotonic() + timeout
+    last_error = None
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=2.0) as client:
+                client.settimeout(2.0)
+                client.sendall(request)
+                response = json.loads(client.recv(4096).decode("utf-8"))
+                if response.get("result") == "pong":
+                    return
+                last_error = RuntimeError(
+                    "JSON-RPC returned an unexpected result"
+                )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            last_error = error
+        time.sleep(0.5)
+    detail = ": %s" % last_error if last_error is not None else ""
+    raise RuntimeError(
+        "Kodi JSON-RPC did not become ready within %.0f seconds%s"
+        % (timeout, detail)
     )
 
 
@@ -133,86 +170,96 @@ def _addon_state(
 
 
 def _functional_checks(
-    adb, server_port, endpoint, logical_id, port, temporary, observe_seconds
+    adb, server_port, endpoint, logical_id, temporary, observe_seconds
 ):
     env = {
         **os.environ,
         "ADB_SERVER_SOCKET": "tcp:localhost:%s" % server_port,
         "PYTHONPATH": str(ROOT),
     }
-    _run(
-        [
-            adb,
-            "-P",
-            str(server_port),
-            "-s",
-            endpoint,
-            "forward",
-            "tcp:%s" % port,
-            "tcp:9090",
-        ]
-    )
-    commands = [
-        (
-            "umbrella-search",
-            [
-                sys.executable,
-                str(ROOT / "tests/e2e/umbrella_search_e2e.py"),
-                "--adb",
-                adb,
-                "--serial",
-                endpoint,
-                "--host",
-                "127.0.0.1",
-                "--jsonrpc-port",
-                str(port),
-                "--term",
-                "Sintel",
-                "--media-type",
-                "movie",
-            ],
-        ),
-        (
-            "umbrella-resolver-playback",
-            [
-                sys.executable,
-                str(ROOT / "tests/e2e/sony_kodi_matrix.py"),
-                "--adb",
-                adb,
-                "--serial",
-                endpoint,
-                "--host",
-                "127.0.0.1",
-                "--jsonrpc-port",
-                str(port),
-                "--event-via-adb",
-                "--direct-play",
-                "--case",
-                "sintel",
-                "--observe-seconds",
-                str(observe_seconds),
-            ],
-        ),
-        (
-            "watchnixtoons2-playback",
-            [
-                sys.executable,
-                str(ROOT / "tests/e2e/sony_watchnixtoons2.py"),
-                "--adb",
-                adb,
-                "--serial",
-                endpoint,
-                "--host",
-                "127.0.0.1",
-                "--jsonrpc-port",
-                str(port),
-                "--observe-seconds",
-                str(observe_seconds),
-            ],
-        ),
-    ]
     checks = []
+    port = None
     try:
+        _adb(
+            adb,
+            server_port,
+            endpoint,
+            "shell",
+            "am",
+            "start",
+            "-n",
+            KODI_ACTIVITY,
+        )
+        port = _forwarded_port(
+            _adb(
+                adb,
+                server_port,
+                endpoint,
+                "forward",
+                "tcp:0",
+                "tcp:9090",
+            )
+        )
+        _wait_for_jsonrpc("127.0.0.1", port)
+        commands = [
+            (
+                "umbrella-search",
+                [
+                    sys.executable,
+                    str(ROOT / "tests/e2e/umbrella_search_e2e.py"),
+                    "--adb",
+                    adb,
+                    "--serial",
+                    endpoint,
+                    "--host",
+                    "127.0.0.1",
+                    "--jsonrpc-port",
+                    str(port),
+                    "--term",
+                    "Sintel",
+                    "--media-type",
+                    "movie",
+                ],
+            ),
+            (
+                "umbrella-resolver-playback",
+                [
+                    sys.executable,
+                    str(ROOT / "tests/e2e/sony_kodi_matrix.py"),
+                    "--adb",
+                    adb,
+                    "--serial",
+                    endpoint,
+                    "--host",
+                    "127.0.0.1",
+                    "--jsonrpc-port",
+                    str(port),
+                    "--event-via-adb",
+                    "--direct-play",
+                    "--case",
+                    "sintel",
+                    "--observe-seconds",
+                    str(observe_seconds),
+                ],
+            ),
+            (
+                "watchnixtoons2-playback",
+                [
+                    sys.executable,
+                    str(ROOT / "tests/e2e/sony_watchnixtoons2.py"),
+                    "--adb",
+                    adb,
+                    "--serial",
+                    endpoint,
+                    "--host",
+                    "127.0.0.1",
+                    "--jsonrpc-port",
+                    str(port),
+                    "--observe-seconds",
+                    str(observe_seconds),
+                ],
+            ),
+        ]
         for name, command in commands:
             report = Path(temporary) / ("%s-%s.json" % (logical_id, name))
             _run([*command, "--result", str(report)], env=env)
@@ -227,20 +274,21 @@ def _functional_checks(
             )
             report.unlink()
     finally:
-        subprocess.run(
-            [
-                adb,
-                "-P",
-                str(server_port),
-                "-s",
-                endpoint,
-                "forward",
-                "--remove",
-                "tcp:%s" % port,
-            ],
-            check=False,
-            capture_output=True,
-        )
+        if port is not None:
+            subprocess.run(
+                [
+                    adb,
+                    "-P",
+                    str(server_port),
+                    "-s",
+                    endpoint,
+                    "forward",
+                    "--remove",
+                    "tcp:%s" % port,
+                ],
+                check=False,
+                capture_output=True,
+            )
     return checks
 
 
@@ -261,7 +309,7 @@ def certify(
     registry = load_registry(devices_file)
     results = []
     with tempfile.TemporaryDirectory(prefix="kodi-certification-") as temporary:
-        for index, logical_id in enumerate(selected):
+        for logical_id in selected:
             device = resolve_device(registry, logical_id)
             if device["platform"] not in {"android", "android-emulator"}:
                 raise ValueError(
@@ -298,7 +346,6 @@ def certify(
                     server_port,
                     endpoint,
                     logical_id,
-                    19190 + index,
                     temporary,
                     observe_seconds,
                 )
