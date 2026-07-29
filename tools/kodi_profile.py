@@ -548,12 +548,38 @@ def verify_snapshot(snapshot):
     return manifest
 
 
-def _build_restore_archive(snapshot, output):
+def _selected_restore_files(manifest, relative_paths=None):
+    if relative_paths is None:
+        return manifest["files"]
+    selected = {}
+    for relative in relative_paths:
+        if not isinstance(relative, str) or not relative:
+            raise ValueError("restore path must be a non-empty string")
+        parsed = PurePosixPath(relative)
+        if (
+            parsed.is_absolute()
+            or ".." in parsed.parts
+            or parsed.as_posix() != relative
+        ):
+            raise ValueError("restore path is unsafe: %s" % relative)
+        if relative not in manifest["files"]:
+            raise ValueError(
+                "restore path is absent from verified snapshot: %s"
+                % relative
+            )
+        selected[relative] = manifest["files"][relative]
+    if not selected:
+        raise ValueError("at least one restore path is required")
+    return selected
+
+
+def _build_restore_archive(snapshot, output, relative_paths=None):
     manifest = verify_snapshot(snapshot)
+    selected_files = _selected_restore_files(manifest, relative_paths)
     restore_manifest = {
         "schema": SCHEMA,
         "snapshot_id": manifest["snapshot_id"],
-        "files": manifest["files"],
+        "files": selected_files,
     }
     with tarfile.open(output, "w", format=tarfile.PAX_FORMAT) as archive:
         payload = canonical_json(restore_manifest)
@@ -563,7 +589,7 @@ def _build_restore_archive(snapshot, output):
         info.mtime = 0
         archive.addfile(info, fileobj=io.BytesIO(payload))
         payload_root = Path(snapshot) / "payload"
-        for relative in sorted(manifest["files"]):
+        for relative in sorted(selected_files):
             source = payload_root / relative
             info = tarfile.TarInfo("payload/" + relative)
             info.size = source.stat().st_size
@@ -801,6 +827,28 @@ def _wait_for_marker(adb, port, serial, timeout=360):
     raise TimeoutError("Kodi profile restore marker timed out")
 
 
+def _run_restore_script(adb, port, serial, attempts=4, attempt_timeout=20):
+    command = "RunScript(%s,%s,%s)" % (
+        RESTORE_SCRIPT,
+        RESTORE_ARCHIVE,
+        RESTORE_MARKER,
+    )
+    for attempt in range(attempts):
+        AdbEventClient(adb, port, serial).execute_builtin(command)
+        try:
+            return _wait_for_marker(
+                adb,
+                port,
+                serial,
+                timeout=attempt_timeout,
+            )
+        except TimeoutError:
+            if attempt + 1 == attempts:
+                raise
+            time.sleep(2)
+    raise AssertionError("restore retry loop exhausted")
+
+
 def install_kodi(adb, port, serial, snapshot):
     manifest = verify_snapshot(snapshot)
     apks = [
@@ -953,11 +1001,7 @@ def _restore_snapshot_inner(
     )
     _wait_for_kodi_ready(adb, port, serial)
     events = AdbEventClient(adb, port, serial)
-    events.execute_builtin(
-        "RunScript(%s,%s,%s)"
-        % (RESTORE_SCRIPT, RESTORE_ARCHIVE, RESTORE_MARKER)
-    )
-    result = _wait_for_marker(adb, port, serial)
+    result = _run_restore_script(adb, port, serial)
     if (
         not result.get("ok")
         or result.get("snapshot_id") != manifest["snapshot_id"]
@@ -1035,6 +1079,111 @@ def restore_snapshot(
         )
 
 
+def _restore_snapshot_paths_inner(
+    adb,
+    port,
+    serial,
+    snapshot,
+    device_script,
+    relative_paths,
+    allow_kodi_upgrade=False,
+):
+    manifest = verify_snapshot(snapshot)
+    selected_files = _selected_restore_files(manifest, relative_paths)
+    target = device_info(adb, port, serial)
+    source = manifest["device"]
+    if not kodi_versions_compatible(
+        source["kodi_version"],
+        target["kodi_version"],
+        allow_upgrade=allow_kodi_upgrade,
+    ):
+        raise ValueError(
+            "Kodi version is incompatible with snapshot: %s -> %s"
+            % (source["kodi_version"], target["kodi_version"])
+        )
+    if not set(target["abi_list"]).intersection(source["abi_list"]):
+        raise ValueError("target ABI is incompatible with snapshot")
+    with tempfile.NamedTemporaryFile(suffix=".tar") as archive:
+        _build_restore_archive(
+            snapshot,
+            archive.name,
+            relative_paths=selected_files,
+        )
+        _push(adb, port, serial, archive.name, RESTORE_ARCHIVE)
+    _push(adb, port, serial, device_script, RESTORE_SCRIPT)
+    _prepare_kodi_permissions(adb, port, serial)
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "rm -f '%s' && "
+        "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
+        % (RESTORE_MARKER, KODI_PACKAGE),
+    )
+    _wait_for_kodi_ready(adb, port, serial)
+    result = _run_restore_script(adb, port, serial)
+    if (
+        not result.get("ok")
+        or result.get("snapshot_id") != manifest["snapshot_id"]
+        or result.get("restored_files") != len(selected_files)
+    ):
+        raise RuntimeError(
+            "Kodi selective profile restore failed: %s"
+            % result.get("error_type")
+        )
+    # Terminating the process prevents an already-running add-on service from
+    # writing its stale in-memory settings over the restored file.
+    adb_command(
+        adb, port, serial, "shell", "am force-stop %s" % KODI_PACKAGE
+    )
+    time.sleep(2)
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
+        % KODI_PACKAGE,
+    )
+    _wait_for_kodi_ready(adb, port, serial)
+    return {
+        "snapshot_id": manifest["snapshot_id"],
+        "restored_files": result["restored_files"],
+    }
+
+
+def restore_snapshot_paths(
+    adb,
+    port,
+    serial,
+    snapshot,
+    device_script,
+    relative_paths,
+    allow_kodi_upgrade=False,
+):
+    try:
+        return _restore_snapshot_paths_inner(
+            adb,
+            port,
+            serial,
+            snapshot,
+            device_script,
+            relative_paths,
+            allow_kodi_upgrade,
+        )
+    finally:
+        adb_command(
+            adb,
+            port,
+            serial,
+            "shell",
+            "rm -f '%s' '%s' '%s'"
+            % (RESTORE_ARCHIVE, RESTORE_SCRIPT, RESTORE_MARKER),
+            check=False,
+        )
+
+
 def main():
     repository_root = Path(__file__).resolve().parents[1]
     default_policy = (
@@ -1067,6 +1216,23 @@ def main():
     restore.add_argument(
         "--device-script", default=str(default_device_script)
     )
+    restore_paths = commands.add_parser("restore-path")
+    restore_paths.add_argument("snapshot")
+    restore_paths.add_argument(
+        "--path",
+        action="append",
+        required=True,
+        dest="paths",
+        help="exact verified snapshot path to restore; may be repeated",
+    )
+    restore_paths.add_argument(
+        "--allow-kodi-upgrade",
+        action="store_true",
+        help="allow restore to a newer Kodi release in the same major line",
+    )
+    restore_paths.add_argument(
+        "--device-script", default=str(default_device_script)
+    )
     args = parser.parse_args()
     if args.command == "export":
         result = create_snapshot(
@@ -1086,13 +1252,23 @@ def main():
             args.serial,
             args.snapshot,
         )
-    else:
+    elif args.command == "restore":
         result = restore_snapshot(
             args.adb,
             args.adb_server_port,
             args.serial,
             args.snapshot,
             args.device_script,
+            args.allow_kodi_upgrade,
+        )
+    else:
+        result = restore_snapshot_paths(
+            args.adb,
+            args.adb_server_port,
+            args.serial,
+            args.snapshot,
+            args.device_script,
+            args.paths,
             args.allow_kodi_upgrade,
         )
     summary = {

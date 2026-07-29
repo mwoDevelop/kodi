@@ -23,14 +23,14 @@ Raporty review i decyzje:
 
 | Obszar | Stan | Dowód / luka |
 |---|---|---|
-| Control plane | zaimplementowany, rollout w toku | advisory source actions są oddzielone od content-addressed `testing_lock_candidate`; lokalny pełny zestaw 172 testów i deterministyczny E2E są zielone |
-| WatchNixtoons2 | hardening scalony | writer waliduje exact tree/base/autora, odświeża target przed pushem i jawnie zapewnia check exact head SHA; live retry/no-op przeszedł |
-| Umbrella | writer scalony | content-addressed replay patch stacku, protected paths i osobny writer są na `main`; live discovery zakończyło się no-op |
-| mwoScrapers/providerzy | writer scalony | policy działa per provider; observation state jest poza ZIP-em; provenance-only PR przeszedł rzeczywisty prepare → writer → CI → merge → no-op; moduł wydany jako `0.1.6` |
-| Testing/stable | implementacja lokalna zielona, rollout w toku | testing-lock reconciler, snapshot schema 2, atestacja i composer stable bez rebuilda są gotowe; pozostał merge repo głównego, urządzeniowa certyfikacja i promocja |
-| Ochrona branchy | aktywna, wymaga utwardzenia review | wszystkie cztery default branche wymagają PR i check `e2e`/`test`, lecz obecnie wymagają zero approvals |
-| E2E urządzeń | runner i schemat gotowe, wykonanie pozostało | workflow wiąże emulator i Android TV z exact snapshotem, nonce, commitem, runnerem, wersjami i digestami; pozostał realny rollout nowego testing |
-| Pełny release mechanizmu | kandydat implementacyjny | blokują go już tylko merge/CI repo głównego, rulesety z jednym approval, realna macierz urządzeń, atestacja, promocja i obserwacja |
+| Control plane | zakończony | advisory source actions są oddzielone od content-addressed `testing_lock_candidate`; pełne testy lokalne, CI i deterministyczny E2E są zielone |
+| WatchNixtoons2 | zakończony | writer waliduje exact tree/base/autora, odświeża target przed pushem i jawnie zapewnia check exact head SHA; rzeczywisty update oraz kolejne no-op przeszły |
+| Umbrella | zakończony | content-addressed replay patch stacku, protected paths i osobny writer są na `main`; staging drill i live discovery/no-op przeszły |
+| mwoScrapers/providerzy | zakończony | policy działa per provider; observation state jest poza ZIP-em; provenance-only PR przeszedł rzeczywisty prepare → writer → CI → merge → no-op; moduł wydany jako `0.1.6` |
+| Testing/stable | zakończony | snapshot schema 2 `82ff8e948aa0aa05e3c486707602c29e7bb5adde333d537298e7839d202b87a1` został certyfikowany, a exact payload wypromowany do stable bez rebuilda |
+| Ochrona branchy | zakończona dla v1 | wszystkie cztery default branche wymagają PR, jednego approval i checka exact head `e2e`/`test`; brak bypass actorów |
+| E2E urządzeń | brama release zaliczona, rollout rozszerzony w toku | chroniona certyfikacja exact snapshotu przeszła na BlueStacks i Sony; po promocji X88 przeszedł wyszukiwanie oraz odtwarzanie Umbrella i WatchNixtoons2 |
+| Pełny release mechanizmu | stabilizacja końcowa | pozostały dodatkowe post-release smoke na urządzeniach, gdy będą wolne, bezpieczna polityka wygaszenia repo `testing` oraz tag/release `upstream-sync-v1.0.0`; repo nie wolno odinstalowywać, dopóki test migracji nie wykaże zachowania `addon_data` |
 
 Pełny release w tym dokumencie oznacza wydanie operacyjnie kompletnego
 mechanizmu synchronizacji. Nie oznacza bezwarunkowego automatycznego scalania
@@ -1221,13 +1221,13 @@ Status etapów:
 |---|---|---|
 | 0 — baseline | zakończony | utrzymywać tylko aktualny raport |
 | 1 — read-only | zakończony | typowane akcje, policy per adapter i per-provider wynik są przetestowane live |
-| 2 — bezpieczeństwo/writer | prawie zakończony | przypięte zależności i exact-head dispatch są gotowe; approval=1 zostanie włączony po merge implementacji |
+| 2 — bezpieczeństwo/writer | zakończony | przypięte zależności, exact-head dispatch, rulesety bez bypassu i approval=1 są aktywne |
 | 3 — Umbrella | zakończony implementacyjnie | writer jest na `main`, testy 43/43 i live no-op przeszły |
 | 4 — WatchNixtoons2 | zakończony implementacyjnie | exact tree/base/autor i ensure-required-check są na `master`; live no-op przeszedł |
 | 5 — mwoScrapers | zakończony implementacyjnie | `0.1.6`, observation state poza ZIP, bezpieczny writer i rzeczywisty provenance PR przeszły |
-| 6 — testing/stable | implementacja zakończona, rollout w toku | lokalny reconciler i exact-snapshot composer są zielone; pozostał publiczny snapshot, atestacja i promocja |
+| 6 — testing/stable | zakończony | publiczny snapshot schema 2 ma atestację, a stable zawiera exact payload bez rebuilda |
 | 7 — adapter Kodi/Rapideo | odroczony | nie blokuje pełnego release v1 |
-| 8 — rollout/E2E | w toku | kompletna macierz i powiązanie dowodów ze snapshotem |
+| 8 — rollout/E2E | brama release zaliczona, rozszerzony rollout w toku | BlueStacks + Sony mają chronioną atestację snapshotu; X88 przeszedł post-stable smoke oraz realny test selektywnego restore; pozostały ponowienia na wolnych urządzeniach i finalny release |
 
 ### Etap 0 — zapis baseline
 

@@ -1,4 +1,5 @@
 import json
+import tarfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,6 +9,9 @@ from tools.kodi_profile import (
     AdbEventClient,
     _addon_inventory,
     _activate_skin,
+    _build_restore_archive,
+    _run_restore_script,
+    _selected_restore_files,
     _wait_for_kodi_ready,
     canonical_json,
     digest,
@@ -17,6 +21,7 @@ from tools.kodi_profile import (
     kodi_versions_compatible,
     requires_direct_copy,
     restore_snapshot,
+    restore_snapshot_paths,
     secure_private_tree,
     verify_snapshot,
 )
@@ -348,3 +353,141 @@ def test_restore_removes_device_staging_after_failure(monkeypatch):
     assert len(calls) == 1
     assert calls[0][0][3] == "shell"
     assert "mwo-kodi-profile-restore.tar" in calls[0][0][4]
+
+
+def test_selective_restore_archive_contains_only_requested_verified_file(
+    tmp_path, monkeypatch
+):
+    snapshot = tmp_path / "snapshot"
+    payload = snapshot / "payload"
+    first = payload / "userdata/addon_data/plugin.example/settings.xml"
+    second = payload / "userdata/guisettings.xml"
+    first.parent.mkdir(parents=True)
+    first.write_bytes(b"<settings/>")
+    second.write_bytes(b"<settings/>")
+    manifest = {
+        "snapshot_id": "a" * 64,
+        "files": {
+            first.relative_to(payload).as_posix(): {
+                "sha256": digest(first.read_bytes()),
+                "size": first.stat().st_size,
+            },
+            second.relative_to(payload).as_posix(): {
+                "sha256": digest(second.read_bytes()),
+                "size": second.stat().st_size,
+            },
+        },
+    }
+    monkeypatch.setattr(
+        "tools.kodi_profile.verify_snapshot", lambda _snapshot: manifest
+    )
+    output = tmp_path / "restore.tar"
+
+    _build_restore_archive(
+        snapshot,
+        output,
+        ["userdata/addon_data/plugin.example/settings.xml"],
+    )
+
+    with tarfile.open(output) as archive:
+        assert archive.getnames() == [
+            "restore-manifest.json",
+            "payload/userdata/addon_data/plugin.example/settings.xml",
+        ]
+        restore_manifest = json.load(
+            archive.extractfile("restore-manifest.json")
+        )
+    assert list(restore_manifest["files"]) == [
+        "userdata/addon_data/plugin.example/settings.xml"
+    ]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "../userdata/settings.xml",
+        "/userdata/settings.xml",
+        "userdata/../settings.xml",
+        "userdata/missing.xml",
+        "",
+    ],
+)
+def test_selective_restore_rejects_unsafe_or_unverified_path(path):
+    manifest = {
+        "files": {
+            "userdata/addon_data/plugin.example/settings.xml": {
+                "sha256": "a" * 64,
+                "size": 1,
+            }
+        }
+    }
+    with pytest.raises(ValueError):
+        _selected_restore_files(manifest, [path])
+
+
+def test_selective_restore_removes_device_staging_after_failure(monkeypatch):
+    calls = []
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("restore failed")
+
+    def record(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr(
+        "tools.kodi_profile._restore_snapshot_paths_inner", fail
+    )
+    monkeypatch.setattr("tools.kodi_profile.adb_command", record)
+
+    with pytest.raises(RuntimeError, match="restore failed"):
+        restore_snapshot_paths(
+            "adb",
+            5038,
+            "serial",
+            "snapshot",
+            "script",
+            ["userdata/settings.xml"],
+        )
+
+    assert len(calls) == 1
+    assert calls[0][0][3] == "shell"
+    assert "mwo-kodi-profile-restore.tar" in calls[0][0][4]
+
+
+def test_restore_script_retries_a_lost_startup_event(monkeypatch):
+    sent = []
+    waits = iter(
+        [
+            TimeoutError("first event was lost"),
+            {"ok": True, "restored_files": 1},
+        ]
+    )
+
+    class EventClient:
+        def __init__(self, *_args):
+            pass
+
+        def execute_builtin(self, command):
+            sent.append(command)
+
+    def wait(*_args, **_kwargs):
+        result = next(waits)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr("tools.kodi_profile.AdbEventClient", EventClient)
+    monkeypatch.setattr("tools.kodi_profile._wait_for_marker", wait)
+    monkeypatch.setattr("tools.kodi_profile.time.sleep", lambda _seconds: None)
+
+    result = _run_restore_script(
+        "adb",
+        5038,
+        "serial",
+        attempts=2,
+        attempt_timeout=1,
+    )
+
+    assert result == {"ok": True, "restored_files": 1}
+    assert len(sent) == 2
+    assert all(command.startswith("RunScript(") for command in sent)
