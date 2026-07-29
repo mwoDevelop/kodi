@@ -3,6 +3,7 @@ import pytest
 from tools.certify_device_matrix import (
     TESTING_ORIGIN,
     _allowed_origins,
+    _forwarded_port,
     _latest_addons_database,
 )
 
@@ -42,3 +43,11 @@ def test_latest_addons_database_does_not_require_android_sort_version():
 
     with pytest.raises(RuntimeError, match="database is missing"):
         _latest_addons_database("vendor\n")
+
+
+def test_dynamic_forward_port_is_validated():
+    assert _forwarded_port("46454\n") == 46454
+
+    for invalid in ("", "tcp:46454", "0", "65536", "-1"):
+        with pytest.raises(RuntimeError, match="dynamic forward port"):
+            _forwarded_port(invalid)
