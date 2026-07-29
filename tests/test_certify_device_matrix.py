@@ -1,4 +1,10 @@
-from tools.certify_device_matrix import TESTING_ORIGIN, _allowed_origins
+import pytest
+
+from tools.certify_device_matrix import (
+    TESTING_ORIGIN,
+    _allowed_origins,
+    _latest_addons_database,
+)
 
 
 def test_changed_bytes_require_testing_but_identical_bytes_accept_stable():
@@ -18,3 +24,21 @@ def test_changed_bytes_require_testing_but_identical_bytes_accept_stable():
         TESTING_ORIGIN,
         "repository.mwodevelop",
     }
+
+
+def test_latest_addons_database_does_not_require_android_sort_version():
+    listing = "\n".join(
+        [
+            "/profile/Database/Addons9.db",
+            "/profile/Database/Addons33.db",
+            "/profile/Database/Addons12.db",
+            "unrelated",
+        ]
+    )
+
+    assert _latest_addons_database(listing) == (
+        "/profile/Database/Addons33.db"
+    )
+
+    with pytest.raises(RuntimeError, match="database is missing"):
+        _latest_addons_database("vendor\n")
