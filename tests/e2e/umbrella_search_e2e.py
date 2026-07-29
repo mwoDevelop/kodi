@@ -7,12 +7,16 @@ import argparse
 import json
 import time
 from pathlib import Path
+from typing import Callable
 from urllib.parse import quote_plus
 
 from sony_kodi_matrix import JsonRpc, addon_version, kodi_version, shell
 
 
 SOURCE_PROGRESS_WINDOW = 10160
+SHUTDOWN_MENU_WINDOW = 10111
+OK_DIALOG_WINDOW = 12002
+PVR_INFO_TITLE = "No PVR add-on enabled"
 KEYBOARD_WINDOWS = {10103, 10138}
 VIDEOS_WINDOW = 10025
 
@@ -43,6 +47,73 @@ def wait_for_window(
 
 def search_action(media_type: str, suffix: str) -> str:
 	return "%sSearch%s" % ("tv" if media_type == "tv" else "movie", suffix)
+
+
+def dismiss_known_startup_window(
+	rpc: JsonRpc,
+	window: dict,
+	timeout: float,
+	transitions: list[dict],
+	modal_back: Callable[[], None] | None = None,
+) -> dict:
+	"""Close a harmless stale Kodi modal without hiding resolver failures."""
+	window_id = window.get("id")
+	if window_id == OK_DIALOG_WINDOW:
+		labels = rpc.call(
+			"XBMC.GetInfoLabels",
+			{"labels": ["Control.GetLabel(1)"]},
+		)
+		title = (
+			labels.get("Control.GetLabel(1)", "")
+			if isinstance(labels, dict)
+			else ""
+		)
+		if title != PVR_INFO_TITLE:
+			return window
+		if modal_back is not None:
+			modal_back()
+			dismiss_method = None
+		else:
+			dismiss_method = "Input.Select"
+	elif window_id != SHUTDOWN_MENU_WINDOW:
+		return window
+	else:
+		dismiss_method = "Input.Back"
+	if dismiss_method is not None:
+		rpc.call(dismiss_method)
+	return wait_for_window(
+		rpc,
+		lambda current: current.get("id") != window_id,
+		timeout,
+		transitions,
+	)
+
+
+def activate_home(
+	rpc: JsonRpc,
+	timeout: float,
+	transitions: list[dict],
+	modal_back: Callable[[], None] | None = None,
+) -> dict:
+	for _attempt in range(3):
+		rpc.call("GUI.ActivateWindow", {"window": "home"})
+		window = wait_for_window(
+			rpc,
+			lambda current: current.get("id")
+			in {10000, SHUTDOWN_MENU_WINDOW, OK_DIALOG_WINDOW},
+			timeout,
+			transitions,
+		)
+		if window.get("id") == 10000:
+			return window
+		dismissed = dismiss_known_startup_window(
+			rpc, window, timeout, transitions, modal_back
+		)
+		if dismissed == window:
+			raise RuntimeError(
+				"unexpected dialog blocks Kodi home: %r" % window
+			)
+	raise RuntimeError("Kodi home remained blocked by startup dialogs")
 
 
 def matching_search_results(
@@ -121,9 +192,13 @@ def run_search(
 	term: str,
 	timeout: float,
 	media_type: str = "movie",
+	modal_back: Callable[[], None] | None = None,
 ) -> dict:
 	transitions = []
 	before = current_window(rpc)
+	before = dismiss_known_startup_window(
+		rpc, before, timeout, transitions, modal_back
+	)
 	if before.get("id") == SOURCE_PROGRESS_WINDOW:
 		raise RuntimeError(
 			"stale Umbrella source_progress window blocks search before test start"
@@ -136,13 +211,7 @@ def run_search(
 			timeout,
 			transitions,
 		)
-	rpc.call("GUI.ActivateWindow", {"window": "home"})
-	wait_for_window(
-		rpc,
-		lambda window: window.get("id") == 10000,
-		timeout,
-		transitions,
-	)
+	activate_home(rpc, timeout, transitions, modal_back)
 	time.sleep(2)
 	keyboard = open_search_keyboard(rpc, timeout, transitions, media_type)
 	# Kodi 21 may focus the virtual keyboard's Done control without activating it.
@@ -205,9 +274,17 @@ def main() -> int:
 			"kodi": kodi_version(args.adb, args.serial),
 		},
 		"umbrella_version": addon_version(
-			args.adb, args.serial, "plugin.video.umbrella"
+			args.adb, args.serial, "plugin.video.umbrella", rpc
 		),
-		"search": run_search(rpc, args.term, args.timeout, args.media_type),
+		"search": run_search(
+			rpc,
+			args.term,
+			args.timeout,
+			args.media_type,
+			modal_back=lambda: shell(
+				args.adb, args.serial, "input keyevent 4"
+			),
+		),
 		"tokens_collected": False,
 	}
 	output = Path(args.result)

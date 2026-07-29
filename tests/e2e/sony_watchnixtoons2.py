@@ -8,6 +8,7 @@ import json
 import re
 import time
 from pathlib import Path
+from typing import Callable
 from urllib.parse import quote
 
 from sony_kodi_matrix import (
@@ -41,7 +42,11 @@ def playback_method(adb: str, serial: str) -> str | None:
     return match.group(1) if match else None
 
 
-def accept_quality_dialog(rpc: JsonRpc, timeout: int = 45) -> str | None:
+def accept_quality_dialog(
+    rpc: JsonRpc,
+    timeout: int = 45,
+    select_fallback: Callable[[], None] | None = None,
+) -> str | None:
     started = time.monotonic()
     while time.monotonic() - started < timeout:
         if active_video_player(rpc) is not None:
@@ -60,6 +65,21 @@ def accept_quality_dialog(rpc: JsonRpc, timeout: int = 45) -> str | None:
             re.IGNORECASE,
         ):
             rpc.call("Input.Select")
+            time.sleep(0.5)
+            after = rpc.call(
+                "GUI.GetProperties",
+                {"properties": ["currentwindow"]},
+            )
+            after_window = (
+                after.get("currentwindow", {})
+                if isinstance(after, dict)
+                else {}
+            )
+            if (
+                after_window.get("id") == window.get("id")
+                and select_fallback is not None
+            ):
+                select_fallback()
             return control_label
         time.sleep(0.5)
     return None
@@ -133,7 +153,12 @@ def main() -> int:
     rpc.call("Player.Open", {"item": {"file": media_url}})
     selected_quality = None
     if method in (None, "0"):
-        selected_quality = accept_quality_dialog(rpc)
+        selected_quality = accept_quality_dialog(
+            rpc,
+            select_fallback=lambda: shell(
+                args.adb, args.serial, "input keyevent 66"
+            ),
+        )
 
     started = time.monotonic()
     player_id = None
@@ -179,7 +204,7 @@ def main() -> int:
         },
         "addon": {
             "id": ADDON_ID,
-            "version": addon_version(args.adb, args.serial, ADDON_ID),
+            "version": addon_version(args.adb, args.serial, ADDON_ID, rpc),
             "playback_method": {
                 None: "default_select_dialog",
                 "0": "select_dialog",

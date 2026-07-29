@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -67,10 +68,13 @@ def test_event_client_uses_ipv6_loopback_for_ipv6_only_listener(monkeypatch):
         "tools.kodi_profile.adb_output",
         lambda *_args, **_kwargs: "udp6 0 0 :::9777 :::*",
     )
-    monkeypatch.setattr(
-        "tools.kodi_profile.adb_command",
-        lambda *args, **_kwargs: commands.append(args[-1]),
-    )
+    def command(*args, **_kwargs):
+        if "command -v nc" in args[-1]:
+            return SimpleNamespace(stdout="/system/bin/nc\n")
+        commands.append(args[-1])
+        return SimpleNamespace(stdout="")
+
+    monkeypatch.setattr("tools.kodi_profile.adb_command", command)
 
     AdbEventClient("adb", 5037, "serial").execute_builtin(
         "Notification(test,ready)"
@@ -79,6 +83,47 @@ def test_event_client_uses_ipv6_loopback_for_ipv6_only_listener(monkeypatch):
     assert len(commands) == 3
     assert all("nc -6 -u " in command for command in commands)
     assert all(" ::1 9777" in command for command in commands)
+
+
+def test_event_client_sends_from_host_when_tv_has_no_netcat(monkeypatch):
+    def output(*args, **_kwargs):
+        command = args[-1]
+        if "netstat" in command:
+            return "udp6 0 0 :::9777 :::*"
+        raise AssertionError(command)
+
+    def command(*args, **_kwargs):
+        assert "command -v nc" in args[-1]
+        return SimpleNamespace(stdout="")
+
+    class Socket:
+        def __init__(self, family, kind):
+            assert family == 2
+            assert kind == 2
+            self.sent = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def sendto(self, packet, address):
+            self.sent.append((packet, address))
+            sent.extend(self.sent[-1:])
+
+    sent = []
+    monkeypatch.setattr("tools.kodi_profile.adb_output", output)
+    monkeypatch.setattr("tools.kodi_profile.adb_command", command)
+    monkeypatch.setattr("tools.kodi_profile.socket.socket", Socket)
+
+    AdbEventClient(
+        "adb", 5037, "192.168.1.12:5555"
+    ).execute_builtin("Notification(test,ready)")
+
+    assert len(sent) == 3
+    assert all(address == ("192.168.1.12", 9777) for _packet, address in sent)
+    assert all(packet.startswith(b"XBMC") for packet, _address in sent)
 
 
 def test_profile_policy_includes_settings_and_excludes_cache():

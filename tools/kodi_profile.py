@@ -587,6 +587,26 @@ class AdbEventClient:
                 current_type, index, len(chunks), len(chunk)
             ) + chunk
 
+    def _network_host(self):
+        if self.serial.startswith("[") and "]:" in self.serial:
+            return self.serial[1 : self.serial.index("]:")]
+        if self.serial.count(":") == 1:
+            host, port = self.serial.rsplit(":", 1)
+            if port.isdigit():
+                return host
+        return None
+
+    def _send_from_host(self, packets):
+        host = self._network_host()
+        if host in (None, "127.0.0.1", "::1", "localhost"):
+            raise RuntimeError(
+                "ADB target has no netcat and is not a direct LAN endpoint"
+            )
+        family = socket.AF_INET6 if ":" in host else socket.AF_INET
+        with socket.socket(family, socket.SOCK_DGRAM) as event_socket:
+            for packet in packets:
+                event_socket.sendto(packet, (host, 9777))
+
     def execute_builtin(self, command):
         listeners = adb_output(
             self.adb,
@@ -616,31 +636,48 @@ class AdbEventClient:
             + struct.pack("!I", 0)
         )
         action = bytes((self.ACTION_EXECBUILTIN,)) + command.encode() + b"\0"
-        for packet_type, payload in (
-            (self.PT_HELO, hello),
-            (self.PT_ACTION, action),
-            (self.PT_BYE, b""),
-        ):
-            for packet in self._packets(packet_type, payload):
-                encoded = base64.b64encode(packet).decode("ascii")
-                remote = (
-                    "echo %s | base64 -d | "
-                    "nc %s-u -w 1 -p %d -q 1 %s 9777"
-                    % (
-                        encoded,
-                        nc_family,
-                        self.source_port,
-                        destination,
-                    )
+        packets = [
+            packet
+            for packet_type, payload in (
+                (self.PT_HELO, hello),
+                (self.PT_ACTION, action),
+                (self.PT_BYE, b""),
+            )
+            for packet in self._packets(packet_type, payload)
+        ]
+        nc_probe = adb_command(
+            self.adb,
+            self.port,
+            self.serial,
+            "shell",
+            "command -v nc 2>/dev/null",
+            check=False,
+            text=True,
+        )
+        nc_path = (nc_probe.stdout or "").strip()
+        if not nc_path:
+            self._send_from_host(packets)
+            return
+        for packet in packets:
+            encoded = base64.b64encode(packet).decode("ascii")
+            remote = (
+                "echo %s | base64 -d | "
+                "nc %s-u -w 1 -p %d -q 1 %s 9777"
+                % (
+                    encoded,
+                    nc_family,
+                    self.source_port,
+                    destination,
                 )
-                adb_command(
-                    self.adb,
-                    self.port,
-                    self.serial,
-                    "shell",
-                    remote,
-                    timeout=10,
-                )
+            )
+            adb_command(
+                self.adb,
+                self.port,
+                self.serial,
+                "shell",
+                remote,
+                timeout=10,
+            )
 
 
 class AdbJsonRpcClient:

@@ -205,17 +205,17 @@ def ensure_kodi_foreground(adb: str, serial: str):
     dream_dismissed = False
     while time.monotonic() - started < 15:
         windows = shell(adb, serial, "dumpsys window", check=False)
-        focus = next(
-            (
-                line
-                for line in windows.splitlines()
-                if "mCurrentFocus=" in line
-            ),
-            "",
-        )
-        if "org.xbmc.kodi/" in focus:
+        focus_lines = [
+            line
+            for line in windows.splitlines()
+            if "mCurrentFocus=" in line
+        ]
+        if any("org.xbmc.kodi/" in line for line in focus_lines):
             return
-        if ":dream" in focus and not dream_dismissed:
+        if (
+            any(":dream" in line for line in focus_lines)
+            and not dream_dismissed
+        ):
             # Android TV can keep its system dream overlay above an already
             # running Kodi activity. HOME wakes the display; then bring Kodi
             # forward again without waiting on Activity Manager.
@@ -424,11 +424,29 @@ class AdbEventClient(EventClient):
                 )
 
 
-def addon_version(adb: str, serial: str, addon_id: str) -> str | None:
+def addon_version(
+    adb: str,
+    serial: str,
+    addon_id: str,
+    rpc: JsonRpc | None = None,
+) -> str | None:
     path = "%s/addons/%s/addon.xml" % (KODI_ROOT, addon_id)
     manifest = shell(adb, serial, "sed -n '1,5p' '%s'" % path, check=False)
     match = re.search(r'<addon[^>]+version="([^"]+)"', manifest.replace("\n", " "))
-    return match.group(1) if match else None
+    if match:
+        return match.group(1)
+    if rpc is None:
+        return None
+    try:
+        details = rpc.call(
+            "Addons.GetAddonDetails",
+            {"addonid": addon_id, "properties": ["version"]},
+        )
+    except (OSError, RuntimeError, TimeoutError):
+        return None
+    addon = details.get("addon", {}) if isinstance(details, dict) else {}
+    version = addon.get("version") if isinstance(addon, dict) else None
+    return str(version) if version else None
 
 
 def kodi_version(adb: str, serial: str) -> str | None:
@@ -555,6 +573,12 @@ def plugin_url(case: dict, e2e_nonce: int | None = None) -> str:
     }
     meta.pop("navigation", None)
     meta["mediatype"] = meta.pop("media_type")
+    if not meta.get("premiered") and meta.get("year"):
+        # Direct E2E fixtures bypass Umbrella's metadata enrichment. Supply a
+        # valid date so the real source-results dialog follows the same path
+        # as normal library/search navigation instead of formatting an empty
+        # value.
+        meta["premiered"] = "%s-01-01" % meta["year"]
     params = dict(case)
     params.pop("media_type")
     params.pop("navigation", None)
@@ -908,7 +932,7 @@ def main() -> int:
             "kodi": kodi_version(args.adb, args.serial),
         },
         "addons": {
-            addon_id: addon_version(args.adb, args.serial, addon_id)
+            addon_id: addon_version(args.adb, args.serial, addon_id, rpc)
             for addon_id in sorted(ADDONS)
         },
         "settings": {
