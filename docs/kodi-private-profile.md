@@ -153,14 +153,40 @@ the already verified snapshot instead of replacing the whole profile:
   --serial 192.168.1.8:5555 \
   restore-path .kodi-private/snapshots/sony-20260727T101733Z \
   --allow-kodi-upgrade \
+  --allow-addon-upgrade \
   --path userdata/addon_data/plugin.video.umbrella/settings.xml
 ```
 
 `restore-path` accepts only exact paths present in the verified snapshot
-manifest, creates a minimal archive containing those paths, applies it inside
-Kodi, validates the restored file count, restarts Kodi so services cannot
-overwrite the restored values from stale memory, and removes all device-side
-staging files. It never prints settings or credentials.
+manifest and limits selective recovery to `userdata/`. For `addon_data`, it
+also requires the snapshotted add-on to be installed at the same version;
+`--allow-addon-upgrade` permits only an explicit forward move within the same
+major line. The command creates a minimal archive containing those paths,
+binds the result to a random operation ID and selection digest, serializes
+restore operations with a device lock, and retries EventServer delivery only
+until Kodi atomically acknowledges a single writer. After restarting Kodi and
+allowing add-on services to load, it verifies every ordinary file by size and
+SHA-256 inside Kodi before reporting success. An add-on `settings.xml` is
+applied through Kodi's settings API so an active service cannot overwrite it
+from stale memory, then verified by a canonical digest of the selected setting
+IDs and values. If an add-on rotates or rejects an OAuth token during startup,
+the strict post-restart check reports failure; refresh the source snapshot or
+re-authorize that account instead of treating the stale credential as a
+successful restore. A partial settings API failure is rolled back to its
+pre-image. All device-side staging files are then removed; if cleanup cannot be
+confirmed, the lock is retained for explicit recovery. The tool never prints
+settings or credentials.
+
+If the host process is interrupted and leaves the device lock behind, abort
+and recover it explicitly (this stops Kodi before removing any staging data):
+
+```bash
+.venv/bin/python tools/kodi_profile.py \
+  --serial 192.168.1.8:5555 \
+  recover-lock
+```
+
+Do not run `recover-lock` while a restore that you want to finish is active.
 
 The cleanup scope is deliberately fixed to the Kodi package and these paths:
 
