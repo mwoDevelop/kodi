@@ -1,3 +1,5 @@
+import subprocess
+
 import pytest
 
 from tools.certify_device_matrix import (
@@ -5,6 +7,8 @@ from tools.certify_device_matrix import (
     _allowed_origins,
     _forwarded_port,
     _latest_addons_database,
+    _redacted_diagnostic,
+    _run_functional_check,
 )
 
 
@@ -51,3 +55,77 @@ def test_dynamic_forward_port_is_validated():
     for invalid in ("", "tcp:46454", "0", "65536", "-1"):
         with pytest.raises(RuntimeError, match="dynamic forward port"):
             _forwarded_port(invalid)
+
+
+def test_functional_check_recovers_kodi_once_after_transient_failure(
+    monkeypatch, tmp_path
+):
+    report = tmp_path / "result.json"
+    attempts = []
+    recoveries = []
+
+    def fake_run(argv, env=None):
+        attempts.append((argv, env))
+        if len(attempts) == 1:
+            raise subprocess.CalledProcessError(
+                1,
+                argv,
+                stderr="failed https://example.invalid/?token=secret",
+            )
+        report.write_text('{"result":"passed"}\n', encoding="utf-8")
+
+    monkeypatch.setattr("tools.certify_device_matrix._run", fake_run)
+    monkeypatch.setattr(
+        "tools.certify_device_matrix._recover_kodi",
+        lambda *args: recoveries.append(args),
+    )
+
+    _run_functional_check(
+        "check",
+        ["python", "check.py"],
+        report,
+        {"TEST": "1"},
+        "adb",
+        5038,
+        "device",
+        12345,
+    )
+
+    assert len(attempts) == 2
+    assert len(recoveries) == 1
+    assert report.is_file()
+
+
+def test_functional_check_fails_after_two_attempts(monkeypatch, tmp_path):
+    report = tmp_path / "result.json"
+
+    def always_fail(argv, env=None):
+        raise subprocess.CalledProcessError(1, argv)
+
+    monkeypatch.setattr("tools.certify_device_matrix._run", always_fail)
+    monkeypatch.setattr(
+        "tools.certify_device_matrix._recover_kodi",
+        lambda *args: None,
+    )
+
+    with pytest.raises(RuntimeError, match="2 controlled attempts"):
+        _run_functional_check(
+            "check",
+            ["python", "check.py"],
+            report,
+            {},
+            "adb",
+            5038,
+            "device",
+            12345,
+        )
+
+
+def test_diagnostic_redacts_urls_and_credentials():
+    redacted = _redacted_diagnostic(
+        "open plugin://addon/path then https://example.invalid/?token=secret"
+    )
+
+    assert "plugin://" not in redacted
+    assert "https://" not in redacted
+    assert "secret" not in redacted

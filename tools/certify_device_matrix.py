@@ -25,7 +25,9 @@ from tools.snapshot_bundle import canonical_json, verify_bundle
 
 
 KODI_ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
-KODI_ACTIVITY = "org.xbmc.kodi/.Main"
+KODI_ACTIVITY = "org.xbmc.kodi/.Splash"
+MAX_CHECK_ATTEMPTS = 2
+STABLE_JSONRPC_PINGS = 3
 TESTING_ORIGIN = "repository.mwodevelop.testing"
 
 
@@ -87,6 +89,7 @@ def _wait_for_jsonrpc(host, port, timeout=45.0):
     )
     deadline = time.monotonic() + timeout
     last_error = None
+    consecutive_pings = 0
     while time.monotonic() < deadline:
         try:
             with socket.create_connection((host, port), timeout=2.0) as client:
@@ -94,11 +97,16 @@ def _wait_for_jsonrpc(host, port, timeout=45.0):
                 client.sendall(request)
                 response = json.loads(client.recv(4096).decode("utf-8"))
                 if response.get("result") == "pong":
-                    return
-                last_error = RuntimeError(
-                    "JSON-RPC returned an unexpected result"
-                )
+                    consecutive_pings += 1
+                    if consecutive_pings >= STABLE_JSONRPC_PINGS:
+                        return
+                else:
+                    consecutive_pings = 0
+                    last_error = RuntimeError(
+                        "JSON-RPC returned an unexpected result"
+                    )
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            consecutive_pings = 0
             last_error = error
         time.sleep(0.5)
     detail = ": %s" % last_error if last_error is not None else ""
@@ -106,6 +114,72 @@ def _wait_for_jsonrpc(host, port, timeout=45.0):
         "Kodi JSON-RPC did not become ready within %.0f seconds%s"
         % (timeout, detail)
     )
+
+
+def _recover_kodi(adb, server_port, endpoint, port):
+    _adb(
+        adb,
+        server_port,
+        endpoint,
+        "shell",
+        "am",
+        "start",
+        "-n",
+        KODI_ACTIVITY,
+    )
+    _wait_for_jsonrpc("127.0.0.1", port)
+
+
+def _redacted_diagnostic(value):
+    value = value or ""
+    value = re.sub(
+        r"(?i)\b(?:plugin|https?|magnet)://\S+",
+        "[REDACTED_URL]",
+        value,
+    )
+    value = re.sub(
+        r"(?i)\b(token|key|apikey|access_token|refresh_token|client_secret)"
+        r"=([^&\s]+)",
+        r"\1=[REDACTED]",
+        value,
+    )
+    return value.strip()[-4000:]
+
+
+def _run_functional_check(
+    name,
+    command,
+    report,
+    env,
+    adb,
+    server_port,
+    endpoint,
+    port,
+):
+    for attempt in range(1, MAX_CHECK_ATTEMPTS + 1):
+        report.unlink(missing_ok=True)
+        try:
+            _run([*command, "--result", str(report)], env=env)
+            if not report.is_file():
+                raise RuntimeError("%s did not create its result" % name)
+            return
+        except subprocess.CalledProcessError as error:
+            diagnostic = _redacted_diagnostic(
+                error.stderr or error.stdout
+            )
+            print(
+                "%s attempt %d/%d failed with exit %d"
+                % (name, attempt, MAX_CHECK_ATTEMPTS, error.returncode),
+                file=sys.stderr,
+            )
+            if diagnostic:
+                print(diagnostic, file=sys.stderr)
+            if attempt == MAX_CHECK_ATTEMPTS:
+                raise RuntimeError(
+                    "%s failed after %d controlled attempts"
+                    % (name, MAX_CHECK_ATTEMPTS)
+                ) from None
+            _recover_kodi(adb, server_port, endpoint, port)
 
 
 def _addon_state(
@@ -262,7 +336,16 @@ def _functional_checks(
         ]
         for name, command in commands:
             report = Path(temporary) / ("%s-%s.json" % (logical_id, name))
-            _run([*command, "--result", str(report)], env=env)
+            _run_functional_check(
+                name,
+                command,
+                report,
+                env,
+                adb,
+                server_port,
+                endpoint,
+                port,
+            )
             checks.append(
                 {
                     "name": name,

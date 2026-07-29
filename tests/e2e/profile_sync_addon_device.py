@@ -354,7 +354,7 @@ def _ensure_kodi_foreground(adb, port, serial):
         "am",
         "start",
         "-n",
-        KODI_PACKAGE + "/.Main",
+        KODI_PACKAGE + "/.Splash",
         text=True,
         timeout=15,
     )

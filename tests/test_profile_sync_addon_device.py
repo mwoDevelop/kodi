@@ -178,7 +178,7 @@ def test_foreground_wakes_android_without_blocking_am_start(monkeypatch):
         "am",
         "start",
         "-n",
-        "org.xbmc.kodi/.Main",
+        "org.xbmc.kodi/.Splash",
     )
     assert "-W" not in commands[1][0]
 
