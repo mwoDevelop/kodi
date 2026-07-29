@@ -19,16 +19,38 @@ The policy is defined in
 - top-level Kodi XML/JSON settings, sources, keymaps, playlists, and profiles;
 - each add-on's persistent `addon_data`, including Umbrella and Real-Debrid
   credentials;
+- content-addressed local artwork for WatchNixtoons2 favourites;
 - the selected skin's settings;
 - the exact Android Kodi APK needed to reproduce the installation.
 
 It excludes:
 
 - Kodi databases, thumbnails, peripheral data, logs, temporary files, and
-  downloaded add-on packages;
+downloaded add-on packages;
 - Umbrella artwork, provider, search, metadata, Trakt synchronization, and
   other rebuildable caches;
 - every add-on `cache/` and `temp/` directory.
+
+WatchNixtoons2 favourites are a deliberate exception to the generic thumbnail
+cache exclusion. During export, known legacy CDN URLs are normalized to the
+current image host, downloaded with bounded size and image validation, and
+stored under `userdata/favourite-artwork/`. `favourites.xml` then references a
+content-addressed `special://profile/` path. A small source manifest permits a
+later export to refresh the image; if the CDN is temporarily unavailable, the
+last verified local image is retained. Cookies and URL header suffixes are
+neither used nor persisted.
+
+To refresh the same portable artwork on live Android Kodi installations:
+
+```bash
+.venv/bin/python tools/kodi_favourite_artwork_rollout.py \
+  --serial 192.168.1.12:5555 \
+  --serial 192.168.1.8:5555
+```
+
+The rollout runs inside Kodi's own process, reports counts only, restarts Kodi
+so its favourites manager reloads the rewritten file, and removes staging
+files.
 
 Kodi rebuilds its add-on database after restore. Media-library databases are
 deferred from schema 1 because replacing a live Kodi database is not an atomic

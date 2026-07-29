@@ -21,6 +21,13 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
+try:
+    from tools.favourite_artwork import (
+        materialize as materialize_favourite_artwork,
+    )
+except ModuleNotFoundError:
+    from favourite_artwork import materialize as materialize_favourite_artwork
+
 
 SCHEMA = 1
 KODI_PACKAGE = "org.xbmc.kodi"
@@ -413,6 +420,20 @@ def _addon_inventory(payload_root, state):
     return result
 
 
+def _payload_inventory(payload_root):
+    result = {}
+    for path in sorted(Path(payload_root).rglob("*")):
+        if path.is_symlink():
+            raise ValueError("profile payload cannot contain links")
+        if path.is_file():
+            payload = path.read_bytes()
+            result[path.relative_to(payload_root).as_posix()] = {
+                "sha256": digest(payload),
+                "size": len(payload),
+            }
+    return result
+
+
 def create_snapshot(adb, port, serial, output, policy_path, repository_root):
     output = ensure_private_output(output, repository_root)
     if output.exists():
@@ -440,7 +461,12 @@ def create_snapshot(adb, port, serial, output, policy_path, repository_root):
         policy = load_policy(policy_path)
         payload_root = temporary / "payload"
         payload_root.mkdir(mode=0o700)
-        files = _extract_profile(adb, port, serial, payload_root, policy)
+        _extract_profile(adb, port, serial, payload_root, policy)
+        materialize_favourite_artwork(
+            payload_root / "userdata/favourites.xml",
+            payload_root / "userdata/favourite-artwork",
+        )
+        files = _payload_inventory(payload_root)
         apks = _copy_apks(adb, port, serial, temporary / "installer")
         identity = {
             "schema": SCHEMA,
@@ -626,8 +652,12 @@ class AdbEventClient:
         nc_family = ""
         destination = "127.0.0.1"
         if has_ipv6 and not has_ipv4:
-            nc_family = "-6 "
-            destination = "::1"
+            # Kodi's Android EventServer is exposed by netstat as an IPv6
+            # wildcard socket, but it is dual-stack. Some Android toybox
+            # netcat builds successfully send to ::1 yet Kodi never receives
+            # those datagrams. Use the socket's IPv4-mapped loopback path,
+            # which works without exposing EventServer beyond the device.
+            nc_family = "-4 "
         hello = (
             b"mwoDevelop Kodi profile restore\0"
             + bytes((0,))

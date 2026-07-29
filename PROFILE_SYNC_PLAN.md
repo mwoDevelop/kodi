@@ -661,6 +661,17 @@ Nie zawiera:
 Pełny snapshot disaster recovery pozostaje osobnym formatem i jest obsługiwany
 przez istniejące narzędzia hosta.
 
+Wyjątkiem od zakazu kopiowania cache są jawnie wybrane grafiki skrótów
+`favourites.xml`. Nie są one kopiowane z `userdata/Thumbnails`: adapter
+`favourite-artwork` pobiera wyłącznie dozwolone publiczne źródła artwork
+WatchNixtoons2, waliduje typ i limit rozmiaru, zapisuje pliki content-addressed
+pod `userdata/favourite-artwork/` i przepisuje skrót na
+`special://profile/favourite-artwork/...`. Manifest zachowuje tylko bezpieczny
+URL źródłowy bez cookies i pozwala odświeżyć grafikę przy następnym backupie.
+Awaria CDN zachowuje ostatnią zweryfikowaną kopię, a nie usuwa ikonę. W MVP
+mechanizm należy do disaster-recovery oraz jawnego rolloutu; włączenie go do
+routine sync wymaga osobnej typowanej klasy binarnego adaptera.
+
 MVP obsługuje wyłącznie domyślny profil Kodi w każdym katalogu danych. Wiele
 kont systemowych z osobnymi katalogami Flatpak jest obsługiwane jako wiele
 endpointów. Dopiero wykrycie dodatkowych profili wewnętrznych w jednym
