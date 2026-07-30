@@ -416,3 +416,4 @@ def test_testing_and_stable_publication_preserve_scanner_evidence():
     assert testing.count("upstream_security_scan.py verify") == 1
     assert "--pattern security-report.json" in stable
     assert stable.count("upstream_security_scan.py verify") == 1
+    assert "needs.materialize.outputs.deploy == 'true'" in stable

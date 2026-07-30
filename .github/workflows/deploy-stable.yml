@@ -7,6 +7,12 @@ on:
       - "manifests/locks/stable.json"
       - ".github/workflows/deploy-stable.yml"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Verify and compose exact stable bytes without deployment
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,6 +27,7 @@ jobs:
   materialize:
     runs-on: ubuntu-latest
     outputs:
+      deploy: ${{ steps.lock.outputs.deploy }}
       publish: ${{ steps.lock.outputs.publish }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -31,13 +38,21 @@ jobs:
           python-version: "3.12"
       - name: Identify snapshot-backed stable lock
         id: lock
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
         run: |
           schema="$(python -c 'import json; print(json.load(open("manifests/locks/stable.json"))["schema"])')"
           if [ "$schema" = "2" ]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "deploy=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "deploy=true" >> "$GITHUB_OUTPUT"
+            fi
           elif [ "$schema" = "1" ]; then
             echo "Legacy stable lock remains published; exact-snapshot migration is a separate reviewed promotion."
             echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
           else
             exit 1
           fi
@@ -170,13 +185,13 @@ jobs:
               raise SystemExit("composer did not preserve current testing")
           PY
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
-        if: steps.lock.outputs.publish == 'true'
+        if: steps.lock.outputs.deploy == 'true'
         with:
           path: dist
 
   deploy:
     needs: materialize
-    if: needs.materialize.outputs.publish == 'true'
+    if: needs.materialize.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
