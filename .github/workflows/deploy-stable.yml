@@ -60,6 +60,9 @@ jobs:
           test "${#snapshot_id}" -eq 64
           gh release download "testing-snapshot-$snapshot_id" \
             --pattern snapshot.tar --output promoted-snapshot.tar
+          gh release download "testing-snapshot-$snapshot_id" \
+            --pattern security-report.json \
+            --output promoted-security-report.json || true
       - name: Verify immutable stable provenance and locate current testing
         if: steps.lock.outputs.publish == 'true'
         env:
@@ -67,6 +70,36 @@ jobs:
         run: |
           python tools/snapshot_bundle.py verify promoted-snapshot.tar \
             > promoted-snapshot.json
+          snapshot_commit="$(
+            python -c 'import json; print(json.load(open("promoted-snapshot.json"))["repository_commit"])'
+          )"
+          evidence_required=false
+          if git cat-file -e \
+            "$snapshot_commit:manifests/upstream-security.json" 2>/dev/null; then
+            evidence_required=true
+          fi
+          if [ -f promoted-security-report.json ]; then
+            mkdir promoted-security-candidate
+            python tools/snapshot_bundle.py extract promoted-snapshot.tar \
+              --section payload \
+              --output promoted-security-candidate/payload >/dev/null
+            python tools/snapshot_bundle.py extract promoted-snapshot.tar \
+              --section promotion \
+              --output promoted-security-candidate/promotion >/dev/null
+            scanned_at="$(
+              python -c 'import json; print(json.load(open("promoted-security-report.json"))["scanned_at"])'
+            )"
+            python tools/upstream_security_scan.py verify \
+              --candidate promoted-security-candidate \
+              --report promoted-security-report.json \
+              --policy manifests/upstream-security.json \
+              --now "$scanned_at"
+          elif [ "$evidence_required" = true ]; then
+            echo "Scanner evidence is mandatory for this snapshot generation"
+            exit 1
+          else
+            echo "Grandfathering a snapshot created before the scanner policy"
+          fi
           curl --fail --silent --show-error \
             https://mwodevelop.github.io/kodi/testing/omega/addons.xml \
             --output public-testing-addons.xml

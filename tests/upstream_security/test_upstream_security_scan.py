@@ -399,3 +399,20 @@ def test_freshclam_runs_as_the_pinned_images_unprivileged_account():
     assert "--user=root" not in action
     assert "--cap-drop ALL" in action
     assert "--security-opt no-new-privileges" in action
+
+
+def test_testing_and_stable_publication_preserve_scanner_evidence():
+    testing = Path(".github/workflows/publish-testing.yml").read_text(
+        encoding="utf-8"
+    )
+    stable = Path(".github/workflows/deploy-stable.yml").read_text(
+        encoding="utf-8"
+    )
+    assert testing.index(
+        "Scan exact testing and promotion bytes before publication"
+    ) < testing.index("Create immutable snapshot bundle")
+    assert 'if [ "$DRY_RUN" = "true" ]' in testing
+    assert "snapshot.tar security-report.json" in testing
+    assert testing.count("upstream_security_scan.py verify") == 1
+    assert "--pattern security-report.json" in stable
+    assert stable.count("upstream_security_scan.py verify") == 1
