@@ -363,3 +363,13 @@ def test_manifest_rejects_moving_image_tags(tmp_path):
     path.write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(SecurityPolicyError, match="immutable"):
         load_policy(path)
+
+
+def test_freshclam_runs_as_the_pinned_images_unprivileged_account():
+    action = Path(
+        ".github/actions/upstream-malware-scan/action.yml"
+    ).read_text(encoding="utf-8")
+    assert "--user 1000:1000" in action
+    assert "--user=root" not in action
+    assert "--cap-drop ALL" in action
+    assert "--security-opt no-new-privileges" in action
