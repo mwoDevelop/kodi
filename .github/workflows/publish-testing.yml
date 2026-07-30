@@ -8,6 +8,11 @@ on:
         required: false
         type: boolean
         default: false
+      dry_run:
+        description: Build, test, and scan exact artifacts without snapshot or deployment
+        required: false
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths-ignore:
@@ -49,12 +54,28 @@ jobs:
           python tools/prepare_snapshot_promotion.py
           --testing-lock manifests/locks/testing.json
           --output promotion-dist
+      - name: Materialize exact normalized publication candidate
+        run: |
+          set -euo pipefail
+          mkdir -p security-candidate/payload security-candidate/promotion
+          cp -a dist/. security-candidate/payload/
+          cp -a promotion-dist/. security-candidate/promotion/
+          find security-candidate -type f -exec chmod 0644 {} +
+      - name: Scan exact testing and promotion bytes before publication
+        uses: ./.github/actions/upstream-malware-scan
+        with:
+          candidate-path: security-candidate
+          output: security-report.json
       - name: Detect byte-identical public output
         id: delta
         env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
           FORCE_SNAPSHOT: ${{ github.event_name == 'workflow_dispatch' && inputs.force_snapshot || false }}
         run: |
-          if curl --fail --silent --show-error \
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "snapshot=false" >> "$GITHUB_OUTPUT"
+          elif curl --fail --silent --show-error \
             https://mwodevelop.github.io/kodi/artifact-manifest.sha256 \
             --output public-artifact-manifest.sha256 &&
             cmp -s public-artifact-manifest.sha256 dist/artifact-manifest.sha256; then
@@ -85,7 +106,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: testing-snapshot
-          path: snapshot.tar
+          path: |
+            snapshot.tar
+            security-report.json
           retention-days: 90
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         if: steps.delta.outputs.publish == 'true'
@@ -110,15 +133,32 @@ jobs:
           SNAPSHOT_ID: ${{ needs.build.outputs.snapshot_id }}
         run: |
           python tools/snapshot_bundle.py verify snapshot.tar > verified-snapshot.json
+          mkdir verified-security-candidate
+          python tools/snapshot_bundle.py extract snapshot.tar \
+            --section payload \
+            --output verified-security-candidate/payload >/dev/null
+          python tools/snapshot_bundle.py extract snapshot.tar \
+            --section promotion \
+            --output verified-security-candidate/promotion >/dev/null
+          scanned_at="$(
+            python -c 'import json; print(json.load(open("security-report.json"))["scanned_at"])'
+          )"
+          python tools/upstream_security_scan.py verify \
+            --candidate verified-security-candidate \
+            --report security-report.json \
+            --policy manifests/upstream-security.json \
+            --now "$scanned_at"
           tag="testing-snapshot-$SNAPSHOT_ID"
           if gh release view "$tag" >/dev/null 2>&1; then
             mkdir existing
             gh release download "$tag" --pattern snapshot.tar --dir existing
+            gh release download "$tag" --pattern security-report.json --dir existing
             cmp snapshot.tar existing/snapshot.tar
+            cmp security-report.json existing/security-report.json
           else
-            gh release create "$tag" snapshot.tar \
+            gh release create "$tag" snapshot.tar security-report.json \
               --title "Kodi testing snapshot $SNAPSHOT_ID" \
-              --notes "Immutable testing snapshot. Promotion requires a separate reviewed workflow."
+              --notes "Immutable testing snapshot with content-bound malware-scan evidence. Promotion requires a separate reviewed workflow."
           fi
 
   deploy:

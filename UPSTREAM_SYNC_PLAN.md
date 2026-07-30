@@ -14,7 +14,10 @@ Raporty review i decyzje:
 
 - `docs/UPSTREAM_SYNC_PLAN_REVIEW.md` — review architektury bazowej;
 - `docs/UPSTREAM_SYNC_FULL_RELEASE_REVIEW_2026-07-29.md` — niezależny review
-  planu domknięcia do pełnego release.
+  planu domknięcia do pełnego release;
+- `docs/UPSTREAM_MALWARE_SCANNING_PLAN.md` — propozycja bezpłatnej,
+  fail-closed bramy ClamAV + analizy semantycznej przed wykonaniem i merge
+  kandydata; dokument wymaga osobnego review przed implementacją.
 
 ## 0. Stan realizacji na 2026-07-29
 
