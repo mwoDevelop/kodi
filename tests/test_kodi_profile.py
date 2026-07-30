@@ -128,6 +128,17 @@ def test_event_client_sends_from_host_when_tv_has_no_netcat(monkeypatch):
     assert all(packet.startswith(b"XBMC") for packet, _address in sent)
 
 
+def test_event_client_can_explicitly_retry_from_host(monkeypatch):
+    client = AdbEventClient("adb", 5037, "192.0.2.18:5555")
+    sent = []
+    monkeypatch.setattr(client, "_send_from_host", lambda packets: sent.extend(packets))
+
+    client.execute_builtin_from_host("Notification(test,retry)")
+
+    assert len(sent) == 3
+    assert all(packet.startswith(b"XBMC") for packet in sent)
+
+
 def test_profile_policy_includes_settings_and_excludes_cache():
     policy = json.loads(
         Path("manifests/kodi-profile-policy.json").read_text(encoding="utf-8")

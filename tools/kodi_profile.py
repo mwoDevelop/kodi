@@ -145,13 +145,16 @@ def adb_command(
     )
 
 
-def adb_output(adb, adb_server_port, serial, *args, text=True):
+def adb_output(
+    adb, adb_server_port, serial, *args, text=True, timeout=120
+):
     return adb_command(
         adb,
         adb_server_port,
         serial,
         *args,
         text=text,
+        timeout=timeout,
     ).stdout
 
 
@@ -633,6 +636,29 @@ class AdbEventClient:
             for packet in packets:
                 event_socket.sendto(packet, (host, 9777))
 
+    def _builtin_packets(self, command):
+        hello = (
+            b"mwoDevelop Kodi profile restore\0"
+            + bytes((0,))
+            + struct.pack("!H", 0)
+            + struct.pack("!I", 0)
+            + struct.pack("!I", 0)
+        )
+        action = bytes((self.ACTION_EXECBUILTIN,)) + command.encode() + b"\0"
+        packets = [
+            packet
+            for packet_type, payload in (
+                (self.PT_HELO, hello),
+                (self.PT_ACTION, action),
+                (self.PT_BYE, b""),
+            )
+            for packet in self._packets(packet_type, payload)
+        ]
+        return packets
+
+    def execute_builtin_from_host(self, command):
+        self._send_from_host(self._builtin_packets(command))
+
     def execute_builtin(self, command):
         listeners = adb_output(
             self.adb,
@@ -640,6 +666,7 @@ class AdbEventClient:
             self.serial,
             "shell",
             "netstat -anu 2>/dev/null | grep ':9777'",
+            timeout=10,
         )
         has_ipv4 = any(
             line.lstrip().startswith("udp ")
@@ -658,23 +685,7 @@ class AdbEventClient:
             # those datagrams. Use the socket's IPv4-mapped loopback path,
             # which works without exposing EventServer beyond the device.
             nc_family = "-4 "
-        hello = (
-            b"mwoDevelop Kodi profile restore\0"
-            + bytes((0,))
-            + struct.pack("!H", 0)
-            + struct.pack("!I", 0)
-            + struct.pack("!I", 0)
-        )
-        action = bytes((self.ACTION_EXECBUILTIN,)) + command.encode() + b"\0"
-        packets = [
-            packet
-            for packet_type, payload in (
-                (self.PT_HELO, hello),
-                (self.PT_ACTION, action),
-                (self.PT_BYE, b""),
-            )
-            for packet in self._packets(packet_type, payload)
-        ]
+        packets = self._builtin_packets(command)
         nc_probe = adb_command(
             self.adb,
             self.port,
