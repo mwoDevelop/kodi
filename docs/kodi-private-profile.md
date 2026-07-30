@@ -40,17 +40,64 @@ later export to refresh the image; if the CDN is temporarily unavailable, the
 last verified local image is retained. Cookies and URL header suffixes are
 neither used nor persisted.
 
-To refresh the same portable artwork on live Android Kodi installations:
+The routine profile service deliberately manages a small semantic settings
+allowlist; it does not carry user content or binary artwork. Favourites use a
+separate portable-state adapter so one complete canonical list and its exact
+content-addressed artwork set converge together.
+
+The authoritative private rollout membership, publisher and current network
+addresses live in the mode-`0600` `.env`:
 
 ```bash
-.venv/bin/python tools/kodi_favourite_artwork_rollout.py \
-  --serial 192.168.1.12:5555 \
-  --serial 192.168.1.8:5555
+KODI_SYNC_PUBLISHER=sony-tv
+KODI_SYNC_DEVICES=bluestacks1,sony-tv,bedroom-tv,x88pro20,nuc-mwo,nuc-alek
+KODI_DEVICE_SONY_TV_ADB=192.0.2.10:5555
+KODI_DEVICE_NUC_MWO_SSH_HOST=192.0.2.20
+KODI_PROFILE_SYNC_CHANNEL=home-stable
+KODI_PROFILE_SYNC_STARTUP_DELAY_SECONDS=15
+KODI_PROFILE_SYNC_INTERVAL_HOURS=6
+KODI_PROFILE_SYNC_READ_ONLY=true
 ```
 
-The rollout runs inside Kodi's own process, reports counts only, restarts Kodi
-so its favourites manager reloads the rewritten file, and removes staging
-files.
+Logical identity, platform, expected model and credentials references remain
+in `.kodi-private/devices.json`; `.env` is authoritative for membership and
+network endpoints. The selected publisher must also have the `publisher` role
+in that registry.
+
+Audit without changing favourites:
+
+```bash
+.venv/bin/python tools/kodi_portable_state_rollout.py audit \
+  --result .kodi-private/e2e/portable-state-audit.json
+```
+
+Converge every currently reachable target:
+
+```bash
+.venv/bin/python tools/kodi_portable_state_rollout.py sync \
+  --result .kodi-private/e2e/portable-state-sync.json
+```
+
+Before export, legacy WatchNixtoons2 actions are migrated to
+`plugin.video.watchnixtoons2.mwodevelop` and verified remote artwork is
+materialized. The publisher then creates a deterministic ZIP below
+`.kodi-private/portable-state/`. Every target validates the exact archive
+inventory, SHA-256 and referenced artwork set, applies it with a private
+journal and rollback, restarts Kodi only after a change, and verifies the
+result from inside Kodi. The same rollout configures the non-secret
+`mwoDevelop Profile Sync` identity and schedule per logical device. Enrollment
+tokens and signing seeds are never copied between devices. A repeated
+application returns `NO_CHANGE`.
+
+Until a persistent authenticated HTTPS backend is available, the identity
+profile remains deliberately `UNPAIRED` with an empty server URL. The device
+E2E uses a temporary verified backend and a distinct one-time enrollment for
+every device, then restores the previous identity settings and state. It must
+not leave a token tied to a temporary endpoint.
+
+Unavailable devices are reported and left unchanged. Linux/Flatpak remains
+read-only until its real in-process `special://profile` path is qualified; the
+tool never guesses a profile path for a write.
 
 Kodi rebuilds its add-on database after restore. Media-library databases are
 deferred from schema 1 because replacing a live Kodi database is not an atomic
@@ -112,8 +159,9 @@ restore mode. It stops Kodi, copies the already verified payload, lets Kodi
 rebuild its databases, enables the recorded add-ons, persists the selected
 skin, restarts Kodi, and validates the result over JSON-RPC.
 
-The tool prints counts and snapshot identifiers only. It never prints add-on
-settings, credentials, tokens, magnets, or resolved streaming URLs.
+The tools print counts and snapshot or bundle identifiers only. They never
+print add-on settings, credentials, tokens, magnets, or resolved streaming
+URLs.
 
 ## Clean reinstall from this host
 

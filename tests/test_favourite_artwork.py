@@ -63,9 +63,11 @@ def test_legacy_watch_artwork_is_rewritten_to_portable_file(tmp_path):
         "materialized": 1,
         "retained": 0,
         "failed": 0,
+        "migrated_actions": 1,
     }
     node = ET.parse(favourites).getroot().find("favourite")
     assert node.attrib["thumb"].startswith(ARTWORK_URI)
+    assert "plugin.video.watchnixtoons2.mwodevelop" in node.text
     assert requests[0].full_url == (
         "https://images.wcostream.com/catimg/775209.jpg"
     )
@@ -125,3 +127,29 @@ def test_non_watch_favourite_is_not_downloaded(tmp_path):
         "thumb"
     ] == remote
     assert not artwork.exists()
+
+
+def test_current_mwodevelop_favourite_is_materialized_without_action_change(
+    tmp_path,
+):
+    favourites = tmp_path / "favourites.xml"
+    artwork = tmp_path / "favourite-artwork"
+    _favourites(
+        favourites,
+        "https://images.wcostream.com/catimg/775209.jpg",
+        action=(
+            'ActivateWindow(10025,"plugin://'
+            "plugin.video.watchnixtoons2.mwodevelop/"
+            '?action=actionEpisodesMenu&url=%2fanime%2fbluey",return)'
+        ),
+    )
+
+    result = materialize(
+        favourites,
+        artwork,
+        opener=lambda request, timeout: Response(request),
+    )
+
+    assert result["matched"] == 1
+    assert result["materialized"] == 1
+    assert result["migrated_actions"] == 0

@@ -5,4 +5,5 @@ __pycache__/
 .e2e/
 .device-backups/
 .kodi-private/
+.env
 dist/

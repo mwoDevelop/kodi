@@ -13,7 +13,9 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 
-ADDON_ID = "plugin.video.watchnixtoons2"
+LEGACY_ADDON_ID = "plugin.video.watchnixtoons2"
+ADDON_ID = "plugin.video.watchnixtoons2.mwodevelop"
+ADDON_IDS = (LEGACY_ADDON_ID, ADDON_ID)
 ARTWORK_URI = "special://profile/favourite-artwork/"
 MANIFEST_NAME = "manifest.json"
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -68,6 +70,24 @@ def _favourite_id(node):
             }
         )
     ).hexdigest()
+
+
+def _migrate_action(action):
+    legacy = "plugin://%s/" % LEGACY_ADDON_ID
+    current = "plugin://%s/" % ADDON_ID
+    return action.replace(legacy, current)
+
+
+def _entry_for_thumbnail(entries, thumbnail):
+    if not thumbnail.startswith(ARTWORK_URI):
+        return {}
+    file_name = thumbnail[len(ARTWORK_URI) :]
+    if not file_name or "/" in file_name or "\\" in file_name:
+        return {}
+    for entry in entries.values():
+        if isinstance(entry, dict) and entry.get("file") == file_name:
+            return entry
+    return {}
 
 
 def _normalise_source(image_uri):
@@ -146,16 +166,31 @@ def materialize(favourites_path, artwork_directory, opener=None):
     manifest_path = artwork_directory / MANIFEST_NAME
     manifest = _load_manifest(manifest_path)
     entries = manifest["entries"]
-    counts = {"matched": 0, "materialized": 0, "retained": 0, "failed": 0}
+    active_entries = {}
+    counts = {
+        "matched": 0,
+        "materialized": 0,
+        "retained": 0,
+        "failed": 0,
+        "migrated_actions": 0,
+    }
     changed = False
 
     for node in root.findall("favourite"):
-        if ADDON_ID not in (node.text or ""):
+        action = node.text or ""
+        if not any(addon_id in action for addon_id in ADDON_IDS):
             continue
         counts["matched"] += 1
+        migrated_action = _migrate_action(action)
+        if migrated_action != action:
+            node.text = migrated_action
+            counts["migrated_actions"] += 1
+            changed = True
         favourite_id = _favourite_id(node)
         thumbnail = node.attrib.get("thumb", "")
         existing = entries.get(favourite_id, {})
+        if not existing:
+            existing = _entry_for_thumbnail(entries, thumbnail)
         if thumbnail.startswith(ARTWORK_URI):
             source_url = _normalise_source(existing.get("source_url", ""))
         else:
@@ -174,6 +209,7 @@ def materialize(favourites_path, artwork_directory, opener=None):
         except (OSError, ValueError):
             if local_path is not None and local_path.is_file():
                 counts["retained"] += 1
+                active_entries[favourite_id] = dict(existing)
             else:
                 counts["failed"] += 1
             continue
@@ -186,7 +222,7 @@ def materialize(favourites_path, artwork_directory, opener=None):
         if node.attrib.get("thumb") != portable_uri:
             node.set("thumb", portable_uri)
             changed = True
-        entries[favourite_id] = {
+        active_entries[favourite_id] = {
             "file": file_name,
             "sha256": sha256,
             "source_url": source_url,
@@ -199,10 +235,10 @@ def materialize(favourites_path, artwork_directory, opener=None):
             favourites_path,
             ET.tostring(root, encoding="utf-8") + b"\n",
         )
-    if counts["materialized"]:
+    if counts["materialized"] or counts["retained"]:
         _atomic_write(
             manifest_path,
-            _canonical_json({"schema": 1, "entries": entries}) + b"\n",
+            _canonical_json({"schema": 1, "entries": active_entries}) + b"\n",
         )
     return counts
 
