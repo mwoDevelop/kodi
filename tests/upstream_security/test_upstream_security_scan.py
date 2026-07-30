@@ -115,6 +115,30 @@ def test_clean_candidate_is_bound_and_verifiable(tmp_path, policy):
     assert verified["candidate_id"] == "a" * 64
 
 
+def test_clamav_coverage_excludes_only_contentless_files(tmp_path, policy):
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    (candidate / "empty.py").write_bytes(b"")
+    (candidate / "addon.py").write_text("VALUE = 1\n", encoding="utf-8")
+    inv = inventory(candidate, policy)
+    assert inv["coverage"]["files"] == 2
+    assert inv["coverage"]["clamav_files"] == 1
+    clamav, semgrep, gitleaks = _reports(tmp_path, scanned_files=1)
+    report = finalize(
+        inv,
+        policy,
+        clamav,
+        0,
+        CLAM_VERSION,
+        semgrep,
+        0,
+        gitleaks,
+        0,
+        scanned_at=NOW,
+    )
+    assert report["result"] == "clean"
+
+
 def test_changed_candidate_invalidates_report(tmp_path, policy):
     candidate = tmp_path / "candidate"
     candidate.mkdir()

@@ -389,6 +389,9 @@ def inventory(candidate, policy, candidate_id=None, archives=()):
             "archive_members": archive_budget.files,
             "archives": archive_budget.archives,
             "bytes": total,
+            "clamav_files": sum(
+                1 for item in files.values() if item["size"] > 0
+            ),
             "files": len(files),
         },
         "external_archives": external_archives,
@@ -516,7 +519,11 @@ def finalize(
     ):
         raise SecurityPolicyError("ClamAV output reports an incomplete scan")
     scanned = re.search(r"^Scanned files:\s*(\d+)$", clam_payload, re.MULTILINE)
-    if not scanned or int(scanned.group(1)) < inventory_document["coverage"]["files"]:
+    expected_clamav_files = inventory_document["coverage"].get(
+        "clamav_files",
+        inventory_document["coverage"]["files"],
+    )
+    if not scanned or int(scanned.group(1)) < expected_clamav_files:
         raise SecurityPolicyError("ClamAV did not cover every candidate file")
     if semgrep_exit not in {0, 1}:
         raise SecurityPolicyError("Semgrep scanner failed")
