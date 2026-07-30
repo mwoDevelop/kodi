@@ -354,6 +354,32 @@ def test_semgrep_and_gitleaks_findings_never_expose_secret(tmp_path, policy):
     assert "do not include me" not in rendered
 
 
+@pytest.mark.parametrize("engine", ("semgrep", "gitleaks"))
+def test_malformed_scanner_reports_are_fail_closed(tmp_path, policy, engine):
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    (candidate / "addon.py").write_text("VALUE = 1\n", encoding="utf-8")
+    inv = inventory(candidate, policy)
+    clamav, semgrep, gitleaks = _reports(tmp_path)
+    (semgrep if engine == "semgrep" else gitleaks).write_text(
+        "not-json\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SecurityPolicyError, match="report is invalid"):
+        finalize(
+            inv,
+            policy,
+            clamav,
+            0,
+            CLAM_VERSION,
+            semgrep,
+            0,
+            gitleaks,
+            0,
+            scanned_at=NOW,
+        )
+
+
 def test_manifest_rejects_moving_image_tags(tmp_path):
     document = json.loads(
         Path("manifests/upstream-security.json").read_text(encoding="utf-8")

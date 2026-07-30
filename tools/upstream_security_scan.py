@@ -377,7 +377,12 @@ def _clamav_findings(payload):
 
 
 def _semgrep_findings(path):
-    document = json.loads(Path(path).read_text(encoding="utf-8"))
+    try:
+        document = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise SecurityPolicyError("Semgrep report is invalid") from error
+    if not isinstance(document, dict):
+        raise SecurityPolicyError("Semgrep report is not an object")
     errors = document.get("errors", [])
     if errors:
         raise SecurityPolicyError("Semgrep report contains errors")
@@ -400,8 +405,11 @@ def _semgrep_findings(path):
 
 
 def _gitleaks_findings(path):
-    payload = Path(path).read_text(encoding="utf-8").strip()
-    document = json.loads(payload) if payload else []
+    try:
+        payload = Path(path).read_text(encoding="utf-8").strip()
+        document = json.loads(payload) if payload else []
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise SecurityPolicyError("Gitleaks report is invalid") from error
     if not isinstance(document, list):
         raise SecurityPolicyError("Gitleaks report is not a list")
     return [
@@ -642,16 +650,29 @@ def main():
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     except SecurityPolicyError as error:
-        print(
-            json.dumps(
-                {
-                    "schema": SCHEMA,
-                    "result": "scanner_unavailable",
-                    "error_type": type(error).__name__,
-                },
-                sort_keys=True,
-            )
-        )
+        failure = {
+            "schema": SCHEMA,
+            "result": "scanner_unavailable",
+            "error_type": type(error).__name__,
+        }
+        if args.command == "finalize":
+            try:
+                source = json.loads(
+                    Path(args.inventory).read_text(encoding="utf-8")
+                )
+                failure.update(
+                    {
+                        "candidate_id": source.get("candidate_id"),
+                        "payload_sha256": source.get("payload_sha256"),
+                        "policy_version": policy["policy_version"],
+                        "coverage": source.get("coverage"),
+                        "findings": [],
+                    }
+                )
+                _write(args.output, failure)
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                pass
+        print(json.dumps(failure, sort_keys=True))
         return 2
 
 
