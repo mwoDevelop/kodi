@@ -1110,3 +1110,63 @@ Zastosowanie OCP jest bramą przeglądu: nowa polityka downstream ma powstawać
 w osobnym module z testami; zmiana kodu upstream jest dopuszczalna tylko jako
 minimalne wywołanie tego rozszerzenia. Synchronizacja odtwarza mały stos
 patchy na czystym `upstream-master` i zatrzymuje się przy konflikcie.
+
+## 18. Niezależność wyszukiwania i rozwiązywania od QNAP
+
+QNAP może udostępniać opcjonalny, bezstanowy relay metadanych providera,
+preferowany na urządzeniach, na których publiczny Torrentio jest blokowany
+przez wyjście VPN. Nie jest on jednak źródłem prawdy ani elementem wymaganym
+do rozwiązywania źródeł. Docelowy przepływ pozostaje rozdzielony:
+
+1. MwoScrapers pobiera publiczne metadane i magnesy z Torrentio albo z
+   opcjonalnego Comet;
+2. relay QNAP, jeżeli skonfigurowany i dostępny, tylko pośredniczy w kroku 1;
+3. Umbrella deduplikuje źródła i dopiero ona używa autoryzacji Real-Debrid;
+4. dodanie magnesu, wybór pliku, uzyskanie odtwarzalnego URL i playback nie
+   przechodzą przez QNAP ani przez MwoScrapers.
+
+### 18.1 Diagnoza stanu
+
+- zinwentaryzować registry MwoScrapers, ustawienia Torrentio/Comet oraz
+  endpointy zapisane na każdym urządzeniu;
+- potwierdzić, że brak innych aktywnych providerów jest decyzją konfiguracyjną,
+  a nie błędem ładowania modułu;
+- w kontrolowanym E2E zebrać osobno dowód znalezienia źródeł przez provider
+  oraz dowód `add_magnet`/rozwiązania i odtwarzania przez Real-Debrid;
+- porównać wyszukiwanie przez QNAP, bezpośrednio przez publiczny endpoint oraz
+  przy celowo niedostępnym relayu, bez ujawniania endpointów, magnetów i
+  tokenów w raporcie.
+
+### 18.2 Generyczny fallback providerów
+
+- zachować skonfigurowany endpoint jako pierwszy kandydat;
+- w bazowym adapterze Stremio wyliczać uporządkowaną, zdeduplikowaną listę:
+  endpoint skonfigurowany, następnie kodowo zdefiniowany endpoint publiczny;
+- przechodzić do następnego endpointu wyłącznie po błędzie transportu,
+  timeoutie, niepoprawnym statusie HTTP albo niepoprawnym JSON/kontrakcie;
+- poprawnej odpowiedzi z pustą listą nie dublować zapytaniem do kolejnego
+  endpointu;
+- rozliczać health/quarantine dopiero po wyczerpaniu wszystkich kandydatów,
+  aby awaria QNAP nie quarantinowała sprawnego publicznego providera;
+- nie kopiować tej logiki do Torrentio i Comet: oba mają korzystać z jednego
+  punktu rozszerzenia bazowego adaptera zgodnie z OCP;
+- nigdy nie przekazywać do relaya ani providera tokenu Real-Debrid lub
+  rozwiązanego URL.
+
+### 18.3 Testy, rollout i kryteria akceptacji
+
+- testy jednostkowe obejmują: sukces relaya, awarię relaya i sukces publiczny,
+  awarię wszystkich kandydatów, pusty poprawny wynik bez fallbacku,
+  deduplikację identycznego endpointu oraz niezależną obsługę Torrentio/Comet;
+- E2E Kodi wykonuje co najmniej film i odcinek: z działającym relayem, z
+  publicznym endpointem oraz z niedostępnym relayem i automatycznym fallbackiem;
+- na urządzeniu z VPN, na którym publiczny Torrentio zwraca HTTP 403, test ma
+  jawnie wykazać ograniczenie środowiskowe: awaria QNAP nie może zablokować
+  próby publicznej, ale wynik może pozostać pusty, jeśli sam publiczny upstream
+  odrzuca adres VPN;
+- sukces pełnej ścieżki wymaga dowodu użycia Real-Debrid w Umbrelli oraz
+  co najmniej 12 sekund odtwarzania, a nie samej liczby znalezionych źródeł;
+- po testach opublikować nową wersję MwoScrapers tylko przy zmianie kodu
+  runtime, wdrożyć najpierw kanał testing, wykonać rollout na dostępne
+  urządzenia, a stable promować byte-for-byte po przejściu bram;
+- wersji `repository.mwodevelop` nie zmieniać.
