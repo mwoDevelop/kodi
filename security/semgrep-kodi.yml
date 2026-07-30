@@ -1,0 +1,41 @@
+rules:
+  - id: mwodevelop.remote-base64-exec
+    message: Decoded network or base64 payload is executed dynamically.
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      mwodevelop_action: block
+    pattern-either:
+      - pattern: exec(base64.b64decode(...))
+      - pattern: eval(base64.b64decode(...))
+      - pattern: exec(b64decode(...))
+      - pattern: eval(b64decode(...))
+      - pattern: exec(requests.get(...).text)
+      - pattern: eval(requests.get(...).text)
+      - pattern: exec(urllib.request.urlopen(...).read())
+      - pattern: eval(urllib.request.urlopen(...).read())
+
+  - id: mwodevelop.remote-shell-command
+    message: Network response is passed directly to a shell command.
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      mwodevelop_action: block
+    pattern-either:
+      - pattern: os.system(requests.get(...).text)
+      - pattern: subprocess.run(requests.get(...).text, ..., shell=True, ...)
+      - pattern: subprocess.Popen(requests.get(...).text, ..., shell=True, ...)
+      - pattern: subprocess.call(requests.get(...).text, ..., shell=True, ...)
+
+  - id: mwodevelop.disable-tls-verification-globally
+    message: Candidate globally disables TLS verification.
+    severity: WARNING
+    languages:
+      - python
+    metadata:
+      mwodevelop_action: security_review
+    pattern-either:
+      - pattern: ssl._create_default_https_context = ssl._create_unverified_context
+      - pattern: requests.packages.urllib3.disable_warnings(...)

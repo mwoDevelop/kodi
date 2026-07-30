@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "policy_version": "1.0.0",
+  "images": {
+    "clamav": "docker.io/clamav/clamav@sha256:9ea1c2bc1955c58d094bb3d168718d0173c7899096012523278ad76e06cc75a2",
+    "semgrep": "docker.io/semgrep/semgrep@sha256:d1012a3bf2acf47721216fbf7ff12d4c2971cc7f9c7b77cf6c6e9dcf006bd487",
+    "gitleaks": "ghcr.io/gitleaks/gitleaks@sha256:a6d5fa4bde3316d4ea9b969ebd3bd36a6529a31efdc5248f5779e6471196b85f"
+  },
+  "limits": {
+    "max_files": 20000,
+    "max_file_bytes": 67108864,
+    "max_total_bytes": 536870912,
+    "max_archive_depth": 8,
+    "max_compression_ratio": 1000,
+    "max_path_bytes": 4096,
+    "scan_timeout_seconds": 900
+  },
+  "attestation": {
+    "max_age_hours": 24,
+    "max_signature_age_hours": 48,
+    "clock_skew_seconds": 300
+  },
+  "semgrep_config": "security/semgrep-kodi.yml"
+}
