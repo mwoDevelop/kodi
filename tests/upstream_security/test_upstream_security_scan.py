@@ -10,6 +10,7 @@ import pytest
 
 from tools.upstream_security_scan import (
     SecurityPolicyError,
+    _finalize_error_code,
     finalize,
     inventory,
     load_policy,
@@ -378,6 +379,19 @@ def test_malformed_scanner_reports_are_fail_closed(tmp_path, policy, engine):
             0,
             scanned_at=NOW,
         )
+
+
+@pytest.mark.parametrize(
+    ("message", "code"),
+    (
+        ("ClamAV scanner failed", "clamav_scanner"),
+        ("Semgrep report contains errors", "semgrep_report_errors"),
+        ("Gitleaks report is invalid", "gitleaks_report"),
+        ("candidate path is secret.txt", "security_policy"),
+    ),
+)
+def test_finalize_errors_expose_only_curated_stage_codes(message, code):
+    assert _finalize_error_code(SecurityPolicyError(message)) == code
 
 
 def test_manifest_rejects_moving_image_tags(tmp_path):

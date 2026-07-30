@@ -38,6 +38,42 @@ class SecurityPolicyError(ValueError):
     """The candidate or scanner evidence violates the security policy."""
 
 
+FINALIZE_ERROR_CODES = (
+    ("inventory schema is unsupported", "inventory_schema"),
+    ("ClamAV version output is invalid", "clamav_version"),
+    ("ClamAV version output is incomplete", "clamav_version"),
+    ("ClamAV database date is invalid", "clamav_signature_time"),
+    ("ClamAV signature database is stale", "clamav_stale_signatures"),
+    ("ClamAV scanner failed", "clamav_scanner"),
+    ("ClamAV result contradicts its findings", "clamav_contradiction"),
+    ("ClamAV detection has no safe finding", "clamav_unsafe_finding"),
+    ("ClamAV output reports an incomplete scan", "clamav_incomplete"),
+    ("ClamAV did not cover every candidate file", "clamav_coverage"),
+    ("Semgrep scanner failed", "semgrep_scanner"),
+    ("Semgrep report is invalid", "semgrep_report"),
+    ("Semgrep report is not an object", "semgrep_report"),
+    ("Semgrep report contains errors", "semgrep_report_errors"),
+    ("Semgrep action is invalid", "semgrep_policy"),
+    ("Semgrep failed without a safe finding", "semgrep_unsafe_finding"),
+    ("Gitleaks scanner failed", "gitleaks_scanner"),
+    ("Gitleaks report is invalid", "gitleaks_report"),
+    ("Gitleaks report is not a list", "gitleaks_report"),
+    ("Gitleaks failed without a safe finding", "gitleaks_unsafe_finding"),
+)
+
+
+def _finalize_error_code(error):
+    message = str(error)
+    return next(
+        (
+            code
+            for prefix, code in FINALIZE_ERROR_CODES
+            if message.startswith(prefix)
+        ),
+        "security_policy",
+    )
+
+
 def _canonical(value):
     return (
         json.dumps(
@@ -656,6 +692,7 @@ def main():
             "error_type": type(error).__name__,
         }
         if args.command == "finalize":
+            failure["error_code"] = _finalize_error_code(error)
             try:
                 source = json.loads(
                     Path(args.inventory).read_text(encoding="utf-8")
