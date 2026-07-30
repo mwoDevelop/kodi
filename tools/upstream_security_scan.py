@@ -415,6 +415,14 @@ def _clamav_findings(payload):
     return findings
 
 
+def _scanner_path(value):
+    path = str(value).replace("\\", "/").lstrip("/")
+    for prefix in ("scan/", "src/"):
+        if path.startswith(prefix):
+            return path[len(prefix) :]
+    return path
+
+
 def _semgrep_findings(path):
     try:
         document = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -436,7 +444,7 @@ def _semgrep_findings(path):
             {
                 "action": action,
                 "engine": "semgrep",
-                "path": str(item.get("path", "")).replace("\\", "/").lstrip("/"),
+                "path": _scanner_path(item.get("path", "")),
                 "rule": str(item.get("check_id", "")),
             }
         )
@@ -454,7 +462,7 @@ def _gitleaks_findings(path):
     return [
         {
             "engine": "gitleaks",
-            "path": str(item.get("File", "")).replace("\\", "/").lstrip("/"),
+            "path": _scanner_path(item.get("File", "")),
             "rule": str(item.get("RuleID", "")),
             "fingerprint": _sha256(
                 str(item.get("Fingerprint", "")).encode("utf-8")
@@ -462,6 +470,56 @@ def _gitleaks_findings(path):
         }
         for item in document
     ]
+
+
+def _apply_baseline(findings, inventory_document, baseline):
+    if not baseline:
+        return findings, [], None
+    baseline_path = Path(baseline)
+    payload = baseline_path.read_bytes()
+    try:
+        document = json.loads(payload)
+    except (UnicodeError, json.JSONDecodeError) as error:
+        raise SecurityPolicyError("security baseline is invalid") from error
+    if set(document) != {"schema", "findings"} or document["schema"] != SCHEMA:
+        raise SecurityPolicyError("security baseline schema is unsupported")
+    entries = document["findings"]
+    if not isinstance(entries, list):
+        raise SecurityPolicyError("security baseline findings are invalid")
+    validated = []
+    for entry in entries:
+        if (
+            not isinstance(entry, dict)
+            or set(entry) != {"engine", "path", "rule", "sha256"}
+            or entry["engine"] not in {"clamav", "semgrep", "gitleaks"}
+            or not isinstance(entry["path"], str)
+            or not isinstance(entry["rule"], str)
+            or not SHA256.fullmatch(str(entry["sha256"]))
+        ):
+            raise SecurityPolicyError("security baseline entry is invalid")
+        validated.append(entry)
+    active = []
+    accepted = []
+    files = inventory_document["files"]
+    for finding in findings:
+        match = next(
+            (
+                entry
+                for entry in validated
+                if all(
+                    finding.get(field) == entry[field]
+                    for field in ("engine", "path", "rule")
+                )
+                and files.get(entry["path"], {}).get("sha256")
+                == entry["sha256"]
+            ),
+            None,
+        )
+        if match:
+            accepted.append(finding)
+        else:
+            active.append(finding)
+    return active, accepted, _sha256(payload)
 
 
 def _clam_version(value):
@@ -489,6 +547,7 @@ def finalize(
     semgrep_exit,
     gitleaks_report,
     gitleaks_exit,
+    baseline=None,
     scanned_at=None,
 ):
     if inventory_document.get("schema") != SCHEMA:
@@ -535,13 +594,26 @@ def finalize(
     gitleaks_findings = _gitleaks_findings(gitleaks_report)
     if gitleaks_exit == 1 and not gitleaks_findings:
         raise SecurityPolicyError("Gitleaks failed without a safe finding")
-    findings = clam_findings + semgrep_findings + gitleaks_findings
-    if clam_findings or gitleaks_findings or any(
-        item.get("action") == "block" for item in semgrep_findings
+    findings, baselined, baseline_sha256 = _apply_baseline(
+        clam_findings + semgrep_findings + gitleaks_findings,
+        inventory_document,
+        baseline,
+    )
+    active_clamav = [
+        item for item in findings if item["engine"] == "clamav"
+    ]
+    active_gitleaks = [
+        item for item in findings if item["engine"] == "gitleaks"
+    ]
+    active_semgrep = [
+        item for item in findings if item["engine"] == "semgrep"
+    ]
+    if active_clamav or active_gitleaks or any(
+        item.get("action") == "block" for item in active_semgrep
     ):
         result = "detected"
     elif any(
-        item.get("action") == "security_review" for item in semgrep_findings
+        item.get("action") == "security_review" for item in active_semgrep
     ):
         result = "security_review"
     else:
@@ -550,6 +622,7 @@ def finalize(
         "schema": SCHEMA,
         "candidate_id": inventory_document["candidate_id"],
         "payload_sha256": inventory_document["payload_sha256"],
+        "baseline_sha256": baseline_sha256,
         "policy_version": policy["policy_version"],
         "scanned_at": _iso(now),
         "scanner": {
@@ -564,27 +637,55 @@ def finalize(
         },
         "checks": {
             "archive_safety": "pass",
-            "clamav": "pass" if not clam_findings else "detected",
-            "gitleaks": "pass" if not gitleaks_findings else "detected",
+            "clamav": (
+                "detected"
+                if active_clamav
+                else (
+                    "pass_with_baseline"
+                    if any(item["engine"] == "clamav" for item in baselined)
+                    else "pass"
+                )
+            ),
+            "gitleaks": (
+                "detected"
+                if active_gitleaks
+                else (
+                    "pass_with_baseline"
+                    if any(item["engine"] == "gitleaks" for item in baselined)
+                    else "pass"
+                )
+            ),
             "semgrep": (
-                "pass"
-                if not semgrep_findings
+                (
+                    "pass_with_baseline"
+                    if any(item["engine"] == "semgrep" for item in baselined)
+                    else "pass"
+                )
+                if not active_semgrep
                 else (
                     "detected"
                     if any(
                         item.get("action") == "block"
-                        for item in semgrep_findings
+                        for item in active_semgrep
                     )
                     else "security_review"
                 )
             ),
         },
+        "baselined_findings": baselined,
         "findings": findings,
         "result": result,
     }
 
 
-def verify(candidate, report, policy, candidate_id=None, now=None):
+def verify(
+    candidate,
+    report,
+    policy,
+    candidate_id=None,
+    baseline=None,
+    now=None,
+):
     report_document = json.loads(Path(report).read_text(encoding="utf-8"))
     if report_document.get("schema") != SCHEMA:
         raise SecurityPolicyError("security report schema is unsupported")
@@ -596,6 +697,11 @@ def verify(candidate, report, policy, candidate_id=None, now=None):
             raise SecurityPolicyError("security report candidate binding differs")
     if report_document.get("policy_version") != policy["policy_version"]:
         raise SecurityPolicyError("security report policy version differs")
+    baseline_sha256 = (
+        _sha256(Path(baseline).read_bytes()) if baseline else None
+    )
+    if report_document.get("baseline_sha256") != baseline_sha256:
+        raise SecurityPolicyError("security report baseline differs")
     scanner = report_document.get("scanner", {})
     if scanner.get("images") != policy["images"]:
         raise SecurityPolicyError("security report scanner images differ")
@@ -644,12 +750,14 @@ def main():
     finalize_parser.add_argument("--semgrep-exit", type=int, required=True)
     finalize_parser.add_argument("--gitleaks-report", required=True)
     finalize_parser.add_argument("--gitleaks-exit", type=int, required=True)
+    finalize_parser.add_argument("--baseline")
     finalize_parser.add_argument("--scanned-at")
     finalize_parser.add_argument("--output", required=True)
 
     verify_parser = commands.add_parser("verify")
     verify_parser.add_argument("--candidate", required=True)
     verify_parser.add_argument("--candidate-id")
+    verify_parser.add_argument("--baseline")
     verify_parser.add_argument("--report", required=True)
     verify_parser.add_argument("--policy", required=True)
     verify_parser.add_argument("--now")
@@ -676,6 +784,7 @@ def main():
                 args.semgrep_exit,
                 args.gitleaks_report,
                 args.gitleaks_exit,
+                baseline=args.baseline,
                 scanned_at=args.scanned_at,
             )
             _write(args.output, result)
@@ -688,6 +797,7 @@ def main():
                 args.report,
                 policy,
                 candidate_id=args.candidate_id,
+                baseline=args.baseline,
                 now=args.now,
             )
         print(json.dumps(result, indent=2, sort_keys=True))

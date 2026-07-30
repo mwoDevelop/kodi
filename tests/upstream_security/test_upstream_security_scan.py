@@ -379,6 +379,83 @@ def test_semgrep_and_gitleaks_findings_never_expose_secret(tmp_path, policy):
     assert "do not include me" not in rendered
 
 
+def test_reviewed_baseline_is_bound_to_exact_file_bytes(tmp_path, policy):
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    source = candidate / "network.py"
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+    inv = inventory(candidate, policy)
+    clamav, semgrep, gitleaks = _reports(tmp_path)
+    semgrep.write_text(
+        json.dumps(
+            {
+                "errors": [],
+                "results": [
+                    {
+                        "check_id": "reviewed-tls",
+                        "path": "/src/network.py",
+                        "extra": {
+                            "metadata": {
+                                "mwodevelop_action": "security_review"
+                            }
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "findings": [
+                    {
+                        "engine": "semgrep",
+                        "path": "network.py",
+                        "rule": "reviewed-tls",
+                        "sha256": inv["files"]["network.py"]["sha256"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = finalize(
+        inv,
+        policy,
+        clamav,
+        0,
+        CLAM_VERSION,
+        semgrep,
+        1,
+        gitleaks,
+        0,
+        baseline=baseline,
+        scanned_at=NOW,
+    )
+    assert report["result"] == "clean"
+    assert report["findings"] == []
+    assert report["checks"]["semgrep"] == "pass_with_baseline"
+    destination = tmp_path / "report.json"
+    destination.write_text(json.dumps(report), encoding="utf-8")
+    verify(
+        candidate,
+        destination,
+        policy,
+        baseline=baseline,
+        now="2026-07-30T13:00:00Z",
+    )
+    with pytest.raises(SecurityPolicyError, match="baseline differs"):
+        verify(
+            candidate,
+            destination,
+            policy,
+            now="2026-07-30T13:00:00Z",
+        )
+
+
 @pytest.mark.parametrize("engine", ("semgrep", "gitleaks"))
 def test_malformed_scanner_reports_are_fail_closed(tmp_path, policy, engine):
     candidate = tmp_path / "candidate"
