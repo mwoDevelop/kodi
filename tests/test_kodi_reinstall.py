@@ -13,6 +13,7 @@ from tools.kodi_reinstall import (
     deploy_target,
     file_digest,
     installed_addon_origins,
+    installed_addon_origins_in_kodi,
     uninstall_and_clean,
 )
 
@@ -92,6 +93,55 @@ def test_origin_read_falls_back_to_in_kodi_for_scoped_storage(monkeypatch):
         ["plugin.video.umbrella"],
         origin_script="origin-script",
     ) == {"plugin.video.umbrella": "repository.mwodevelop"}
+
+
+def test_in_kodi_origin_read_retries_dropped_eventserver_command(monkeypatch):
+    clock = [0]
+    executions = []
+
+    class Events:
+        def __init__(self, *_args):
+            pass
+
+        def execute_builtin(self, command):
+            executions.append(command)
+
+    def command(*args, **_kwargs):
+        remote = args[4] if len(args) > 4 else ""
+        if remote.startswith("cat ") and len(executions) >= 2:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=(
+                    '{"ok":true,"origins":'
+                    '{"plugin.video.umbrella":"repository.mwodevelop"}}'
+                ),
+            )
+        return SimpleNamespace(returncode=1, stdout="")
+
+    monkeypatch.setattr("tools.kodi_reinstall.adb_command", command)
+    monkeypatch.setattr("tools.kodi_reinstall.AdbEventClient", Events)
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.time.monotonic",
+        lambda: clock[0],
+    )
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.time.sleep",
+        lambda seconds: clock.__setitem__(0, clock[0] + seconds),
+    )
+
+    origins = installed_addon_origins_in_kodi(
+        "adb",
+        5038,
+        "serial",
+        ["plugin.video.umbrella"],
+        "origin-script",
+        timeout=30,
+    )
+
+    assert origins == {
+        "plugin.video.umbrella": "repository.mwodevelop"
+    }
+    assert len(executions) == 2
 
 
 def test_deploy_uses_direct_adb_restore_mode(monkeypatch):
