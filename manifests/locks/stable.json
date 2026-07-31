@@ -1,11 +1,11 @@
 {
-  "attestation_sha256": "a1ac19d037a31f8dcf6d4f73822875ce12e9b8b0d80c1a836f29f0aaf56ec5e1",
+  "attestation_sha256": "0305dcbecb55ce3c2a21f5decf207512754cd99200507f5edb074de40a3a7637",
   "channel": "stable",
   "components": {
     "plugin.video.umbrella": {
-      "commit": "4b714050ac64ddb6fb22ced6bb008a322bc8dc5a",
-      "version": "6.7.81.18",
-      "zip_sha256": "ddac042c68d95128e1d075b71c48c052dd84906599bdc42236d7bcda3d3113cb"
+      "commit": "933c3bbd7fb68d6df8d6fc101d99ccb38a216fe7",
+      "version": "6.7.81.19",
+      "zip_sha256": "43178b7e3a14d526a9c34d83ea038e9d58647bff0b6e97b6b28ada2149c6cb10"
     },
     "plugin.video.watchnixtoons2.mwodevelop": {
       "commit": "83560a2a5ccf7ab56724183959688a42b63b9615",
@@ -13,13 +13,13 @@
       "zip_sha256": "01a84245391da1beef7bc65982b4d47dd517595c533296473b65763e6a1e2312"
     },
     "script.module.mwoscrapers": {
-      "commit": "e50595c6ba0971499d663079c8acc63b1efb117f",
+      "commit": "a1cad9102e429c2398300d312bf90f6cdb5db2cb",
       "provider_api": 1,
-      "version": "0.1.8",
-      "zip_sha256": "18d09f6cfc73d46669688a2e8cfd0c2233f54ec1418fd84109ebbf3532f3613f"
+      "version": "0.1.9",
+      "zip_sha256": "44e8b5b0abbca9b19756f379416d0644d2713d19ce4ad09e8059c8e4196028ff"
     },
     "script.mwoscrapers": {
-      "commit": "e50595c6ba0971499d663079c8acc63b1efb117f",
+      "commit": "a1cad9102e429c2398300d312bf90f6cdb5db2cb",
       "version": "0.1.1",
       "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
     },
@@ -30,7 +30,7 @@
     }
   },
   "schema": 2,
-  "source_artifact_manifest_sha256": "29ad5987707a32871d80c7ad1b93f4f624a889a7dd17c6127ec09b8df3a36af7",
-  "source_index_sha256": "dd97baf0d7cf96e4edf80e5f4eac91ce2abbb44f8e6036c86322d7154f15609a",
-  "source_snapshot_id": "b89c7205c1a6a40f573c24bc1a9e68725da066c3b5b49a50d5308ada05d50698"
+  "source_artifact_manifest_sha256": "fd7da965db28b34c7c0212e0718c7b7f407002cb79c84bb33a044e83b1caaf5d",
+  "source_index_sha256": "8b07506bb1e437b2128480c7ea1b09b80aab3f3a40233511e7bd9cd995d04ae9",
+  "source_snapshot_id": "b47fadd08c50b1d2c515b69221f3bcc6f7c048e3fa66da269450e5e5f3f6433b"
 }
