@@ -117,6 +117,20 @@ def ssh_responses(canonical="/home/kodi/.var/app/tv.kodi.Kodi/data"):
             + canonical
         ): "1000|directory\n",
         "pgrep -u 1000 -f 'tv.kodi.Kodi|/kodi( |$)'": (1, "", ""),
+        "cat " + canonical + "/temp/kodi.log": (
+            "2026-07-31 18:00:00 info: special://envhome/ is mapped to: /home/kodi\n"
+            "2026-07-31 18:00:00 info: special://home/ is mapped to: "
+            + canonical
+            + "\n"
+            "2026-07-31 18:00:00 info: special://masterprofile/ is mapped to: "
+            + canonical
+            + "/userdata\n"
+            "2026-07-31 18:00:00 info: special://profile/ is mapped to: "
+            "special://masterprofile/\n"
+        ),
+        "stat -Lc '%u|%F' -- " + canonical + "/temp/kodi.log": (
+            "1000|regular file\n"
+        ),
     }
 
 
@@ -182,8 +196,25 @@ def test_flatpak_lifecycle_read_only_probe(tmp_path):
     assert probe["abi"] == ["x86_64"]
     assert probe["running"] is False
     assert probe["data_root"].startswith("/home/kodi/")
-    assert probe["runtime_paths_qualified"] is False
-    assert probe["runtime_path_status"] == "REQUIRES_IN_PROCESS_KODI_PROBE"
+    assert probe["runtime_paths_qualified"] is True
+    assert probe["runtime_path_status"] == "QUALIFIED_FROM_KODI_RUNTIME_LOG"
+
+
+def test_flatpak_lifecycle_rejects_runtime_mapping_for_other_account(tmp_path):
+    identity, known_hosts = private_ssh_files(tmp_path)
+    responses = ssh_responses()
+    responses[
+        "cat /home/kodi/.var/app/tv.kodi.Kodi/data/temp/kodi.log"
+    ] = responses[
+        "cat /home/kodi/.var/app/tv.kodi.Kodi/data/temp/kodi.log"
+    ].replace("special://envhome/ is mapped to: /home/kodi", "special://envhome/ is mapped to: /home/other")
+    runner = FakeSshRunner(responses)
+    transport = SshTransport(
+        "private-linux", "kodi", identity, known_hosts, runner=runner
+    )
+
+    with pytest.raises(TransportError, match="runtime home differs"):
+        lifecycle_for_device(linux_device(), transport).probe_kodi()
 
 
 def test_flatpak_lifecycle_rejects_symlink_escape(tmp_path):

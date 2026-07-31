@@ -99,6 +99,53 @@ class FlatpakKodiLifecycle(KodiPlatformLifecycle):
             ReadOnlyCommand(tuple(argv), tuple(allowed_returncodes))
         )
 
+    def _qualify_runtime_paths(self, identity, canonical):
+        log_path = canonical / "temp" / "kodi.log"
+        log = self._execute(
+            ("cat", str(log_path)), allowed_returncodes=(0, 1)
+        )
+        if log.returncode != 0:
+            return None
+        metadata = self._execute(
+            ("stat", "-Lc", "%u|%F", "--", str(log_path))
+        ).stdout.strip()
+        owner, separator, file_type = metadata.partition("|")
+        if (
+            not separator
+            or owner != str(identity.uid)
+            or file_type != "regular file"
+        ):
+            raise TransportError("Flatpak Kodi runtime log has invalid owner or type")
+        mappings = {}
+        for name, value in re.findall(
+            r"special://(home|masterprofile|profile|envhome)/ is mapped to: (.+)$",
+            log.stdout,
+            flags=re.MULTILINE,
+        ):
+            mappings[name] = value.strip()
+        expected_profile = canonical / "userdata"
+        profile = mappings.get("profile")
+        if profile == "special://masterprofile/":
+            profile = mappings.get("masterprofile")
+        expected = {
+            "home": str(canonical),
+            "masterprofile": str(expected_profile),
+            "profile": str(expected_profile),
+            "envhome": identity.home,
+        }
+        if mappings.get("home") != expected["home"]:
+            raise TransportError("Flatpak special home differs from canonical data root")
+        if mappings.get("masterprofile") != expected["masterprofile"]:
+            raise TransportError("Flatpak master profile differs from data root")
+        if profile != expected["profile"]:
+            raise TransportError("Flatpak active profile differs from master profile")
+        if mappings.get("envhome") != expected["envhome"]:
+            raise TransportError("Flatpak runtime home differs from SSH account")
+        return {
+            "runtime_paths_qualified": True,
+            "runtime_path_status": "QUALIFIED_FROM_KODI_RUNTIME_LOG",
+        }
+
     def probe_kodi(self):
         identity = self.transport.probe_identity()
         expected = self.device["expected"]
@@ -167,6 +214,7 @@ class FlatpakKodiLifecycle(KodiPlatformLifecycle):
             ),
             allowed_returncodes=(0, 1),
         )
+        runtime_paths = self._qualify_runtime_paths(identity, canonical)
         return {
             "platform": self.device["platform"],
             "transport": identity.transport,
@@ -177,8 +225,14 @@ class FlatpakKodiLifecycle(KodiPlatformLifecycle):
             "kodi_version": version,
             "running": running_result.returncode == 0,
             "data_root": str(canonical),
-            "runtime_paths_qualified": False,
-            "runtime_path_status": "REQUIRES_IN_PROCESS_KODI_PROBE",
+            **(
+                runtime_paths
+                if runtime_paths is not None
+                else {
+                    "runtime_paths_qualified": False,
+                    "runtime_path_status": "REQUIRES_IN_PROCESS_KODI_PROBE",
+                }
+            ),
         }
 
 
