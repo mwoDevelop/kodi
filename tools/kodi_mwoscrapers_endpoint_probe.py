@@ -51,6 +51,33 @@ def _wait_report(adb, port, serial, deadline):
     return None
 
 
+def _execute_probe(adb, port, serial, command, deadline):
+    try:
+        with AdbJsonRpcClient(adb, port, serial) as rpc:
+            rpc.call(
+                "XBMC.ExecuteBuiltin",
+                {"command": command, "wait": False},
+            )
+        report = _wait_report(
+            adb,
+            port,
+            serial,
+            min(deadline, time.monotonic() + 12),
+        )
+    except (OSError, RuntimeError, TimeoutError):
+        report = None
+    events = AdbEventClient(adb, port, serial)
+    while report is None and time.monotonic() < deadline:
+        events.execute_builtin(command)
+        report = _wait_report(
+            adb,
+            port,
+            serial,
+            min(deadline, time.monotonic() + 10),
+        )
+    return report
+
+
 def probe(adb, port, serial, timeout):
     script = ROOT / "tests/e2e/kodi_mwoscrapers_endpoint_probe.py"
     try:
@@ -75,23 +102,13 @@ def probe(adb, port, serial, timeout):
         _wait_for_kodi_ready(adb, port, serial)
         deadline = time.monotonic() + timeout
         command = f"RunScript({REMOTE_SCRIPT},{REMOTE_REPORT})"
-        try:
-            with AdbJsonRpcClient(adb, port, serial) as rpc:
-                rpc.call(
-                    "XBMC.ExecuteBuiltin",
-                    {"command": command, "wait": False},
-                )
-            report = _wait_report(
-                adb,
-                port,
-                serial,
-                min(deadline, time.monotonic() + 12),
-            )
-        except (OSError, RuntimeError, TimeoutError):
-            report = None
-        if report is None:
-            AdbEventClient(adb, port, serial).execute_builtin(command)
-            report = _wait_report(adb, port, serial, deadline)
+        report = _execute_probe(
+            adb,
+            port,
+            serial,
+            command,
+            deadline,
+        )
         if report is None:
             raise TimeoutError("Kodi endpoint probe timed out")
         if not report.get("ok"):
