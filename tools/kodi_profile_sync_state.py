@@ -20,6 +20,7 @@ SAFE_CHANNEL = SAFE_LOGICAL_ID
 SETTING_IDS = (
     "enabled",
     "server_url",
+    "ca_certificate",
     "logical_device_id",
     "channel",
     "startup_delay_seconds",
@@ -101,6 +102,9 @@ def probe(addon, profile):
         "addon_version": addon.getAddonInfo("version"),
         "enabled": settings["enabled"].strip().casefold() == "true",
         **_server_summary(settings["server_url"]),
+        "ca_certificate_configured": bool(
+            settings["ca_certificate"].strip()
+        ),
         "logical_device_id": logical_id,
         "channel": channel,
         "startup_delay_seconds": settings["startup_delay_seconds"],
@@ -128,6 +132,7 @@ def configure(
     logical_device_id,
     channel,
     read_only,
+    ca_certificate=None,
 ):
     parsed = urlsplit(server_url)
     if (
@@ -143,6 +148,14 @@ def configure(
         raise ValueError("Profile Sync channel is invalid")
     if read_only not in {"true", "false"}:
         raise ValueError("Profile Sync read_only value is invalid")
+    ca_certificate = str(ca_certificate or "").strip()
+    if ca_certificate and parsed.scheme != "https":
+        raise ValueError("Profile Sync CA certificate requires HTTPS")
+    if ca_certificate and (
+        not ca_certificate.startswith("special://profile/")
+        or ".." in ca_certificate.split("/")
+    ):
+        raise ValueError("Profile Sync CA certificate path is invalid")
     state = _state_document(profile)
     enrollment = state.get("enrollment")
     if enrollment and (
@@ -154,6 +167,7 @@ def configure(
         )
     addon.setSetting("enabled", "true")
     addon.setSetting("server_url", server_url)
+    addon.setSetting("ca_certificate", ca_certificate)
     addon.setSetting("logical_device_id", logical_device_id)
     addon.setSetting("channel", channel)
     addon.setSetting("read_only", read_only)
@@ -218,7 +232,7 @@ def main():
         profile = xbmcvfs.translatePath(addon.getAddonInfo("profile"))
         if sys.argv[1] == "probe" and len(sys.argv) == 3:
             result = probe(addon, profile)
-        elif sys.argv[1] == "configure" and len(sys.argv) == 7:
+        elif sys.argv[1] == "configure" and len(sys.argv) in {7, 8}:
             result = configure(
                 addon,
                 profile,
@@ -226,6 +240,7 @@ def main():
                 sys.argv[4],
                 sys.argv[5],
                 sys.argv[6],
+                sys.argv[7] if len(sys.argv) == 8 else None,
             )
         elif sys.argv[1] == "configure-identity" and len(sys.argv) == 8:
             result = configure_identity(
