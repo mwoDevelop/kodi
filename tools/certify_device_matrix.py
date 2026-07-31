@@ -26,6 +26,7 @@ from tools.snapshot_bundle import canonical_json, verify_bundle
 
 KODI_ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
 KODI_ACTIVITY = "org.xbmc.kodi/.Splash"
+KODI_PACKAGE = "org.xbmc.kodi"
 MAX_CHECK_ATTEMPTS = 2
 STABLE_JSONRPC_PINGS = 3
 TESTING_ORIGIN = "repository.mwodevelop.testing"
@@ -117,6 +118,15 @@ def _wait_for_jsonrpc(host, port, timeout=45.0):
 
 
 def _recover_kodi(adb, server_port, endpoint, port):
+    _adb(
+        adb,
+        server_port,
+        endpoint,
+        "shell",
+        "am",
+        "force-stop",
+        KODI_PACKAGE,
+    )
     _adb(
         adb,
         server_port,
@@ -335,6 +345,10 @@ def _functional_checks(
             ),
         ]
         for name, command in commands:
+            # Android TV video initialization can temporarily starve Kodi's
+            # JSON-RPC server. Give each functional canary an isolated Kodi
+            # process so a previous codec/source cannot poison the next test.
+            _recover_kodi(adb, server_port, endpoint, port)
             report = Path(temporary) / ("%s-%s.json" % (logical_id, name))
             _run_functional_check(
                 name,
