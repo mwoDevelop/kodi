@@ -57,6 +57,28 @@ def _artifact(component, addon_id, commit, output):
     }
 
 
+def component_repository_targets(root, components, upstreams):
+    targets = {}
+    for config in upstreams.values():
+        target = config["target"]
+        targets[target["repository"]] = (
+            root / config["local_path"],
+            target["branch"],
+        )
+    for component in components.values():
+        repository = component["repository"]
+        if repository in targets:
+            continue
+        source = PurePosixPath(component["source"])
+        if source.is_absolute() or ".." in source.parts or not source.parts:
+            raise ValueError("component source must be a confined relative path")
+        targets[repository] = (
+            root / source.parts[0],
+            component.get("branch", "main"),
+        )
+    return targets
+
+
 def prepare(output, root=ROOT):
     root = Path(root).resolve()
     output = Path(output)
@@ -67,13 +89,9 @@ def prepare(output, root=ROOT):
     testing = load(root / TESTING_LOCK)
     stable = load(root / STABLE_LOCK)
     proposed = json.loads(json.dumps(testing))
-    repository_targets = {}
-    for config in upstreams.values():
-        target = config["target"]
-        repository_targets[target["repository"]] = (
-            root / config["local_path"],
-            target["branch"],
-        )
+    repository_targets = component_repository_targets(
+        root, components, upstreams
+    )
     changed = []
     target_heads = {}
     with tempfile.TemporaryDirectory(prefix="testing-lock-") as temporary:

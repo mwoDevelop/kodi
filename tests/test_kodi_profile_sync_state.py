@@ -10,6 +10,7 @@ class Addon:
         self.settings = {
             "enabled": "true",
             "server_url": "",
+            "ca_certificate": "",
             "logical_device_id": "",
             "channel": "home-stable",
             "startup_delay_seconds": "15",
@@ -59,6 +60,7 @@ def test_probe_redacts_server_and_secrets(tmp_path):
     assert result["has_access_token"] is True
     assert result["has_signing_seed"] is True
     assert result["server_url_configured"] is True
+    assert result["ca_certificate_configured"] is False
     assert "profile-sync.example.test" not in serialized
     assert "never-print" not in serialized
 
@@ -81,6 +83,36 @@ def test_configure_sets_per_device_identity_without_creating_credentials(
     assert result["paired"] is False
     assert result["has_access_token"] is False
     assert addon.settings["server_url"] == "http://127.0.0.1:18765"
+
+
+def test_configure_sets_private_ca_for_verified_https(tmp_path):
+    addon = Addon()
+
+    result = configure(
+        addon,
+        tmp_path,
+        "https://192.0.2.39:18765",
+        "x88pro20",
+        "home-stable",
+        "true",
+        "special://profile/addon_data/service.mwodevelop.profilesync/ca.pem",
+    )
+
+    assert result["ca_certificate_configured"] is True
+    assert addon.settings["ca_certificate"].startswith("special://profile/")
+
+
+def test_configure_rejects_private_ca_with_plain_http(tmp_path):
+    with pytest.raises(ValueError, match="requires HTTPS"):
+        configure(
+            Addon(),
+            tmp_path,
+            "http://127.0.0.1:18765",
+            "x88pro20",
+            "home-stable",
+            "true",
+            "special://profile/addon_data/service.mwodevelop.profilesync/ca.pem",
+        )
 
 
 def test_configure_refuses_to_relabel_existing_enrollment(tmp_path):
