@@ -9,10 +9,25 @@ from tools.qnap_profile_sync import (
     production_root,
     production_environment,
     production_backup_paths,
+    create_production_pairing,
     validate_production_files,
     qnap_connection_settings,
     smoke_root,
 )
+
+
+class PairingSession:
+    def __init__(self):
+        self.command = None
+
+    def execute(self, command, timeout=30):
+        self.command = command
+        assert timeout == 120
+        return (
+            '{"channel":"home-stable","code":"12345678",'
+            '"logical_device_id":"bluestacks1",'
+            '"target_tags":["android-emulator:x86_64","home"]}'
+        )
 
 
 def test_production_root_is_fixed_and_never_derived_from_input():
@@ -29,6 +44,35 @@ def test_production_backup_paths_follow_data_bind_mount():
     assert host == PurePosixPath(
         "/share/ProfileSync/data/backups/production-initial-20260731.sqlite"
     )
+
+
+def test_production_pairing_writes_code_only_to_private_file(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.container_station",
+        lambda _session: ("/container-station", "/usr/bin/docker"),
+    )
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.production_compose_command",
+        lambda _docker: "docker compose",
+    )
+    session = PairingSession()
+    output = tmp_path / "pairing.json"
+
+    result = create_production_pairing(
+        session,
+        "bluestacks1",
+        "home-stable",
+        ["home", "android-emulator:x86_64"],
+        output,
+    )
+
+    assert result["code_written"] is True
+    assert "12345678" not in str(result)
+    assert output.stat().st_mode & 0o077 == 0
+    assert '"code":"12345678"' in output.read_text()
+    assert "--target-tag android-emulator:x86_64" in session.command
 
 
 @pytest.mark.parametrize("backup_id", ("../escape", "/absolute", "x"))

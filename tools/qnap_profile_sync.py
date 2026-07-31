@@ -34,6 +34,8 @@ except ModuleNotFoundError:
 
 
 RUN_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,47}$")
+SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+TARGET_TAG = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,63}$")
 INSTALL_PATH = re.compile(
     r"^/share/[A-Za-z0-9._-]+/\.qpkg/container-station$"
 )
@@ -587,6 +589,64 @@ def download_production_backup(
     }
 
 
+def create_production_pairing(
+    session, logical_device_id, channel, target_tags, output
+):
+    if not SAFE_ID.fullmatch(logical_device_id):
+        raise QnapError("invalid logical device id")
+    if not SAFE_ID.fullmatch(channel):
+        raise QnapError("invalid profile sync channel")
+    target_tags = sorted(set(target_tags))
+    if any(not TARGET_TAG.fullmatch(tag) for tag in target_tags):
+        raise QnapError("invalid profile sync target tag")
+    output = Path(output)
+    if output.exists():
+        raise QnapError("pairing output already exists")
+    _install, docker = container_station(session)
+    command = (
+        production_compose_command(docker)
+        + " exec -T profile-sync python -m profile_sync_server.admin"
+        + " --database /data/state.sqlite create-pairing"
+        + " --logical-device-id "
+        + shlex.quote(logical_device_id)
+        + " --channel "
+        + shlex.quote(channel)
+    )
+    for target_tag in target_tags:
+        command += " --target-tag " + shlex.quote(target_tag)
+    payload = session.execute(command, timeout=120)
+    try:
+        document = json.loads(payload)
+    except json.JSONDecodeError as error:
+        raise QnapError("production pairing returned invalid JSON") from error
+    if (
+        document.get("logical_device_id") != logical_device_id
+        or document.get("channel") != channel
+        or document.get("target_tags") != target_tags
+        or not isinstance(document.get("code"), str)
+        or not re.fullmatch(r"[0-9]{8}", document["code"])
+    ):
+        raise QnapError("production pairing returned invalid identity")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(
+        output,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+        0o600,
+    )
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        json.dump(document, handle, sort_keys=True, separators=(",", ":"))
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    return {
+        "logical_device_id": logical_device_id,
+        "channel": channel,
+        "target_tags": target_tags,
+        "pairing_file": str(output),
+        "code_written": True,
+    }
+
+
 def smoke_deploy(session, repository, image, run_id):
     if not IMAGE.fullmatch(image):
         raise QnapError("smoke image must use an immutable GHCR digest")
@@ -813,6 +873,11 @@ def main():
     download_backup = subparsers.add_parser("download-production-backup")
     download_backup.add_argument("--backup-id", required=True)
     download_backup.add_argument("--output", required=True)
+    pairing = subparsers.add_parser("create-production-pairing")
+    pairing.add_argument("--logical-device-id", required=True)
+    pairing.add_argument("--channel", required=True)
+    pairing.add_argument("--target-tag", action="append", default=[])
+    pairing.add_argument("--output", required=True)
     destroy = subparsers.add_parser("destroy-smoke")
     destroy.add_argument("--run-id", required=True)
     args = parser.parse_args()
@@ -855,6 +920,14 @@ def main():
         elif args.command == "download-production-backup":
             result = download_production_backup(
                 session, args.backup_id, args.output
+            )
+        elif args.command == "create-production-pairing":
+            result = create_production_pairing(
+                session,
+                args.logical_device_id,
+                args.channel,
+                args.target_tag,
+                args.output,
             )
         else:
             result = destroy_smoke(session, args.run_id)

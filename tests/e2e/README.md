@@ -235,3 +235,29 @@ the original value, injects a failure after the first write of a second
 transaction, and requires rollback, quarantine, journal cleanup and exact
 settings restoration. Private Profile Sync state is restored byte-for-byte
 inside Kodi and never leaves the device.
+
+## Profile Sync production TLS and signed-report step
+
+Create a one-time pairing file on the host without printing the code, then
+configure or synchronize one Android endpoint through the real QNAP service:
+
+```bash
+python tools/qnap_profile_sync.py --references .env \
+  create-production-pairing \
+  --logical-device-id bluestacks1 --channel home-stable \
+  --target-tag home --target-tag android-emulator:x86_64 \
+  --output .kodi-private/profile-sync-production/pairing-bluestacks1.json
+PYTHONPATH=. .venv/bin/python \
+  tests/e2e/profile_sync_production_device.py \
+  --device bluestacks1 --devices .kodi-private/devices.json \
+  --server-url https://192.0.2.39:18765 \
+  --ca-certificate .kodi-private/profile-sync-production/tls/ca.crt \
+  --pairing-file \
+    .kodi-private/profile-sync-production/pairing-bluestacks1.json \
+  --channel home-stable --action configure
+```
+
+The in-Kodi probe copies only the public CA certificate, keeps enrollment
+secrets inside Kodi and emits a sanitized marker. `--action sync` additionally
+requires the signed assignment, exact revision apply and signed report to
+complete with no pending report.
