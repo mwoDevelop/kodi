@@ -709,41 +709,48 @@ def installed_addon_origins_in_kodi(
         adb_command(adb, port, serial, "push", mapping.name, ORIGIN_MAPPING)
     try:
         events = AdbEventClient(adb, port, serial)
-        adb_command(
-            adb,
-            port,
-            serial,
-            "shell",
-            "rm -f '%s'" % ORIGIN_MARKER,
-            check=False,
-        )
-        events.execute_builtin(
-            "RunScript(%s,%s,%s,read)"
-            % (ORIGIN_SCRIPT, ORIGIN_MAPPING, ORIGIN_MARKER)
-        )
         started = time.monotonic()
         while time.monotonic() - started < timeout:
-            marker = adb_command(
+            adb_command(
                 adb,
                 port,
                 serial,
                 "shell",
-                "cat '%s'" % ORIGIN_MARKER,
+                "rm -f '%s'" % ORIGIN_MARKER,
                 check=False,
-                text=True,
             )
-            if marker.returncode == 0 and marker.stdout.strip():
-                result = json.loads(marker.stdout)
-                if not result.get("ok"):
-                    raise RuntimeError(
-                        "Kodi origin read failed: %s"
-                        % result.get("error_type", "unknown")
-                    )
-                origins = result.get("origins")
-                if not isinstance(origins, dict):
-                    raise RuntimeError("Kodi origin read returned no mapping")
-                return origins
-            time.sleep(1)
+            events.execute_builtin(
+                "RunScript(%s,%s,%s,read)"
+                % (ORIGIN_SCRIPT, ORIGIN_MAPPING, ORIGIN_MARKER)
+            )
+            attempt = time.monotonic()
+            while (
+                time.monotonic() - attempt < 10
+                and time.monotonic() - started < timeout
+            ):
+                marker = adb_command(
+                    adb,
+                    port,
+                    serial,
+                    "shell",
+                    "cat '%s'" % ORIGIN_MARKER,
+                    check=False,
+                    text=True,
+                )
+                if marker.returncode == 0 and marker.stdout.strip():
+                    result = json.loads(marker.stdout)
+                    if not result.get("ok"):
+                        raise RuntimeError(
+                            "Kodi origin read failed: %s"
+                            % result.get("error_type", "unknown")
+                        )
+                    origins = result.get("origins")
+                    if not isinstance(origins, dict):
+                        raise RuntimeError(
+                            "Kodi origin read returned no mapping"
+                        )
+                    return origins
+                time.sleep(1)
         raise TimeoutError("Kodi origin read did not finish")
     finally:
         adb_command(
