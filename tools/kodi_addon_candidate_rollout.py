@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -43,7 +44,10 @@ def _marker(adb, port, serial):
 
 def _wait_marker(adb, port, serial, deadline):
     while time.monotonic() < deadline:
-        result = _marker(adb, port, serial)
+        try:
+            result = _marker(adb, port, serial)
+        except (OSError, subprocess.TimeoutExpired):
+            result = None
         if result is not None:
             return result
         time.sleep(1)
@@ -65,9 +69,24 @@ def _execute(adb, port, serial, command, deadline):
         )
     except (OSError, RuntimeError, TimeoutError):
         result = None
-    if result is None:
-        AdbEventClient(adb, port, serial).execute_builtin(command)
-        result = _wait_marker(adb, port, serial, deadline)
+    events = AdbEventClient(adb, port, serial)
+    while result is None and time.monotonic() < deadline:
+        try:
+            events.execute_builtin(command)
+        except (
+            OSError,
+            RuntimeError,
+            TimeoutError,
+            subprocess.TimeoutExpired,
+        ):
+            time.sleep(1)
+            continue
+        result = _wait_marker(
+            adb,
+            port,
+            serial,
+            min(deadline, time.monotonic() + 10),
+        )
     return result
 
 
@@ -146,6 +165,16 @@ def rollout(adb, port, serial, candidate, addon_id, version, timeout):
                     },
                 )
             addon = details.get("addon", {})
+            if str(addon.get("version")) == version and not addon.get(
+                "enabled"
+            ):
+                with AdbJsonRpcClient(adb, port, serial) as rpc:
+                    rpc.call(
+                        "Addons.SetAddonEnabled",
+                        {"addonid": addon_id, "enabled": True},
+                    )
+                time.sleep(1)
+                continue
             if (
                 str(addon.get("version")) == version
                 and addon.get("enabled")
@@ -156,15 +185,19 @@ def rollout(adb, port, serial, candidate, addon_id, version, timeout):
             raise RuntimeError("Kodi did not activate the candidate version")
         return {"addon": addon_id, "serial": serial, **result}
     finally:
-        adb_command(
-            adb,
-            port,
-            serial,
-            "shell",
-            "rm -f "
-            f"'{REMOTE_SCRIPT}' '{REMOTE_ZIP}' '{REMOTE_MARKER}'",
-            check=False,
-        )
+        try:
+            adb_command(
+                adb,
+                port,
+                serial,
+                "shell",
+                "rm -f "
+                f"'{REMOTE_SCRIPT}' '{REMOTE_ZIP}' '{REMOTE_MARKER}'",
+                check=False,
+                timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            pass
 
 
 def main():

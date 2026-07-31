@@ -2,9 +2,9 @@
   "channel": "testing",
   "components": {
     "plugin.video.umbrella": {
-      "commit": "4b714050ac64ddb6fb22ced6bb008a322bc8dc5a",
-      "version": "6.7.81.18",
-      "zip_sha256": "ddac042c68d95128e1d075b71c48c052dd84906599bdc42236d7bcda3d3113cb"
+      "commit": "933c3bbd7fb68d6df8d6fc101d99ccb38a216fe7",
+      "version": "6.7.81.19",
+      "zip_sha256": "43178b7e3a14d526a9c34d83ea038e9d58647bff0b6e97b6b28ada2149c6cb10"
     },
     "plugin.video.watchnixtoons2.mwodevelop": {
       "commit": "83560a2a5ccf7ab56724183959688a42b63b9615",
@@ -12,13 +12,13 @@
       "zip_sha256": "01a84245391da1beef7bc65982b4d47dd517595c533296473b65763e6a1e2312"
     },
     "script.module.mwoscrapers": {
-      "commit": "e50595c6ba0971499d663079c8acc63b1efb117f",
+      "commit": "a1cad9102e429c2398300d312bf90f6cdb5db2cb",
       "provider_api": 1,
-      "version": "0.1.8",
-      "zip_sha256": "18d09f6cfc73d46669688a2e8cfd0c2233f54ec1418fd84109ebbf3532f3613f"
+      "version": "0.1.9",
+      "zip_sha256": "44e8b5b0abbca9b19756f379416d0644d2713d19ce4ad09e8059c8e4196028ff"
     },
     "script.mwoscrapers": {
-      "commit": "e50595c6ba0971499d663079c8acc63b1efb117f",
+      "commit": "a1cad9102e429c2398300d312bf90f6cdb5db2cb",
       "version": "0.1.1",
       "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
     },

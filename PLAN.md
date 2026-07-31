@@ -356,6 +356,16 @@ Pierwsze wydanie nie włączy wszystkich providerów:
   opt-in;
 - ustawienia pozwolą włączyć każdy zakwalifikowany provider osobno.
 
+Stan po kwalifikacji 0.1.9 to dwa domyślnie aktywne, niezależne adaptery:
+Torrentio i Comet. Comet nie jest już oznaczony jako testowy po przejściu
+testów kontraktu, skanu malware oraz E2E na BlueStacks, X88, Sony i Bedroom
+TV. Kolejne źródło będzie dodawane pojedynczo i najpierw jako opt-in. Warunkiem
+awansu będzie jawna licencja i provenance, niezależna infrastruktura lub
+korpus wyników, deterministyczne fixture filmu i odcinka, izolowane timeouty,
+brak sekretów RD w providerze oraz matryca urządzeń z VPN i bez dostępnego
+QNAP. Preferowane są adaptery publicznego API o pokryciu uzupełniającym, a nie
+hurtowy import całych paczek Coco/Viper/Magneto.
+
 ### 5.6 Opcjonalny provider metadata relay
 
 VPN pozostaje włączony dla Kodi i całego ruchu Real-Debrid. Jeżeli publiczny

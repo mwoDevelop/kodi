@@ -59,6 +59,21 @@ repository over HTTP, installs Umbrella and recursively resolves MwoScrapers
 from the repository metadata, validates the provider contract, and compiles the
 downstream resolver.
 
+To align the provider configuration on an Android Kodi target and invalidate
+only Umbrella's provider cache, run:
+
+```bash
+python3 tools/kodi_mwoscrapers_configure.py \
+  --serial DEVICE \
+  --torrentio-endpoint https://torrentio.strem.fun \
+  --comet-endpoint https://comet.feels.legal
+```
+
+For a LAN device whose VPN exit is rejected by Torrentio, pass the private
+relay `/torrentio` endpoint instead. The adapter always retains its public
+Torrentio fallback; Comet, Real-Debrid credentials, magnet resolution and the
+final media URL never pass through that relay.
+
 ## Private Kodi configuration
 
 `tools/kodi_profile.py` exports and restores installed add-ons, their settings
