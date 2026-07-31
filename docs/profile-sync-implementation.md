@@ -161,9 +161,9 @@ seed values never leave Kodi.
 
 The production backend is active on QNAP using the immutable server 0.2.1
 multi-architecture image, a dedicated private CA and verified TLS. Live
-preflight reports RAID `[UU]` with no recovery in progress. The post-canary
-off-NAS backup passed authenticated decryption in memory and
-`PRAGMA integrity_check=ok` on schema 2.
+preflight reports RAID `[UU]` with no recovery in progress. The final
+post-rollout off-NAS backup passed authenticated decryption in memory and
+`PRAGMA integrity_check=ok` on schema 2 with three active device enrollments.
 
 Profile Sync 0.1.8 passed exact-snapshot certification on BlueStacks and X88,
 including production signed assignment, transactional apply, signed report

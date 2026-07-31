@@ -43,6 +43,12 @@ after the isolated test. Sony received a separate production enrollment. No
 pairing code, access token, signing seed or credential is present in this
 report. One-time pairing files were removed after use.
 
+After the Sony enrollment, backup `production-final-20260731` was downloaded
+from QNAP, encrypted off-NAS with AES-256-GCM and re-opened only in memory.
+SQLite reported schema 2, `integrity_check=ok`, three enrollments and two
+signed canary reports. The encrypted file has mode `0600`; the downloaded
+plaintext was removed.
+
 The X88 production probe exposed a lossy one-shot EventServer launch. The E2E
 harness now prefers JSON-RPC and falls back to EventServer. The isolated probe
 also now removes production state only inside its temporary transaction,
