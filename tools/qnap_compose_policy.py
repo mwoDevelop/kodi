@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import ipaddress
 import re
 import shutil
 import subprocess
@@ -20,6 +21,8 @@ PLACEHOLDER_IMAGE = (
 )
 SMOKE_LABEL = "io.mwodevelop.profile-sync.mode"
 KEY_TARGET = "/run/profile-sync/key-registry.json"
+TLS_CERT_TARGET = "/run/profile-sync/tls/server.crt"
+TLS_KEY_TARGET = "/run/profile-sync/tls/server.key"
 
 
 class PolicyError(ValueError):
@@ -115,20 +118,35 @@ def validate_policy(document, mode, allow_placeholder=False):
     if not re.fullmatch(r"[1-9][0-9]*:[1-9][0-9]*", user):
         raise PolicyError("container must use a numeric non-root UID:GID")
     port = _single(service.get("ports"), "ports")
+    host_ip = str(port.get("host_ip", ""))
     if (
-        port.get("host_ip") != "127.0.0.1"
-        or int(port.get("target", 0)) != 8765
+        int(port.get("target", 0)) != 8765
         or port.get("protocol") != "tcp"
     ):
-        raise PolicyError("API must be published only on QNAP loopback")
+        raise PolicyError("API must publish only its TLS listener")
+    try:
+        parsed_host = ipaddress.ip_address(host_ip)
+    except ValueError as error:
+        raise PolicyError("listener must use an explicit IP address") from error
+    if mode == "production" and (
+        parsed_host.is_loopback or parsed_host.is_unspecified
+    ):
+        raise PolicyError("production listener must use an explicit non-loopback IP")
+    if mode == "smoke" and not parsed_host.is_loopback:
+        raise PolicyError("smoke listener must remain on loopback")
     published = int(port.get("published", 0))
     if not 1024 <= published <= 65535:
         raise PolicyError("published port must be unprivileged")
     volumes = service.get("volumes")
-    if not isinstance(volumes, list) or len(volumes) != 2:
-        raise PolicyError("exactly two bind mounts are required")
+    if not isinstance(volumes, list) or len(volumes) != 4:
+        raise PolicyError("exactly four bind mount targets are required")
     by_target = {item.get("target"): item for item in volumes}
-    if set(by_target) != {"/data", KEY_TARGET}:
+    if set(by_target) != {
+        "/data",
+        KEY_TARGET,
+        TLS_CERT_TARGET,
+        TLS_KEY_TARGET,
+    }:
         raise PolicyError("unexpected bind mount target")
     explicit_bind_targets_from_source = set(
         document.get("_mwodevelop_source_policy", {}).get(
@@ -146,8 +164,19 @@ def validate_policy(document, mode, allow_placeholder=False):
         KEY_TARGET,
         explicit_bind_targets_from_source,
     )
-    if by_target[KEY_TARGET].get("read_only") is not True:
-        raise PolicyError("key registry must be read-only")
+    tls_cert_source = _absolute_source(
+        by_target[TLS_CERT_TARGET],
+        TLS_CERT_TARGET,
+        explicit_bind_targets_from_source,
+    )
+    tls_key_source = _absolute_source(
+        by_target[TLS_KEY_TARGET],
+        TLS_KEY_TARGET,
+        explicit_bind_targets_from_source,
+    )
+    for target in (KEY_TARGET, TLS_CERT_TARGET, TLS_KEY_TARGET):
+        if by_target[target].get("read_only") is not True:
+            raise PolicyError("security configuration must be read-only")
     tmpfs = service.get("tmpfs", [])
     if len(tmpfs) != 1 or not str(tmpfs[0]).startswith("/tmp:"):
         raise PolicyError("only the bounded /tmp tmpfs is allowed")
@@ -163,6 +192,9 @@ def validate_policy(document, mode, allow_placeholder=False):
             raise PolicyError("production data path is outside ProfileSync")
         if not key_source.startswith("/share/ProfileSync/config/"):
             raise PolicyError("production key registry is outside ProfileSync")
+        for source in (tls_cert_source, tls_key_source):
+            if not source.startswith("/share/ProfileSync/config/tls/"):
+                raise PolicyError("production TLS file is outside ProfileSync")
         if labels.get(SMOKE_LABEL) == "smoke":
             raise PolicyError("production cannot carry the smoke label")
     else:
@@ -172,13 +204,19 @@ def validate_policy(document, mode, allow_placeholder=False):
             raise PolicyError("smoke label is missing")
         if published == 18765:
             raise PolicyError("smoke cannot use the production port")
-        for source in (data_source, key_source):
+        for source in (
+            data_source,
+            key_source,
+            tls_cert_source,
+            tls_key_source,
+        ):
             if source.startswith("/share/ProfileSync"):
                 raise PolicyError("smoke cannot use production paths")
             if ".mwodevelop-smoke" not in source:
                 raise PolicyError("smoke path is not clearly isolated")
     return {
         "image_digest": match.group(1) if match else "placeholder",
+        "host_ip": host_ip,
         "mode": mode,
         "port": published,
         "project": document["name"],
