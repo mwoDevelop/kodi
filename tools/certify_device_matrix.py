@@ -9,7 +9,6 @@ import json
 import os
 import re
 import socket
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -21,14 +20,16 @@ sys.path.insert(0, str(ROOT))
 
 from tools.kodi_devices import load_registry, resolve_device
 from tools.kodi_inventory import inventory_device
+from tools.kodi_profile import AdbJsonRpcClient
+from tools.kodi_reinstall import installed_addon_origins
 from tools.snapshot_bundle import canonical_json, verify_bundle
 
 
-KODI_ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
 KODI_ACTIVITY = "org.xbmc.kodi/.Splash"
 KODI_PACKAGE = "org.xbmc.kodi"
 MAX_CHECK_ATTEMPTS = 2
 STABLE_JSONRPC_PINGS = 3
+KODI_SERVICE_WARMUP_SECONDS = 20
 TESTING_ORIGIN = "repository.mwodevelop.testing"
 
 
@@ -61,20 +62,6 @@ def _allowed_origins(testing, stable):
         )
         for addon_id, pin in testing.items()
     }
-
-
-def _latest_addons_database(listing):
-    candidates = [
-        item.strip()
-        for item in listing.splitlines()
-        if re.search(r"/Addons\d+\.db$", item.strip())
-    ]
-    if not candidates:
-        raise RuntimeError("Kodi add-on database is missing")
-    return max(
-        candidates,
-        key=lambda item: int(re.search(r"Addons(\d+)\.db$", item).group(1)),
-    )
 
 
 def _forwarded_port(output):
@@ -138,6 +125,10 @@ def _recover_kodi(adb, server_port, endpoint, port):
         KODI_ACTIVITY,
     )
     _wait_for_jsonrpc("127.0.0.1", port)
+    # JSON-RPC becomes available before EventServer and the video renderer on
+    # some Android TV builds. The canaries use both, so process readiness alone
+    # is not a sufficient recovery boundary.
+    time.sleep(KODI_SERVICE_WARMUP_SECONDS)
 
 
 def _redacted_diagnostic(value):
@@ -192,57 +183,41 @@ def _run_functional_check(
             _recover_kodi(adb, server_port, endpoint, port)
 
 
-def _addon_state(
-    adb, server_port, endpoint, expected, stable, temporary
-):
+def _addon_state(adb, server_port, endpoint, expected, stable):
     versions = {}
-    for addon_id, pin in sorted(expected.items()):
-        payload = _adb(
+    with AdbJsonRpcClient(adb, server_port, endpoint) as jsonrpc:
+        _recover_kodi(
             adb,
             server_port,
             endpoint,
-            "shell",
-            "cat",
-            "%s/addons/%s/addon.xml" % (KODI_ROOT, addon_id),
+            jsonrpc.local_port,
         )
-        match = re.search(r'<addon\b[^>]*\bversion="([^"]+)"', payload)
-        if not match or match.group(1) != pin["version"]:
-            raise RuntimeError(
-                "%s has version %r, expected %s"
-                % (addon_id, match.group(1) if match else None, pin["version"])
+        for addon_id, pin in sorted(expected.items()):
+            details = jsonrpc.call(
+                "Addons.GetAddonDetails",
+                {
+                    "addonid": addon_id,
+                    "properties": ["version"],
+                },
             )
-        versions[addon_id] = match.group(1)
-    database_remote = _latest_addons_database(
-        _adb(
-            adb,
-            server_port,
-            endpoint,
-            "shell",
-            "ls '%s/userdata/Database'/Addons*.db 2>/dev/null" % KODI_ROOT,
-        )
-    )
-    database = Path(temporary) / "addons.db"
-    _run(
-        [
-            adb,
-            "-P",
-            str(server_port),
-            "-s",
-            endpoint,
-            "pull",
-            database_remote,
-            str(database),
-        ]
-    )
-    placeholders = ",".join("?" for _ in expected)
-    with sqlite3.connect(database) as connection:
-        origins = dict(
-            connection.execute(
-                "SELECT addonID, origin FROM installed WHERE addonID IN (%s)"
-                % placeholders,
-                tuple(sorted(expected)),
+            version = (
+                details.get("addon", {}).get("version")
+                if isinstance(details, dict)
+                else None
             )
-        )
+            if version != pin["version"]:
+                raise RuntimeError(
+                    "%s has version %r, expected %s"
+                    % (addon_id, version, pin["version"])
+                )
+            versions[addon_id] = version
+    origins = installed_addon_origins(
+        adb,
+        server_port,
+        endpoint,
+        sorted(expected),
+        origin_script=ROOT / "tools/kodi_profile_origin_device.py",
+    )
     allowed = _allowed_origins(expected, stable)
     if set(origins) != set(expected) or any(
         origins[addon_id] not in allowed[addon_id] for addon_id in expected
@@ -423,7 +398,7 @@ def certify(
                 adb_server_port=server_port,
             )
             state = _addon_state(
-                adb, server_port, endpoint, expected, stable, temporary
+                adb, server_port, endpoint, expected, stable
             )
             checks = [
                 {
