@@ -62,6 +62,28 @@ On all three devices:
 Bedroom TV was unreachable at `192.168.1.18:5555` and NUC SSH was unreachable
 at `192.168.1.25:22`; both were skipped after TCP and neighbor checks failed.
 
+## X88 NordVPN limitation
+
+X88 has no active VPN tunnel. The previously installed `9.9.2` build was the
+mobile variant and refused to run on a TV. Google Play resolved the same
+mobile package because this X88 firmware does not identify as a supported
+Android TV target.
+
+The official NordVPN TV APK was downloaded from the
+[NordVPN Android TV page](https://nordvpn.com/download/android-tv/). Before
+installation, its signing-certificate SHA-256 was compared with the installed
+Google Play package and matched:
+`bc64ae0725af656b3b10b684cd1df4c9d6b7f81bc5dc32df3a3b2ce94ce61466`.
+The installed TV build is `9.9.2+sideload-tv`; its APK SHA-256 is
+`82e4b6828c7aeb973565f6f213016ce8beba52583a111d7e6f84655a4f94a3ce`.
+
+The TV build then displayed NordVPN's explicit "device not compatible"
+screen. NordVPN documents this condition as a hardware-backed KeyStore or
+device-certification limitation and recommends another certified device or a
+VPN router. No security or compatibility check was bypassed. The X88 Kodi
+results in this report therefore prove the stable release without VPN; Sony
+proves the same release with an active NordVPN `tun0` route.
+
 ## Provider independence
 
 The sanitized endpoint probe produced these live results:
