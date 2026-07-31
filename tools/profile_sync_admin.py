@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import ssl
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import urlencode, urlparse
@@ -23,7 +24,14 @@ def validate_base_url(value):
     raise ValueError("admin API must use HTTPS or loopback HTTP")
 
 
-def request(base, method, path, document=None, idempotency_key=None):
+def request(
+    base,
+    method,
+    path,
+    document=None,
+    idempotency_key=None,
+    ca_certificate=None,
+):
     payload = None
     headers = {"Accept": "application/json"}
     if document is not None:
@@ -32,9 +40,18 @@ def request(base, method, path, document=None, idempotency_key=None):
     if idempotency_key:
         headers["Idempotency-Key"] = idempotency_key
     try:
+        options = {"timeout": 15}
+        if base.startswith("https://"):
+            options["context"] = ssl.create_default_context(
+                cafile=str(Path(ca_certificate).resolve())
+                if ca_certificate
+                else None
+            )
+        elif ca_certificate:
+            raise ValueError("CA certificate requires an HTTPS admin API")
         with urlopen(
             Request(base + path, data=payload, headers=headers, method=method),
-            timeout=15,
+            **options,
         ) as response:
             return json.loads(response.read())
     except HTTPError as error:
@@ -51,6 +68,7 @@ def load_document(path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", default="http://127.0.0.1:8765")
+    parser.add_argument("--ca-certificate")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("health")
     revision = subparsers.add_parser("put-revision")
@@ -78,10 +96,16 @@ def main():
     args = parser.parse_args()
     base = validate_base_url(args.base)
     if args.command == "health":
-        result = request(base, "GET", "/health")
+        result = request(
+            base, "GET", "/health", ca_certificate=args.ca_certificate
+        )
     elif args.command == "put-revision":
         result = request(
-            base, "POST", "/v1/revisions", load_document(args.manifest)
+            base,
+            "POST",
+            "/v1/revisions",
+            load_document(args.manifest),
+            ca_certificate=args.ca_certificate,
         )
     elif args.command == "publish-candidate":
         result = request(
@@ -94,6 +118,7 @@ def main():
                 "expected_candidate_head": args.expected_candidate_head,
             },
             args.idempotency_key,
+            ca_certificate=args.ca_certificate,
         )
     elif args.command == "assign":
         result = request(
@@ -102,6 +127,7 @@ def main():
             "/v1/channels/%s/assignments" % args.channel,
             load_document(args.document),
             args.idempotency_key,
+            ca_certificate=args.ca_certificate,
         )
     elif args.command == "report":
         result = request(
@@ -110,6 +136,7 @@ def main():
             "/v1/reports",
             load_document(args.document),
             args.idempotency_key,
+            ca_certificate=args.ca_certificate,
         )
     elif args.command == "assignment":
         query = urlencode({"channel": args.channel})
@@ -118,6 +145,7 @@ def main():
             "GET",
             "/v1/enrollments/%s/assignment?%s"
             % (args.enrollment_id, query),
+            ca_certificate=args.ca_certificate,
         )
     else:
         result = request(
@@ -126,6 +154,7 @@ def main():
             "/v1/channels/%s/promote" % args.channel,
             load_document(args.document),
             args.idempotency_key,
+            ca_certificate=args.ca_certificate,
         )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
