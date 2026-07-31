@@ -902,7 +902,7 @@ def _prepare_server(repository, server_repository, root):
 
 
 def verify_device(
-    repository,
+    registry,
     logical_device_id,
     adb,
     adb_port,
@@ -914,7 +914,6 @@ def verify_device(
     expected_version,
     temporary,
 ):
-    registry = load_registry(repository / ".kodi-private/devices.json")
     device = resolve_device(registry, logical_device_id)
     serial = device["endpoints"]["adb"]
     model = adb_output(
@@ -1032,6 +1031,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", action="append")
     parser.add_argument(
+        "--devices",
+        type=Path,
+        default=repository / ".kodi-private/devices.json",
+    )
+    parser.add_argument(
         "--adb", default="/home/mwo/android-sdk/platform-tools/adb"
     )
     parser.add_argument("--adb-server-port", type=int, default=5038)
@@ -1061,7 +1065,7 @@ def main():
         ).read_text()
     )
     expected_version = lock["components"][ADDON_ID]["version"]
-    registry = load_registry(repository / ".kodi-private/devices.json")
+    registry = load_registry(args.devices.resolve())
     selected = args.device or sorted(registry["devices"])
     server_repository = args.server_repository.resolve()
     with tempfile.TemporaryDirectory(
@@ -1098,7 +1102,7 @@ def main():
                 (root / logical_device_id).mkdir()
             results = [
                 verify_device(
-                    repository,
+                    registry,
                     logical_device_id,
                     args.adb,
                     args.adb_server_port,
