@@ -1,6 +1,6 @@
 # Profile sync implementation status
 
-Date: 2026-07-30
+Date: 2026-07-31
 
 ## Implemented
 
@@ -59,7 +59,12 @@ Date: 2026-07-30
 - immutable server 0.1.0 GHCR manifest qualified for `linux/amd64` and
   `linux/arm/v7`;
 - isolated QNAP 6A smoke with `/ready`, database schema 2, process restart,
-  controlled unavailability/recovery and zero remaining Compose resources.
+  controlled unavailability/recovery and zero remaining Compose resources;
+- production QNAP lifecycle with a fixed managed root, healthy-RAID gate,
+  immutable-image enforcement, pinned SSH host key, verified TLS 1.2+ and
+  confined read-only security mounts;
+- online SQLite backup, atomic off-NAS download, AES-256-GCM encryption and a
+  successful decrypt plus SQLite integrity restore drill;
 - separate `kodi.favourites` portable-state adapter for user content that must
   not be embedded in semantic routine settings revisions;
 - deterministic exact-inventory bundle generation, bounded file/XML
@@ -154,16 +159,16 @@ seed values never leave Kodi.
 
 ## Deliberate blockers
 
-The backend has passed an isolated multiarch Container Station smoke, but
-production activation on the current QNAP remains blocked by:
+The production backend is active on QNAP using the immutable server 0.2.0
+multi-architecture image, a dedicated private CA and verified TLS. Live
+preflight reports RAID `[UU]` with no recovery in progress. The initial
+off-NAS backup passed authenticated encryption, byte-exact decryption and
+`PRAGMA integrity_check=ok` on schema 2.
 
-- missing confirmed encrypted off-NAS backup and successful restore drill;
-- no protected production admin API/key rotation;
-- no encrypted-secret feasibility result;
-
-Live preflight on 2026-07-29 reports RAID `[UU]` with no recovery in progress.
-This satisfies the array-health prerequisite, but does not replace the
-independent backup gate.
+Remaining rollout work is the signed production assignment/apply/rollback
+qualification in device order, followed by exact-candidate promotion. Client
+enrollment tokens remain device-local by design and are not copied into the
+portable profile or disaster-recovery archive.
 
 Linux/Flatpak host support additionally remains read-only until:
 

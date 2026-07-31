@@ -4,12 +4,18 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import ipaddress
 import json
+import os
 import re
 import shlex
 import stat
+import tempfile
 import time
 from pathlib import Path, PurePosixPath
+from urllib.request import urlopen
+import ssl
 
 try:
     from kodi_inventory import load_private_references
@@ -32,7 +38,10 @@ INSTALL_PATH = re.compile(
     r"^/share/[A-Za-z0-9._-]+/\.qpkg/container-station$"
 )
 SMOKE_PORT = 28765
-PROJECT = "qnap-profile-sync-smoke"
+PRODUCTION_PORT = 18765
+SMOKE_PROJECT = "qnap-profile-sync-smoke"
+PRODUCTION_PROJECT = "qnap-profile-sync"
+PRODUCTION_ROOT = PurePosixPath("/share/ProfileSync")
 SYNTHETIC_REGISTRY = {
     "schema": 1,
     "keys": {
@@ -80,6 +89,28 @@ class QnapSession:
             with sftp.open(remote_path, "w") as handle:
                 handle.write(text)
             sftp.chmod(remote_path, mode)
+
+    def download_file(self, remote_path, local_path):
+        local_path = Path(local_path)
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        if local_path.exists():
+            raise QnapError("local download target already exists")
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=".%s." % local_path.name,
+            dir=str(local_path.parent),
+        )
+        temporary = Path(temporary_name)
+        os.close(descriptor)
+        try:
+            with self.client.open_sftp() as sftp:
+                sftp.get(remote_path, str(temporary))
+            temporary.chmod(0o600)
+            try:
+                os.link(temporary, local_path)
+            except FileExistsError:
+                raise QnapError("local download target already exists") from None
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def close(self):
         self.client.close()
@@ -198,9 +229,9 @@ def preflight(session):
     }
 
 
-def status(session):
+def status(session, project=SMOKE_PROJECT):
     _install, docker = container_station(session)
-    label = shlex.quote("label=com.docker.compose.project=%s" % PROJECT)
+    label = shlex.quote("label=com.docker.compose.project=%s" % project)
     output = session.execute(
         docker + " ps -a --filter " + label + " --format '{{.Status}}'"
     )
@@ -214,7 +245,7 @@ def status(session):
     return {
         "containers": len(states),
         "networks": len([line for line in networks.splitlines() if line]),
-        "project": PROJECT,
+        "project": project,
         "states": states,
         "volumes": len([line for line in volumes.splitlines() if line]),
     }
@@ -229,12 +260,87 @@ def smoke_root(install, run_id):
     return share / ".mwodevelop-smoke" / run_id
 
 
+def production_root():
+    return PRODUCTION_ROOT
+
+
+def production_environment(image, host_ip):
+    if not IMAGE.fullmatch(image):
+        raise QnapError("production image must use an immutable GHCR digest")
+    try:
+        address = ipaddress.ip_address(host_ip)
+    except ValueError as error:
+        raise QnapError("production listener is not an IP address") from error
+    if address.is_loopback or address.is_unspecified:
+        raise QnapError("production listener must be explicit and non-loopback")
+    root = production_root()
+    return "\n".join(
+        (
+            "PROFILE_SYNC_IMAGE=%s" % image,
+            "PROFILE_SYNC_PORT=%s" % PRODUCTION_PORT,
+            "PROFILE_SYNC_HOST_IP=%s" % address,
+            "PROFILE_SYNC_DATA=%s" % (root / "data"),
+            "PROFILE_SYNC_KEY_REGISTRY=%s"
+            % (root / "config" / "key-registry.json"),
+            "PROFILE_SYNC_TLS_CERT=%s"
+            % (root / "config" / "tls" / "server.crt"),
+            "PROFILE_SYNC_TLS_KEY=%s"
+            % (root / "config" / "tls" / "server.key"),
+            "PROFILE_SYNC_UID=10001",
+            "PROFILE_SYNC_GID=10001",
+            "",
+        )
+    )
+
+
+def _local_regular_file(path, description, private=False):
+    path = Path(path).expanduser()
+    try:
+        metadata = path.lstat()
+    except OSError as error:
+        raise QnapError("%s does not exist" % description) from error
+    if not stat.S_ISREG(metadata.st_mode) or path.is_symlink():
+        raise QnapError("%s must be a regular non-symlink file" % description)
+    if private and stat.S_IMODE(metadata.st_mode) & 0o077:
+        raise QnapError("%s permissions are too broad" % description)
+    return path.resolve()
+
+
+def validate_production_files(key_registry, tls_certificate, tls_key):
+    registry = _local_regular_file(
+        key_registry, "key registry", private=True
+    )
+    certificate = _local_regular_file(tls_certificate, "TLS certificate")
+    key = _local_regular_file(tls_key, "TLS key", private=True)
+    try:
+        document = json.loads(registry.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise QnapError("key registry is invalid JSON") from error
+    if (
+        not isinstance(document, dict)
+        or document.get("schema") != 1
+        or not isinstance(document.get("keys"), dict)
+        or not document["keys"]
+    ):
+        raise QnapError("key registry has an invalid contract")
+    try:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(str(certificate), str(key))
+    except (OSError, ssl.SSLError) as error:
+        raise QnapError("TLS certificate and key do not form a valid pair") from error
+    return {
+        "key_registry": registry,
+        "tls_certificate": certificate,
+        "tls_key": key,
+    }
+
+
 def compose_command(docker, root):
     root = str(root)
     return (
         docker
         + " compose --project-name "
-        + PROJECT
+        + SMOKE_PROJECT
         + " --env-file "
         + shlex.quote(root + "/smoke.env")
         + " -f "
@@ -242,6 +348,243 @@ def compose_command(docker, root):
         + " -f "
         + shlex.quote(root + "/compose.smoke.yaml")
     )
+
+
+def production_compose_command(docker):
+    root = production_root()
+    return (
+        docker
+        + " compose --project-name "
+        + PRODUCTION_PROJECT
+        + " --env-file "
+        + shlex.quote(str(root / "app" / "production.env"))
+        + " -f "
+        + shlex.quote(str(root / "app" / "compose.yaml"))
+    )
+
+
+def verify_production(host_ip, ca_certificate, attempts=45):
+    ca_certificate = _local_regular_file(
+        ca_certificate, "TLS CA certificate"
+    )
+    context = ssl.create_default_context(cafile=str(ca_certificate))
+    endpoint = "https://%s:%s/ready" % (host_ip, PRODUCTION_PORT)
+    last_error = None
+    for _attempt in range(attempts):
+        try:
+            with urlopen(endpoint, timeout=5, context=context) as response:
+                document = json.loads(response.read())
+            if (
+                document.get("status") == "ready"
+                and document.get("mode") == "verified-tls"
+                and document.get("database_schema") == 2
+                and document.get("service") == "kodi-profile-sync-server"
+            ):
+                return {
+                    key: document[key]
+                    for key in (
+                        "api_version",
+                        "build",
+                        "database_schema",
+                        "mode",
+                        "service",
+                        "status",
+                        "version",
+                    )
+                }
+        except Exception as error:
+            last_error = error
+        time.sleep(2)
+    raise QnapError("production HTTPS readiness failed") from last_error
+
+
+def deploy_production(
+    session,
+    repository,
+    image,
+    host_ip,
+    key_registry,
+    tls_certificate,
+    tls_key,
+    ca_certificate,
+):
+    report = preflight(session)
+    if report["raid"] != {"array": "UU", "recovery_percent": None}:
+        raise QnapError("production deployment requires healthy RAID [UU]")
+    security = validate_production_files(
+        key_registry, tls_certificate, tls_key
+    )
+    _local_regular_file(ca_certificate, "TLS CA certificate")
+    _install, docker = container_station(session)
+    root = production_root()
+    app = root / "app"
+    data = root / "data"
+    backups = root / "backups"
+    config = root / "config"
+    tls = config / "tls"
+    marker = app / ".managed-by-mwodevelop"
+    exists = session.execute(
+        "test -e {root} && printf exists".format(
+            root=shlex.quote(str(root))
+        ),
+        allowed=(0, 1),
+    )
+    if exists:
+        managed = session.execute(
+            "test -f {marker} && printf managed".format(
+                marker=shlex.quote(str(marker))
+            ),
+            allowed=(0, 1),
+        )
+        if not managed:
+            raise QnapError("existing production root is not managed")
+    session.execute(
+        "mkdir -p {app} {data} {backups} {tls}".format(
+            app=shlex.quote(str(app)),
+            data=shlex.quote(str(data)),
+            backups=shlex.quote(str(backups)),
+            tls=shlex.quote(str(tls)),
+        )
+    )
+    deployment = Path(repository) / "deploy" / "qnap-profile-sync"
+    compose_source = (deployment / "compose.yaml").read_text(
+        encoding="utf-8"
+    )
+    session.upload_text(str(app / "compose.yaml"), compose_source, 0o600)
+    session.upload_text(
+        str(app / "production.env"),
+        production_environment(image, host_ip),
+        0o600,
+    )
+    session.upload_text(str(marker), "profile-sync-production-v1\n", 0o600)
+    session.upload_text(
+        str(config / "key-registry.json"),
+        security["key_registry"].read_text(encoding="utf-8"),
+        0o400,
+    )
+    session.upload_text(
+        str(tls / "server.crt"),
+        security["tls_certificate"].read_text(encoding="utf-8"),
+        0o400,
+    )
+    session.upload_text(
+        str(tls / "server.key"),
+        security["tls_key"].read_text(encoding="utf-8"),
+        0o400,
+    )
+    session.execute(
+        "chown -R 10001:10001 {data} {backups} "
+        "&& chown 10001:10001 {registry} {cert} {key}".format(
+            data=shlex.quote(str(data)),
+            backups=shlex.quote(str(backups)),
+            registry=shlex.quote(str(config / "key-registry.json")),
+            cert=shlex.quote(str(tls / "server.crt")),
+            key=shlex.quote(str(tls / "server.key")),
+        )
+    )
+    compose = production_compose_command(docker)
+    rendered_payload = session.execute(
+        compose + " config --format json --no-normalize"
+    )
+    try:
+        rendered = json.loads(rendered_payload)
+    except json.JSONDecodeError as error:
+        raise QnapError("remote Compose returned invalid policy JSON") from error
+    rendered["_mwodevelop_source_policy"] = {
+        "bind_create_host_path_false": sorted(
+            explicit_bind_targets(compose_source)
+        )
+    }
+    policy = validate_policy(rendered, "production")
+    session.execute(compose + " up -d --pull always", timeout=360)
+    ready = verify_production(host_ip, ca_certificate)
+    resources = status(session, PRODUCTION_PROJECT)
+    if (
+        resources["containers"] != 1
+        or resources["networks"] != 1
+        or resources["volumes"] != 0
+    ):
+        raise QnapError("production project has unexpected resources")
+    return {
+        "policy": policy,
+        "preflight": report,
+        "ready": ready,
+        "resources": resources,
+    }
+
+
+def backup_production(session, backup_id, output):
+    if not RUN_ID.fullmatch(backup_id):
+        raise QnapError("invalid backup id")
+    output = Path(output)
+    if output.exists():
+        raise QnapError("local backup output already exists")
+    _install, docker = container_station(session)
+    compose = production_compose_command(docker)
+    remote_container_path = "/data/backups/%s.sqlite" % backup_id
+    result_payload = session.execute(
+        compose
+        + " exec -T profile-sync python -m profile_sync_server.admin "
+        + "--database /data/state.sqlite backup --output "
+        + shlex.quote(remote_container_path),
+        timeout=120,
+    )
+    try:
+        result = json.loads(result_payload)
+    except json.JSONDecodeError as error:
+        raise QnapError("production backup returned invalid JSON") from error
+    return download_production_backup(
+        session,
+        backup_id,
+        output,
+        expected_sha256=result.get("sha256"),
+    )
+
+
+def production_backup_paths(backup_id):
+    if not RUN_ID.fullmatch(backup_id):
+        raise QnapError("invalid backup id")
+    filename = backup_id + ".sqlite"
+    return (
+        PurePosixPath("/data/backups") / filename,
+        production_root() / "data" / "backups" / filename,
+    )
+
+
+def download_production_backup(
+    session, backup_id, output, expected_sha256=None
+):
+    container_path, host_path = production_backup_paths(backup_id)
+    output = Path(output)
+    if output.exists():
+        raise QnapError("local backup output already exists")
+    _install, docker = container_station(session)
+    compose = production_compose_command(docker)
+    if expected_sha256 is None:
+        checksum = session.execute(
+            compose
+            + " exec -T profile-sync sha256sum "
+            + shlex.quote(str(container_path)),
+            timeout=120,
+        )
+        fields = checksum.split()
+        if len(fields) != 2 or not re.fullmatch(r"[0-9a-f]{64}", fields[0]):
+            raise QnapError("production backup returned invalid checksum")
+        expected_sha256 = fields[0]
+    if not isinstance(expected_sha256, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", expected_sha256
+    ):
+        raise QnapError("production backup returned invalid checksum")
+    session.download_file(str(host_path), output)
+    digest = hashlib.sha256(output.read_bytes()).hexdigest()
+    if digest != expected_sha256:
+        output.unlink(missing_ok=True)
+        raise QnapError("downloaded backup digest differs")
+    return {
+        "backup_id": backup_id,
+        "bytes": output.stat().st_size,
+        "sha256": digest,
+    }
 
 
 def smoke_deploy(session, repository, image, run_id):
@@ -256,8 +599,11 @@ def smoke_deploy(session, repository, image, run_id):
         (
             "PROFILE_SYNC_IMAGE=%s" % image,
             "PROFILE_SYNC_PORT=%s" % SMOKE_PORT,
+            "PROFILE_SYNC_HOST_IP=127.0.0.1",
             "PROFILE_SYNC_DATA=%s" % data,
             "PROFILE_SYNC_KEY_REGISTRY=%s" % registry,
+            "PROFILE_SYNC_TLS_CERT=%s" % (root / "server.crt"),
+            "PROFILE_SYNC_TLS_KEY=%s" % (root / "server.key"),
             "PROFILE_SYNC_UID=10001",
             "PROFILE_SYNC_GID=10001",
             "",
@@ -273,6 +619,14 @@ def smoke_deploy(session, repository, image, run_id):
         )
     )
     try:
+        session.execute(
+            "openssl req -x509 -newkey rsa:2048 -nodes -days 1 "
+            "-subj /CN=127.0.0.1 "
+            "-keyout {key} -out {cert} >/dev/null 2>&1".format(
+                key=shlex.quote(str(root / "server.key")),
+                cert=shlex.quote(str(root / "server.crt")),
+            )
+        )
         session.upload_text(
             str(root / "compose.yaml"),
             (deployment / "compose.yaml").read_text(encoding="utf-8"),
@@ -290,9 +644,11 @@ def smoke_deploy(session, repository, image, run_id):
             0o400,
         )
         session.execute(
-            "chown -R 10001:10001 {data} {registry}".format(
+            "chown -R 10001:10001 {data} {registry} {cert} {key}".format(
                 data=shlex.quote(str(data)),
                 registry=shlex.quote(str(registry)),
+                cert=shlex.quote(str(root / "server.crt")),
+                key=shlex.quote(str(root / "server.key")),
             )
         )
         compose = compose_command(docker, root)
@@ -329,7 +685,8 @@ def verify(session):
     _install, docker = container_station(session)
     for _attempt in range(30):
         payload = session.execute(
-            "wget -qO- http://127.0.0.1:%s/ready" % SMOKE_PORT,
+            "wget --no-check-certificate -qO- https://127.0.0.1:%s/ready"
+            % SMOKE_PORT,
             allowed=(0, 1, 4, 8),
             timeout=5,
         )
@@ -343,7 +700,7 @@ def verify(session):
                 and document.get("service") == "kodi-profile-sync-server"
                 and document.get("database_schema") == 2
             ):
-                state = status(session)
+                state = status(session, SMOKE_PROJECT)
                 if (
                     state["containers"] != 1
                     or state["networks"] != 1
@@ -366,7 +723,7 @@ def verify(session):
     diagnostics = session.execute(
         docker
         + " ps -a --filter "
-        + shlex.quote("label=com.docker.compose.project=%s" % PROJECT)
+        + shlex.quote("label=com.docker.compose.project=%s" % SMOKE_PROJECT)
         + " --format '{{.Status}}'",
         allowed=(0,),
     )
@@ -386,11 +743,15 @@ def destroy_smoke(session, run_id, ignore_missing=False):
         allowed=(0, 1),
     )
     if not exists:
-        remaining = status(session)
+        remaining = status(session, SMOKE_PROJECT)
         if remaining["containers"]:
             raise QnapError("smoke project exists without its control files")
         if ignore_missing:
-            return {"project": PROJECT, "removed": True, "run_id": run_id}
+            return {
+                "project": SMOKE_PROJECT,
+                "removed": True,
+                "run_id": run_id,
+            }
         raise QnapError("smoke run directory does not exist")
     compose = compose_command(docker, root)
     session.execute(
@@ -398,7 +759,7 @@ def destroy_smoke(session, run_id, ignore_missing=False):
         allowed=(0, 1),
         timeout=120,
     )
-    remaining = status(session)
+    remaining = status(session, SMOKE_PROJECT)
     if any(
         remaining[key]
         for key in ("containers", "networks", "volumes")
@@ -417,7 +778,11 @@ def destroy_smoke(session, run_id, ignore_missing=False):
         "rmdir " + shlex.quote(str(root.parent)),
         allowed=(0, 1),
     )
-    return {"project": PROJECT, "removed": True, "run_id": run_id}
+    return {
+        "project": SMOKE_PROJECT,
+        "removed": True,
+        "run_id": run_id,
+    }
 
 
 def main():
@@ -431,6 +796,23 @@ def main():
     deploy.add_argument("--image", required=True)
     deploy.add_argument("--run-id", required=True)
     subparsers.add_parser("verify")
+    production = subparsers.add_parser("deploy-production")
+    production.add_argument("--image", required=True)
+    production.add_argument("--host-ip", required=True)
+    production.add_argument("--key-registry", required=True)
+    production.add_argument("--tls-certificate", required=True)
+    production.add_argument("--tls-key", required=True)
+    production.add_argument("--ca-certificate", required=True)
+    production_verify = subparsers.add_parser("verify-production")
+    production_verify.add_argument("--host-ip", required=True)
+    production_verify.add_argument("--ca-certificate", required=True)
+    subparsers.add_parser("production-status")
+    backup = subparsers.add_parser("backup-production")
+    backup.add_argument("--backup-id", required=True)
+    backup.add_argument("--output", required=True)
+    download_backup = subparsers.add_parser("download-production-backup")
+    download_backup.add_argument("--backup-id", required=True)
+    download_backup.add_argument("--output", required=True)
     destroy = subparsers.add_parser("destroy-smoke")
     destroy.add_argument("--run-id", required=True)
     args = parser.parse_args()
@@ -449,6 +831,31 @@ def main():
             )
         elif args.command == "verify":
             result = verify(session)
+        elif args.command == "deploy-production":
+            result = deploy_production(
+                session,
+                repository,
+                args.image,
+                args.host_ip,
+                args.key_registry,
+                args.tls_certificate,
+                args.tls_key,
+                args.ca_certificate,
+            )
+        elif args.command == "verify-production":
+            result = verify_production(
+                args.host_ip, args.ca_certificate
+            )
+        elif args.command == "production-status":
+            result = status(session, PRODUCTION_PROJECT)
+        elif args.command == "backup-production":
+            result = backup_production(
+                session, args.backup_id, args.output
+            )
+        elif args.command == "download-production-backup":
+            result = download_production_backup(
+                session, args.backup_id, args.output
+            )
         else:
             result = destroy_smoke(session, args.run_id)
     finally:

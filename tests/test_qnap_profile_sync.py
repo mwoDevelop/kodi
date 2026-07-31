@@ -3,11 +3,68 @@ from pathlib import PurePosixPath
 import pytest
 
 from tools.qnap_profile_sync import (
+    PRODUCTION_ROOT,
     QnapError,
     _raid_summary,
+    production_root,
+    production_environment,
+    production_backup_paths,
+    validate_production_files,
     qnap_connection_settings,
     smoke_root,
 )
+
+
+def test_production_root_is_fixed_and_never_derived_from_input():
+    assert production_root() == PurePosixPath("/share/ProfileSync")
+    assert production_root() == PRODUCTION_ROOT
+
+
+def test_production_backup_paths_follow_data_bind_mount():
+    container, host = production_backup_paths("production-initial-20260731")
+
+    assert container == PurePosixPath(
+        "/data/backups/production-initial-20260731.sqlite"
+    )
+    assert host == PurePosixPath(
+        "/share/ProfileSync/data/backups/production-initial-20260731.sqlite"
+    )
+
+
+@pytest.mark.parametrize("backup_id", ("../escape", "/absolute", "x"))
+def test_production_backup_paths_reject_unsafe_id(backup_id):
+    with pytest.raises(QnapError, match="invalid backup id"):
+        production_backup_paths(backup_id)
+
+
+def test_production_environment_uses_explicit_tls_listener():
+    rendered = production_environment(
+        "ghcr.io/mwodevelop/kodi-profile-sync-server@sha256:" + "a" * 64,
+        "192.168.1.39",
+    )
+
+    assert "PROFILE_SYNC_HOST_IP=192.168.1.39\n" in rendered
+    assert "PROFILE_SYNC_TLS_CERT=/share/ProfileSync/config/tls/server.crt\n" in rendered
+    assert "PROFILE_SYNC_TLS_KEY=/share/ProfileSync/config/tls/server.key\n" in rendered
+
+
+def test_production_files_reject_nonprivate_tls_key(tmp_path, monkeypatch):
+    registry = tmp_path / "key-registry.json"
+    registry.write_text(
+        '{"schema":1,"keys":{"publisher":{"public_key":"x","allowed_kinds":["revision"]}}}'
+    )
+    registry.chmod(0o600)
+    certificate = tmp_path / "server.crt"
+    certificate.write_text("certificate")
+    key = tmp_path / "server.key"
+    key.write_text("private key")
+    key.chmod(0o644)
+    monkeypatch.setattr(
+        "ssl.SSLContext.load_cert_chain", lambda *_args, **_kwargs: None
+    )
+
+    with pytest.raises(QnapError, match="permissions are too broad"):
+        validate_production_files(registry, certificate, key)
 
 
 def test_raid_summary_reports_degraded_recovery():

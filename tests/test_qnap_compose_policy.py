@@ -31,6 +31,7 @@ def test_production_compose_contract(repository_root):
     assert summary == {
         "image_digest": "placeholder",
         "mode": "production",
+        "host_ip": "192.0.2.39",
         "port": 18765,
         "project": "qnap-profile-sync",
         "restart": "unless-stopped",
@@ -45,6 +46,7 @@ def test_smoke_compose_contract(repository_root):
     assert summary == {
         "image_digest": "placeholder",
         "mode": "smoke",
+        "host_ip": "127.0.0.1",
         "port": 28765,
         "project": "qnap-profile-sync-smoke",
         "restart": "no",
@@ -91,6 +93,26 @@ def test_policy_rejects_container_name_and_host_network(repository_root):
         validate_policy(named, "production", allow_placeholder=True)
     with pytest.raises(PolicyError, match="host-network"):
         validate_policy(host_network, "production", allow_placeholder=True)
+
+
+def test_production_policy_requires_private_tls_mounts(repository_root):
+    document = render(repository_root, "production", "env.example")
+    missing_key = copy.deepcopy(document)
+    missing_key["services"]["profile-sync"]["volumes"] = [
+        item
+        for item in missing_key["services"]["profile-sync"]["volumes"]
+        if item.get("target") != "/run/profile-sync/tls/server.key"
+    ]
+
+    with pytest.raises(PolicyError, match="bind mount target"):
+        validate_policy(missing_key, "production", allow_placeholder=True)
+
+    public_listener = copy.deepcopy(document)
+    public_listener["services"]["profile-sync"]["ports"][0][
+        "host_ip"
+    ] = "0.0.0.0"
+    with pytest.raises(PolicyError, match="explicit non-loopback"):
+        validate_policy(public_listener, "production", allow_placeholder=True)
 
 
 def test_source_audit_requires_explicit_false():
