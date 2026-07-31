@@ -7,6 +7,7 @@ from tools.certify_device_matrix import (
     _allowed_origins,
     _forwarded_port,
     _latest_addons_database,
+    _recover_kodi,
     _redacted_diagnostic,
     _run_functional_check,
 )
@@ -55,6 +56,45 @@ def test_dynamic_forward_port_is_validated():
     for invalid in ("", "tcp:46454", "0", "65536", "-1"):
         with pytest.raises(RuntimeError, match="dynamic forward port"):
             _forwarded_port(invalid)
+
+
+def test_recovery_force_stops_before_starting_kodi(monkeypatch):
+    commands = []
+    waits = []
+
+    monkeypatch.setattr(
+        "tools.certify_device_matrix._adb",
+        lambda *args: commands.append(args),
+    )
+    monkeypatch.setattr(
+        "tools.certify_device_matrix._wait_for_jsonrpc",
+        lambda *args: waits.append(args),
+    )
+
+    _recover_kodi("adb", 5038, "device", 12345)
+
+    assert commands == [
+        (
+            "adb",
+            5038,
+            "device",
+            "shell",
+            "am",
+            "force-stop",
+            "org.xbmc.kodi",
+        ),
+        (
+            "adb",
+            5038,
+            "device",
+            "shell",
+            "am",
+            "start",
+            "-n",
+            "org.xbmc.kodi/.Splash",
+        ),
+    ]
+    assert waits == [("127.0.0.1", 12345)]
 
 
 def test_functional_check_recovers_kodi_once_after_transient_failure(

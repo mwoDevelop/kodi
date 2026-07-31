@@ -10,7 +10,7 @@ on:
       android_tv:
         description: Logical Android TV canary
         required: false
-        default: sony-tv
+        default: x88pro20
         type: string
 
 concurrency:
