@@ -324,15 +324,12 @@ def test_transient_android_player_gap_does_not_end_playback_too_early():
     assert not missing_player_timed_out(
         now=114.9,
         last_player_seen_at=100.0,
-        playback_log_seen_at=None,
     )
     assert missing_player_timed_out(
         now=115.0,
         last_player_seen_at=100.0,
-        playback_log_seen_at=None,
     )
     assert not missing_player_timed_out(
-        now=114.9,
+        now=1000.0,
         last_player_seen_at=None,
-        playback_log_seen_at=100.0,
     )

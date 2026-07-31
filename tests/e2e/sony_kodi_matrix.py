@@ -248,16 +248,19 @@ def ensure_kodi_foreground(adb: str, serial: str):
 def missing_player_timed_out(
     now: float,
     last_player_seen_at: float | None,
-    playback_log_seen_at: float | None,
     grace_seconds: float = PLAYER_DISAPPEAR_GRACE_SECONDS,
 ) -> bool:
-    """Return true only after Kodi's transient Android player gap is exhausted."""
-    evidence_at = (
-        last_player_seen_at
-        if last_player_seen_at is not None
-        else playback_log_seen_at
+    """Return true only after a previously observed player disappears.
+
+    A demuxer log line is not sufficient evidence that Kodi's JSON-RPC player
+    should already exist. Android TV can spend tens of seconds negotiating a
+    VPN-routed CDN connection and initializing MediaCodec after that line.
+    Explicit close lines are handled separately by ``playback_log_state``.
+    """
+    return (
+        last_player_seen_at is not None
+        and now - last_player_seen_at >= grace_seconds
     )
-    return evidence_at is not None and now - evidence_at >= grace_seconds
 
 
 class JsonRpc:
@@ -812,7 +815,10 @@ def run_case(
                 if log_state == "unplayable":
                     state = log_state
                     break
-                if log_state in {"playback_started", "playback_stopped_early"}:
+                if log_state == "playback_stopped_early":
+                    state = log_state
+                    break
+                if log_state == "playback_started":
                     if playback_log_seen_at is None:
                         playback_log_seen_at = now
                     state = log_state
@@ -820,7 +826,6 @@ def run_case(
             if missing_player_timed_out(
                 now,
                 last_player_seen_at,
-                playback_log_seen_at,
             ):
                 state = "playback_stopped_early"
                 break
