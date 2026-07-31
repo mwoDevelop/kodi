@@ -159,7 +159,7 @@ seed values never leave Kodi.
 
 ## Release status and deliberate blockers
 
-The production backend is active on QNAP using the immutable server 0.2.1
+The production backend is active on QNAP using the immutable server 0.2.2
 multi-architecture image, a dedicated private CA and verified TLS. Live
 preflight reports RAID `[UU]` with no recovery in progress. The final
 post-rollout off-NAS backup passed authenticated decryption in memory and
@@ -175,17 +175,19 @@ production enrollment. Client tokens and signing seeds remained device-local.
 An already-active revision is intentionally returned as `ACTIVE_UNVERIFIED`
 to a newly enrolled client because the backend does not hold the offline
 promoter key and therefore cannot mint a new signed per-device assignment.
-The initial production revision is empty, so this does not create settings
-drift. Applying a non-empty active revision to a new device must use a new
-signed canary assignment or a separately reviewed bootstrap-assignment
-workflow; trusting the TLS response as an unsigned assignment is forbidden.
+Server 0.2.2 and `tools/profile_sync_admin.py bootstrap-active` now provide a
+reviewed bootstrap path: the host signs offline, while the server constrains
+the exact enrollment, channel, administrative target tags and revision to the
+current active state. The stored document remains a signed, client-compatible
+candidate assignment. Trusting the TLS response as an unsigned assignment
+remains forbidden.
 
 Linux/Flatpak host support additionally remains read-only until:
 
 - the NUC is reachable again; separate SSH keys are already enrolled for both
   accounts and passed positive plus cross-account rejection checks;
-- `special://home` and `special://profile` are qualified from inside the real
-  Flatpak Kodi process;
+- `special://home` and `special://profile` are qualified from the current
+  Kodi-generated runtime log and checked against canonical SSH account paths;
 - repository bootstrap uses a supported Kodi UI/API path or returns
   `BOOTSTRAP_REQUIRES_USER`.
 
@@ -201,6 +203,14 @@ channel and schedule. Live 2026-07-31 E2E on BlueStacks, Sony TV and X88 Pro
 assignment discovery, successful settings apply, injected-failure rollback,
 journal cleanup and byte-exact settings restoration through the authenticated
 HTTPS production endpoint.
+
+Bedroom TV passed this workflow against production 0.2.2: stable Profile Sync
+0.1.8 paired with a unique enrollment, accepted the offline-signed bootstrap,
+applied and reported the exact active revision, and retained a complete
+portable profile with WatchNixtoons2 artwork. Both NUC principals were
+reachable long enough to verify Kodi Flatpak 21.3 and their independent
+runtime mappings; the host then suspended and did not accept Wake-on-LAN, so
+repository installation and pairing remain unclaimed.
 
 Revision schema 3 and administratively bound compatibility tags are now
 implemented in the generator, server and add-on. The remaining live gates are

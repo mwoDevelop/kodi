@@ -1,6 +1,6 @@
 # Plan synchronizacji profili, urządzeń i aktualizacji Kodi
 
-Status: pełny release Android wdrożony; pozostała kwalifikacja Linux/Flatpak
+Status: pełny release Android i podpisany bootstrap wdrożone; pozostał rollout Linux/Flatpak
 
 Data: 2026-07-31
 
@@ -22,7 +22,7 @@ Stan realizacji 2026-07-31:
   deterministyczne rewizje schema 2/3, osobny klient Kodi, podpisy Ed25519,
   transakcyjny apply, journal, recovery, rollback i kwarantanna;
 - Etapy 6A–6B są wdrożone na QNAP w kontenerze: zweryfikowane TLS, zdrowy RAID,
-  niezmienny obraz serwera 0.2.1 dla `linux/amd64,linux/arm/v7`, online backup,
+  niezmienny obraz serwera 0.2.2 dla `linux/amd64,linux/arm/v7`, online backup,
   AES-256-GCM i udany restore drill SQLite schema 2;
 - Profile Sync 0.1.8 przeszedł certyfikację dokładnego snapshotu na BlueStacks
   i X88 Pro 20, a następnie został promowany byte-for-byte do `stable`; wersja
