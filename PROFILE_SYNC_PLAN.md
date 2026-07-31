@@ -1,8 +1,8 @@
 # Plan synchronizacji profili, urządzeń i aktualizacji Kodi
 
-Status: plan po review, w realizacji etapowej
+Status: pełny release Android wdrożony; pozostała kwalifikacja Linux/Flatpak
 
-Data: 2026-07-29
+Data: 2026-07-31
 
 Repo nadrzędne: `mwoDevelop/kodi`
 
@@ -16,53 +16,30 @@ Raporty review:
 - `docs/PROFILE_SYNC_QNAP_PLAN_REVIEW.md`;
 - `docs/PROFILE_SYNC_NUC_PLAN_REVIEW.md`.
 
-Stan realizacji 2026-07-28:
+Stan realizacji 2026-07-31:
 
-- Etap 1: zrealizowany lokalnie i pokryty testami;
-- Etap 2: schema 2 portable-common oraz schema 3 z deterministycznymi
-  `base/layers` są zaimplementowane; reader schema 2 pozostaje zgodny;
-- Etap 3: zrealizowany transakcyjny store, loopback API development,
-  przenośny Ed25519 na Kodi x86/ARMv7 oraz build obrazu
-  `linux/amd64,linux/arm/v7`;
-- Etap 4: osobne repo dodatku, pairing, heartbeat i podpisany check
-  read-only opublikowane w `stable`; wersja 0.1.6 wybiera warstwy wyłącznie
-  z podpisanego assignmentu i administracyjnych target tags; E2E wersji
-  0.1.5 zaliczone na BlueStacks i Sony TV, a E2E 0.1.6 na Bedroom TV i
-  X88 Pro 20 zalicza instalację z repo, pairing, uwierzytelniony heartbeat,
-  podpisany check i invariant read-only no-apply;
-- Etap 5: transakcyjny adapter Umbrella, journal, recovery, rollback i
-  kwarantanna są zaimplementowane i pokryte testami lokalnymi; stable 0.1.6
-  przeszedł odwracalny in-process canary successful-apply, kontrolowaną
-  awarię, rollback, kwarantannę, cleanup journalu i przywrócenie ustawień na
-  BlueStacks, Sony TV i X88 Pro 20. Pełny signed assignment -> apply przez
-  produkcyjny backend pozostaje do wykonania;
-- Etap 6A: kontenerowy kontrakt Compose, walidator polityki, hostowy lifecycle,
-  manifest GHCR `linux/amd64,linux/arm/v7` oraz nietrwały live smoke QNAP
-  z restartem, awarią/odtworzeniem i pełnym cleanupem są zrealizowane;
-  produkcja 6B pozostaje zablokowana do zakończenia Etapu 0 i spełnienia bram
-  bezpieczeństwa API, migracji, TLS oraz backupu;
-- rozszerzenie Linux/Flatpak: live discovery NUC zrealizowane dla kont `mwo`
-  i `alek`; registry v2, neutralne ADB/SSH, lifecycle Android/Flatpak oraz
-  read-only inventory są zaimplementowane i pokryte testami; osobne klucze SSH
-  obu kont zostały zainstalowane i przeszły test izolacji między kontami, lecz
-  dalsza live kwalifikacja czeka na ponowną dostępność NUC;
-- rozszerzenie Android: `Bedroom TV` (`Google TV Streamer`, codename
-  `kirkwood`) znajduje się w prywatnym registry v2, przeszedł read-only
-  lifecycle inventory oraz odwracalny rollout Kodi 21.3, profilu, skórki i
-  dodatków. E2E Profile Sync 0.1.6 i playback WatchNixtoons2 0.26.1 zakończyły
-  się powodzeniem. Playback po poprawce Umbrella także zaliczył bramę z
-  aktywnym NordVPN i został promowany bajt po bajcie do `stable`. Sony TV i
-  Bedroom TV zostały przepięte z repo testing na dokładny indeks stable, a
-  pomocnicze repo testing usunięto po weryfikacji zgodności kandydatów;
-- rozszerzenie Android: `X88 Pro 20` znajduje się w prywatnym registry v2.
-  Czysta aktualizacja Kodi 21.2 -> 21.3, restore profilu przez proces Kodi,
-  stabilne originy pięciu dodatków, Profile Sync 0.1.6 oraz playback Umbrella
-  i WatchNixtoons2 przeszły E2E. Rollout ujawnił i pokrył regresyjnie scoped
-  storage oraz EventServer nasłuchujący wyłącznie na IPv6. Oficjalny NordVPN
-  9.9.2 i wariant Android TV mają na tym niecertyfikowanym boxie twardy
-  blocker braku Hardware-Backed KeyStore; test z aktywnym NordVPN wymaga
-  poprawionego firmware/sprzętu albo tunelu na routerze;
-- Etapy 7–8: nierozpoczęte.
+- Etapy 1–5 są zaimplementowane: registry v2, transport/lifecycle OCP,
+  deterministyczne rewizje schema 2/3, osobny klient Kodi, podpisy Ed25519,
+  transakcyjny apply, journal, recovery, rollback i kwarantanna;
+- Etapy 6A–6B są wdrożone na QNAP w kontenerze: zweryfikowane TLS, zdrowy RAID,
+  niezmienny obraz serwera 0.2.1 dla `linux/amd64,linux/arm/v7`, online backup,
+  AES-256-GCM i udany restore drill SQLite schema 2;
+- Profile Sync 0.1.8 przeszedł certyfikację dokładnego snapshotu na BlueStacks
+  i X88 Pro 20, a następnie został promowany byte-for-byte do `stable`; wersja
+  `repository.mwodevelop` pozostała 1.0.0;
+- BlueStacks i X88 przeszły produkcyjny signed assignment -> apply -> podpisany
+  report, rollback canary oraz ponowny sync po instalacji stable. Sony TV
+  przeszło instalację stable, osobny enrollment produkcyjny i rollback canary;
+- BlueStacks, X88 i Sony mają wyłącznie repo stable mwoDevelop oraz oficjalne
+  repo Kodi. Audyt portable-state potwierdził identyczne osiem favourites,
+  siedem akcji WatchNixtoons2 i komplet grafik na wszystkich trzech;
+- pomocnicze repo testing jest używane tylko do certyfikacji kandydatów i po
+  promocji zostało usunięte z urządzeń produkcyjnych;
+- Bedroom TV oraz oba endpointy NUC były niedostępne podczas końcowego rollout.
+  Bedroom pozostaje w prywatnym inventory do ponownego audytu. NUC wymaga
+  dodatkowo kwalifikacji prawdziwych ścieżek Flatpak i bootstrapu repo;
+- automatyczna promocja kodu do stable oraz profilu do active pozostaje celowo
+  poza zakresem: obie operacje nadal wymagają podpisanej, audytowalnej decyzji.
 
 ## 1. Cel
 
