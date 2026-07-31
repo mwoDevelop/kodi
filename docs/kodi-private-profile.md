@@ -40,17 +40,64 @@ later export to refresh the image; if the CDN is temporarily unavailable, the
 last verified local image is retained. Cookies and URL header suffixes are
 neither used nor persisted.
 
-To refresh the same portable artwork on live Android Kodi installations:
+The routine profile service deliberately manages a small semantic settings
+allowlist; it does not carry user content or binary artwork. Favourites use a
+separate portable-state adapter so one complete canonical list and its exact
+content-addressed artwork set converge together.
+
+The authoritative private rollout membership, publisher and current network
+addresses live in the mode-`0600` `.env`:
 
 ```bash
-.venv/bin/python tools/kodi_favourite_artwork_rollout.py \
-  --serial 192.168.1.12:5555 \
-  --serial 192.168.1.8:5555
+KODI_SYNC_PUBLISHER=sony-tv
+KODI_SYNC_DEVICES=bluestacks1,sony-tv,bedroom-tv,x88pro20,nuc-mwo,nuc-alek
+KODI_DEVICE_SONY_TV_ADB=192.0.2.10:5555
+KODI_DEVICE_NUC_MWO_SSH_HOST=192.0.2.20
+KODI_PROFILE_SYNC_CHANNEL=home-stable
+KODI_PROFILE_SYNC_STARTUP_DELAY_SECONDS=15
+KODI_PROFILE_SYNC_INTERVAL_HOURS=6
+KODI_PROFILE_SYNC_READ_ONLY=true
 ```
 
-The rollout runs inside Kodi's own process, reports counts only, restarts Kodi
-so its favourites manager reloads the rewritten file, and removes staging
-files.
+Logical identity, platform, expected model and credentials references remain
+in `.kodi-private/devices.json`; `.env` is authoritative for membership and
+network endpoints. The selected publisher must also have the `publisher` role
+in that registry.
+
+Audit without changing favourites:
+
+```bash
+.venv/bin/python tools/kodi_portable_state_rollout.py audit \
+  --result .kodi-private/e2e/portable-state-audit.json
+```
+
+Converge every currently reachable target:
+
+```bash
+.venv/bin/python tools/kodi_portable_state_rollout.py sync \
+  --result .kodi-private/e2e/portable-state-sync.json
+```
+
+Before export, legacy WatchNixtoons2 actions are migrated to
+`plugin.video.watchnixtoons2.mwodevelop` and verified remote artwork is
+materialized. The publisher then creates a deterministic ZIP below
+`.kodi-private/portable-state/`. Every target validates the exact archive
+inventory, SHA-256 and referenced artwork set, applies it with a private
+journal and rollback, restarts Kodi only after a change, and verifies the
+result from inside Kodi. The same rollout configures the non-secret
+`mwoDevelop Profile Sync` identity and schedule per logical device. Enrollment
+tokens and signing seeds are never copied between devices. A repeated
+application returns `NO_CHANGE`.
+
+Until a persistent authenticated HTTPS backend is available, the identity
+profile remains deliberately `UNPAIRED` with an empty server URL. The device
+E2E uses a temporary verified backend and a distinct one-time enrollment for
+every device, then restores the previous identity settings and state. It must
+not leave a token tied to a temporary endpoint.
+
+Unavailable devices are reported and left unchanged. Linux/Flatpak remains
+read-only until its real in-process `special://profile` path is qualified; the
+tool never guesses a profile path for a write.
 
 Kodi rebuilds its add-on database after restore. Media-library databases are
 deferred from schema 1 because replacing a live Kodi database is not an atomic
@@ -112,8 +159,9 @@ restore mode. It stops Kodi, copies the already verified payload, lets Kodi
 rebuild its databases, enables the recorded add-ons, persists the selected
 skin, restarts Kodi, and validates the result over JSON-RPC.
 
-The tool prints counts and snapshot identifiers only. It never prints add-on
-settings, credentials, tokens, magnets, or resolved streaming URLs.
+The tools print counts and snapshot or bundle identifiers only. They never
+print add-on settings, credentials, tokens, magnets, or resolved streaming
+URLs.
 
 ## Clean reinstall from this host
 
@@ -145,6 +193,49 @@ Limit the operation to one configured target, or repeat only the restore:
 ./tools/kodi_reinstall.py --target sony-tv --restore-only --yes
 ```
 
+If one add-on loses only a managed settings file, restore that exact file from
+the already verified snapshot instead of replacing the whole profile:
+
+```bash
+.venv/bin/python tools/kodi_profile.py \
+  --serial 192.168.1.8:5555 \
+  restore-path .kodi-private/snapshots/sony-20260727T101733Z \
+  --allow-kodi-upgrade \
+  --allow-addon-upgrade \
+  --path userdata/addon_data/plugin.video.umbrella/settings.xml
+```
+
+`restore-path` accepts only exact paths present in the verified snapshot
+manifest and limits selective recovery to `userdata/`. For `addon_data`, it
+also requires the snapshotted add-on to be installed at the same version;
+`--allow-addon-upgrade` permits only an explicit forward move within the same
+major line. The command creates a minimal archive containing those paths,
+binds the result to a random operation ID and selection digest, serializes
+restore operations with a device lock, and retries EventServer delivery only
+until Kodi atomically acknowledges a single writer. After restarting Kodi and
+allowing add-on services to load, it verifies every ordinary file by size and
+SHA-256 inside Kodi before reporting success. An add-on `settings.xml` is
+applied through Kodi's settings API so an active service cannot overwrite it
+from stale memory, then verified by a canonical digest of the selected setting
+IDs and values. If an add-on rotates or rejects an OAuth token during startup,
+the strict post-restart check reports failure; refresh the source snapshot or
+re-authorize that account instead of treating the stale credential as a
+successful restore. A partial settings API failure is rolled back to its
+pre-image. All device-side staging files are then removed; if cleanup cannot be
+confirmed, the lock is retained for explicit recovery. The tool never prints
+settings or credentials.
+
+If the host process is interrupted and leaves the device lock behind, abort
+and recover it explicitly (this stops Kodi before removing any staging data):
+
+```bash
+.venv/bin/python tools/kodi_profile.py \
+  --serial 192.168.1.8:5555 \
+  recover-lock
+```
+
+Do not run `recover-lock` while a restore that you want to finish is active.
+
 The cleanup scope is deliberately fixed to the Kodi package and these paths:
 
 - `/sdcard/Android/data/org.xbmc.kodi`;
@@ -156,6 +247,13 @@ Kodi 21.2 and 21.3 on Android TV use the same relevant profile layout:
 `media/`, `system/`, `temp/`, and versioned databases are generated by the
 newly installed Kodi and are not evidence of a different Android TV profile
 format.
+
+Do not uninstall a superseded repository until its add-ons and their
+`addon_data` have been backed up and a real-device migration test has passed.
+Kodi may remove dependent add-ons and their user settings as part of repository
+uninstallation even after their update origin has been reassigned. Prefer
+leaving the old repository disabled until a verified cleanup workflow can
+prove that the managed add-ons and settings survive.
 
 ## Validation checklist
 

@@ -1,6 +1,6 @@
 # Profile sync implementation status
 
-Date: 2026-07-29
+Date: 2026-07-30
 
 ## Implemented
 
@@ -60,6 +60,21 @@ Date: 2026-07-29
   `linux/arm/v7`;
 - isolated QNAP 6A smoke with `/ready`, database schema 2, process restart,
   controlled unavailability/recovery and zero remaining Compose resources.
+- separate `kodi.favourites` portable-state adapter for user content that must
+  not be embedded in semantic routine settings revisions;
+- deterministic exact-inventory bundle generation, bounded file/XML
+  validation, content-addressed artwork verification and transactional
+  apply/recovery;
+- legacy WatchNixtoons2 favourite-action migration to the mwoDevelop add-on ID;
+- `.env`-driven authoritative sync membership, publisher and network
+  endpoints, with logical identity and expected hardware retained in the
+  private registry;
+- repeatable Android rollout with in-Kodi audit, JSON-RPC/EventServer
+  fallbacks, post-apply convergence proof and `NO_CHANGE` idempotence;
+- per-device Profile Sync identity profiles sourced from `.env` and the
+  logical registry, without cloning enrollment tokens or signing seeds;
+- identity-preserving device E2E cleanup: temporary verified-backend pairing
+  restores the previous settings and state instead of blanking the profile.
 
 ## Private state
 
@@ -71,10 +86,14 @@ The migration created:
 .kodi-private/kodi-reinstall.json
 .kodi-private/kodi-reinstall.json.schema1.bak
 .kodi-private/routine/bluestacks1.json
+.kodi-private/portable-state/<bundle-sha256>.zip
 ```
 
-All files remain ignored by Git. Endpoint values are emitted only by the
-private inventory and are not written to public fixtures or test output.
+All files remain ignored by Git. The mode-`0600` `.env` additionally contains
+`KODI_SYNC_PUBLISHER`, `KODI_SYNC_DEVICES` and per-logical-device ADB/SSH host
+keys. It also stores the Profile Sync channel, startup delay, interval and
+read-only policy. These values are not written to public fixtures or test
+output.
 
 ## Reproducible checks
 
@@ -92,6 +111,10 @@ python tools/kodi_routine_profile.py \
   --kodi-major 21
 PYTHONPATH=. .venv/bin/python \
   tests/e2e/profile_sync_foundation_device.py
+.venv/bin/python tools/kodi_portable_state_rollout.py audit \
+  --result .kodi-private/e2e/portable-state-audit.json
+.venv/bin/python tools/kodi_portable_state_rollout.py sync \
+  --result .kodi-private/e2e/portable-state-sync.json
 ```
 
 Server repository:
@@ -150,6 +173,20 @@ Linux/Flatpak host support additionally remains read-only until:
   Flatpak Kodi process;
 - repository bootstrap uses a supported Kodi UI/API path or returns
   `BOOTSTRAP_REQUIRES_USER`.
+
+The portable-state rollout follows the same gate. An unreachable NUC is
+reported as `UNAVAILABLE`; a reachable NUC still refuses mutation until its
+real in-process profile path is qualified. Android devices do not share this
+blocker because the adapter runs inside Kodi and resolves
+`special://profile` there.
+
+Android identity profiles can be prepared before that gate: each device has
+its own `logical_device_id`, channel and schedule, but stays `UNPAIRED` with no
+server URL. Live 2026-07-30 E2E on BlueStacks, Sony TV and X88 Pro 20 passed
+unique pairing, authenticated heartbeat, signed assignment discovery,
+successful settings apply, injected-failure rollback, journal cleanup and
+byte-exact settings restoration. Persistent enrollment remains gated on the
+authenticated HTTPS production endpoint.
 
 Revision schema 3 and administratively bound compatibility tags are now
 implemented in the generator, server and add-on. Read-only rollout passed on

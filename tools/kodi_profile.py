@@ -9,6 +9,7 @@ import hashlib
 import io
 import json
 import re
+import secrets
 import shutil
 import socket
 import sqlite3
@@ -36,7 +37,15 @@ PRIVATE_ROOT_NAME = ".kodi-private"
 RESTORE_ARCHIVE = "/sdcard/Download/mwo-kodi-profile-restore.tar"
 RESTORE_SCRIPT = "/sdcard/Download/mwo-kodi-profile-restore-device.py"
 RESTORE_MARKER = "/sdcard/Download/mwo-kodi-profile-restore-result.json"
+RESTORE_STARTED = "/sdcard/Download/mwo-kodi-profile-restore-started.json"
+VERIFY_MARKER = "/sdcard/Download/mwo-kodi-profile-verify-result.json"
+VERIFY_STARTED = "/sdcard/Download/mwo-kodi-profile-verify-started.json"
+RESTORE_LOCK = "/sdcard/Download/mwo-kodi-profile-restore.lock"
 EXPORT_FILE_LIST = "/sdcard/Download/mwo-kodi-profile-filelist.txt"
+
+
+class RestoreCommandMayBeQueued(TimeoutError):
+    """A Kodi EventServer command was sent but never acknowledged."""
 
 
 def canonical_json(value):
@@ -145,13 +154,16 @@ def adb_command(
     )
 
 
-def adb_output(adb, adb_server_port, serial, *args, text=True):
+def adb_output(
+    adb, adb_server_port, serial, *args, text=True, timeout=120
+):
     return adb_command(
         adb,
         adb_server_port,
         serial,
         *args,
         text=text,
+        timeout=timeout,
     ).stdout
 
 
@@ -548,13 +560,116 @@ def verify_snapshot(snapshot):
     return manifest
 
 
-def _build_restore_archive(snapshot, output):
+def _selected_restore_files(manifest, relative_paths=None):
+    if relative_paths is None:
+        return manifest["files"]
+    selected = {}
+    for relative in relative_paths:
+        if not isinstance(relative, str) or not relative:
+            raise ValueError("restore path must be a non-empty string")
+        parsed = PurePosixPath(relative)
+        if (
+            parsed.is_absolute()
+            or ".." in parsed.parts
+            or parsed.as_posix() != relative
+        ):
+            raise ValueError("restore path is unsafe: %s" % relative)
+        if relative not in manifest["files"]:
+            raise ValueError(
+                "restore path is absent from verified snapshot: %s"
+                % relative
+            )
+        selected[relative] = manifest["files"][relative]
+    if not selected:
+        raise ValueError("at least one restore path is required")
+    return selected
+
+
+def _selective_addon_requirements(manifest, selected_files):
+    addon_versions = {
+        item["id"]: item["version"]
+        for item in manifest["addons"]
+        if item.get("id") and item.get("version")
+    }
+    requirements = {}
+    for relative in selected_files:
+        parts = PurePosixPath(relative).parts
+        if not parts or parts[0] != "userdata":
+            raise ValueError(
+                "selective restore is limited to userdata paths: %s"
+                % relative
+            )
+        if parts[:2] == ("userdata", "addon_data"):
+            if len(parts) < 4:
+                raise ValueError("add-on data restore path is incomplete")
+            addon_id = parts[2]
+            version = addon_versions.get(addon_id)
+            if version is None:
+                raise ValueError(
+                    "add-on data has no versioned snapshot add-on: %s"
+                    % addon_id
+                )
+            requirements[addon_id] = version
+    return requirements
+
+
+def _selection_sha256(selected_files):
+    return digest(canonical_json(selected_files))
+
+
+def _addon_settings_metadata(source):
+    root = ET.fromstring(source.read_bytes())
+    values = {}
+    for setting in root.findall(".//setting"):
+        setting_id = setting.attrib.get("id")
+        if not setting_id:
+            raise ValueError("add-on settings contain an entry without an ID")
+        if setting_id in values:
+            raise ValueError("add-on settings contain a duplicate ID")
+        values[setting_id] = setting.text or ""
+    return {
+        "setting_ids": sorted(values),
+        "settings_sha256": digest(canonical_json(values)),
+    }
+
+
+def _build_restore_archive(
+    snapshot,
+    output,
+    relative_paths=None,
+    operation_id=None,
+    semantic_addon_settings=False,
+):
     manifest = verify_snapshot(snapshot)
+    selected_files = _selected_restore_files(manifest, relative_paths)
+    if operation_id is not None and not re.fullmatch(
+        r"[0-9a-f]{32}", operation_id
+    ):
+        raise ValueError("invalid restore operation identifier")
+    payload_root = Path(snapshot) / "payload"
+    restore_files = {
+        relative: dict(metadata)
+        for relative, metadata in selected_files.items()
+    }
+    if semantic_addon_settings:
+        for relative, metadata in restore_files.items():
+            parts = PurePosixPath(relative).parts
+            if (
+                len(parts) == 4
+                and parts[:2] == ("userdata", "addon_data")
+                and parts[3] == "settings.xml"
+            ):
+                metadata.update(
+                    _addon_settings_metadata(payload_root / relative)
+                )
     restore_manifest = {
         "schema": SCHEMA,
         "snapshot_id": manifest["snapshot_id"],
-        "files": manifest["files"],
+        "files": restore_files,
+        "selection_sha256": _selection_sha256(restore_files),
     }
+    if operation_id is not None:
+        restore_manifest["operation_id"] = operation_id
     with tarfile.open(output, "w", format=tarfile.PAX_FORMAT) as archive:
         payload = canonical_json(restore_manifest)
         info = tarfile.TarInfo("restore-manifest.json")
@@ -562,8 +677,7 @@ def _build_restore_archive(snapshot, output):
         info.mode = 0o600
         info.mtime = 0
         archive.addfile(info, fileobj=io.BytesIO(payload))
-        payload_root = Path(snapshot) / "payload"
-        for relative in sorted(manifest["files"]):
+        for relative in sorted(restore_files):
             source = payload_root / relative
             info = tarfile.TarInfo("payload/" + relative)
             info.size = source.stat().st_size
@@ -571,6 +685,7 @@ def _build_restore_archive(snapshot, output):
             info.mtime = 0
             with source.open("rb") as handle:
                 archive.addfile(info, handle)
+    return restore_manifest
     return manifest
 
 
@@ -633,6 +748,29 @@ class AdbEventClient:
             for packet in packets:
                 event_socket.sendto(packet, (host, 9777))
 
+    def _builtin_packets(self, command):
+        hello = (
+            b"mwoDevelop Kodi profile restore\0"
+            + bytes((0,))
+            + struct.pack("!H", 0)
+            + struct.pack("!I", 0)
+            + struct.pack("!I", 0)
+        )
+        action = bytes((self.ACTION_EXECBUILTIN,)) + command.encode() + b"\0"
+        packets = [
+            packet
+            for packet_type, payload in (
+                (self.PT_HELO, hello),
+                (self.PT_ACTION, action),
+                (self.PT_BYE, b""),
+            )
+            for packet in self._packets(packet_type, payload)
+        ]
+        return packets
+
+    def execute_builtin_from_host(self, command):
+        self._send_from_host(self._builtin_packets(command))
+
     def execute_builtin(self, command):
         listeners = adb_output(
             self.adb,
@@ -640,6 +778,7 @@ class AdbEventClient:
             self.serial,
             "shell",
             "netstat -anu 2>/dev/null | grep ':9777'",
+            timeout=10,
         )
         has_ipv4 = any(
             line.lstrip().startswith("udp ")
@@ -658,23 +797,7 @@ class AdbEventClient:
             # those datagrams. Use the socket's IPv4-mapped loopback path,
             # which works without exposing EventServer beyond the device.
             nc_family = "-4 "
-        hello = (
-            b"mwoDevelop Kodi profile restore\0"
-            + bytes((0,))
-            + struct.pack("!H", 0)
-            + struct.pack("!I", 0)
-            + struct.pack("!I", 0)
-        )
-        action = bytes((self.ACTION_EXECBUILTIN,)) + command.encode() + b"\0"
-        packets = [
-            packet
-            for packet_type, payload in (
-                (self.PT_HELO, hello),
-                (self.PT_ACTION, action),
-                (self.PT_BYE, b""),
-            )
-            for packet in self._packets(packet_type, payload)
-        ]
+        packets = self._builtin_packets(command)
         nc_probe = adb_command(
             self.adb,
             self.port,
@@ -779,26 +902,346 @@ class AdbJsonRpcClient:
         return document.get("result")
 
 
+def _validate_selective_addon_versions(
+    jsonrpc,
+    requirements,
+    allow_addon_upgrade=False,
+):
+    verified = {}
+    for addon_id, snapshot_version in requirements.items():
+        details = jsonrpc.call(
+            "Addons.GetAddonDetails",
+            {
+                "addonid": addon_id,
+                "properties": ["version", "enabled"],
+            },
+        )
+        addon = details.get("addon", {}) if isinstance(details, dict) else {}
+        installed_version = str(addon.get("version") or "")
+        if not installed_version:
+            raise RuntimeError(
+                "selective restore target add-on is not installed: %s"
+                % addon_id
+            )
+        if installed_version != snapshot_version:
+            if not allow_addon_upgrade:
+                raise ValueError(
+                    "target add-on version differs from snapshot: %s"
+                    % addon_id
+                )
+            if not _compatible_forward_addon_version(
+                snapshot_version,
+                installed_version,
+            ):
+                raise ValueError(
+                    "target add-on version is not a compatible forward upgrade: %s"
+                    % addon_id
+                )
+        verified[addon_id] = installed_version
+    return verified
+
+
+def _parse_addon_version(value):
+    match = re.fullmatch(
+        r"([0-9]+(?:\.[0-9]+)*)(?:([~+])(.+))?",
+        str(value),
+    )
+    if match is None:
+        raise ValueError("unsupported add-on version: %r" % value)
+    base, separator, suffix = match.groups()
+    numeric = tuple(int(part) for part in base.split("."))
+    suffix_tokens = tuple(
+        (0, int(token)) if token.isdigit() else (1, token.lower())
+        for token in re.findall(r"[A-Za-z]+|[0-9]+", suffix or "")
+    )
+    return numeric, separator, suffix_tokens
+
+
+def _compatible_forward_addon_version(snapshot_version, installed_version):
+    source_numeric, source_separator, source_suffix = _parse_addon_version(
+        snapshot_version
+    )
+    target_numeric, target_separator, target_suffix = _parse_addon_version(
+        installed_version
+    )
+    if source_numeric[0] != target_numeric[0]:
+        return False
+    width = max(len(source_numeric), len(target_numeric))
+    source_numeric += (0,) * (width - len(source_numeric))
+    target_numeric += (0,) * (width - len(target_numeric))
+    if target_numeric != source_numeric:
+        return target_numeric > source_numeric
+    if source_separator is None:
+        return target_separator is None
+    if target_separator is None:
+        return True
+    if source_separator != target_separator:
+        return False
+    return target_suffix >= source_suffix
+
+
 def _push(adb, port, serial, source, destination):
     adb_command(adb, port, serial, "push", str(source), destination)
 
 
-def _wait_for_marker(adb, port, serial, timeout=360):
+def _acquire_restore_lock(adb, port, serial):
+    result = adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "mkdir '%s'" % RESTORE_LOCK,
+        check=False,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "another Kodi profile restore is active or its lock is stale; "
+            "use recover-lock only when aborting that operation is safe"
+        )
+
+
+def _release_restore_lock(adb, port, serial):
+    result = adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "rmdir '%s'" % RESTORE_LOCK,
+        check=False,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("Kodi restore lock could not be removed")
+
+
+def _cleanup_restore_staging(adb, port, serial):
+    result = adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "rm -f '%s' '%s' '%s' '%s' '%s' '%s'"
+        % (
+            RESTORE_ARCHIVE,
+            RESTORE_SCRIPT,
+            RESTORE_MARKER,
+            RESTORE_STARTED,
+            VERIFY_MARKER,
+            VERIFY_STARTED,
+        ),
+        check=False,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Kodi restore staging cleanup failed; the device lock was retained"
+        )
+
+
+def recover_restore_lock(adb, port, serial):
+    existing = adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "test -d '%s'" % RESTORE_LOCK,
+        check=False,
+        text=True,
+    )
+    if existing.returncode != 0:
+        return {"restore_lock_recovered": False}
+    stopped = adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "am force-stop %s" % KODI_PACKAGE,
+        check=False,
+        text=True,
+    )
+    if stopped.returncode != 0:
+        raise RuntimeError(
+            "Kodi could not be stopped; the restore lock was retained"
+        )
+    _cleanup_restore_staging(adb, port, serial)
+    removed = adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "rmdir '%s'" % RESTORE_LOCK,
+        check=False,
+        text=True,
+    )
+    if removed.returncode != 0:
+        raise RuntimeError("Kodi restore lock recovery failed")
+    return {"restore_lock_recovered": True}
+
+
+def _quiesce_incomplete_restore(
+    adb,
+    port,
+    serial,
+    command_may_be_queued=False,
+):
+    incomplete = command_may_be_queued
+    for started_marker, result_marker in (
+        (RESTORE_STARTED, RESTORE_MARKER),
+        (VERIFY_STARTED, VERIFY_MARKER),
+    ):
+        started = _read_marker(adb, port, serial, started_marker)
+        result = _read_marker(adb, port, serial, result_marker)
+        if (
+            isinstance(started, dict)
+            and started.get("started") is True
+            and result is None
+        ):
+            incomplete = True
+    if not incomplete:
+        return
+    stopped = adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "am force-stop %s" % KODI_PACKAGE,
+        check=False,
+        text=True,
+    )
+    if stopped.returncode != 0:
+        raise RuntimeError(
+            "Kodi restore writer may still be active; the device lock was "
+            "retained for safe manual recovery"
+        )
+
+
+def _read_marker(adb, port, serial, path):
+    result = adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "cat '%s'" % path,
+        check=False,
+        text=True,
+    )
+    if result.returncode == 0 and result.stdout.strip().startswith("{"):
+        try:
+            return json.loads(result.stdout)
+        except json.JSONDecodeError:
+            # The exclusive started marker is visible as soon as it is
+            # created, before its small JSON payload is necessarily complete.
+            return None
+    return None
+
+
+def _wait_for_marker(
+    adb,
+    port,
+    serial,
+    timeout=360,
+    marker=RESTORE_MARKER,
+):
     started = time.monotonic()
     while time.monotonic() - started < timeout:
-        result = adb_command(
+        document = _read_marker(adb, port, serial, marker)
+        if document is not None:
+            return document
+        time.sleep(2)
+    raise TimeoutError("Kodi profile restore marker timed out")
+
+
+def _wait_for_restore_delivery(
+    adb,
+    port,
+    serial,
+    operation_id,
+    result_marker,
+    started_marker,
+    timeout,
+):
+    started = time.monotonic()
+    while time.monotonic() - started < timeout:
+        result = _read_marker(adb, port, serial, result_marker)
+        if (
+            result is not None
+            and result.get("operation_id") == operation_id
+        ):
+            return "complete", result
+        acknowledgement = _read_marker(
             adb,
             port,
             serial,
-            "shell",
-            "cat '%s'" % RESTORE_MARKER,
-            check=False,
-            text=True,
+            started_marker,
         )
-        if result.returncode == 0 and result.stdout.strip().startswith("{"):
-            return json.loads(result.stdout)
+        if acknowledgement == {
+            "operation_id": operation_id,
+            "started": True,
+        }:
+            return "started", None
         time.sleep(2)
-    raise TimeoutError("Kodi profile restore marker timed out")
+    return "missing", None
+
+
+def _run_restore_script(
+    adb,
+    port,
+    serial,
+    operation_id,
+    attempts=4,
+    delivery_timeout=20,
+    completion_timeout=360,
+    mode="restore",
+):
+    if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+        raise ValueError("invalid restore operation identifier")
+    if mode not in {"restore", "verify"}:
+        raise ValueError("invalid restore device-script mode")
+    result_marker, started_marker = (
+        (RESTORE_MARKER, RESTORE_STARTED)
+        if mode == "restore"
+        else (VERIFY_MARKER, VERIFY_STARTED)
+    )
+    command = "RunScript(%s,%s,%s,%s,%s,%s)" % (
+        RESTORE_SCRIPT,
+        RESTORE_ARCHIVE,
+        result_marker,
+        started_marker,
+        operation_id,
+        mode,
+    )
+    for attempt in range(attempts):
+        try:
+            AdbEventClient(adb, port, serial).execute_builtin(command)
+            state, result = _wait_for_restore_delivery(
+                adb,
+                port,
+                serial,
+                operation_id,
+                result_marker,
+                started_marker,
+                timeout=delivery_timeout,
+            )
+        except BaseException as exc:
+            raise RestoreCommandMayBeQueued(
+                "Kodi profile restore dispatch outcome is unknown"
+            ) from exc
+        if state == "complete":
+            return result
+        if state == "started":
+            return _wait_for_marker(
+                adb,
+                port,
+                serial,
+                timeout=completion_timeout,
+                marker=result_marker,
+            )
+        if attempt + 1 < attempts:
+            time.sleep(2)
+    raise RestoreCommandMayBeQueued(
+        "Kodi profile restore command was sent but not acknowledged"
+    )
 
 
 def install_kodi(adb, port, serial, snapshot):
@@ -924,6 +1367,7 @@ def _restore_snapshot_inner(
     allow_kodi_upgrade=False,
 ):
     manifest = verify_snapshot(snapshot)
+    operation_id = secrets.token_hex(16)
     target = device_info(adb, port, serial)
     source = manifest["device"]
     if not kodi_versions_compatible(
@@ -938,7 +1382,12 @@ def _restore_snapshot_inner(
     if not set(target["abi_list"]).intersection(source["abi_list"]):
         raise ValueError("target ABI is incompatible with snapshot")
     with tempfile.NamedTemporaryFile(suffix=".tar") as archive:
-        _build_restore_archive(snapshot, archive.name)
+        restore_manifest = _build_restore_archive(
+            snapshot,
+            archive.name,
+            operation_id=operation_id,
+        )
+        selection_sha256 = restore_manifest["selection_sha256"]
         _push(adb, port, serial, archive.name, RESTORE_ARCHIVE)
     _push(adb, port, serial, device_script, RESTORE_SCRIPT)
     _prepare_kodi_permissions(adb, port, serial)
@@ -947,20 +1396,24 @@ def _restore_snapshot_inner(
         port,
         serial,
         "shell",
-        "rm -f '%s' && "
+        "rm -f '%s' '%s' '%s' '%s' && "
         "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
-        % (RESTORE_MARKER, KODI_PACKAGE),
+        % (
+            RESTORE_MARKER,
+            RESTORE_STARTED,
+            VERIFY_MARKER,
+            VERIFY_STARTED,
+            KODI_PACKAGE,
+        ),
     )
     _wait_for_kodi_ready(adb, port, serial)
     events = AdbEventClient(adb, port, serial)
-    events.execute_builtin(
-        "RunScript(%s,%s,%s)"
-        % (RESTORE_SCRIPT, RESTORE_ARCHIVE, RESTORE_MARKER)
-    )
-    result = _wait_for_marker(adb, port, serial)
+    result = _run_restore_script(adb, port, serial, operation_id)
     if (
         not result.get("ok")
         or result.get("snapshot_id") != manifest["snapshot_id"]
+        or result.get("operation_id") != operation_id
+        or result.get("selection_sha256") != selection_sha256
     ):
         raise RuntimeError(
             "Kodi profile restore failed: %s" % result.get("error_type")
@@ -1014,7 +1467,11 @@ def restore_snapshot(
     device_script,
     allow_kodi_upgrade=False,
 ):
+    locked = False
+    safe_to_unlock = True
     try:
+        _acquire_restore_lock(adb, port, serial)
+        locked = True
         return _restore_snapshot_inner(
             adb,
             port,
@@ -1023,16 +1480,210 @@ def restore_snapshot(
             device_script,
             allow_kodi_upgrade,
         )
+    except BaseException as exc:
+        if locked:
+            try:
+                _quiesce_incomplete_restore(
+                    adb,
+                    port,
+                    serial,
+                    command_may_be_queued=isinstance(
+                        exc,
+                        RestoreCommandMayBeQueued,
+                    ),
+                )
+            except Exception as quiesce_error:
+                safe_to_unlock = False
+                raise quiesce_error from exc
+        raise
     finally:
-        adb_command(
+        if locked and safe_to_unlock:
+            _cleanup_restore_staging(adb, port, serial)
+            _release_restore_lock(adb, port, serial)
+
+
+def _restore_snapshot_paths_inner(
+    adb,
+    port,
+    serial,
+    snapshot,
+    device_script,
+    relative_paths,
+    allow_kodi_upgrade=False,
+    allow_addon_upgrade=False,
+):
+    manifest = verify_snapshot(snapshot)
+    selected_files = _selected_restore_files(manifest, relative_paths)
+    addon_requirements = _selective_addon_requirements(
+        manifest,
+        selected_files,
+    )
+    operation_id = secrets.token_hex(16)
+    target = device_info(adb, port, serial)
+    source = manifest["device"]
+    if not kodi_versions_compatible(
+        source["kodi_version"],
+        target["kodi_version"],
+        allow_upgrade=allow_kodi_upgrade,
+    ):
+        raise ValueError(
+            "Kodi version is incompatible with snapshot: %s -> %s"
+            % (source["kodi_version"], target["kodi_version"])
+        )
+    if not set(target["abi_list"]).intersection(source["abi_list"]):
+        raise ValueError("target ABI is incompatible with snapshot")
+    with tempfile.NamedTemporaryFile(suffix=".tar") as archive:
+        restore_manifest = _build_restore_archive(
+            snapshot,
+            archive.name,
+            relative_paths=selected_files,
+            operation_id=operation_id,
+            semantic_addon_settings=True,
+        )
+        selection_sha256 = restore_manifest["selection_sha256"]
+        _push(adb, port, serial, archive.name, RESTORE_ARCHIVE)
+    _push(adb, port, serial, device_script, RESTORE_SCRIPT)
+    _prepare_kodi_permissions(adb, port, serial)
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "rm -f '%s' '%s' '%s' '%s' && "
+        "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
+        % (
+            RESTORE_MARKER,
+            RESTORE_STARTED,
+            VERIFY_MARKER,
+            VERIFY_STARTED,
+            KODI_PACKAGE,
+        ),
+    )
+    _wait_for_kodi_ready(adb, port, serial)
+    with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
+        verified_addons = _validate_selective_addon_versions(
+            jsonrpc,
+            addon_requirements,
+            allow_addon_upgrade=allow_addon_upgrade,
+        )
+    result = _run_restore_script(adb, port, serial, operation_id)
+    if (
+        not result.get("ok")
+        or result.get("snapshot_id") != manifest["snapshot_id"]
+        or result.get("restored_files") != len(selected_files)
+        or result.get("operation_id") != operation_id
+        or result.get("selection_sha256") != selection_sha256
+    ):
+        raise RuntimeError(
+            "Kodi selective profile restore failed: %s"
+            % result.get("error_type")
+        )
+    # Terminating the process prevents an already-running add-on service from
+    # writing its stale in-memory settings over the restored file.
+    adb_command(
+        adb, port, serial, "shell", "am force-stop %s" % KODI_PACKAGE
+    )
+    time.sleep(2)
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
+        % KODI_PACKAGE,
+    )
+    _wait_for_kodi_ready(adb, port, serial)
+    # Wait until add-on services have loaded the restored settings, then prove
+    # that no stale in-memory writer reverted any selected file.
+    time.sleep(5)
+    with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
+        post_restart_addons = _validate_selective_addon_versions(
+            jsonrpc,
+            addon_requirements,
+            allow_addon_upgrade=allow_addon_upgrade,
+        )
+    if post_restart_addons != verified_addons:
+        raise RuntimeError(
+            "target add-on version changed during selective restore"
+        )
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "rm -f '%s' '%s'" % (VERIFY_MARKER, VERIFY_STARTED),
+    )
+    verification = _run_restore_script(
+        adb,
+        port,
+        serial,
+        operation_id,
+        mode="verify",
+    )
+    if (
+        not verification.get("ok")
+        or verification.get("snapshot_id") != manifest["snapshot_id"]
+        or verification.get("verified_files") != len(selected_files)
+        or verification.get("operation_id") != operation_id
+        or verification.get("selection_sha256") != selection_sha256
+    ):
+        raise RuntimeError(
+            "Kodi selective profile post-restart verification failed: %s"
+            % verification.get("error_type")
+        )
+    return {
+        "snapshot_id": manifest["snapshot_id"],
+        "restored_files": result["restored_files"],
+        "verified_files": verification["verified_files"],
+        "verified_addons": len(verified_addons),
+    }
+
+
+def restore_snapshot_paths(
+    adb,
+    port,
+    serial,
+    snapshot,
+    device_script,
+    relative_paths,
+    allow_kodi_upgrade=False,
+    allow_addon_upgrade=False,
+):
+    locked = False
+    safe_to_unlock = True
+    try:
+        _acquire_restore_lock(adb, port, serial)
+        locked = True
+        return _restore_snapshot_paths_inner(
             adb,
             port,
             serial,
-            "shell",
-            "rm -f '%s' '%s' '%s'"
-            % (RESTORE_ARCHIVE, RESTORE_SCRIPT, RESTORE_MARKER),
-            check=False,
+            snapshot,
+            device_script,
+            relative_paths,
+            allow_kodi_upgrade,
+            allow_addon_upgrade,
         )
+    except BaseException as exc:
+        if locked:
+            try:
+                _quiesce_incomplete_restore(
+                    adb,
+                    port,
+                    serial,
+                    command_may_be_queued=isinstance(
+                        exc,
+                        RestoreCommandMayBeQueued,
+                    ),
+                )
+            except Exception as quiesce_error:
+                safe_to_unlock = False
+                raise quiesce_error from exc
+        raise
+    finally:
+        if locked and safe_to_unlock:
+            _cleanup_restore_staging(adb, port, serial)
+            _release_restore_lock(adb, port, serial)
 
 
 def main():
@@ -1067,6 +1718,38 @@ def main():
     restore.add_argument(
         "--device-script", default=str(default_device_script)
     )
+    restore_paths = commands.add_parser("restore-path")
+    restore_paths.add_argument("snapshot")
+    restore_paths.add_argument(
+        "--path",
+        action="append",
+        required=True,
+        dest="paths",
+        help="exact verified snapshot path to restore; may be repeated",
+    )
+    restore_paths.add_argument(
+        "--allow-kodi-upgrade",
+        action="store_true",
+        help="allow restore to a newer Kodi release in the same major line",
+    )
+    restore_paths.add_argument(
+        "--allow-addon-upgrade",
+        action="store_true",
+        help=(
+            "allow addon_data restore to a newer installed add-on version "
+            "within the same major line"
+        ),
+    )
+    restore_paths.add_argument(
+        "--device-script", default=str(default_device_script)
+    )
+    commands.add_parser(
+        "recover-lock",
+        help=(
+            "abort an unfinished restore, clean its staging files, and "
+            "remove its device lock"
+        ),
+    )
     args = parser.parse_args()
     if args.command == "export":
         result = create_snapshot(
@@ -1086,7 +1769,7 @@ def main():
             args.serial,
             args.snapshot,
         )
-    else:
+    elif args.command == "restore":
         result = restore_snapshot(
             args.adb,
             args.adb_server_port,
@@ -1095,6 +1778,23 @@ def main():
             args.device_script,
             args.allow_kodi_upgrade,
         )
+    elif args.command == "recover-lock":
+        result = recover_restore_lock(
+            args.adb,
+            args.adb_server_port,
+            args.serial,
+        )
+    else:
+        result = restore_snapshot_paths(
+            args.adb,
+            args.adb_server_port,
+            args.serial,
+            args.snapshot,
+            args.device_script,
+            args.paths,
+            args.allow_kodi_upgrade,
+            args.allow_addon_upgrade,
+        )
     summary = {
         key: result[key]
         for key in (
@@ -1102,6 +1802,9 @@ def main():
             "created_utc",
             "selected_skin",
             "restored_files",
+            "verified_files",
+            "verified_addons",
+            "restore_lock_recovered",
             "enabled_addons_requested",
         )
         if key in result

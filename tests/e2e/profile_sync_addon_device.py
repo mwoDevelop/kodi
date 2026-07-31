@@ -591,6 +591,14 @@ def wait_for(predicate, timeout=120):
 
 
 addon = xbmcaddon.Addon(ADDON_ID)
+original_settings = {
+    key: addon.getSetting(key) for key in SETTING_KEYS
+}
+try:
+    with open(STATE_PATH, "r", encoding="utf-8") as handle:
+        original_state = handle.read()
+except OSError:
+    original_state = None
 try:
     for key, value in SETTINGS.items():
         addon.setSetting(key, value)
@@ -703,12 +711,18 @@ except Exception as error:
         }
     )
 finally:
-    for key in ("server_url", "logical_device_id"):
-        addon.setSetting(key, "")
-    try:
-        os.unlink(STATE_PATH)
-    except OSError:
-        pass
+    for key, value in original_settings.items():
+        addon.setSetting(key, value)
+    if original_state is None:
+        try:
+            os.unlink(STATE_PATH)
+        except OSError:
+            pass
+    else:
+        temporary = STATE_PATH + ".restore"
+        with open(temporary, "w", encoding="utf-8") as handle:
+            handle.write(original_state)
+        os.replace(temporary, STATE_PATH)
 """ % (
         json.dumps(ADDON_ID),
         repr(settings),
