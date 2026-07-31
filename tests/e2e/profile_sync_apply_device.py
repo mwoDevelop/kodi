@@ -25,13 +25,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", required=True)
     parser.add_argument(
+        "--devices",
+        type=Path,
+        default=repository / ".kodi-private/devices.json",
+    )
+    parser.add_argument(
         "--adb", default="/home/mwo/android-sdk/platform-tools/adb"
     )
     parser.add_argument("--adb-server-port", type=int, default=5038)
     parser.add_argument("--result", type=Path)
     args = parser.parse_args()
 
-    registry = load_registry(repository / ".kodi-private/devices.json")
+    registry = load_registry(args.devices.resolve())
     device = resolve_device(registry, args.device)
     if device["platform"] not in {"android", "android-emulator"}:
         raise ValueError("apply canary requires an Android Kodi device")
