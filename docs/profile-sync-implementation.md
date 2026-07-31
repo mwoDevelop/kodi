@@ -157,18 +157,28 @@ repository when needed, and runs a single in-Kodi probe. The probe exposes
 only status, enrollment ID and secret-presence booleans; token and signing
 seed values never leave Kodi.
 
-## Deliberate blockers
+## Release status and deliberate blockers
 
-The production backend is active on QNAP using the immutable server 0.2.0
+The production backend is active on QNAP using the immutable server 0.2.1
 multi-architecture image, a dedicated private CA and verified TLS. Live
-preflight reports RAID `[UU]` with no recovery in progress. The initial
-off-NAS backup passed authenticated encryption, byte-exact decryption and
-`PRAGMA integrity_check=ok` on schema 2.
+preflight reports RAID `[UU]` with no recovery in progress. The final
+post-rollout off-NAS backup passed authenticated decryption in memory and
+`PRAGMA integrity_check=ok` on schema 2 with three active device enrollments.
 
-Remaining rollout work is the signed production assignment/apply/rollback
-qualification in device order, followed by exact-candidate promotion. Client
-enrollment tokens remain device-local by design and are not copied into the
-portable profile or disaster-recovery archive.
+Profile Sync 0.1.8 passed exact-snapshot certification on BlueStacks and X88,
+including production signed assignment, transactional apply, signed report
+and rollback. The same certified ZIP was promoted without rebuilding and its
+public stable digest is recorded in the release report. Sony then passed the
+stable-origin, isolated assignment and rollback checks and received its own
+production enrollment. Client tokens and signing seeds remained device-local.
+
+An already-active revision is intentionally returned as `ACTIVE_UNVERIFIED`
+to a newly enrolled client because the backend does not hold the offline
+promoter key and therefore cannot mint a new signed per-device assignment.
+The initial production revision is empty, so this does not create settings
+drift. Applying a non-empty active revision to a new device must use a new
+signed canary assignment or a separately reviewed bootstrap-assignment
+workflow; trusting the TLS response as an unsigned assignment is forbidden.
 
 Linux/Flatpak host support additionally remains read-only until:
 
@@ -185,19 +195,18 @@ real in-process profile path is qualified. Android devices do not share this
 blocker because the adapter runs inside Kodi and resolves
 `special://profile` there.
 
-Android identity profiles can be prepared before that gate: each device has
-its own `logical_device_id`, channel and schedule, but stays `UNPAIRED` with no
-server URL. Live 2026-07-30 E2E on BlueStacks, Sony TV and X88 Pro 20 passed
-unique pairing, authenticated heartbeat, signed assignment discovery,
-successful settings apply, injected-failure rollback, journal cleanup and
-byte-exact settings restoration. Persistent enrollment remains gated on the
-authenticated HTTPS production endpoint.
+Android identity profiles use a unique `logical_device_id`, enrollment,
+channel and schedule. Live 2026-07-31 E2E on BlueStacks, Sony TV and X88 Pro
+20 passed unique production pairing, authenticated heartbeat, signed
+assignment discovery, successful settings apply, injected-failure rollback,
+journal cleanup and byte-exact settings restoration through the authenticated
+HTTPS production endpoint.
 
 Revision schema 3 and administratively bound compatibility tags are now
-implemented in the generator, server and add-on. Read-only rollout passed on
-Bedroom TV and X88 Pro 20. BlueStacks, Sony TV and X88 passed the isolated
-journaled apply/rollback canary; signed backend assignment-to-apply and the
-remaining target matrix remain release gates.
+implemented in the generator, server and add-on. The remaining live gates are
+an availability-dependent re-audit of Bedroom TV and Linux/Flatpak
+qualification for both NUC accounts; neither is reported as passed while the
+endpoint is unreachable.
 
 ## Layered routine revisions
 

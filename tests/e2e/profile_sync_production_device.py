@@ -11,13 +11,31 @@ import time
 from pathlib import Path
 
 from tools.kodi_devices import load_registry, resolve_device
-from tools.kodi_profile import AdbEventClient, adb_command, adb_output
+from tools.kodi_profile import (
+    AdbEventClient,
+    AdbJsonRpcClient,
+    adb_command,
+    adb_output,
+)
 
 
 REMOTE_PROBE = "/sdcard/Download/.mwo-profile-sync-production-probe.py"
 REMOTE_CONFIG = "/sdcard/Download/.mwo-profile-sync-production-config.json"
 REMOTE_CA = "/sdcard/Download/.mwo-profile-sync-production-ca.pem"
 REMOTE_MARKER = "/sdcard/Download/.mwo-profile-sync-production-result.json"
+
+
+def execute_builtin(adb, port, serial, command):
+    try:
+        with AdbJsonRpcClient(adb, port, serial) as rpc:
+            rpc.call(
+                "XBMC.ExecuteBuiltin",
+                {"command": command, "wait": False},
+            )
+        return "jsonrpc"
+    except (OSError, RuntimeError, TimeoutError):
+        AdbEventClient(adb, port, serial).execute_builtin(command)
+        return "eventserver"
 
 
 def main():
@@ -97,8 +115,12 @@ def main():
             "rm -f '%s'" % REMOTE_MARKER,
             check=False,
         )
-        AdbEventClient(args.adb, args.adb_server_port, serial).execute_builtin(
-            "RunScript(%s,%s,%s)" % (REMOTE_PROBE, REMOTE_CONFIG, REMOTE_MARKER)
+        launch_transport = execute_builtin(
+            args.adb,
+            args.adb_server_port,
+            serial,
+            "RunScript(%s,%s,%s)"
+            % (REMOTE_PROBE, REMOTE_CONFIG, REMOTE_MARKER),
         )
         deadline = time.monotonic() + 120
         result = None
@@ -126,12 +148,20 @@ def main():
                     result.get("error_code", "unknown"),
                 )
             )
-        result.update({"device": args.device, "model": model, "result": "pass"})
+        result.update(
+            {
+                "device": args.device,
+                "launch_transport": launch_transport,
+                "model": model,
+                "result": "pass",
+            }
+        )
         rendered = json.dumps(result, indent=2, sort_keys=True)
         if args.result:
             destination = args.result.resolve()
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(rendered + "\n", encoding="utf-8")
+            destination.chmod(0o600)
         print(rendered)
     finally:
         local_config.unlink(missing_ok=True)

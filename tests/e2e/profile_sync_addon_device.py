@@ -60,6 +60,7 @@ STATE_PATH = (
 REMOTE_HELPER = "/sdcard/Download/.mwo-profile-sync-e2e-helper.py"
 REMOTE_MARKER = "/sdcard/Download/.mwo-profile-sync-e2e-marker.json"
 REMOTE_COMMAND = "/sdcard/Download/.mwo-profile-sync-e2e-command.json"
+REMOTE_CLEANUP = "/sdcard/Download/.mwo-profile-sync-e2e-cleanup.json"
 REMOTE_ORIGIN_ARCHIVE = "/sdcard/Download/" + ORIGIN_ARCHIVE
 PUBLISHER_SEED = bytes.fromhex("61" * 32)
 PROMOTER_SEED = bytes.fromhex("62" * 32)
@@ -184,6 +185,23 @@ def _wait_probe_phase(adb, port, serial, phase, timeout=120):
     if marker.get("phase") == "error":
         raise RuntimeError(
             "Kodi profile-sync probe failed: %s"
+            % marker.get("error_type", "unknown")
+        )
+    return marker
+
+
+def _wait_probe_cleanup(adb, port, serial, timeout=120):
+    marker = _wait_json(
+        adb,
+        port,
+        serial,
+        REMOTE_CLEANUP,
+        lambda item: isinstance(item.get("ok"), bool),
+        timeout=timeout,
+    )
+    if not marker["ok"]:
+        raise RuntimeError(
+            "Kodi profile-sync state restoration failed: %s"
             % marker.get("error_type", "unknown")
         )
     return marker
@@ -558,6 +576,7 @@ SETTING_KEYS = %s
 STATE_PATH = %s
 MARKER_PATH = %s
 COMMAND_PATH = %s
+CLEANUP_PATH = %s
 EXPECTED_REVISION = %s
 PAIRING_CODE = %s
 COMMAND_ENTRYPOINT = (
@@ -570,6 +589,13 @@ def write_marker(document):
     with open(temporary, "w", encoding="utf-8") as handle:
         json.dump(document, handle, sort_keys=True)
     os.replace(temporary, MARKER_PATH)
+
+
+def write_cleanup(document):
+    temporary = CLEANUP_PATH + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as handle:
+        json.dump(document, handle, sort_keys=True)
+    os.replace(temporary, CLEANUP_PATH)
 
 
 def read_state():
@@ -605,6 +631,10 @@ try:
     actual = {key: addon.getSetting(key) for key in SETTING_KEYS}
     if actual != SETTINGS:
         raise RuntimeError("profile sync settings did not persist")
+    try:
+        os.unlink(STATE_PATH)
+    except OSError:
+        pass
     write_marker({"ok": True, "phase": "configured"})
     deadline = time.monotonic() + 120
     direct_pair_at = time.monotonic() + 10
@@ -711,18 +741,25 @@ except Exception as error:
         }
     )
 finally:
-    for key, value in original_settings.items():
-        addon.setSetting(key, value)
-    if original_state is None:
-        try:
-            os.unlink(STATE_PATH)
-        except OSError:
-            pass
+    try:
+        for key, value in original_settings.items():
+            addon.setSetting(key, value)
+        if original_state is None:
+            try:
+                os.unlink(STATE_PATH)
+            except OSError:
+                pass
+        else:
+            temporary = STATE_PATH + ".restore"
+            with open(temporary, "w", encoding="utf-8") as handle:
+                handle.write(original_state)
+            os.replace(temporary, STATE_PATH)
+    except Exception as error:
+        write_cleanup(
+            {"ok": False, "error_type": type(error).__name__}
+        )
     else:
-        temporary = STATE_PATH + ".restore"
-        with open(temporary, "w", encoding="utf-8") as handle:
-            handle.write(original_state)
-        os.replace(temporary, STATE_PATH)
+        write_cleanup({"ok": True})
 """ % (
         json.dumps(ADDON_ID),
         repr(settings),
@@ -730,6 +767,7 @@ finally:
         json.dumps(STATE_PATH),
         json.dumps(REMOTE_MARKER),
         json.dumps(REMOTE_COMMAND),
+        json.dumps(REMOTE_CLEANUP),
         json.dumps(expected_revision),
         json.dumps(pairing_code),
         ADDON_ID,
@@ -745,8 +783,8 @@ finally:
             port,
             serial,
             "shell",
-            "rm -f '%s' '%s' '%s'"
-            % (REMOTE_HELPER, REMOTE_MARKER, REMOTE_COMMAND),
+            "rm -f '%s' '%s' '%s' '%s'"
+            % (REMOTE_HELPER, REMOTE_MARKER, REMOTE_COMMAND, REMOTE_CLEANUP),
         )
         adb_command(
             adb,
@@ -922,6 +960,8 @@ def verify_device(
     if model != device["expected"]["model"]:
         raise RuntimeError("%s resolved to the wrong model" % logical_device_id)
     enrollment_id = None
+    probe_started = False
+    cleanup_complete = False
     try:
         adb_command(
             adb,
@@ -951,16 +991,18 @@ def verify_device(
             revision["revision_id"],
             pairing["code"],
         )
+        probe_started = True
         state = _wait_probe_phase(
             adb, adb_port, serial, "paired"
         )
-        enrollment_id = state["enrollment_id"]
+        candidate_enrollment_id = state["enrollment_id"]
         if (
             state.get("status") != "IDLE"
             or not state.get("has_access_token")
             or not state.get("has_signing_seed")
         ):
             raise RuntimeError("pairing did not create private local state")
+        enrollment_id = candidate_enrollment_id
         assignment = modules["sign_document"](
             "assignment",
             {
@@ -982,6 +1024,8 @@ def verify_device(
             or checked.get("has_applied_revision")
         ):
             raise RuntimeError("read-only assignment invariant failed")
+        _wait_probe_cleanup(adb, adb_port, serial)
+        cleanup_complete = True
         origin = _installed_origin(
             adb,
             adb_port,
@@ -1003,6 +1047,8 @@ def verify_device(
             "result": "pass",
         }
     finally:
+        if probe_started and not cleanup_complete:
+            _wait_probe_cleanup(adb, adb_port, serial)
         if enrollment_id is not None:
             store.revoke_enrollment(enrollment_id)
         adb_command(
@@ -1020,8 +1066,8 @@ def verify_device(
             adb_port,
             serial,
             "shell",
-            "rm -f '%s' '%s' '%s'"
-            % (REMOTE_HELPER, REMOTE_MARKER, REMOTE_COMMAND),
+            "rm -f '%s' '%s' '%s' '%s'"
+            % (REMOTE_HELPER, REMOTE_MARKER, REMOTE_COMMAND, REMOTE_CLEANUP),
             check=False,
         )
 
