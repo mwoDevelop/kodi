@@ -1,8 +1,8 @@
 # Plan synchronizacji profili, urządzeń i aktualizacji Kodi
 
-Status: pełny release Android i podpisany bootstrap wdrożone; pozostał rollout Linux/Flatpak
+Status: finalny release Android w kwalifikacji; pozostał rollout Linux/Flatpak
 
-Data: 2026-07-31
+Data: 2026-08-03
 
 Repo nadrzędne: `mwoDevelop/kodi`
 
@@ -35,9 +35,11 @@ Stan realizacji 2026-07-31:
   siedem akcji WatchNixtoons2 i komplet grafik na wszystkich trzech;
 - pomocnicze repo testing jest używane tylko do certyfikacji kandydatów i po
   promocji zostało usunięte z urządzeń produkcyjnych;
-- Bedroom TV oraz oba endpointy NUC były niedostępne podczas końcowego rollout.
-  Bedroom pozostaje w prywatnym inventory do ponownego audytu. NUC wymaga
-  dodatkowo kwalifikacji prawdziwych ścieżek Flatpak i bootstrapu repo;
+- Bedroom TV przeszło rollout klienta 1.0.0 RC2, signed active assignment,
+  idempotentny sync, audyt favourites/artwork oraz E2E wyszukiwania i
+  odtwarzania Umbrella/Real-Debrid i WatchNixtoons2. Oba endpointy NUC są
+  nadal niedostępne; NUC wymaga dodatkowo kwalifikacji prawdziwych ścieżek
+  Flatpak i bootstrapu repo;
 - automatyczna promocja kodu do stable oraz profilu do active pozostaje celowo
   poza zakresem: obie operacje nadal wymagają podpisanej, audytowalnej decyzji.
 
@@ -1537,8 +1539,10 @@ PYTHONPATH=. .venv/bin/python \
     sieci Kodi -> QNAP.
 26. Zapisać osobne zredagowane raporty E2E zawierające platformę, exact
     revision i enrollment, ale nie username, home, IP ani sekrety.
-27. Po przejściu wymaganych klas wykonać obserwację, ręczną promocję profilu
-    do `active`, a dopiero potem startowy pull i apply konsumentów.
+27. Po przejściu wymaganych klas wykonać ręczną promocję profilu do `active`,
+    a dopiero potem startowy pull i apply konsumentów. Nie stosować czasowej
+    bramki oczekiwania: o promocji decydują wyniki testów i zgodność
+    promowanych artefaktów.
 
 ### Etap 6: QNAP
 
@@ -1677,7 +1681,8 @@ Brama wyjścia:
    Bedroom TV jest dodatkowym canary, gdy ma inną klasę albo device overlay.
 9. Canary klasy Linux Flatpak x86_64 na `nuc-alek`.
 10. Obowiązkowy E2E izolacji i post-canary rollout na `nuc-mwo`.
-11. Okres obserwacji.
+11. Decyzja wydaniowa na podstawie wyników wymaganych E2E i integralności
+    artefaktów, bez arbitralnej bramki czasowej.
 12. Ręczna promocja tych samych bajtów do stable.
 
 ## 17. Testy
@@ -1942,8 +1947,9 @@ Projekt jest ukończony dopiero, gdy:
     bezpiecznie obsługuje schema 2;
 36. administracyjne target tags, nie self-report heartbeat, wybierają klasy i
     warstwy;
-37. wydanie stable następuje dopiero po publikacji testing, E2E klas i okresie
-    obserwacji.
+37. wydanie stable następuje dopiero po publikacji testing i zaliczeniu
+    wymaganych E2E klas; niedostępność urządzenia jest raportowana osobno i nie
+    wprowadza arbitralnej bramki czasowej.
 
 ## 22. Kolejność zależności
 
@@ -1970,7 +1976,7 @@ policy v2 -> revision schema 3 + server target tags
               canary/E2E per compatibility class
                               |
                               v
-               observation -> manual stable/active
+             release decision -> manual stable/active
 
 naprawa RAID + backup -> QNAP production deployment
                                       |
@@ -1988,5 +1994,6 @@ QNAP deployment + encryption feasibility -> encrypted secret sync
 Najpierw powstaje kompatybilny registry v2, potem neutralny transport i
 lifecycle. Apply warstw platformowych czeka na revision schema 3 i serwerowe
 target tags. Publikacja `testing` poprzedza każdy urządzeniowy canary; stable
-następuje po E2E i obserwacji. Naprawa RAID może biec równolegle, ale pozostaje
-twardą bramą wyłącznie dla produkcyjnego wdrożenia QNAP.
+następuje po zaliczeniu wymaganych E2E i potwierdzeniu zgodności artefaktów,
+bez czasowej bramki oczekiwania. Naprawa RAID może biec równolegle, ale
+pozostaje twardą bramą wyłącznie dla produkcyjnego wdrożenia QNAP.
