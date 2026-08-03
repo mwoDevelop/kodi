@@ -39,10 +39,10 @@ def test_production_backup_paths_follow_data_bind_mount():
     container, host = production_backup_paths("production-initial-20260731")
 
     assert container == PurePosixPath(
-        "/data/backups/production-initial-20260731.sqlite"
+        "/data/backups/production-initial-20260731"
     )
     assert host == PurePosixPath(
-        "/share/ProfileSync/data/backups/production-initial-20260731.sqlite"
+        "/share/ProfileSync/data/backups/production-initial-20260731"
     )
 
 
@@ -88,6 +88,7 @@ def test_production_environment_uses_explicit_tls_listener():
     )
 
     assert "PROFILE_SYNC_HOST_IP=192.168.1.39\n" in rendered
+    assert "PROFILE_SYNC_ADMIN_PORT=18766\n" in rendered
     assert "PROFILE_SYNC_TLS_CERT=/share/ProfileSync/config/tls/server.crt\n" in rendered
     assert "PROFILE_SYNC_TLS_KEY=/share/ProfileSync/config/tls/server.key\n" in rendered
 
