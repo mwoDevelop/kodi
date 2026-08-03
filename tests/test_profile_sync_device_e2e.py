@@ -68,6 +68,39 @@ def test_production_probe_falls_back_to_eventserver(monkeypatch):
     assert event_calls[-1] == ("execute", "RunScript(x)")
 
 
+def test_production_probe_retries_until_marker(monkeypatch):
+    launches = []
+    clock = [0]
+    markers = iter((None, None, {"ok": True}))
+    monkeypatch.setattr(
+        production_device,
+        "execute_builtin",
+        lambda *_args: launches.append("eventserver") or "eventserver",
+    )
+    monkeypatch.setattr(
+        production_device.time, "monotonic", lambda: clock[0]
+    )
+    monkeypatch.setattr(
+        production_device.time,
+        "sleep",
+        lambda value: clock.__setitem__(0, clock[0] + value),
+    )
+
+    result, transport = production_device.execute_until_marker(
+        "adb",
+        5038,
+        "device",
+        "RunScript(x)",
+        lambda: next(markers),
+        timeout=10,
+        retry_seconds=2,
+    )
+
+    assert result == {"ok": True}
+    assert transport == "eventserver"
+    assert len(launches) == 2
+
+
 def test_addon_probe_refuses_failed_state_restoration(monkeypatch):
     monkeypatch.setattr(
         addon_device,

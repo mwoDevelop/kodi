@@ -720,6 +720,7 @@ def open_case_through_gui(
     events: EventClient,
     case: dict,
 ) -> list[str]:
+    del events
     search_action = (
         "movieSearchterm" if case["media_type"] == "movie" else "tvSearchterm"
     )
@@ -727,13 +728,16 @@ def open_case_through_gui(
     if case["media_type"] == "episode":
         search_name = case["tvshowtitle"]
     directory = (
-        "plugin://plugin.video.umbrella/?action=%s&name=%s"
-        % (search_action, quote_plus(str(search_name)))
+        "plugin://plugin.video.umbrella/?action=%s&name=%s&e2e_nonce=%d"
+        % (search_action, quote_plus(str(search_name)), time.time_ns())
     )
     # Reset nested add-on navigation so every case starts from the same GUI state.
-    events.execute_builtin("ActivateWindow(Home)")
+    rpc.call("GUI.ActivateWindow", {"window": "home"})
     time.sleep(2)
-    events.execute_builtin("ActivateWindow(Videos,%s,return)" % directory)
+    rpc.call(
+        "GUI.ActivateWindow",
+        {"window": "videos", "parameters": [directory, "return"]},
+    )
     # Network search plus metadata enrichment takes several seconds on this TV.
     time.sleep(8)
 

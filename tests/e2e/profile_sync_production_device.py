@@ -38,6 +38,28 @@ def execute_builtin(adb, port, serial, command):
         return "eventserver"
 
 
+def execute_until_marker(
+    adb,
+    port,
+    serial,
+    command,
+    read_marker,
+    timeout=120,
+    retry_seconds=12,
+):
+    deadline = time.monotonic() + timeout
+    transports = []
+    while time.monotonic() < deadline:
+        transports.append(execute_builtin(adb, port, serial, command))
+        attempt = min(deadline, time.monotonic() + retry_seconds)
+        while time.monotonic() < attempt:
+            result = read_marker()
+            if result is not None:
+                return result, "+".join(dict.fromkeys(transports))
+            time.sleep(1)
+    raise TimeoutError("Profile Sync production probe timed out")
+
+
 def main():
     repository = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser()
@@ -115,16 +137,7 @@ def main():
             "rm -f '%s'" % REMOTE_MARKER,
             check=False,
         )
-        launch_transport = execute_builtin(
-            args.adb,
-            args.adb_server_port,
-            serial,
-            "RunScript(%s,%s,%s)"
-            % (REMOTE_PROBE, REMOTE_CONFIG, REMOTE_MARKER),
-        )
-        deadline = time.monotonic() + 120
-        result = None
-        while time.monotonic() < deadline:
+        def read_marker():
             marker = adb_command(
                 args.adb,
                 args.adb_server_port,
@@ -135,11 +148,17 @@ def main():
                 text=True,
             )
             if marker.returncode == 0 and marker.stdout.strip().startswith("{"):
-                result = json.loads(marker.stdout)
-                break
-            time.sleep(1)
-        if result is None:
-            raise TimeoutError("Profile Sync production probe timed out")
+                return json.loads(marker.stdout)
+            return None
+
+        result, launch_transport = execute_until_marker(
+            args.adb,
+            args.adb_server_port,
+            serial,
+            "RunScript(%s,%s,%s)"
+            % (REMOTE_PROBE, REMOTE_CONFIG, REMOTE_MARKER),
+            read_marker,
+        )
         if not result.get("ok"):
             raise RuntimeError(
                 "Profile Sync production probe failed: %s/%s"

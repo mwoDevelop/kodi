@@ -161,6 +161,18 @@ pipeline:
 
 Both reports omit credentials, magnets, and resolved media URLs.
 
+Before a resolver matrix, the sanitized Real-Debrid probe can distinguish an
+invalid account from Real-Debrid's supported `disabled_endpoint` cache-check
+mode. It runs inside Kodi and emits only account type, HTTP/error codes and
+timings; it never exports the token or account identity:
+
+```bash
+.venv/bin/python tools/kodi_umbrella_rd_probe.py \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --adb-server-port 5038 \
+  --serial 192.168.1.8:5555
+```
+
 The focused search regression opens Umbrella's real virtual keyboard, submits a
 term, and verifies that Kodi receives a matching directory result. It fails
 immediately if a stale `source_progress` modal is still blocking the UI:
