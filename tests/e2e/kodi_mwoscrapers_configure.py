@@ -11,6 +11,7 @@ import xbmcaddon
 
 
 MODULE_ID = "script.module.mwoscrapers"
+UMBRELLA_ID = "plugin.video.umbrella"
 PUBLIC_TORRENTIO = "https://torrentio.strem.fun"
 PUBLIC_COMET = "https://comet.feels.legal"
 
@@ -71,16 +72,32 @@ def main():
         comet = _comet_endpoint(comet)
         stage = "settings"
         addon = xbmcaddon.Addon(MODULE_ID)
-        expected = {
+        module_expected = {
             "provider.torrentio": "true",
             "provider.torrentio.endpoint": torrentio,
             "provider.comet": "true",
             "provider.comet.endpoint": comet,
         }
-        for key, value in expected.items():
+        for key, value in module_expected.items():
             addon.setSetting(key, value)
-        if any(addon.getSetting(key) != value for key, value in expected.items()):
+        if any(
+            addon.getSetting(key) != value
+            for key, value in module_expected.items()
+        ):
             raise RuntimeError("provider settings did not converge")
+        umbrella = xbmcaddon.Addon(UMBRELLA_ID)
+        umbrella_expected = {
+            "provider.external.enabled": "true",
+            "external_provider.name": "mwoscrapers",
+            "external_provider.module": MODULE_ID,
+        }
+        for key, value in umbrella_expected.items():
+            umbrella.setSetting(key, value)
+        if any(
+            umbrella.getSetting(key) != value
+            for key, value in umbrella_expected.items()
+        ):
+            raise RuntimeError("Umbrella provider binding did not converge")
         stage = "cache-clear"
         cache_mode = "file-reset"
         cache_path = xbmcvfs.translatePath(
@@ -96,6 +113,8 @@ def main():
                 "cache_clear_mode": cache_mode,
                 "comet_enabled": True,
                 "comet_endpoint_class": "public",
+                "external_provider_enabled": True,
+                "external_provider_module": MODULE_ID,
                 "module_version": addon.getAddonInfo("version"),
                 "ok": True,
                 "torrentio_enabled": True,
