@@ -114,6 +114,18 @@ def _recover_kodi(adb, server_port, endpoint, port):
         "force-stop",
         KODI_PACKAGE,
     )
+    # BlueStacks can leave the Android package disabled after force-stop.
+    # Enabling an already enabled package is idempotent on Android and keeps
+    # recovery portable across emulators and physical Android TV devices.
+    _adb(
+        adb,
+        server_port,
+        endpoint,
+        "shell",
+        "pm",
+        "enable",
+        KODI_PACKAGE,
+    )
     _adb(
         adb,
         server_port,
@@ -193,13 +205,21 @@ def _addon_state(adb, server_port, endpoint, expected, stable):
             jsonrpc.local_port,
         )
         for addon_id, pin in sorted(expected.items()):
-            details = jsonrpc.call(
-                "Addons.GetAddonDetails",
-                {
-                    "addonid": addon_id,
-                    "properties": ["version"],
-                },
-            )
+            details = None
+            for attempt in range(1, MAX_CHECK_ATTEMPTS + 1):
+                try:
+                    details = jsonrpc.call(
+                        "Addons.GetAddonDetails",
+                        {
+                            "addonid": addon_id,
+                            "properties": ["version"],
+                        },
+                    )
+                    break
+                except (OSError, RuntimeError, TimeoutError):
+                    if attempt == MAX_CHECK_ATTEMPTS:
+                        raise
+                    time.sleep(1)
             version = (
                 details.get("addon", {}).get("version")
                 if isinstance(details, dict)
