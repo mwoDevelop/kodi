@@ -29,3 +29,12 @@ gate.
 
 Private machine-readable reports remain outside version control under
 `.kodi-private/e2e` and `.kodi-private/profile-sync-production/e2e`.
+
+## Final version ordering
+
+The first final descriptor `1.0.0` was intentionally rejected before stable
+promotion: Kodi retained the installed `1.0.0~rc2` instead of treating
+`1.0.0` as an upgrade. The final candidate is therefore `1.0.1`. This keeps
+the runtime code unchanged while providing a monotonic upgrade path for every
+device that participated in RC qualification. The `1.0.0` testing snapshot is
+not eligible for stable promotion.
