@@ -27,6 +27,7 @@ from tools.kodi_profile import (
     included_by_policy,
     kodi_versions_compatible,
     requires_direct_copy,
+    sanitize_snapshot_identity,
     restore_snapshot,
     restore_snapshot_paths,
     recover_restore_lock,
@@ -210,6 +211,67 @@ def test_profile_sync_identity_is_classified_and_rejected_before_restore(
     )
     with pytest.raises(ValueError, match="IDENTITY_CONTAMINATED"):
         verify_snapshot(snapshot)
+
+
+def test_contaminated_snapshot_can_be_copied_to_verified_sanitized_form(
+    tmp_path,
+):
+    snapshot = tmp_path / "source"
+    payload = snapshot / "payload"
+    identity_file = payload / (
+        "userdata/addon_data/service.mwodevelop.profilesync/state.json"
+    )
+    portable_file = payload / "userdata/favourites.xml"
+    identity_file.parent.mkdir(parents=True)
+    portable_file.parent.mkdir(parents=True, exist_ok=True)
+    identity_file.write_bytes(b"device-secret")
+    portable_file.write_bytes(b"<favourites/>")
+    installer = snapshot / "installer"
+    installer.mkdir()
+    apk = installer / "base.apk"
+    apk.write_bytes(b"apk")
+    files = {
+        path.relative_to(payload).as_posix(): {
+            "sha256": digest(path.read_bytes()),
+            "size": path.stat().st_size,
+        }
+        for path in (identity_file, portable_file)
+    }
+    base = {
+        "schema": 1,
+        "policy_sha256": "policy",
+        "device": {},
+        "selected_skin": "skin.estuary",
+        "addons": [],
+        "files": files,
+        "installer": {
+            "apks": [
+                {"name": "base.apk", "sha256": digest(b"apk"), "size": 3}
+            ]
+        },
+    }
+    manifest = {
+        **base,
+        "created_utc": "2026-08-03T00:00:00+00:00",
+        "snapshot_id": digest(canonical_json(base)),
+    }
+    (snapshot / "manifest.json").write_bytes(canonical_json(manifest) + b"\n")
+
+    output = tmp_path / "sanitized"
+    result = sanitize_snapshot_identity(snapshot, output)
+
+    assert result["sanitized_from"] == manifest["snapshot_id"]
+    assert classify_snapshot_identity(output)["identity_status"] == (
+        "IDENTITY_CLEAN"
+    )
+    assert verify_snapshot(output)["snapshot_id"] == result["snapshot_id"]
+    assert portable_file.relative_to(snapshot).as_posix().replace(
+        "payload/", ""
+    ) in result["files"]
+    assert not (
+        output
+        / "payload/userdata/addon_data/service.mwodevelop.profilesync"
+    ).exists()
 
 
 def test_single_star_does_not_cross_directory_boundaries():

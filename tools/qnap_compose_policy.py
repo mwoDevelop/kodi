@@ -117,24 +117,13 @@ def validate_policy(document, mode, allow_placeholder=False):
     user = str(service.get("user", ""))
     if not re.fullmatch(r"[1-9][0-9]*:[1-9][0-9]*", user):
         raise PolicyError("container must use a numeric non-root UID:GID")
-    ports = service.get("ports")
-    if not isinstance(ports, list) or len(ports) != 2:
-        raise PolicyError("exactly consumer and admin ports are required")
-    by_target_port = {int(item.get("target", 0)): item for item in ports}
-    if set(by_target_port) != {8765, 8766}:
-        raise PolicyError("only consumer and admin listeners may be published")
-    port = by_target_port[8765]
-    admin_port = by_target_port[8766]
+    port = _single(service.get("ports"), "ports")
     host_ip = str(port.get("host_ip", ""))
     if (
-        port.get("protocol") != "tcp"
+        int(port.get("target", 0)) != 8765
+        or port.get("protocol") != "tcp"
     ):
-        raise PolicyError("consumer API must publish its TLS listener")
-    if (
-        str(admin_port.get("host_ip", "")) not in {"127.0.0.1", "::1"}
-        or admin_port.get("protocol") != "tcp"
-    ):
-        raise PolicyError("admin API must remain loopback-only")
+        raise PolicyError("only the consumer TLS API may be published")
     try:
         parsed_host = ipaddress.ip_address(host_ip)
     except ValueError as error:
@@ -146,12 +135,7 @@ def validate_policy(document, mode, allow_placeholder=False):
     if mode == "smoke" and not parsed_host.is_loopback:
         raise PolicyError("smoke listener must remain on loopback")
     published = int(port.get("published", 0))
-    admin_published = int(admin_port.get("published", 0))
-    if (
-        not 1024 <= published <= 65535
-        or not 1024 <= admin_published <= 65535
-        or admin_published == published
-    ):
+    if not 1024 <= published <= 65535:
         raise PolicyError("published port must be unprivileged")
     volumes = service.get("volumes")
     if not isinstance(volumes, list) or len(volumes) != 4:
@@ -234,7 +218,6 @@ def validate_policy(document, mode, allow_placeholder=False):
         "image_digest": match.group(1) if match else "placeholder",
         "host_ip": host_ip,
         "mode": mode,
-        "admin_port": admin_published,
         "port": published,
         "project": document["name"],
         "restart": restart,

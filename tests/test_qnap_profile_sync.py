@@ -8,6 +8,7 @@ from tools.qnap_profile_sync import (
     _raid_summary,
     production_root,
     production_environment,
+    production_admin_request,
     production_backup_paths,
     create_production_pairing,
     validate_production_files,
@@ -88,7 +89,6 @@ def test_production_environment_uses_explicit_tls_listener():
     )
 
     assert "PROFILE_SYNC_HOST_IP=192.168.1.39\n" in rendered
-    assert "PROFILE_SYNC_ADMIN_PORT=18766\n" in rendered
     assert "PROFILE_SYNC_TLS_CERT=/share/ProfileSync/config/tls/server.crt\n" in rendered
     assert "PROFILE_SYNC_TLS_KEY=/share/ProfileSync/config/tls/server.key\n" in rendered
 
@@ -191,4 +191,42 @@ def test_qnap_connection_rejects_broad_key_permissions(tmp_path):
                 "QNAP_SSH_KEY": str(identity),
                 "QNAP_KNOWN_HOSTS": str(known_hosts),
             }
+        )
+
+
+def test_production_admin_uses_container_loopback_and_restricts_path(
+    monkeypatch,
+):
+    class Session:
+        command = None
+
+        def execute(self, command, timeout=30):
+            self.command = command
+            assert timeout == 120
+            return '{"revision_id":"sha256:' + "a" * 64 + '"}'
+
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.container_station",
+        lambda _session: ("/container-station", "/usr/bin/docker"),
+    )
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.production_compose_command",
+        lambda _docker: "docker compose",
+    )
+    session = Session()
+
+    result = production_admin_request(
+        session,
+        "/v1/revisions",
+        {"schema": 1, "signature": {"value": "opaque"}},
+        "admin-test-0001",
+    )
+
+    assert result["revision_id"] == "sha256:" + "a" * 64
+    assert "exec -T profile-sync" in session.command
+    assert "127.0.0.1:8766" in session.command
+    assert "opaque" not in session.command
+    with pytest.raises(QnapError, match="invalid production admin path"):
+        production_admin_request(
+            session, "/health", {}, "admin-test-0002"
         )

@@ -15,11 +15,6 @@ services:
         published: "${PROFILE_SYNC_PORT:-18765}"
         host_ip: ${PROFILE_SYNC_HOST_IP:?set explicit listener address}
         protocol: tcp
-      - name: profile-sync-admin
-        target: 8766
-        published: "${PROFILE_SYNC_ADMIN_PORT:-18766}"
-        host_ip: 127.0.0.1
-        protocol: tcp
     volumes:
       - type: bind
         source: ${PROFILE_SYNC_DATA:?set data directory}

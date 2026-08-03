@@ -5,10 +5,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
+import re
 import secrets
+import shutil
 import tempfile
+import zipfile
 from pathlib import Path
 
 from cryptography.exceptions import InvalidTag
@@ -16,6 +20,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
 MAGIC = b"MWOPSBK1"
+EPOCH_MAGIC = b"MWOPSE01"
 NONCE_BYTES = 12
 MAX_BACKUP_BYTES = 512 * 1024 * 1024
 
@@ -92,10 +97,128 @@ def decrypt_backup(source, output, key):
     }
 
 
+def _validated_epoch_files(source):
+    source = Path(source).resolve()
+    inventory_payload = (source / "inventory.json").read_bytes()
+    inventory = json.loads(inventory_payload)
+    database = (source / "state.sqlite").read_bytes()
+    metadata = inventory.get("database")
+    if (
+        inventory.get("schema") != 1
+        or not isinstance(metadata, dict)
+        or metadata.get("file") != "state.sqlite"
+        or metadata.get("bytes") != len(database)
+        or metadata.get("sha256") != hashlib.sha256(database).hexdigest()
+        or not isinstance(inventory.get("blobs"), list)
+    ):
+        raise ValueError("invalid backup epoch inventory")
+    files = {
+        "inventory.json": inventory_payload,
+        "state.sqlite": database,
+    }
+    for blob in inventory["blobs"]:
+        digest = blob.get("sha256", "")
+        value = digest.removeprefix("sha256:")
+        if not re.fullmatch(r"[a-f0-9]{64}", value):
+            raise ValueError("invalid backup epoch blob digest")
+        relative = "blobs/%s/%s" % (value[:2], value)
+        payload = (source / relative).read_bytes()
+        if (
+            blob.get("size") != len(payload)
+            or hashlib.sha256(payload).hexdigest() != value
+        ):
+            raise ValueError("invalid backup epoch blob")
+        files[relative] = payload
+    actual = {
+        path.relative_to(source).as_posix()
+        for path in source.rglob("*")
+        if path.is_file()
+    }
+    if actual != set(files) or any(path.is_symlink() for path in source.rglob("*")):
+        raise ValueError("backup epoch contains unexpected files")
+    if sum(len(payload) for payload in files.values()) > MAX_BACKUP_BYTES:
+        raise ValueError("backup exceeds the encrypted backup size limit")
+    return files
+
+
+def _epoch_archive(files):
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED) as archive:
+        for name, payload in sorted(files.items()):
+            entry = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            entry.compress_type = zipfile.ZIP_STORED
+            entry.create_system = 3
+            entry.external_attr = 0o100600 << 16
+            archive.writestr(entry, payload)
+    return output.getvalue()
+
+
+def encrypt_epoch(source, output, key):
+    plaintext = _epoch_archive(_validated_epoch_files(source))
+    nonce = secrets.token_bytes(NONCE_BYTES)
+    ciphertext = AESGCM(_key(key)).encrypt(nonce, plaintext, EPOCH_MAGIC)
+    payload = EPOCH_MAGIC + nonce + ciphertext
+    _publish_private(output, payload)
+    return {
+        "encrypted_sha256": hashlib.sha256(payload).hexdigest(),
+        "plaintext_sha256": hashlib.sha256(plaintext).hexdigest(),
+        "bytes": len(plaintext),
+    }
+
+
+def decrypt_epoch(source, output, key):
+    payload = _read_bounded(source)
+    if len(payload) < len(EPOCH_MAGIC) + NONCE_BYTES + 16 or not payload.startswith(
+        EPOCH_MAGIC
+    ):
+        raise ValueError("invalid encrypted epoch format")
+    nonce = payload[len(EPOCH_MAGIC) : len(EPOCH_MAGIC) + NONCE_BYTES]
+    try:
+        plaintext = AESGCM(_key(key)).decrypt(
+            nonce, payload[len(EPOCH_MAGIC) + NONCE_BYTES :], EPOCH_MAGIC
+        )
+    except InvalidTag as error:
+        raise ValueError("encrypted epoch authentication failed") from error
+    with zipfile.ZipFile(io.BytesIO(plaintext), "r") as archive:
+        names = archive.namelist()
+        if len(names) != len(set(names)) or any(
+            name.startswith("/") or ".." in Path(name).parts for name in names
+        ):
+            raise ValueError("encrypted epoch contains unsafe paths")
+        extracted = {name: archive.read(name) for name in names}
+    output = Path(output).resolve()
+    if output.exists():
+        raise FileExistsError(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(
+        tempfile.mkdtemp(prefix=".%s." % output.name, dir=str(output.parent))
+    )
+    try:
+        for name, content in extracted.items():
+            destination = temporary / name
+            destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            _publish_private(destination, content)
+        _validated_epoch_files(temporary)
+        for directory in (
+            path for path in temporary.rglob("*") if path.is_dir()
+        ):
+            directory.chmod(0o700)
+        temporary.chmod(0o700)
+        temporary.rename(output)
+    except BaseException:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    return {
+        "plaintext_sha256": hashlib.sha256(plaintext).hexdigest(),
+        "bytes": len(plaintext),
+        "epoch": str(output),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("encrypt", "decrypt"):
+    for name in ("encrypt", "decrypt", "encrypt-epoch", "decrypt-epoch"):
         command = commands.add_parser(name)
         command.add_argument("--input", required=True)
         command.add_argument("--output", required=True)
@@ -107,8 +230,12 @@ def main():
     key = key_path.read_bytes()
     if args.command == "encrypt":
         result = encrypt_backup(args.input, args.output, key)
-    else:
+    elif args.command == "decrypt":
         result = decrypt_backup(args.input, args.output, key)
+    elif args.command == "encrypt-epoch":
+        result = encrypt_epoch(args.input, args.output, key)
+    else:
+        result = decrypt_epoch(args.input, args.output, key)
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 

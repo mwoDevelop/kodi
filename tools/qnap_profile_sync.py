@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import ipaddress
 import json
@@ -36,13 +37,16 @@ except ModuleNotFoundError:
 RUN_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,47}$")
 SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 TARGET_TAG = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,63}$")
+ADMIN_PATH = re.compile(
+    r"^/v1/(?:revisions|blobs/sha256:[a-f0-9]{64}|"
+    r"channels/[a-z0-9][a-z0-9._-]{0,63}/"
+    r"(?:candidates|assignments|bootstrap-assignments|promote))$"
+)
 INSTALL_PATH = re.compile(
     r"^/share/[A-Za-z0-9._-]+/\.qpkg/container-station$"
 )
 SMOKE_PORT = 28765
-SMOKE_ADMIN_PORT = 28766
 PRODUCTION_PORT = 18765
-PRODUCTION_ADMIN_PORT = 18766
 SMOKE_PROJECT = "qnap-profile-sync-smoke"
 PRODUCTION_PROJECT = "qnap-profile-sync"
 PRODUCTION_ROOT = PurePosixPath("/share/ProfileSync")
@@ -316,7 +320,6 @@ def production_environment(image, host_ip):
         (
             "PROFILE_SYNC_IMAGE=%s" % image,
             "PROFILE_SYNC_PORT=%s" % PRODUCTION_PORT,
-            "PROFILE_SYNC_ADMIN_PORT=%s" % PRODUCTION_ADMIN_PORT,
             "PROFILE_SYNC_HOST_IP=%s" % address,
             "PROFILE_SYNC_DATA=%s" % (root / "data"),
             "PROFILE_SYNC_KEY_REGISTRY=%s"
@@ -603,12 +606,18 @@ def download_production_backup(
         raise QnapError("local backup output already exists")
     session.download_tree(str(host_path), output)
     try:
-        epoch = json.loads((output / "epoch.json").read_text(encoding="utf-8"))
+        epoch = json.loads(
+            (output / "inventory.json").read_text(encoding="utf-8")
+        )
         database_path = output / "state.sqlite"
         digest = hashlib.sha256(database_path.read_bytes()).hexdigest()
+        database = epoch.get("database")
         if (
             epoch.get("schema") != 1
-            or epoch.get("database_sha256") != digest
+            or not isinstance(database, dict)
+            or database.get("file") != "state.sqlite"
+            or database.get("sha256") != digest
+            or database.get("bytes") != database_path.stat().st_size
             or (
                 expected_database_sha256 is not None
                 and expected_database_sha256 != digest
@@ -702,6 +711,50 @@ def create_production_pairing(
     }
 
 
+def production_admin_request(
+    session, path, document, idempotency_key
+):
+    """Submit an already signed request through SSH and container loopback."""
+    if not ADMIN_PATH.fullmatch(str(path)):
+        raise QnapError("invalid production admin path")
+    if not isinstance(document, dict):
+        raise QnapError("production admin request must be an object")
+    if not isinstance(idempotency_key, str) or len(idempotency_key) < 8:
+        raise QnapError("invalid production admin idempotency key")
+    payload = base64.urlsafe_b64encode(
+        json.dumps(
+            document, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    ).rstrip(b"=").decode("ascii")
+    _install, docker = container_station(session)
+    program = (
+        "import base64,json,sys,urllib.request;"
+        "raw=base64.urlsafe_b64decode(sys.argv[1]+'='*(-len(sys.argv[1])%4));"
+        "request=urllib.request.Request('http://127.0.0.1:8766'+sys.argv[2],"
+        "data=raw,headers={'Content-Type':'application/json',"
+        "'Idempotency-Key':sys.argv[3]},method='POST');"
+        "print(urllib.request.urlopen(request,timeout=15).read().decode())"
+    )
+    command = (
+        production_compose_command(docker)
+        + " exec -T profile-sync python -c "
+        + shlex.quote(program)
+        + " "
+        + shlex.quote(payload)
+        + " "
+        + shlex.quote(path)
+        + " "
+        + shlex.quote(idempotency_key)
+    )
+    try:
+        response = json.loads(session.execute(command, timeout=120))
+    except json.JSONDecodeError as error:
+        raise QnapError("production admin returned invalid JSON") from error
+    if not isinstance(response, dict):
+        raise QnapError("production admin returned an invalid document")
+    return response
+
+
 def smoke_deploy(session, repository, image, run_id):
     if not IMAGE.fullmatch(image):
         raise QnapError("smoke image must use an immutable GHCR digest")
@@ -714,7 +767,6 @@ def smoke_deploy(session, repository, image, run_id):
         (
             "PROFILE_SYNC_IMAGE=%s" % image,
             "PROFILE_SYNC_PORT=%s" % SMOKE_PORT,
-            "PROFILE_SYNC_ADMIN_PORT=%s" % SMOKE_ADMIN_PORT,
             "PROFILE_SYNC_HOST_IP=127.0.0.1",
             "PROFILE_SYNC_DATA=%s" % data,
             "PROFILE_SYNC_KEY_REGISTRY=%s" % registry,
@@ -934,6 +986,10 @@ def main():
     pairing.add_argument("--channel", required=True)
     pairing.add_argument("--target-tag", action="append", default=[])
     pairing.add_argument("--output", required=True)
+    admin_request = subparsers.add_parser("admin-request")
+    admin_request.add_argument("--path", required=True)
+    admin_request.add_argument("--document", required=True)
+    admin_request.add_argument("--idempotency-key", required=True)
     destroy = subparsers.add_parser("destroy-smoke")
     destroy.add_argument("--run-id", required=True)
     args = parser.parse_args()
@@ -984,6 +1040,13 @@ def main():
                 args.channel,
                 args.target_tag,
                 args.output,
+            )
+        elif args.command == "admin-request":
+            result = production_admin_request(
+                session,
+                args.path,
+                json.loads(Path(args.document).read_text(encoding="utf-8")),
+                args.idempotency_key,
             )
         else:
             result = destroy_smoke(session, args.run_id)

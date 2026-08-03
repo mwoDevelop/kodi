@@ -32,7 +32,6 @@ def test_production_compose_contract(repository_root):
         "image_digest": "placeholder",
         "mode": "production",
         "host_ip": "192.0.2.39",
-        "admin_port": 18766,
         "port": 18765,
         "project": "qnap-profile-sync",
         "restart": "unless-stopped",
@@ -48,7 +47,6 @@ def test_smoke_compose_contract(repository_root):
         "image_digest": "placeholder",
         "mode": "smoke",
         "host_ip": "127.0.0.1",
-        "admin_port": 28766,
         "port": 28765,
         "project": "qnap-profile-sync-smoke",
         "restart": "no",
@@ -131,17 +129,19 @@ def test_source_audit_requires_explicit_false():
     assert explicit_bind_targets(unsafe) == set()
 
 
-def test_admin_listener_must_remain_on_loopback(repository_root):
+def test_admin_listener_must_not_be_published(repository_root):
     document = render(repository_root, "production", "env.example")
     candidate = copy.deepcopy(document)
-    admin = next(
-        item
-        for item in candidate["services"]["profile-sync"]["ports"]
-        if int(item["target"]) == 8766
+    candidate["services"]["profile-sync"]["ports"].append(
+        {
+            "target": 8766,
+            "published": 18767,
+            "host_ip": "127.0.0.1",
+            "protocol": "tcp",
+        }
     )
-    admin["host_ip"] = "192.0.2.39"
 
-    with pytest.raises(PolicyError, match="loopback-only"):
+    with pytest.raises(PolicyError, match="exactly one entry"):
         validate_policy(candidate, "production", allow_placeholder=True)
 
 
