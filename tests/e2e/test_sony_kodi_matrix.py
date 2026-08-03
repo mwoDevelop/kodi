@@ -12,6 +12,7 @@ from sony_kodi_matrix import (
     addon_version,
     diagnostic_lines,
     missing_player_timed_out,
+    open_case_through_gui,
     open_media,
     playback_log_state,
     plugin_url,
@@ -185,6 +186,45 @@ def test_open_media_uses_acknowledged_jsonrpc_player_open():
                 }
             },
         )
+    ]
+
+
+def test_gui_navigation_uses_acknowledged_jsonrpc(monkeypatch):
+    class FakeRpc:
+        def __init__(self):
+            self.calls = []
+
+        def call(self, method, params=None):
+            self.calls.append((method, params))
+            return "OK"
+
+    rpc = FakeRpc()
+    monkeypatch.setattr(sony_kodi_matrix.time, "sleep", lambda _value: None)
+    monkeypatch.setattr(sony_kodi_matrix.time, "time_ns", lambda: 123)
+    monkeypatch.setattr(
+        sony_kodi_matrix,
+        "focus_matching_control",
+        lambda _rpc, label: label,
+    )
+
+    visited = open_case_through_gui(
+        rpc, object(), sony_kodi_matrix.CASES["sintel"]
+    )
+
+    assert visited == ["Sintel (2010)"]
+    assert rpc.calls[:2] == [
+        ("GUI.ActivateWindow", {"window": "home"}),
+        (
+            "GUI.ActivateWindow",
+            {
+                "window": "videos",
+                "parameters": [
+                    "plugin://plugin.video.umbrella/"
+                    "?action=movieSearchterm&name=Sintel&e2e_nonce=123",
+                    "return",
+                ],
+            },
+        ),
     ]
 
 
