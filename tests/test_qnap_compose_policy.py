@@ -76,7 +76,7 @@ def test_smoke_rejects_production_data_path(repository_root):
     candidate = copy.deepcopy(document)
     candidate["services"]["profile-sync"]["volumes"][0][
         "source"
-    ] = "/share/ProfileSync/data"
+    ] = "/share/CACHEDEV3_DATA/.mwodevelop/profile-sync/data"
 
     with pytest.raises(PolicyError, match="production paths"):
         validate_policy(candidate, "smoke", allow_placeholder=True)

@@ -8,6 +8,7 @@ import os
 import sys
 
 import xbmcaddon
+import xbmc
 import xbmcvfs
 
 
@@ -38,6 +39,10 @@ def main():
             TransactionalApplier,
         )
         from resources.lib.mwoprofilesync.pairing import pair_with_code
+        from resources.lib.mwoprofilesync.portable import (
+            KodiFavourites,
+            PortableFavouritesAdapter,
+        )
         from resources.lib.mwoprofilesync.state import StateStore
         from resources.lib.mwoprofilesync.sync import ReadOnlySync
 
@@ -82,7 +87,12 @@ def main():
                 profile,
                 state,
                 KodiAddonSettings(xbmcaddon.Addon),
+                portable=PortableFavouritesAdapter(
+                    xbmcvfs.translatePath("special://profile"),
+                    KodiFavourites(xbmc.executeJSONRPC),
+                ),
             )
+            applier.recover()
             sync_result = ReadOnlySync(addon, state, applier=applier)()
             local = state.read()
         result = {

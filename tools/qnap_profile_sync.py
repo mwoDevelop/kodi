@@ -49,7 +49,9 @@ SMOKE_PORT = 28765
 PRODUCTION_PORT = 18765
 SMOKE_PROJECT = "qnap-profile-sync-smoke"
 PRODUCTION_PROJECT = "qnap-profile-sync"
-PRODUCTION_ROOT = PurePosixPath("/share/ProfileSync")
+PRODUCTION_ROOT = PurePosixPath(
+    "/share/CACHEDEV3_DATA/.mwodevelop/profile-sync"
+)
 SYNTHETIC_REGISTRY = {
     "schema": 1,
     "keys": {

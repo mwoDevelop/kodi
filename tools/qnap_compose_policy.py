@@ -188,12 +188,13 @@ def validate_policy(document, mode, allow_placeholder=False):
     if mode == "production":
         if restart != "unless-stopped":
             raise PolicyError("production restart policy must be unless-stopped")
-        if not data_source.startswith("/share/ProfileSync/data"):
+        production_root = "/share/CACHEDEV3_DATA/.mwodevelop/profile-sync"
+        if not data_source.startswith(production_root + "/data"):
             raise PolicyError("production data path is outside ProfileSync")
-        if not key_source.startswith("/share/ProfileSync/config/"):
+        if not key_source.startswith(production_root + "/config/"):
             raise PolicyError("production key registry is outside ProfileSync")
         for source in (tls_cert_source, tls_key_source):
-            if not source.startswith("/share/ProfileSync/config/tls/"):
+            if not source.startswith(production_root + "/config/tls/"):
                 raise PolicyError("production TLS file is outside ProfileSync")
         if labels.get(SMOKE_LABEL) == "smoke":
             raise PolicyError("production cannot carry the smoke label")
@@ -210,7 +211,9 @@ def validate_policy(document, mode, allow_placeholder=False):
             tls_cert_source,
             tls_key_source,
         ):
-            if source.startswith("/share/ProfileSync"):
+            if source.startswith(
+                "/share/CACHEDEV3_DATA/.mwodevelop/profile-sync"
+            ):
                 raise PolicyError("smoke cannot use production paths")
             if ".mwodevelop-smoke" not in source:
                 raise PolicyError("smoke path is not clearly isolated")
