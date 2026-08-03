@@ -137,6 +137,15 @@ def test_recovery_force_stops_before_starting_kodi(monkeypatch):
             5038,
             "device",
             "shell",
+            "pm",
+            "enable",
+            "org.xbmc.kodi",
+        ),
+        (
+            "adb",
+            5038,
+            "device",
+            "shell",
             "am",
             "start",
             "-n",
@@ -145,6 +154,58 @@ def test_recovery_force_stops_before_starting_kodi(monkeypatch):
     ]
     assert waits == [("127.0.0.1", 12345)]
     assert sleeps == [20]
+
+
+def test_addon_state_retries_transient_jsonrpc_read(monkeypatch):
+    calls = []
+    sleeps = []
+
+    class FakeJsonRpc:
+        local_port = 12345
+
+        def __init__(self, *args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def call(self, method, params):
+            calls.append((method, params["addonid"]))
+            if len(calls) == 1:
+                raise RuntimeError("incomplete response")
+            return {"addon": {"version": "2.0"}}
+
+    monkeypatch.setattr(
+        "tools.certify_device_matrix.AdbJsonRpcClient", FakeJsonRpc
+    )
+    monkeypatch.setattr(
+        "tools.certify_device_matrix._recover_kodi", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "tools.certify_device_matrix.installed_addon_origins",
+        lambda *args, **kwargs: {"changed": TESTING_ORIGIN},
+    )
+    monkeypatch.setattr(
+        "tools.certify_device_matrix.time.sleep", sleeps.append
+    )
+
+    state = _addon_state(
+        "adb",
+        5038,
+        "device",
+        {"changed": {"version": "2.0", "zip_sha256": "a" * 64}},
+        {"changed": {"version": "1.0", "zip_sha256": "b" * 64}},
+    )
+
+    assert state["versions"] == {"changed": "2.0"}
+    assert calls == [
+        ("Addons.GetAddonDetails", "changed"),
+        ("Addons.GetAddonDetails", "changed"),
+    ]
+    assert sleeps == [1]
 
 
 def test_functional_check_recovers_kodi_once_after_transient_failure(
