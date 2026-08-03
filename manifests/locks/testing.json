@@ -23,9 +23,9 @@
       "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
     },
     "service.mwodevelop.profilesync": {
-      "commit": "69fd1921906e32a2e1bd4e5106690ebe103b41a2",
-      "version": "0.1.8",
-      "zip_sha256": "0542cad64b30c2491ae42ce1b4a07011d002ba1de6b064092443cea1ba942574"
+      "commit": "65dd9cb7902705211427ec75c1fc5b9ffc4a4a37",
+      "version": "1.0.0~rc1",
+      "zip_sha256": "72fce4f3478a01f6831eb17ec3123162c212a1033f268ae57071a729d220f435"
     }
   },
   "schema": 1
