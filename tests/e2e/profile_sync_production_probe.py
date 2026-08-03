@@ -69,6 +69,18 @@ def main():
             addon.setSetting(setting_id, value)
         state = StateStore(profile)
         local = state.read()
+        if config.get("replace_enrollment") and local.get("enrollment"):
+            current = local["enrollment"]
+            if (
+                current.get("logical_device_id")
+                != config["logical_device_id"]
+                or current.get("channel") != config["channel"]
+            ):
+                raise ValueError(
+                    "Profile Sync replacement identity differs"
+                )
+            os.remove(state.path)
+            local = state.read()
         if local.get("enrollment") is None:
             code = config.get("pairing_code")
             if not code:
