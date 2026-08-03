@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import stat
+import tempfile
 import time
 from pathlib import Path
 
@@ -23,6 +24,25 @@ REMOTE_PROBE = "/sdcard/Download/.mwo-profile-sync-production-probe.py"
 REMOTE_CONFIG = "/sdcard/Download/.mwo-profile-sync-production-config.json"
 REMOTE_CA = "/sdcard/Download/.mwo-profile-sync-production-ca.pem"
 REMOTE_MARKER = "/sdcard/Download/.mwo-profile-sync-production-result.json"
+
+
+def write_local_config(repository, config, logical_device_id):
+    """Write invocation-scoped private config to avoid cross-device races."""
+    directory = repository / ".kodi-private/e2e"
+    directory.mkdir(parents=True, exist_ok=True)
+    identity = hashlib.sha256(logical_device_id.encode("utf-8")).hexdigest()[:12]
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=directory,
+        prefix=".production-config-%s-" % identity,
+        suffix=".json",
+        delete=False,
+    ) as handle:
+        json.dump(config, handle)
+        local_config = Path(handle.name)
+    local_config.chmod(0o600)
+    return local_config
 
 
 def execute_builtin(adb, port, serial, command):
@@ -115,10 +135,7 @@ def main():
         if not args.pairing_file:
             raise ValueError("replacement enrollment requires a pairing file")
         config["replace_enrollment"] = True
-    local_config = repository / ".kodi-private/e2e/.production-config.json"
-    local_config.parent.mkdir(parents=True, exist_ok=True)
-    local_config.write_text(json.dumps(config), encoding="utf-8")
-    local_config.chmod(0o600)
+    local_config = write_local_config(repository, config, args.device)
     try:
         for source, destination in (
             (repository / "tests/e2e/profile_sync_production_probe.py", REMOTE_PROBE),
