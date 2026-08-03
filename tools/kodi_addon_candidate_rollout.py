@@ -87,6 +87,22 @@ def _execute(adb, port, serial, command, deadline):
             serial,
             min(deadline, time.monotonic() + 10),
         )
+        if (
+            result is None
+            and time.monotonic() < deadline
+            and hasattr(events, "execute_builtin_from_host")
+        ):
+            try:
+                events.execute_builtin_from_host(command)
+            except (OSError, RuntimeError, TimeoutError):
+                pass
+            else:
+                result = _wait_marker(
+                    adb,
+                    port,
+                    serial,
+                    min(deadline, time.monotonic() + 10),
+                )
     return result
 
 

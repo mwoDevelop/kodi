@@ -1,3 +1,6 @@
+import json
+import stat
+
 import pytest
 
 from tests.e2e import profile_sync_addon_device as addon_device
@@ -99,6 +102,28 @@ def test_production_probe_retries_until_marker(monkeypatch):
     assert result == {"ok": True}
     assert transport == "eventserver"
     assert len(launches) == 2
+
+
+def test_production_configs_are_isolated_per_invocation(tmp_path):
+    first = production_device.write_local_config(
+        tmp_path, {"logical_device_id": "sony-tv"}, "sony-tv"
+    )
+    second = production_device.write_local_config(
+        tmp_path, {"logical_device_id": "x88pro20"}, "x88pro20"
+    )
+    try:
+        assert first != second
+        assert json.loads(first.read_text(encoding="utf-8")) == {
+            "logical_device_id": "sony-tv"
+        }
+        assert json.loads(second.read_text(encoding="utf-8")) == {
+            "logical_device_id": "x88pro20"
+        }
+        assert stat.S_IMODE(first.stat().st_mode) == 0o600
+        assert stat.S_IMODE(second.stat().st_mode) == 0o600
+    finally:
+        first.unlink(missing_ok=True)
+        second.unlink(missing_ok=True)
 
 
 def test_addon_probe_refuses_failed_state_restoration(monkeypatch):
