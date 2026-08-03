@@ -110,6 +110,38 @@ def included_by_policy(relative, policy):
     return included and not excluded
 
 
+PROFILE_SYNC_IDENTITY_PREFIX = (
+    "userdata",
+    "addon_data",
+    "service.mwodevelop.profilesync",
+)
+
+
+def contains_profile_sync_identity(paths):
+    return any(
+        PurePosixPath(relative).parts[:3] == PROFILE_SYNC_IDENTITY_PREFIX
+        for relative in paths
+    )
+
+
+def classify_snapshot_identity(snapshot):
+    snapshot = Path(snapshot).resolve()
+    manifest = json.loads(
+        (snapshot / "manifest.json").read_text(encoding="utf-8")
+    )
+    files = manifest.get("files")
+    if not isinstance(files, dict):
+        raise ValueError("snapshot has no file inventory")
+    return {
+        "snapshot": str(snapshot),
+        "identity_status": (
+            "IDENTITY_CONTAMINATED"
+            if contains_profile_sync_identity(files)
+            else "IDENTITY_CLEAN"
+        ),
+    }
+
+
 def requires_direct_copy(relative):
     return any(
         part.startswith("...")
@@ -524,6 +556,10 @@ def verify_snapshot(snapshot):
     )
     if manifest.get("schema") != SCHEMA:
         raise ValueError("unsupported snapshot schema")
+    if contains_profile_sync_identity(manifest.get("files", {})):
+        raise ValueError(
+            "IDENTITY_CONTAMINATED: snapshot contains Profile Sync identity"
+        )
     payload = snapshot / "payload"
     actual = {}
     for path in sorted(payload.rglob("*")):
@@ -1706,6 +1742,8 @@ def main():
     export.add_argument("--policy", default=str(default_policy))
     verify = commands.add_parser("verify")
     verify.add_argument("snapshot")
+    classify = commands.add_parser("classify-identity")
+    classify.add_argument("snapshot", nargs="+")
     install = commands.add_parser("install-kodi")
     install.add_argument("snapshot")
     restore = commands.add_parser("restore")
@@ -1762,6 +1800,13 @@ def main():
         )
     elif args.command == "verify":
         result = verify_snapshot(args.snapshot)
+    elif args.command == "classify-identity":
+        result = {
+            "snapshots": [
+                classify_snapshot_identity(snapshot)
+                for snapshot in args.snapshot
+            ]
+        }
     elif args.command == "install-kodi":
         result = install_kodi(
             args.adb,

@@ -5,12 +5,15 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import re
+import secrets
 import ssl
 import stat
 import tempfile
+import time
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import urlencode, urlparse
@@ -27,14 +30,13 @@ TARGET_TAG = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,63}$")
 
 def validate_base_url(value):
     parsed = urlparse(value)
-    if parsed.scheme == "https" and parsed.netloc:
+    if parsed.scheme in {"http", "https"} and parsed.hostname in {
+        "127.0.0.1",
+        "::1",
+        "localhost",
+    }:
         return value.rstrip("/")
-    if (
-        parsed.scheme == "http"
-        and parsed.hostname in {"127.0.0.1", "::1", "localhost"}
-    ):
-        return value.rstrip("/")
-    raise ValueError("admin API must use HTTPS or loopback HTTP")
+    raise ValueError("admin API must use a loopback listener or SSH forward")
 
 
 def request(
@@ -114,6 +116,142 @@ def _decode_base64url(value, size, label):
     return payload
 
 
+def sign_with_registry(kind, document, key_id, seed_file, key_registry):
+    if not KEY_ID.fullmatch(str(key_id)):
+        raise ValueError("invalid signing key id")
+    seeds = _private_json(seed_file)
+    registry = _private_json(key_registry)
+    record = registry.get("keys", {}).get(key_id)
+    if (
+        not isinstance(record, dict)
+        or kind not in record.get("allowed_kinds", [])
+    ):
+        raise ValueError("signing key is not authorized for %s" % kind)
+    seed = _decode_base64url(seeds.get(key_id), 32, "signing seed")
+    expected_public = _decode_base64url(
+        record.get("public_key"), 32, "registry public key"
+    )
+    try:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+            Ed25519PrivateKey,
+        )
+    except ImportError as error:
+        raise RuntimeError("cryptography is required for offline signing") from error
+    private = Ed25519PrivateKey.from_private_bytes(seed)
+    actual_public = private.public_key().public_bytes(
+        serialization.Encoding.Raw,
+        serialization.PublicFormat.Raw,
+    )
+    if actual_public != expected_public:
+        raise ValueError("signing seed does not match the trusted registry")
+    output = dict(document)
+    payload = DOMAIN + kind.encode("ascii") + b"\0" + canonical_json(output)
+    output["signature"] = {
+        "algorithm": "Ed25519",
+        "key_id": key_id,
+        "value": base64.urlsafe_b64encode(private.sign(payload))
+        .rstrip(b"=")
+        .decode("ascii"),
+    }
+    return output
+
+
+def sign_admin_request(
+    operation,
+    payload,
+    role,
+    idempotency_key,
+    key_id,
+    seed_file,
+    key_registry,
+    now=None,
+    nonce=None,
+):
+    if role not in {"publish", "promote", "admin"}:
+        raise ValueError("invalid admin actor role")
+    if not isinstance(idempotency_key, str) or len(idempotency_key) < 8:
+        raise ValueError("invalid idempotency key")
+    now = int(time.time()) if now is None else int(now)
+    document = {
+        "schema": 1,
+        "actor_role": role,
+        "operation": operation,
+        "idempotency_key": idempotency_key,
+        "nonce": nonce or ("admin-" + secrets.token_urlsafe(18)),
+        "issued_at": now,
+        "expires_at": now + 120,
+        "payload": payload,
+    }
+    kind = "admin" if role == "admin" else "admin_" + role
+    return sign_with_registry(
+        kind, document, key_id, seed_file, key_registry
+    )
+
+
+def sign_assignment_v2(
+    channel,
+    enrollment_id,
+    enrollment_generation,
+    channel_generation,
+    revision_id,
+    target_tags,
+    assignment_kind,
+    apply_policy,
+    key_id,
+    seed_file,
+    key_registry,
+    now=None,
+    ttl_seconds=24 * 60 * 60,
+    nonce=None,
+):
+    if not CHANNEL.fullmatch(str(channel)):
+        raise ValueError("invalid channel")
+    if not ENROLLMENT.fullmatch(str(enrollment_id)):
+        raise ValueError("invalid enrollment")
+    if not isinstance(enrollment_generation, int) or enrollment_generation < 1:
+        raise ValueError("invalid enrollment generation")
+    if not isinstance(channel_generation, int) or channel_generation < 0:
+        raise ValueError("invalid channel generation")
+    if not REVISION.fullmatch(str(revision_id)):
+        raise ValueError("invalid revision")
+    if assignment_kind not in {"candidate", "active"}:
+        raise ValueError("invalid assignment kind")
+    if apply_policy not in {"observe", "enforce"}:
+        raise ValueError("invalid apply policy")
+    if (
+        len(target_tags) != len(set(target_tags))
+        or len(target_tags) > 16
+        or any(not TARGET_TAG.fullmatch(str(tag)) for tag in target_tags)
+    ):
+        raise ValueError("invalid target tags")
+    if not isinstance(ttl_seconds, int) or not 60 <= ttl_seconds <= 7 * 86400:
+        raise ValueError("invalid assignment TTL")
+    now = int(time.time()) if now is None else int(now)
+    identity = {
+        "schema": 2,
+        "enrollment_id": enrollment_id,
+        "enrollment_generation": enrollment_generation,
+        "channel": channel,
+        "channel_generation": channel_generation,
+        "revision_id": revision_id,
+        "target_tags": sorted(target_tags),
+        "assignment_kind": assignment_kind,
+        "apply_policy": apply_policy,
+        "nonce": nonce or ("assignment-" + secrets.token_urlsafe(18)),
+        "issued_at": now,
+        "expires_at": now + ttl_seconds,
+    }
+    document = {
+        **identity,
+        "assignment_id": "sha256:"
+        + hashlib.sha256(canonical_json(identity)).hexdigest(),
+    }
+    return sign_with_registry(
+        "assignment", document, key_id, seed_file, key_registry
+    )
+
+
 def sign_bootstrap_assignment(
     channel,
     enrollment_id,
@@ -137,48 +275,15 @@ def sign_bootstrap_assignment(
         or any(not TARGET_TAG.fullmatch(str(tag)) for tag in target_tags)
     ):
         raise ValueError("invalid target tags")
-    seeds = _private_json(seed_file)
-    registry = _private_json(key_registry)
-    record = registry.get("keys", {}).get(key_id)
-    if (
-        not isinstance(record, dict)
-        or "assignment" not in record.get("allowed_kinds", [])
-    ):
-        raise ValueError("signing key is not authorized for assignments")
-    seed = _decode_base64url(seeds.get(key_id), 32, "signing seed")
-    expected_public = _decode_base64url(
-        record.get("public_key"), 32, "registry public key"
-    )
-    try:
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-            Ed25519PrivateKey,
-        )
-    except ImportError as error:
-        raise RuntimeError("cryptography is required for offline signing") from error
-    private = Ed25519PrivateKey.from_private_bytes(seed)
-    actual_public = private.public_key().public_bytes(
-        serialization.Encoding.Raw,
-        serialization.PublicFormat.Raw,
-    )
-    if actual_public != expected_public:
-        raise ValueError("signing seed does not match the trusted registry")
     document = {
         "channel": channel,
         "enrollment_id": enrollment_id,
         "revision_id": revision_id,
         "target_tags": sorted(target_tags),
     }
-    payload = DOMAIN + b"assignment\0" + canonical_json(document)
-    signature = private.sign(payload)
-    document["signature"] = {
-        "algorithm": "Ed25519",
-        "key_id": key_id,
-        "value": base64.urlsafe_b64encode(signature)
-        .rstrip(b"=")
-        .decode("ascii"),
-    }
-    return document
+    return sign_with_registry(
+        "assignment", document, key_id, seed_file, key_registry
+    )
 
 
 def write_private_document(path, document):
@@ -217,12 +322,24 @@ def write_private_document(path, document):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base", default="http://127.0.0.1:8765")
+    parser.add_argument("--base", default="http://127.0.0.1:8766")
     parser.add_argument("--ca-certificate")
+    parser.add_argument("--admin-key-id")
+    parser.add_argument("--admin-seed-file")
+    parser.add_argument("--admin-key-registry")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("health")
     revision = subparsers.add_parser("put-revision")
     revision.add_argument("manifest")
+    revision.add_argument("--idempotency-key", required=True)
+    blob = subparsers.add_parser("put-blob")
+    blob.add_argument("path")
+    blob.add_argument(
+        "--media-type",
+        choices=("image/jpeg", "image/png", "image/webp"),
+        required=True,
+    )
+    blob.add_argument("--idempotency-key", required=True)
     publish = subparsers.add_parser("publish-candidate")
     publish.add_argument("channel")
     publish.add_argument("revision_id")
@@ -243,6 +360,26 @@ def main():
     bootstrap.add_argument("--key-registry", required=True)
     bootstrap.add_argument("--document-output", required=True)
     bootstrap.add_argument("--idempotency-key", required=True)
+    signed_assignment = subparsers.add_parser("sign-assignment-v2")
+    signed_assignment.add_argument("channel")
+    signed_assignment.add_argument("enrollment_id")
+    signed_assignment.add_argument("enrollment_generation", type=int)
+    signed_assignment.add_argument("channel_generation", type=int)
+    signed_assignment.add_argument("revision_id")
+    signed_assignment.add_argument(
+        "--assignment-kind",
+        choices=("candidate", "active"),
+        required=True,
+    )
+    signed_assignment.add_argument(
+        "--apply-policy", choices=("observe", "enforce"), required=True
+    )
+    signed_assignment.add_argument("--target-tag", action="append", default=[])
+    signed_assignment.add_argument("--key-id", required=True)
+    signed_assignment.add_argument("--seed-file", required=True)
+    signed_assignment.add_argument("--key-registry", required=True)
+    signed_assignment.add_argument("--document-output", required=True)
+    signed_assignment.add_argument("--ttl-seconds", type=int, default=86400)
     report = subparsers.add_parser("report")
     report.add_argument("document")
     report.add_argument("--idempotency-key", required=True)
@@ -255,37 +392,90 @@ def main():
     promote.add_argument("--idempotency-key", required=True)
     args = parser.parse_args()
     base = validate_base_url(args.base)
+
+    def admin_document(operation, payload, role, idempotency_key):
+        if not (
+            args.admin_key_id
+            and args.admin_seed_file
+            and args.admin_key_registry
+        ):
+            raise ValueError(
+                "mutating admin command requires --admin-key-id, "
+                "--admin-seed-file and --admin-key-registry"
+            )
+        return sign_admin_request(
+            operation,
+            payload,
+            role,
+            idempotency_key,
+            args.admin_key_id,
+            args.admin_seed_file,
+            args.admin_key_registry,
+        )
     if args.command == "health":
         result = request(
             base, "GET", "/health", ca_certificate=args.ca_certificate
         )
     elif args.command == "put-revision":
+        payload = load_document(args.manifest)
         result = request(
             base,
             "POST",
             "/v1/revisions",
-            load_document(args.manifest),
+            admin_document(
+                "put_revision", payload, "publish", args.idempotency_key
+            ),
+            args.idempotency_key,
+            ca_certificate=args.ca_certificate,
+        )
+    elif args.command == "put-blob":
+        content = Path(args.path).read_bytes()
+        digest = "sha256:" + hashlib.sha256(content).hexdigest()
+        payload = {
+            "content_base64": base64.urlsafe_b64encode(content)
+            .rstrip(b"=")
+            .decode("ascii"),
+            "media_type": args.media_type,
+        }
+        result = request(
+            base,
+            "POST",
+            "/v1/blobs/%s" % digest,
+            admin_document("put_blob", payload, "publish", args.idempotency_key),
+            args.idempotency_key,
             ca_certificate=args.ca_certificate,
         )
     elif args.command == "publish-candidate":
+        payload = {
+            "revision_id": args.revision_id,
+            "base_revision": args.base_revision,
+            "expected_candidate_head": args.expected_candidate_head,
+        }
         result = request(
             base,
             "POST",
             "/v1/channels/%s/candidates" % args.channel,
-            {
-                "revision_id": args.revision_id,
-                "base_revision": args.base_revision,
-                "expected_candidate_head": args.expected_candidate_head,
-            },
+            admin_document(
+                "publish_candidate",
+                payload,
+                "publish",
+                args.idempotency_key,
+            ),
             args.idempotency_key,
             ca_certificate=args.ca_certificate,
         )
     elif args.command == "assign":
+        payload = load_document(args.document)
         result = request(
             base,
             "POST",
             "/v1/channels/%s/assignments" % args.channel,
-            load_document(args.document),
+            admin_document(
+                "assign_candidate",
+                payload,
+                "publish",
+                args.idempotency_key,
+            ),
             args.idempotency_key,
             ca_certificate=args.ca_certificate,
         )
@@ -304,10 +494,35 @@ def main():
             base,
             "POST",
             "/v1/channels/%s/bootstrap-assignments" % args.channel,
-            document,
+            admin_document(
+                "bootstrap_active",
+                document,
+                "publish",
+                args.idempotency_key,
+            ),
             args.idempotency_key,
             ca_certificate=args.ca_certificate,
         )
+    elif args.command == "sign-assignment-v2":
+        document = sign_assignment_v2(
+            args.channel,
+            args.enrollment_id,
+            args.enrollment_generation,
+            args.channel_generation,
+            args.revision_id,
+            args.target_tag,
+            args.assignment_kind,
+            args.apply_policy,
+            args.key_id,
+            args.seed_file,
+            args.key_registry,
+            ttl_seconds=args.ttl_seconds,
+        )
+        write_private_document(args.document_output, document)
+        result = {
+            "assignment_id": document["assignment_id"],
+            "document": str(Path(args.document_output).expanduser().resolve()),
+        }
     elif args.command == "report":
         result = request(
             base,
@@ -327,11 +542,14 @@ def main():
             ca_certificate=args.ca_certificate,
         )
     else:
+        payload = load_document(args.document)
         result = request(
             base,
             "POST",
             "/v1/channels/%s/promote" % args.channel,
-            load_document(args.document),
+            admin_document(
+                "promote", payload, "promote", args.idempotency_key
+            ),
             args.idempotency_key,
             ca_certificate=args.ca_certificate,
         )

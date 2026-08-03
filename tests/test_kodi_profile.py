@@ -19,6 +19,8 @@ from tools.kodi_profile import (
     _validate_selective_addon_versions,
     _wait_for_kodi_ready,
     canonical_json,
+    classify_snapshot_identity,
+    contains_profile_sync_identity,
     digest,
     ensure_private_output,
     glob_regex,
@@ -184,6 +186,30 @@ def test_profile_policy_includes_settings_and_excludes_cache():
     assert not included_by_policy(
         "addons/packages/plugin.zip", policy
     )
+    assert not included_by_policy(
+        "userdata/addon_data/service.mwodevelop.profilesync/state.json",
+        policy,
+    )
+
+
+def test_profile_sync_identity_is_classified_and_rejected_before_restore(
+    tmp_path,
+):
+    relative = (
+        "userdata/addon_data/service.mwodevelop.profilesync/state.json"
+    )
+    assert contains_profile_sync_identity([relative])
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    (snapshot / "manifest.json").write_text(
+        json.dumps({"schema": 1, "files": {relative: {}}})
+    )
+
+    assert classify_snapshot_identity(snapshot)["identity_status"] == (
+        "IDENTITY_CONTAMINATED"
+    )
+    with pytest.raises(ValueError, match="IDENTITY_CONTAMINATED"):
+        verify_snapshot(snapshot)
 
 
 def test_single_star_does_not_cross_directory_boundaries():
