@@ -25,6 +25,7 @@
         "userdata/temp/**",
         "userdata/addon_data/**/cache/**",
         "userdata/addon_data/**/temp/**",
+        "userdata/addon_data/service.mwodevelop.profilesync/**",
         "userdata/addon_data/plugin.video.umbrella/artwork.db",
         "userdata/addon_data/plugin.video.umbrella/cache.db",
         "userdata/addon_data/plugin.video.umbrella/cache.v",
@@ -43,7 +44,8 @@
         "Addons, texture, EPG, thumbnail and peripheral databases are rebuilt.",
         "Umbrella credentials remain in addon_data/plugin.video.umbrella/settings.xml.",
         "Library databases are deferred because they cannot be atomically replaced while Kodi owns them.",
-        "WatchNixtoons2 favourite artwork is materialized under userdata/favourite-artwork so it survives cache-free restores."
+        "WatchNixtoons2 favourite artwork is materialized under userdata/favourite-artwork so it survives cache-free restores.",
+        "Profile Sync enrollment, token, private key, journal and local state are never backed up or restored."
       ]
     },
     "routine": {

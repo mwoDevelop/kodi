@@ -68,6 +68,7 @@ def main():
     parser.add_argument("--server-url", required=True)
     parser.add_argument("--ca-certificate", type=Path, required=True)
     parser.add_argument("--pairing-file", type=Path)
+    parser.add_argument("--replace-enrollment", action="store_true")
     parser.add_argument("--channel", default="home-stable")
     parser.add_argument("--action", choices=("configure", "sync"), required=True)
     parser.add_argument("--read-only", action="store_true")
@@ -110,6 +111,10 @@ def main():
         ):
             raise ValueError("pairing file identity differs")
         config["pairing_code"] = pairing["code"]
+    if args.replace_enrollment:
+        if not args.pairing_file:
+            raise ValueError("replacement enrollment requires a pairing file")
+        config["replace_enrollment"] = True
     local_config = repository / ".kodi-private/e2e/.production-config.json"
     local_config.parent.mkdir(parents=True, exist_ok=True)
     local_config.write_text(json.dumps(config), encoding="utf-8")

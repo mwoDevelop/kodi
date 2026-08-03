@@ -110,6 +110,91 @@ def included_by_policy(relative, policy):
     return included and not excluded
 
 
+PROFILE_SYNC_IDENTITY_PREFIX = (
+    "userdata",
+    "addon_data",
+    "service.mwodevelop.profilesync",
+)
+
+
+def contains_profile_sync_identity(paths):
+    return any(
+        PurePosixPath(relative).parts[:3] == PROFILE_SYNC_IDENTITY_PREFIX
+        for relative in paths
+    )
+
+
+def classify_snapshot_identity(snapshot):
+    snapshot = Path(snapshot).resolve()
+    manifest = json.loads(
+        (snapshot / "manifest.json").read_text(encoding="utf-8")
+    )
+    files = manifest.get("files")
+    if not isinstance(files, dict):
+        raise ValueError("snapshot has no file inventory")
+    return {
+        "snapshot": str(snapshot),
+        "identity_status": (
+            "IDENTITY_CONTAMINATED"
+            if contains_profile_sync_identity(files)
+            else "IDENTITY_CLEAN"
+        ),
+    }
+
+
+def sanitize_snapshot_identity(snapshot, output):
+    """Create a verified copy without device-local Profile Sync identity."""
+    snapshot = Path(snapshot).resolve()
+    output = Path(output).resolve()
+    if output.exists():
+        raise ValueError("sanitized snapshot output already exists")
+    if classify_snapshot_identity(snapshot)["identity_status"] != (
+        "IDENTITY_CONTAMINATED"
+    ):
+        raise ValueError("snapshot does not contain Profile Sync identity")
+    output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    temporary = Path(
+        tempfile.mkdtemp(prefix=".sanitize-", dir=str(output.parent))
+    ).resolve()
+    try:
+        shutil.copytree(snapshot, temporary, dirs_exist_ok=True, symlinks=True)
+        identity_root = temporary / "payload" / Path(
+            *PROFILE_SYNC_IDENTITY_PREFIX
+        )
+        if identity_root.is_symlink():
+            raise ValueError("snapshot identity path cannot be a link")
+        shutil.rmtree(identity_root)
+        manifest_path = temporary / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["files"] = {
+            relative: metadata
+            for relative, metadata in manifest["files"].items()
+            if not contains_profile_sync_identity([relative])
+        }
+        identity = {
+            key: manifest[key]
+            for key in (
+                "schema",
+                "policy_sha256",
+                "device",
+                "selected_skin",
+                "addons",
+                "files",
+                "installer",
+            )
+        }
+        manifest["sanitized_from"] = manifest["snapshot_id"]
+        manifest["snapshot_id"] = digest(canonical_json(identity))
+        manifest_path.write_bytes(canonical_json(manifest) + b"\n")
+        secure_private_tree(temporary)
+        verify_snapshot(temporary)
+        temporary.rename(output)
+        return manifest
+    except BaseException:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+
+
 def requires_direct_copy(relative):
     return any(
         part.startswith("...")
@@ -524,6 +609,10 @@ def verify_snapshot(snapshot):
     )
     if manifest.get("schema") != SCHEMA:
         raise ValueError("unsupported snapshot schema")
+    if contains_profile_sync_identity(manifest.get("files", {})):
+        raise ValueError(
+            "IDENTITY_CONTAMINATED: snapshot contains Profile Sync identity"
+        )
     payload = snapshot / "payload"
     actual = {}
     for path in sorted(payload.rglob("*")):
@@ -1706,6 +1795,11 @@ def main():
     export.add_argument("--policy", default=str(default_policy))
     verify = commands.add_parser("verify")
     verify.add_argument("snapshot")
+    classify = commands.add_parser("classify-identity")
+    classify.add_argument("snapshot", nargs="+")
+    sanitize = commands.add_parser("sanitize-identity")
+    sanitize.add_argument("snapshot")
+    sanitize.add_argument("--output", required=True)
     install = commands.add_parser("install-kodi")
     install.add_argument("snapshot")
     restore = commands.add_parser("restore")
@@ -1762,6 +1856,15 @@ def main():
         )
     elif args.command == "verify":
         result = verify_snapshot(args.snapshot)
+    elif args.command == "classify-identity":
+        result = {
+            "snapshots": [
+                classify_snapshot_identity(snapshot)
+                for snapshot in args.snapshot
+            ]
+        }
+    elif args.command == "sanitize-identity":
+        result = sanitize_snapshot_identity(args.snapshot, args.output)
     elif args.command == "install-kodi":
         result = install_kodi(
             args.adb,
@@ -1795,6 +1898,9 @@ def main():
             args.allow_kodi_upgrade,
             args.allow_addon_upgrade,
         )
+    if args.command == "classify-identity":
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
     summary = {
         key: result[key]
         for key in (

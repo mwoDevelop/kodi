@@ -76,7 +76,7 @@ def test_smoke_rejects_production_data_path(repository_root):
     candidate = copy.deepcopy(document)
     candidate["services"]["profile-sync"]["volumes"][0][
         "source"
-    ] = "/share/ProfileSync/data"
+    ] = "/share/CACHEDEV3_DATA/.mwodevelop/profile-sync/data"
 
     with pytest.raises(PolicyError, match="production paths"):
         validate_policy(candidate, "smoke", allow_placeholder=True)
@@ -127,6 +127,22 @@ def test_source_audit_requires_explicit_false():
 
     assert explicit_bind_targets(valid) == {"/data"}
     assert explicit_bind_targets(unsafe) == set()
+
+
+def test_admin_listener_must_not_be_published(repository_root):
+    document = render(repository_root, "production", "env.example")
+    candidate = copy.deepcopy(document)
+    candidate["services"]["profile-sync"]["ports"].append(
+        {
+            "target": 8766,
+            "published": 18767,
+            "host_ip": "127.0.0.1",
+            "protocol": "tcp",
+        }
+    )
+
+    with pytest.raises(PolicyError, match="exactly one entry"):
+        validate_policy(candidate, "production", allow_placeholder=True)
 
 
 @pytest.fixture

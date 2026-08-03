@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import ipaddress
 import json
@@ -36,6 +37,11 @@ except ModuleNotFoundError:
 RUN_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,47}$")
 SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 TARGET_TAG = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,63}$")
+ADMIN_PATH = re.compile(
+    r"^/v1/(?:revisions|blobs/sha256:[a-f0-9]{64}|"
+    r"channels/[a-z0-9][a-z0-9._-]{0,63}/"
+    r"(?:candidates|assignments|bootstrap-assignments|promote))$"
+)
 INSTALL_PATH = re.compile(
     r"^/share/[A-Za-z0-9._-]+/\.qpkg/container-station$"
 )
@@ -43,7 +49,9 @@ SMOKE_PORT = 28765
 PRODUCTION_PORT = 18765
 SMOKE_PROJECT = "qnap-profile-sync-smoke"
 PRODUCTION_PROJECT = "qnap-profile-sync"
-PRODUCTION_ROOT = PurePosixPath("/share/ProfileSync")
+PRODUCTION_ROOT = PurePosixPath(
+    "/share/CACHEDEV3_DATA/.mwodevelop/profile-sync"
+)
 SYNTHETIC_REGISTRY = {
     "schema": 1,
     "keys": {
@@ -113,6 +121,40 @@ class QnapSession:
                 raise QnapError("local download target already exists") from None
         finally:
             temporary.unlink(missing_ok=True)
+
+    def download_tree(self, remote_path, local_path):
+        """Download a regular-file tree without following remote links."""
+        remote_path = str(PurePosixPath(remote_path))
+        local_path = Path(local_path)
+        if local_path.exists():
+            raise QnapError("local download target already exists")
+        local_path.mkdir(parents=True, mode=0o700)
+        try:
+            with self.client.open_sftp() as sftp:
+                pending = [(PurePosixPath(remote_path), local_path)]
+                while pending:
+                    remote, local = pending.pop()
+                    for attribute in sftp.listdir_attr(str(remote)):
+                        name = attribute.filename
+                        if name in {"", ".", ".."} or "/" in name:
+                            raise QnapError("remote backup has an unsafe entry")
+                        remote_entry = remote / name
+                        local_entry = local / name
+                        if stat.S_ISDIR(attribute.st_mode):
+                            local_entry.mkdir(mode=0o700)
+                            pending.append((remote_entry, local_entry))
+                        elif stat.S_ISREG(attribute.st_mode):
+                            sftp.get(str(remote_entry), str(local_entry))
+                            local_entry.chmod(0o600)
+                        else:
+                            raise QnapError(
+                                "remote backup contains a non-regular entry"
+                            )
+        except Exception:
+            import shutil
+
+            shutil.rmtree(local_path, ignore_errors=True)
+            raise
 
     def close(self):
         self.client.close()
@@ -379,7 +421,7 @@ def verify_production(host_ip, ca_certificate, attempts=45):
             if (
                 document.get("status") == "ready"
                 and document.get("mode") == "verified-tls"
-                and document.get("database_schema") == 2
+                and document.get("database_schema") == 3
                 and document.get("service") == "kodi-profile-sync-server"
             ):
                 return {
@@ -523,11 +565,11 @@ def backup_production(session, backup_id, output):
         raise QnapError("local backup output already exists")
     _install, docker = container_station(session)
     compose = production_compose_command(docker)
-    remote_container_path = "/data/backups/%s.sqlite" % backup_id
+    remote_container_path = "/data/backups/%s" % backup_id
     result_payload = session.execute(
         compose
         + " exec -T profile-sync python -m profile_sync_server.admin "
-        + "--database /data/state.sqlite backup --output "
+        + "--database /data/state.sqlite backup-epoch --output "
         + shlex.quote(remote_container_path),
         timeout=120,
     )
@@ -539,53 +581,77 @@ def backup_production(session, backup_id, output):
         session,
         backup_id,
         output,
-        expected_sha256=result.get("sha256"),
+        expected_database_sha256=result.get("database_sha256"),
+        expected_blob_count=result.get("blob_count"),
     )
 
 
 def production_backup_paths(backup_id):
     if not RUN_ID.fullmatch(backup_id):
         raise QnapError("invalid backup id")
-    filename = backup_id + ".sqlite"
     return (
-        PurePosixPath("/data/backups") / filename,
-        production_root() / "data" / "backups" / filename,
+        PurePosixPath("/data/backups") / backup_id,
+        production_root() / "data" / "backups" / backup_id,
     )
 
 
 def download_production_backup(
-    session, backup_id, output, expected_sha256=None
+    session,
+    backup_id,
+    output,
+    expected_database_sha256=None,
+    expected_blob_count=None,
 ):
-    container_path, host_path = production_backup_paths(backup_id)
+    _container_path, host_path = production_backup_paths(backup_id)
     output = Path(output)
     if output.exists():
         raise QnapError("local backup output already exists")
-    _install, docker = container_station(session)
-    compose = production_compose_command(docker)
-    if expected_sha256 is None:
-        checksum = session.execute(
-            compose
-            + " exec -T profile-sync sha256sum "
-            + shlex.quote(str(container_path)),
-            timeout=120,
+    session.download_tree(str(host_path), output)
+    try:
+        epoch = json.loads(
+            (output / "inventory.json").read_text(encoding="utf-8")
         )
-        fields = checksum.split()
-        if len(fields) != 2 or not re.fullmatch(r"[0-9a-f]{64}", fields[0]):
-            raise QnapError("production backup returned invalid checksum")
-        expected_sha256 = fields[0]
-    if not isinstance(expected_sha256, str) or not re.fullmatch(
-        r"[0-9a-f]{64}", expected_sha256
-    ):
-        raise QnapError("production backup returned invalid checksum")
-    session.download_file(str(host_path), output)
-    digest = hashlib.sha256(output.read_bytes()).hexdigest()
-    if digest != expected_sha256:
-        output.unlink(missing_ok=True)
-        raise QnapError("downloaded backup digest differs")
+        database_path = output / "state.sqlite"
+        digest = hashlib.sha256(database_path.read_bytes()).hexdigest()
+        database = epoch.get("database")
+        if (
+            epoch.get("schema") != 1
+            or not isinstance(database, dict)
+            or database.get("file") != "state.sqlite"
+            or database.get("sha256") != digest
+            or database.get("bytes") != database_path.stat().st_size
+            or (
+                expected_database_sha256 is not None
+                and expected_database_sha256 != digest
+            )
+            or not isinstance(epoch.get("blobs"), list)
+        ):
+            raise QnapError("downloaded backup epoch differs")
+        for blob in epoch["blobs"]:
+            value = blob.get("sha256", "").removeprefix("sha256:")
+            path = output / "blobs" / value[:2] / value
+            payload = path.read_bytes()
+            if (
+                not re.fullmatch(r"[a-f0-9]{64}", value)
+                or len(payload) != blob.get("size")
+                or hashlib.sha256(payload).hexdigest() != value
+            ):
+                raise QnapError("downloaded backup blob differs")
+        if (
+            expected_blob_count is not None
+            and expected_blob_count != len(epoch["blobs"])
+        ):
+            raise QnapError("downloaded backup blob inventory differs")
+    except Exception:
+        import shutil
+
+        shutil.rmtree(output, ignore_errors=True)
+        raise
     return {
         "backup_id": backup_id,
-        "bytes": output.stat().st_size,
-        "sha256": digest,
+        "blob_count": len(epoch["blobs"]),
+        "database_sha256": digest,
+        "epoch": str(output),
     }
 
 
@@ -645,6 +711,50 @@ def create_production_pairing(
         "pairing_file": str(output),
         "code_written": True,
     }
+
+
+def production_admin_request(
+    session, path, document, idempotency_key
+):
+    """Submit an already signed request through SSH and container loopback."""
+    if not ADMIN_PATH.fullmatch(str(path)):
+        raise QnapError("invalid production admin path")
+    if not isinstance(document, dict):
+        raise QnapError("production admin request must be an object")
+    if not isinstance(idempotency_key, str) or len(idempotency_key) < 8:
+        raise QnapError("invalid production admin idempotency key")
+    payload = base64.urlsafe_b64encode(
+        json.dumps(
+            document, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    ).rstrip(b"=").decode("ascii")
+    _install, docker = container_station(session)
+    program = (
+        "import base64,json,sys,urllib.request;"
+        "raw=base64.urlsafe_b64decode(sys.argv[1]+'='*(-len(sys.argv[1])%4));"
+        "request=urllib.request.Request('http://127.0.0.1:8766'+sys.argv[2],"
+        "data=raw,headers={'Content-Type':'application/json',"
+        "'Idempotency-Key':sys.argv[3]},method='POST');"
+        "print(urllib.request.urlopen(request,timeout=15).read().decode())"
+    )
+    command = (
+        production_compose_command(docker)
+        + " exec -T profile-sync python -c "
+        + shlex.quote(program)
+        + " "
+        + shlex.quote(payload)
+        + " "
+        + shlex.quote(path)
+        + " "
+        + shlex.quote(idempotency_key)
+    )
+    try:
+        response = json.loads(session.execute(command, timeout=120))
+    except json.JSONDecodeError as error:
+        raise QnapError("production admin returned invalid JSON") from error
+    if not isinstance(response, dict):
+        raise QnapError("production admin returned an invalid document")
+    return response
 
 
 def smoke_deploy(session, repository, image, run_id):
@@ -758,7 +868,7 @@ def verify(session):
             if (
                 document.get("status") == "ready"
                 and document.get("service") == "kodi-profile-sync-server"
-                and document.get("database_schema") == 2
+                and document.get("database_schema") == 3
             ):
                 state = status(session, SMOKE_PROJECT)
                 if (
@@ -878,6 +988,10 @@ def main():
     pairing.add_argument("--channel", required=True)
     pairing.add_argument("--target-tag", action="append", default=[])
     pairing.add_argument("--output", required=True)
+    admin_request = subparsers.add_parser("admin-request")
+    admin_request.add_argument("--path", required=True)
+    admin_request.add_argument("--document", required=True)
+    admin_request.add_argument("--idempotency-key", required=True)
     destroy = subparsers.add_parser("destroy-smoke")
     destroy.add_argument("--run-id", required=True)
     args = parser.parse_args()
@@ -928,6 +1042,13 @@ def main():
                 args.channel,
                 args.target_tag,
                 args.output,
+            )
+        elif args.command == "admin-request":
+            result = production_admin_request(
+                session,
+                args.path,
+                json.loads(Path(args.document).read_text(encoding="utf-8")),
+                args.idempotency_key,
             )
         else:
             result = destroy_smoke(session, args.run_id)
