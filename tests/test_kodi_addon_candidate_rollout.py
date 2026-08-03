@@ -36,3 +36,46 @@ def test_execute_retries_dropped_eventserver_command(monkeypatch):
 
     assert result == {"ok": True}
     assert len(commands) == 3
+
+
+def test_execute_falls_back_to_host_eventserver_for_lan_target(monkeypatch):
+    commands = []
+    markers = iter([None, {"ok": True}])
+
+    class JsonRpc:
+        def __init__(self, *args):
+            del args
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            del args
+
+        def call(self, *args):
+            del args
+            raise RuntimeError("method unavailable")
+
+    class Events:
+        def __init__(self, *args):
+            del args
+
+        def execute_builtin(self, command):
+            commands.append(("device", command))
+
+        def execute_builtin_from_host(self, command):
+            commands.append(("host", command))
+
+    monkeypatch.setattr(rollout, "AdbJsonRpcClient", JsonRpc)
+    monkeypatch.setattr(rollout, "AdbEventClient", Events)
+    monkeypatch.setattr(rollout, "_wait_marker", lambda *args: next(markers))
+
+    result = rollout._execute(
+        "adb", 5038, "192.168.1.18:5555", "RunScript(x)", 10**9
+    )
+
+    assert result == {"ok": True}
+    assert commands == [
+        ("device", "RunScript(x)"),
+        ("host", "RunScript(x)"),
+    ]
