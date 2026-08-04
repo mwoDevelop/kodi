@@ -134,7 +134,16 @@ def _execute(adb, port, serial, command, deadline):
     return result
 
 
-def rollout(adb, port, serial, candidate, addon_id, version, timeout):
+def rollout(
+    adb,
+    port,
+    serial,
+    candidate,
+    addon_id,
+    version,
+    timeout,
+    repair_orphan=False,
+):
     script = ROOT / "tests/e2e/kodi_addon_candidate_apply.py"
     for source, destination in (
         (script, REMOTE_SCRIPT),
@@ -161,7 +170,8 @@ def rollout(adb, port, serial, candidate, addon_id, version, timeout):
         _wait_for_kodi_ready(adb, port, serial)
         command = (
             f"RunScript({REMOTE_SCRIPT},{REMOTE_ZIP},"
-            f"{addon_id},{version},{REMOTE_MARKER})"
+            f"{addon_id},{version},{REMOTE_MARKER}"
+            f"{',repair-orphan' if repair_orphan else ''})"
         )
         result = _execute(
             adb,
@@ -175,7 +185,8 @@ def rollout(adb, port, serial, candidate, addon_id, version, timeout):
         if not result.get("ok"):
             raise RuntimeError(
                 "Kodi candidate apply failed: "
-                f"{result.get('error_type', 'unknown')}"
+                f"{result.get('error_type', 'unknown')} at "
+                f"{result.get('error_stage', 'unknown')}"
             )
         adb_command(
             adb,
@@ -246,6 +257,14 @@ def main():
     )
     parser.add_argument("--adb-server-port", type=int, default=5038)
     parser.add_argument("--timeout", type=float, default=120)
+    parser.add_argument(
+        "--repair-orphan",
+        action="store_true",
+        help=(
+            "remove an identity-verified orphan directory only when atomic "
+            "backup is denied; caller must prove the add-on is not installed"
+        ),
+    )
     args = parser.parse_args()
     candidate = args.candidate.resolve()
     if not candidate.is_file():
@@ -258,6 +277,7 @@ def main():
         args.addon_id,
         args.version,
         args.timeout,
+        repair_orphan=args.repair_orphan,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
 

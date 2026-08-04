@@ -172,6 +172,30 @@ It also maps restored custom add-ons to the repository that actually indexes
 them, so Kodi retains automatic update ownership after rebuilding its add-on
 database. The APK must also remain under `.kodi-private/`.
 
+The optional top-level `default_addons_manifest` points at a versioned public
+policy such as `manifests/kodi-default-addons.json`. After restoring the private
+snapshot and before validating it, the reinstall workflow reconciles every
+listed external add-on from its official HTTPS publisher. It verifies the
+download SHA-256, safe ZIP layout, add-on identity and version, dependencies,
+enabled state, and repository origin. Add-on credentials remain exclusively in
+the private profile; the public manifest contains provenance and immutable
+artifact identities only.
+
+The same reconciliation can be rerun without reinstalling Kodi:
+
+```bash
+.venv/bin/python tools/kodi_default_addons.py \
+  --serial ADB_ENDPOINT \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --adb-server-port 5038
+```
+
+An exact compliant installation is reported as `unchanged`. A failed legacy
+ADB copy may leave an Android scoped-storage directory that Kodi cannot rename.
+The reconciler retries an orphan repair only after JSON-RPC proves the add-on is
+absent from Kodi's database; active add-ons always retain the atomic backup and
+rollback path.
+
 Preview and validate every target without changing either device:
 
 ```bash

@@ -198,6 +198,10 @@ def test_deploy_uses_direct_adb_restore_mode(monkeypatch):
         "tools.kodi_reinstall.validate_restored_target",
         lambda *_args: calls.append("validate") or {"result": "pass"},
     )
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.reconcile_default_addons",
+        lambda *_args: calls.append("defaults"),
+    )
 
     assert deploy_target(
         "adb",
@@ -208,7 +212,13 @@ def test_deploy_uses_direct_adb_restore_mode(monkeypatch):
     ) == {
         "result": "pass"
     }
-    assert calls == ["clean", "install", "restore", "validate"]
+    assert calls == [
+        "clean",
+        "install",
+        "restore",
+        "defaults",
+        "validate",
+    ]
 
 
 def create_addons_database(path, installed_origin=""):
