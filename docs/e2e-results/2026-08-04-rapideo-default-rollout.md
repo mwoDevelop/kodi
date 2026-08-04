@@ -22,3 +22,29 @@ Evidence:
 The two registered Linux Flatpak profiles could not be audited or changed in
 this run because their pinned SSH transport returned exit code 255. This is an
 availability exception, not a successful rollout claim.
+
+## Final convergence
+
+The X88 clean-profile repair restored an older stable snapshot, so the final
+matrix audit also reconciled the current stable Umbrella `6.7.81.20`,
+mwoScrapers `0.1.10`, WatchNixtoons2 `0.26.1`, and Profile Sync `1.0.1`.
+Profile Sync received a new one-time production enrollment and an
+offline-signed bootstrap assignment for the active `home-stable` revision. The
+first sync applied it and the repeat sync returned `NO_CHANGE` with no pending
+report.
+
+With the X88 always-on OpenVPN tunnel validated, public Torrentio returned HTTP
+403 while public Comet returned 132 sanitized source records. Both providers
+remain enabled, so the working provider is retained instead of treating the
+Torrentio VPN policy as an empty-search result. Umbrella then resolved and
+played the open Sintel test asset for 10 seconds through Real-Debrid; resolver
+startup took 52.886 seconds. The BlueStacks and X88 Real-Debrid probes both
+reported a premium account and the expected code-37 `disabled_endpoint`
+mapping as healthy.
+
+The final four-device portable-state audit reported the same eight favourites,
+seven portable WatchNixtoons2 entries, no missing artwork, Profile Sync `1.0.1`
+and `NO_CHANGE` on BlueStacks1, X88 Pro 20, Sony TV, and Bedroom TV. All four
+also use Umbrella `6.7.81.20` from `repository.mwodevelop`, Rapideo `1.5.0` from
+`repository.rapideo_pl`, and xbmcswift2 `19.0.7` from
+`repository.xbmc.org`.
