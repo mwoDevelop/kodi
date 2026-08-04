@@ -1413,20 +1413,33 @@ def _wait_for_kodi_ready(adb, port, serial, timeout=90):
     )
 
 
+def _skin_rpc(jsonrpc, method, params=None, attempts=3):
+    for attempt in range(attempts):
+        try:
+            return jsonrpc.call(method, params)
+        except (OSError, TimeoutError):
+            if attempt + 1 == attempts:
+                raise
+            time.sleep(1)
+
+
 def _activate_skin(jsonrpc, skin_id, timeout=15):
     if skin_id != "skin.estuary":
-        jsonrpc.call(
+        _skin_rpc(
+            jsonrpc,
             "Settings.SetSettingValue",
             {"setting": "lookandfeel.skin", "value": "skin.estuary"},
         )
         time.sleep(1)
-    jsonrpc.call(
+    _skin_rpc(
+        jsonrpc,
         "Settings.SetSettingValue",
         {"setting": "lookandfeel.skin", "value": skin_id},
     )
     started = time.monotonic()
     while time.monotonic() - started < timeout:
-        gui = jsonrpc.call(
+        gui = _skin_rpc(
+            jsonrpc,
             "GUI.GetProperties",
             {"properties": ["currentwindow", "currentcontrol"]},
         )
@@ -1434,12 +1447,13 @@ def _activate_skin(jsonrpc, skin_id, timeout=15):
         control = gui.get("currentcontrol", {})
         if window.get("id") == 10100:
             if control.get("label") == "No":
-                jsonrpc.call("Input.Left")
-            jsonrpc.call("Input.Select")
+                _skin_rpc(jsonrpc, "Input.Left")
+            _skin_rpc(jsonrpc, "Input.Select")
             break
         time.sleep(0.25)
     time.sleep(2)
-    selected = jsonrpc.call(
+    selected = _skin_rpc(
+        jsonrpc,
         "Settings.GetSettingValue",
         {"setting": "lookandfeel.skin"},
     )

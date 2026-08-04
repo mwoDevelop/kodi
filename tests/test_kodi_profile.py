@@ -446,6 +446,35 @@ def test_activate_skin_accepts_only_the_expected_confirmation(monkeypatch):
     assert ("Input.Select", None) in rpc.calls
 
 
+def test_activate_skin_retries_a_transient_transport_timeout(monkeypatch):
+    monkeypatch.setattr("tools.kodi_profile.time.sleep", lambda _seconds: None)
+
+    class JsonRpc:
+        def __init__(self):
+            self.calls = []
+            self.timed_out = False
+
+        def call(self, method, params=None):
+            self.calls.append((method, params))
+            if method == "GUI.GetProperties" and not self.timed_out:
+                self.timed_out = True
+                raise TimeoutError("transient Kodi startup timeout")
+            if method == "GUI.GetProperties":
+                return {
+                    "currentwindow": {"id": 10100},
+                    "currentcontrol": {"label": "Yes"},
+                }
+            if method == "Settings.GetSettingValue":
+                return {"value": "skin.estuary"}
+            return True
+
+    rpc = JsonRpc()
+    _activate_skin(rpc, "skin.estuary", timeout=0.1)
+
+    methods = [method for method, _params in rpc.calls]
+    assert methods.count("GUI.GetProperties") >= 2
+
+
 def test_restore_removes_device_staging_after_failure(monkeypatch):
     calls = []
 
