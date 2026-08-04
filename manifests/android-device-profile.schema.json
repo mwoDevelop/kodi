@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mwodevelop.github.io/kodi/schemas/android-device-profile.schema.json",
+  "title": "mwoDevelop Android device policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "device_id", "platform", "expected", "vpn"],
+  "properties": {
+    "schema": {"const": 1},
+    "device_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "platform": {"const": "android"},
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model"],
+      "properties": {"model": {"type": "string", "minLength": 1}}
+    },
+    "vpn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package",
+        "always_on",
+        "lockdown",
+        "connection_profile_name",
+        "reconnect_on_reboot",
+        "credential_mode",
+        "profile_path_env",
+        "tunnel_interface",
+        "require_validated_tunnel",
+        "bypass_cidrs",
+        "required_env"
+      ],
+      "properties": {
+        "package": {"type": "string", "minLength": 1},
+        "always_on": {"type": "boolean"},
+        "lockdown": {"type": "boolean"},
+        "connection_profile_name": {"type": "string", "minLength": 1},
+        "reconnect_on_reboot": {
+          "enum": ["connect_latest", "restore_connection", "none"]
+        },
+        "credential_mode": {"const": "inline_auth_user_pass"},
+        "profile_path_env": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "tunnel_interface": {"type": "string", "minLength": 1},
+        "require_validated_tunnel": {"type": "boolean"},
+        "bypass_cidrs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "required_env": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"}
+        }
+      }
+    }
+  }
+}
