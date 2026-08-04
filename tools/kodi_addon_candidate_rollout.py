@@ -27,6 +27,34 @@ REMOTE_ZIP = "/sdcard/Download/mwo-addon-candidate.zip"
 REMOTE_MARKER = "/sdcard/Download/mwo-addon-candidate-result.json"
 
 
+def _restart_kodi(adb, port, serial):
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        f"cmd package unsuspend {KODI_PACKAGE}",
+        check=False,
+    )
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        f"pm enable {KODI_PACKAGE}",
+    )
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "monkey -p "
+        f"{KODI_PACKAGE} -c android.intent.category.LAUNCHER "
+        "1 >/dev/null",
+    )
+    _wait_for_kodi_ready(adb, port, serial)
+
+
 def _marker(adb, port, serial):
     result = adb_command(
         adb,
@@ -156,16 +184,7 @@ def rollout(adb, port, serial, candidate, addon_id, version, timeout):
             "shell",
             f"am force-stop {KODI_PACKAGE}",
         )
-        adb_command(
-            adb,
-            port,
-            serial,
-            "shell",
-            "monkey -p "
-            f"{KODI_PACKAGE} -c android.intent.category.LAUNCHER "
-            "1 >/dev/null",
-        )
-        _wait_for_kodi_ready(adb, port, serial)
+        _restart_kodi(adb, port, serial)
         AdbEventClient(adb, port, serial).execute_builtin(
             "UpdateLocalAddons"
         )

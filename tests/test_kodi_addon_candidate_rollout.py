@@ -3,6 +3,35 @@ from types import SimpleNamespace
 from tools import kodi_addon_candidate_rollout as rollout
 
 
+def test_restart_unsuspends_and_enables_kodi_before_launch(monkeypatch):
+    commands = []
+    options = []
+    readiness = []
+    monkeypatch.setattr(
+        rollout,
+        "adb_command",
+        lambda *args, **kwargs: (
+            commands.append(args[4]), options.append(kwargs)
+        ),
+    )
+    monkeypatch.setattr(
+        rollout,
+        "_wait_for_kodi_ready",
+        lambda *args: readiness.append(args),
+    )
+
+    rollout._restart_kodi("adb", 5038, "device")
+
+    assert commands == [
+        "cmd package unsuspend org.xbmc.kodi",
+        "pm enable org.xbmc.kodi",
+        "monkey -p org.xbmc.kodi "
+        "-c android.intent.category.LAUNCHER 1 >/dev/null",
+    ]
+    assert options[0] == {"check": False}
+    assert readiness == [("adb", 5038, "device")]
+
+
 def test_execute_retries_dropped_eventserver_command(monkeypatch):
     commands = []
     markers = iter([None, None, {"ok": True}])

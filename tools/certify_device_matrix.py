@@ -114,7 +114,18 @@ def _recover_kodi(adb, server_port, endpoint, port):
         "force-stop",
         KODI_PACKAGE,
     )
-    # BlueStacks can leave the Android package disabled after force-stop.
+    # BlueStacks can leave the Android package suspended or disabled after
+    # force-stop. Certified Kodi 21 Android targets support this package API.
+    _adb(
+        adb,
+        server_port,
+        endpoint,
+        "shell",
+        "cmd",
+        "package",
+        "unsuspend",
+        KODI_PACKAGE,
+    )
     # Enabling an already enabled package is idempotent on Android and keeps
     # recovery portable across emulators and physical Android TV devices.
     _adb(
