@@ -181,6 +181,37 @@ enabled state, and repository origin. Add-on credentials remain exclusively in
 the private profile; the public manifest contains provenance and immutable
 artifact identities only.
 
+Private add-on configuration is a separate post-install phase. The ignored
+reinstall config may declare an allow-listed adapter and references to values
+in the ignored, mode-`0600` `.env` file:
+
+```json
+{
+  "private_references_file": ".env",
+  "default_addon_private_profiles": [
+    {
+      "adapter": "rapideo-v1",
+      "username_ref": "RAPIDEO_USER",
+      "password_ref": "RAPIDEO_PASS"
+    }
+  ]
+}
+```
+
+The Rapideo adapter runs after the official add-on reconciliation and before
+final restore validation. It writes settings through Kodi, discards any old
+token, performs a fresh login and verifies the account endpoint. The temporary
+credential file and sanitized result are always removed from Android shared
+storage. Neither the restore report nor process arguments contain credentials
+or tokens. A standalone, idempotent retry is also available:
+
+```bash
+.venv/bin/python tools/kodi_rapideo_configure.py \
+  --serial ADB_ENDPOINT --references .env \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --adb-server-port 5038
+```
+
 The same reconciliation can be rerun without reinstalling Kodi:
 
 ```bash

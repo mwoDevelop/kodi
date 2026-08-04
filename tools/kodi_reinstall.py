@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import time
@@ -121,6 +122,26 @@ def resolve_private_path(repository, value):
     return ensure_private_output(path, repository)
 
 
+def resolve_ignored_reference_path(repository, value):
+    path = Path(value)
+    if not path.is_absolute():
+        path = repository / path
+    path = path.resolve()
+    try:
+        path.relative_to(repository.resolve())
+    except ValueError as error:
+        raise ValueError("private reference file escapes repository") from error
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    ignored = subprocess.run(
+        ["git", "-C", str(repository), "check-ignore", "-q", str(path)],
+        check=False,
+    )
+    if ignored.returncode:
+        raise ValueError("private reference file must be ignored by git")
+    return path
+
+
 def load_config(path, repository):
     path = resolve_private_path(repository, path)
     document = json.loads(path.read_text(encoding="utf-8"))
@@ -143,6 +164,22 @@ def load_config(path, repository):
         or not default_addons_manifest
     ):
         raise ValueError("invalid default add-ons manifest path")
+    private_profiles = document.get("default_addon_private_profiles", [])
+    references_file = document.get("private_references_file", ".env")
+    if not isinstance(private_profiles, list):
+        raise ValueError("invalid default add-on private profiles")
+    if not isinstance(references_file, str) or not references_file:
+        raise ValueError("invalid private references path")
+    try:
+        from kodi_private_addons import validate_profiles
+    except ModuleNotFoundError:
+        from tools.kodi_private_addons import validate_profiles
+
+    private_profiles = validate_profiles(private_profiles)
+    if private_profiles and default_addons_manifest is None:
+        raise ValueError(
+            "private add-on profiles require a default add-ons manifest"
+        )
     resolved = []
     forbidden = {"name", "serial", "expected_model"}
     for target in targets:
@@ -178,6 +215,8 @@ def load_config(path, repository):
                     if default_addons_manifest is not None
                     else {}
                 ),
+                "default_addon_private_profiles": private_profiles,
+                "private_references_file": references_file,
                 "name": logical_id,
                 "serial": device["endpoints"]["adb"],
                 "expected_model": device["expected"]["model"],
@@ -227,6 +266,8 @@ def preflight_target(target, repository, adb, port):
     required_addons = target.get("required_addons", [])
     addon_origins = target.get("addon_origins", {})
     default_addons_manifest = None
+    private_profiles = target.get("default_addon_private_profiles", [])
+    references_path = None
     default_manifest_value = target.get("default_addons_manifest")
     if default_manifest_value is not None:
         candidate = (repository / default_manifest_value).resolve()
@@ -266,6 +307,19 @@ def preflight_target(target, repository, adb, port):
                 % (target["name"], ", ".join(sorted(conflicts)))
             )
         addon_origins = {**addon_origins, **default_origins}
+    if private_profiles:
+        references_path = resolve_ignored_reference_path(
+            repository, target["private_references_file"]
+        )
+        try:
+            from kodi_inventory import load_private_references
+            from kodi_private_addons import validate_references
+        except ModuleNotFoundError:
+            from tools.kodi_inventory import load_private_references
+            from tools.kodi_private_addons import validate_references
+
+        references = load_private_references(references_path)
+        validate_references(private_profiles, references)
     restore_mode = target.get("restore_mode", "kodi-process")
     if not isinstance(required_addons, list) or any(
         not isinstance(item, str) or not SAFE_ADDON_ID.fullmatch(item)
@@ -338,6 +392,8 @@ def preflight_target(target, repository, adb, port):
         "default_addons_cache": (
             repository / ".kodi-private/cache/default-addons"
         ),
+        "default_addon_private_profiles": private_profiles,
+        "private_references_file": references_path,
     }
 
 
@@ -357,6 +413,28 @@ def reconcile_default_addons(adb, port, target):
         manifest,
         target["default_addons_cache"],
         assign_origins=False,
+    )
+
+
+def reconcile_private_addons(adb, port, target):
+    profiles = target.get("default_addon_private_profiles", [])
+    if not profiles:
+        return []
+    try:
+        from kodi_inventory import load_private_references
+        from kodi_private_addons import reconcile
+    except ModuleNotFoundError:
+        from tools.kodi_inventory import load_private_references
+        from tools.kodi_private_addons import reconcile
+
+    references = load_private_references(target["private_references_file"])
+    return reconcile(
+        adb,
+        port,
+        target["serial"],
+        profiles,
+        references,
+        Path(__file__).resolve().parents[1],
     )
 
 
@@ -1088,14 +1166,18 @@ def deploy_target(
             "unsupported restore mode: %s" % target["restore_mode"]
         )
     reconcile_default_addons(adb, port, target)
+    private_addons = reconcile_private_addons(adb, port, target)
     assign_addon_origins(adb, port, target, origin_script)
-    return validate_restored_target(
+    result = validate_restored_target(
         adb,
         port,
         target,
         restore_result,
         origin_script,
     )
+    if private_addons:
+        result["private_addons"] = private_addons
+    return result
 
 
 def main():

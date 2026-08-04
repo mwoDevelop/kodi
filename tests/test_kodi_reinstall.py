@@ -202,6 +202,10 @@ def test_deploy_uses_direct_adb_restore_mode(monkeypatch):
         "tools.kodi_reinstall.reconcile_default_addons",
         lambda *_args: calls.append("defaults"),
     )
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.reconcile_private_addons",
+        lambda *_args: calls.append("private") or [],
+    )
 
     assert deploy_target(
         "adb",
@@ -217,6 +221,7 @@ def test_deploy_uses_direct_adb_restore_mode(monkeypatch):
         "install",
         "restore",
         "defaults",
+        "private",
         "validate",
     ]
 
