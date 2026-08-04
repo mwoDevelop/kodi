@@ -8,6 +8,7 @@ import pytest
 from tools.kodi_reinstall import (
     KODI_STORAGE_PATHS,
     RepositoryIndexNotReady,
+    _start_kodi,
     apply_addon_origins,
     apk_abis,
     deploy_target,
@@ -16,6 +17,34 @@ from tools.kodi_reinstall import (
     installed_addon_origins_in_kodi,
     uninstall_and_clean,
 )
+
+
+def test_start_kodi_enables_package_before_launcher(monkeypatch):
+    commands = []
+    options = []
+    readiness = []
+
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.adb_command",
+        lambda *args, **kwargs: (
+            commands.append(args[4]), options.append(kwargs)
+        ),
+    )
+    monkeypatch.setattr(
+        "tools.kodi_reinstall._wait_for_kodi_ready",
+        lambda *args: readiness.append(args),
+    )
+
+    _start_kodi("adb", 5038, "serial")
+
+    assert commands == [
+        "cmd package unsuspend org.xbmc.kodi",
+        "pm enable org.xbmc.kodi",
+        "monkey -p org.xbmc.kodi "
+        "-c android.intent.category.LAUNCHER 1 >/dev/null",
+    ]
+    assert options[0] == {"check": False}
+    assert readiness == [("adb", 5038, "serial")]
 
 
 def test_apk_inventory_and_digest(tmp_path):

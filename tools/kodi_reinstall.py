@@ -66,6 +66,36 @@ class RepositoryIndexNotReady(RuntimeError):
     pass
 
 
+def _start_kodi(adb, port, serial):
+    # BlueStacks may leave Kodi suspended or disabled after force-stop.
+    # Unsuspending is best-effort for older Android builds; enabling an already
+    # enabled package is idempotent and portable across emulators and TVs.
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "cmd package unsuspend %s" % KODI_PACKAGE,
+        check=False,
+    )
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "pm enable %s" % KODI_PACKAGE,
+    )
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
+        % KODI_PACKAGE,
+    )
+    _wait_for_kodi_ready(adb, port, serial)
+
+
 def file_digest(path):
     hasher = hashlib.sha256()
     with Path(path).open("rb") as handle:
@@ -529,15 +559,7 @@ def assign_addon_origins_via_adb(adb, port, target, timeout=90):
                     timeout=120,
                 )
                 last_error = None
-        adb_command(
-            adb,
-            port,
-            target["serial"],
-            "shell",
-            "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
-            % KODI_PACKAGE,
-        )
-        _wait_for_kodi_ready(adb, port, target["serial"])
+        _start_kodi(adb, port, target["serial"])
         if last_error is None:
             return
         time.sleep(5)
@@ -591,15 +613,7 @@ def assign_addon_origins_in_kodi(
             ORIGIN_MAPPING,
         )
     try:
-        adb_command(
-            adb,
-            port,
-            target["serial"],
-            "shell",
-            "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
-            % KODI_PACKAGE,
-        )
-        _wait_for_kodi_ready(adb, port, target["serial"])
+        _start_kodi(adb, port, target["serial"])
         events = AdbEventClient(adb, port, target["serial"])
         started = time.monotonic()
         result = None
@@ -654,15 +668,7 @@ def assign_addon_origins_in_kodi(
             "shell",
             "am force-stop %s" % KODI_PACKAGE,
         )
-        adb_command(
-            adb,
-            port,
-            target["serial"],
-            "shell",
-            "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
-            % KODI_PACKAGE,
-        )
-        _wait_for_kodi_ready(adb, port, target["serial"])
+        _start_kodi(adb, port, target["serial"])
     finally:
         adb_command(
             adb,
@@ -895,15 +901,7 @@ def restore_snapshot_via_adb(adb, port, target):
         KODI_ROOT + "/",
         timeout=900,
     )
-    adb_command(
-        adb,
-        port,
-        target["serial"],
-        "shell",
-        "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
-        % KODI_PACKAGE,
-    )
-    _wait_for_kodi_ready(adb, port, target["serial"])
+    _start_kodi(adb, port, target["serial"])
     enabled = [
         item["id"]
         for item in manifest["addons"]
@@ -959,15 +957,7 @@ def restore_snapshot_via_adb(adb, port, target):
     )
     if result.returncode != 0:
         raise RuntimeError("failed to persist the restored skin setting")
-    adb_command(
-        adb,
-        port,
-        target["serial"],
-        "shell",
-        "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
-        % KODI_PACKAGE,
-    )
-    _wait_for_kodi_ready(adb, port, target["serial"])
+    _start_kodi(adb, port, target["serial"])
     with AdbJsonRpcClient(
         adb,
         port,
