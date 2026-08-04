@@ -269,3 +269,45 @@ After restore:
 
 The E2E runners redact credentials, magnets, plug-in URLs, and resolved media
 URLs from their reports.
+
+## Android device policy
+
+System settings that live outside Kodi are versioned separately under
+`manifests/device-profiles/`. Profiles contain package names, desired policy,
+and references to private `.env` values, but never credentials themselves.
+
+Apply and verify the X88 Pro 20 policy with:
+
+```bash
+.venv/bin/python tools/android_device_profile.py \
+  --profile manifests/device-profiles/x88pro20.json \
+  --serial 192.168.1.8:5555 \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --adb-server-port 5038 \
+  --env-file .env \
+  apply --yes
+```
+
+The current X88 policy combines Android `Always-on VPN` with OpenVPN Connect's
+native `Connect latest` reboot action and deliberately leaves lockdown off. A
+plain username/password profile cannot be used for this: OpenVPN Connect starts
+before its interactive credential store is available and reports
+`AON_REQUEST_CREDS`. The X88 rollout therefore renders a private autologin
+profile from `.env`; the imported profile can authenticate without displaying
+an `Enter credentials` prompt. A temporarily unavailable VPN still must not cut
+the device off from ADB, Kodi, or the local network.
+
+The versioned X88 profile declares `inline_auth_user_pass`, the private profile
+path environment variable, the imported connection name, and both reboot
+policies. The audit additionally requires the private file to be mode `0600`
+and verifies that its inline credentials match `.env`, but never includes those
+values in output. A compliant runtime also needs a connected, Android-validated
+`tun0` interface; saved settings alone are not accepted as proof of autostart.
+The X88 policy also requires `192.168.1.0/24` to use `net_gateway`, matching
+NordVPN's LAN exclusion so QNAP Profile Sync remains reachable outside the VPN.
+
+OpenVPN connection profiles and NordVPN service credentials remain in
+`.kodi-private/` and `.env`; only their names and references are versioned. The
+apply command uses OpenVPN Connect's accessibility-labelled settings UI
+because the application exposes no managed-configuration API for this option;
+the follow-up audit verifies that the selected radio option actually persisted.

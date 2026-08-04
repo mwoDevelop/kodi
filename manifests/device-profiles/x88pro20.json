@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "device_id": "x88pro20",
+  "platform": "android",
+  "expected": {
+    "model": "X88Pro20"
+  },
+  "vpn": {
+    "package": "net.openvpn.openvpn",
+    "always_on": true,
+    "lockdown": false,
+    "connection_profile_name": "NordVPN PL278 UDP Auto X88",
+    "reconnect_on_reboot": "connect_latest",
+    "credential_mode": "inline_auth_user_pass",
+    "profile_path_env": "KODI_DEVICE_X88PRO20_VPN_PROFILE",
+    "tunnel_interface": "tun0",
+    "require_validated_tunnel": true,
+    "bypass_cidrs": [
+      "192.168.1.0/24"
+    ],
+    "required_env": [
+      "KODI_DEVICE_X88PRO20_VPN_PROFILE",
+      "NORDVPN_SERVICE_USERNAME",
+      "NORDVPN_SERVICE_PASSWORD"
+    ]
+  }
+}
