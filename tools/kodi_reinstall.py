@@ -137,6 +137,12 @@ def load_config(path, repository):
     )
     devices_path = resolve_private_path(repository, devices_value)
     registry = load_registry(devices_path)
+    default_addons_manifest = document.get("default_addons_manifest")
+    if default_addons_manifest is not None and (
+        not isinstance(default_addons_manifest, str)
+        or not default_addons_manifest
+    ):
+        raise ValueError("invalid default add-ons manifest path")
     resolved = []
     forbidden = {"name", "serial", "expected_model"}
     for target in targets:
@@ -167,6 +173,11 @@ def load_config(path, repository):
         resolved.append(
             {
                 **target,
+                **(
+                    {"default_addons_manifest": default_addons_manifest}
+                    if default_addons_manifest is not None
+                    else {}
+                ),
                 "name": logical_id,
                 "serial": device["endpoints"]["adb"],
                 "expected_model": device["expected"]["model"],
@@ -215,6 +226,46 @@ def preflight_target(target, repository, adb, port):
     ]
     required_addons = target.get("required_addons", [])
     addon_origins = target.get("addon_origins", {})
+    default_addons_manifest = None
+    default_manifest_value = target.get("default_addons_manifest")
+    if default_manifest_value is not None:
+        candidate = (repository / default_manifest_value).resolve()
+        try:
+            candidate.relative_to(repository.resolve())
+        except ValueError as error:
+            raise ValueError(
+                "%s default add-ons manifest escapes repository"
+                % target["name"]
+            ) from error
+        try:
+            from kodi_default_addons import load_manifest
+        except ModuleNotFoundError:
+            from tools.kodi_default_addons import load_manifest
+
+        default_addons_manifest = load_manifest(candidate)
+        default_ids = [
+            addon["id"] for addon in default_addons_manifest["addons"]
+        ]
+        default_origins = {
+            addon["id"]: addon["origin"]
+            for addon in default_addons_manifest["addons"]
+            if "origin" in addon
+        }
+        origin_ids = list(default_origins.values())
+        required_addons = list(
+            dict.fromkeys([*required_addons, *default_ids, *origin_ids])
+        )
+        conflicts = {
+            addon_id
+            for addon_id, origin in default_origins.items()
+            if addon_id in addon_origins and addon_origins[addon_id] != origin
+        }
+        if conflicts:
+            raise ValueError(
+                "%s default add-on origins conflict: %s"
+                % (target["name"], ", ".join(sorted(conflicts)))
+            )
+        addon_origins = {**addon_origins, **default_origins}
     restore_mode = target.get("restore_mode", "kodi-process")
     if not isinstance(required_addons, list) or any(
         not isinstance(item, str) or not SAFE_ADDON_ID.fullmatch(item)
@@ -283,7 +334,30 @@ def preflight_target(target, repository, adb, port):
         "addon_origins": addon_origins,
         "allow_kodi_upgrade": allow_upgrade,
         "restore_mode": restore_mode,
+        "default_addons_manifest": default_addons_manifest,
+        "default_addons_cache": (
+            repository / ".kodi-private/cache/default-addons"
+        ),
     }
+
+
+def reconcile_default_addons(adb, port, target):
+    manifest = target.get("default_addons_manifest")
+    if not manifest:
+        return None
+    try:
+        from kodi_default_addons import reconcile_android
+    except ModuleNotFoundError:
+        from tools.kodi_default_addons import reconcile_android
+
+    return reconcile_android(
+        adb,
+        port,
+        target["serial"],
+        manifest,
+        target["default_addons_cache"],
+        assign_origins=False,
+    )
 
 
 def uninstall_and_clean(adb, port, serial):
@@ -1013,6 +1087,7 @@ def deploy_target(
         raise ValueError(
             "unsupported restore mode: %s" % target["restore_mode"]
         )
+    reconcile_default_addons(adb, port, target)
     assign_addon_origins(adb, port, target, origin_script)
     return validate_restored_target(
         adb,

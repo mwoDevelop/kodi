@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "policy": "official-external",
+  "addons": [
+    {
+      "id": "repository.rapideo_pl",
+      "version": "1.0.4",
+      "kind": "repository",
+      "url": "https://www.rapideo.pl/kodi/repo/repository.rapideo_pl.zip",
+      "sha256": "fa6e9b020d910e96eed89f1b41f3b6afd1252401976f6dc4a4bed43709b03e77",
+      "source": "https://www.rapideo.pl/kodi/repo/",
+      "license": "not-declared"
+    },
+    {
+      "id": "script.module.xbmcswift2",
+      "version": "19.0.7",
+      "kind": "module",
+      "url": "https://mirrors.kodi.tv/addons/omega/script.module.xbmcswift2/script.module.xbmcswift2-19.0.7.zip",
+      "sha256": "1f4c8c79e36ea61c88b4d55bc8ee1f7a9618950de7f3a09b5bd675009703fb8f",
+      "source": "https://github.com/XBMC-Addons/script.module.xbmcswift2",
+      "license": "GPL-3.0-only",
+      "origin": "repository.xbmc.org"
+    },
+    {
+      "id": "plugin.video.rapideo_pl",
+      "version": "1.5.0",
+      "kind": "plugin",
+      "url": "https://www.rapideo.pl/kodi/zip/plugin.video.rapideo_pl/plugin.video.rapideo_pl-1.5.0.zip",
+      "sha256": "129e4fb59065d8b8d46a272dcbb3d78cb3a43ae6b7a6231d2446499f26739d8e",
+      "source": "https://www.rapideo.pl",
+      "license": "GPL-2.0-only",
+      "origin": "repository.rapideo_pl",
+      "dependencies": [
+        "script.module.requests",
+        "script.module.six",
+        "script.module.xbmcswift2"
+      ]
+    }
+  ]
+}
