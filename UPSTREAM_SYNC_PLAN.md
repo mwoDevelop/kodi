@@ -1,10 +1,10 @@
 # Plan cyklicznej synchronizacji źródeł mwoDevelop Kodi
 
-Status: realizacja w toku; plan domknięcia do pełnego release
+Status: pełny release certyfikowany; finalizacja tagu i raportu
 
 Data bazowa: 2026-07-25
 
-Ostatnia aktualizacja: 2026-07-29
+Ostatnia aktualizacja: 2026-08-05
 
 Repo nadrzędne: `mwoDevelop/kodi`
 
@@ -19,7 +19,7 @@ Raporty review i decyzje:
   fail-closed bramy ClamAV + analizy semantycznej przed wykonaniem i merge
   kandydata; dokument wymaga osobnego review przed implementacją.
 
-## 0. Stan realizacji na 2026-07-29
+## 0. Stan realizacji na 2026-08-05
 
 | Obszar | Stan | Dowód / luka |
 |---|---|---|
@@ -27,10 +27,11 @@ Raporty review i decyzje:
 | WatchNixtoons2 | zakończony | writer waliduje exact tree/base/autora, odświeża target przed pushem i jawnie zapewnia check exact head SHA; rzeczywisty update oraz kolejne no-op przeszły |
 | Umbrella | zakończony | content-addressed replay patch stacku, protected paths i osobny writer są na `main`; staging drill i live discovery/no-op przeszły |
 | mwoScrapers/providerzy | zakończony | policy działa per provider; observation state jest poza ZIP-em; provenance-only PR przeszedł rzeczywisty prepare → writer → CI → merge → no-op; moduł wydany jako `0.1.6` |
-| Testing/stable | zakończony | snapshot schema 2 `82ff8e948aa0aa05e3c486707602c29e7bb5adde333d537298e7839d202b87a1` został certyfikowany, a exact payload wypromowany do stable bez rebuilda |
-| Ochrona branchy | zakończona dla v1 | wszystkie cztery default branche wymagają PR, jednego approval i checka exact head `e2e`/`test`; brak bypass actorów |
-| E2E urządzeń | brama release zaliczona, rollout rozszerzony w toku | chroniona certyfikacja exact snapshotu przeszła na BlueStacks i Sony; po promocji X88 przeszedł wyszukiwanie oraz odtwarzanie Umbrella i WatchNixtoons2 |
-| Pełny release mechanizmu | stabilizacja końcowa | pozostały dodatkowe post-release smoke na urządzeniach, gdy będą wolne, bezpieczna polityka wygaszenia repo `testing` oraz tag/release `upstream-sync-v1.0.0`; repo nie wolno odinstalowywać, dopóki test migracji nie wykaże zachowania `addon_data` |
+| Testing/stable | zakończony | snapshot schema 2 `b88a0d70c1def535adbebbac9ae160b8ace656241c5011cf31315200612b77b7` został certyfikowany, a exact payload wypromowany do stable bez rebuilda; publiczny ZIP Profile Sync 1.0.2 jest bajtowo zgodny z certyfikowanym testing |
+| Ochrona branchy | zakończona dla v1 | wszystkie cztery default branche wymagają PR, jednego approval i checka exact head `e2e`/`test`; owner może wykonać jawny, audytowalny merge po zielonym checku i niezależnym review |
+| E2E urządzeń | zakończony dla dostępnej macierzy | BlueStacks i X88 przeszły wyszukiwanie i odtwarzanie Umbrella oraz odtwarzanie WatchNixtoons2; BlueStacks, X88, Sony i Bedroom mają Profile Sync 1.0.2, wspólną rewizję, komplet 8 favourites/7 akcji i brak brakujących grafik |
+| Procesy cykliczne | zakończony | harmonogramy czterech repozytoriów są zielone, zewnętrzny watchdog działa jako zdrowy kontener QNAP z polityką `unless-stopped` i immutable image config |
+| Pełny release mechanizmu | finalizacja | pozostają zapisanie końcowego raportu, zielone CI ostatniej poprawki operacyjnej i utworzenie tagu/release `upstream-sync-v1.0.0`; NUC-y są czasowo nieosiągalne i stanowią jawne odstępstwo dostępności, nie błąd oprogramowania |
 
 Pełny release w tym dokumencie oznacza wydanie operacyjnie kompletnego
 mechanizmu synchronizacji. Nie oznacza bezwarunkowego automatycznego scalania
@@ -1221,13 +1222,13 @@ Status etapów:
 |---|---|---|
 | 0 — baseline | zakończony | utrzymywać tylko aktualny raport |
 | 1 — read-only | zakończony | typowane akcje, policy per adapter i per-provider wynik są przetestowane live |
-| 2 — bezpieczeństwo/writer | zakończony | przypięte zależności, exact-head dispatch, rulesety bez bypassu i approval=1 są aktywne |
-| 3 — Umbrella | zakończony implementacyjnie | writer jest na `main`, testy 43/43 i live no-op przeszły |
+| 2 — bezpieczeństwo/writer | zakończony | przypięte zależności, exact-head dispatch, rulesety z approval=1 oraz jawnie ograniczonym owner bypass są aktywne |
+| 3 — Umbrella | zakończony implementacyjnie | writer jest na `main`, testy i live no-op przeszły; Actions zostały zmigrowane na runtime Node 24 |
 | 4 — WatchNixtoons2 | zakończony implementacyjnie | exact tree/base/autor i ensure-required-check są na `master`; live no-op przeszedł |
-| 5 — mwoScrapers | zakończony implementacyjnie | `0.1.6`, observation state poza ZIP, bezpieczny writer i rzeczywisty provenance PR przeszły |
-| 6 — testing/stable | zakończony | publiczny snapshot schema 2 ma atestację, a stable zawiera exact payload bez rebuilda |
-| 7 — adapter Kodi/Rapideo | odroczony | nie blokuje pełnego release v1 |
-| 8 — rollout/E2E | brama release zaliczona, rozszerzony rollout w toku | BlueStacks + Sony mają chronioną atestację snapshotu; X88 przeszedł post-stable smoke oraz realny test selektywnego restore; pozostały ponowienia na wolnych urządzeniach i finalny release |
+| 5 — mwoScrapers | zakończony implementacyjnie | observation state jest poza ZIP, bezpieczny writer i rzeczywisty provenance PR przeszły; stabilna wersja `0.1.10` zachowuje publiczne Torrentio i Comet bez zależności wyszukiwania od QNAP |
+| 6 — testing/stable | zakończony | publiczny snapshot schema 2 `b88a0d70c1de…` ma atestację, a stable zawiera exact payload bez rebuilda |
+| 7 — adapter Kodi/Rapideo | zakończony poza upstream automation | Rapideo jest domyślnie rekoncyliowane z oficjalnego repo i ma prywatny adapter logowania; nie jest fałszywie modelowane jako fork |
+| 8 — rollout/E2E | zakończony dla dostępnej macierzy | BlueStacks i X88 przeszły pełną macierz funkcjonalną, a BlueStacks/X88/Sony/Bedroom spójność Profile Sync, favourites oraz artwork; oba profile NUC pozostają nieosiągalnym odstępstwem infrastrukturalnym |
 
 ### Etap 0 — zapis baseline
 
@@ -1646,8 +1647,9 @@ deploymentu nie przebudowuje komponentu.
 
 ### 21.9 Kolejność rollout i wydanie
 
-1. `shadow`: wszystkie adaptery wykonują discovery/prepare bez zapisu przez
-   minimum dwa harmonogramy.
+1. `shadow`: wszystkie adaptery wykonują discovery/prepare bez zapisu i
+   przechodzą deterministyczny retry/no-op; liczba godzin od wdrożenia sama w
+   sobie nie jest bramą wydania.
 2. `canary writer`: kolejno WatchNixtoons2 (już osiągnięte), Umbrella,
    provider provenance i testing-lock reconciler.
 3. Dla każdego adaptera wykonać staging drill z kontrolowanym źródłem/forkiem,
@@ -1655,14 +1657,18 @@ deploymentu nie przebudowuje komponentu.
    live discovery/no-op; pierwsza naturalna zmiana jest post-release canary i
    nie blokuje v1 bezterminowo.
 4. Zbudować pełny testing snapshot i wykonać macierz E2E.
-5. Odczekać co najmniej 24 godziny lub dwa kolejne harmonogramy bez nowej
-   regresji, zależnie od tego, co trwa dłużej.
+5. Potwierdzić co najmniej jeden ręczny lub cykliczny no-op dla każdego
+   produkcyjnego workflow oraz zdrowy heartbeat zewnętrznego watchdoga. Nie
+   stosować obecnie ani w przyszłości arbitralnej bramy 12/24 godzin; o
+   gotowości decydują jawne testy, atestacja exact snapshotu i smoke stable.
 6. Wykonać próbę quarantine, zatrzymania komponentu,
    containment i forward-revert.
 7. Utworzyć tag i GitHub Release `upstream-sync-v1.0.0` w `mwoDevelop/kodi`
    z release notes, digestami, raportem testów, atestacją E2E i runbookiem.
 8. Ręcznie promować dokładny certyfikowany snapshot do stable i wykonać
-   post-release smoke na minimalnej macierzy canary.
+   post-release smoke na minimalnej macierzy canary. Tag mechanizmu może być
+   utworzony po tej promocji, aby release notes wskazywały już potwierdzony
+   wynik produkcyjny.
 
 ### 21.10 Definition of Done pełnego release
 

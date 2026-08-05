@@ -23,12 +23,14 @@ def test_restart_unsuspends_and_enables_kodi_before_launch(monkeypatch):
     rollout._restart_kodi("adb", 5038, "device")
 
     assert commands == [
+        "input keyevent KEYCODE_WAKEUP",
         "cmd package unsuspend org.xbmc.kodi",
         "pm enable org.xbmc.kodi",
         "monkey -p org.xbmc.kodi "
         "-c android.intent.category.LAUNCHER 1 >/dev/null",
     ]
     assert options[0] == {"check": False}
+    assert options[1] == {"check": False}
     assert readiness == [("adb", 5038, "device")]
 
 
