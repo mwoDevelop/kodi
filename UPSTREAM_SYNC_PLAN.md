@@ -1,6 +1,6 @@
 # Plan cyklicznej synchronizacji źródeł mwoDevelop Kodi
 
-Status: pełny release certyfikowany; finalizacja tagu i raportu
+Status: pełny release v1 zakończony
 
 Data bazowa: 2026-07-25
 
@@ -31,7 +31,7 @@ Raporty review i decyzje:
 | Ochrona branchy | zakończona dla v1 | wszystkie cztery default branche wymagają PR, jednego approval i checka exact head `e2e`/`test`; owner może wykonać jawny, audytowalny merge po zielonym checku i niezależnym review |
 | E2E urządzeń | zakończony dla dostępnej macierzy | BlueStacks i X88 przeszły wyszukiwanie i odtwarzanie Umbrella oraz odtwarzanie WatchNixtoons2; BlueStacks, X88, Sony i Bedroom mają Profile Sync 1.0.2, wspólną rewizję, komplet 8 favourites/7 akcji i brak brakujących grafik |
 | Procesy cykliczne | zakończony | harmonogramy czterech repozytoriów są zielone, zewnętrzny watchdog działa jako zdrowy kontener QNAP z polityką `unless-stopped` i immutable image config |
-| Pełny release mechanizmu | finalizacja | pozostają zapisanie końcowego raportu, zielone CI ostatniej poprawki operacyjnej i utworzenie tagu/release `upstream-sync-v1.0.0`; NUC-y są czasowo nieosiągalne i stanowią jawne odstępstwo dostępności, nie błąd oprogramowania |
+| Pełny release mechanizmu | zakończony | końcowy raport i CI są zielone, a commit jest oznaczony tagiem/release `upstream-sync-v1.0.0`; NUC-y są czasowo nieosiągalne i stanowią jawne odstępstwo dostępności, nie błąd oprogramowania |
 
 Pełny release w tym dokumencie oznacza wydanie operacyjnie kompletnego
 mechanizmu synchronizacji. Nie oznacza bezwarunkowego automatycznego scalania
