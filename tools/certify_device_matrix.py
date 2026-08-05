@@ -18,8 +18,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from tools.kodi_devices import load_registry, resolve_device
-from tools.kodi_inventory import inventory_device
+from tools.kodi_devices import (
+    load_registry,
+    resolve_device,
+    resolve_private_endpoint,
+)
+from tools.kodi_inventory import inventory_device, load_private_references
 from tools.kodi_profile import AdbJsonRpcClient
 from tools.kodi_reinstall import installed_addon_origins
 from tools.snapshot_bundle import canonical_json, verify_bundle
@@ -410,10 +414,13 @@ def certify(
         (ROOT / "manifests/locks/stable.json").read_text(encoding="utf-8")
     )["components"]
     registry = load_registry(devices_file)
+    references = load_private_references(references_file)
     results = []
     with tempfile.TemporaryDirectory(prefix="kodi-certification-") as temporary:
         for logical_id in selected:
-            device = resolve_device(registry, logical_id)
+            device = resolve_private_endpoint(
+                resolve_device(registry, logical_id), references
+            )
             if device["platform"] not in {"android", "android-emulator"}:
                 raise ValueError(
                     "functional certification currently requires an Android target"

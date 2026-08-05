@@ -3,27 +3,28 @@
 
 from __future__ import annotations
 
-import copy
 import re
 from pathlib import Path
 
 try:
-    from kodi_devices import load_registry
+    from kodi_devices import (
+        device_env_prefix,
+        load_registry,
+        resolve_device,
+        resolve_private_endpoint,
+    )
     from kodi_inventory import load_private_references
 except ModuleNotFoundError:
-    from tools.kodi_devices import load_registry
+    from tools.kodi_devices import (
+        device_env_prefix,
+        load_registry,
+        resolve_device,
+        resolve_private_endpoint,
+    )
     from tools.kodi_inventory import load_private_references
 
 
-SAFE_ENV_PART = re.compile(r"^[A-Z0-9_]+$")
 SAFE_PROFILE_VALUE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
-
-
-def device_env_prefix(logical_device_id):
-    part = logical_device_id.upper().replace("-", "_").replace(".", "_")
-    if not SAFE_ENV_PART.fullmatch(part):
-        raise ValueError("logical device id cannot map to an environment key")
-    return "KODI_DEVICE_%s" % part
 
 
 def _device_list(value):
@@ -95,42 +96,10 @@ def load_sync_inventory(
         raise ValueError("KODI_SYNC_PUBLISHER lacks the publisher role")
     resolved = {}
     for logical_id in selected:
-        device = copy.deepcopy(registry["devices"][logical_id])
-        prefix = device_env_prefix(logical_id)
-        if device["platform"] in {"android", "android-emulator"}:
-            key = prefix + "_ADB"
-            endpoint = references.get(key)
-            if not endpoint:
-                raise ValueError("private references have no %s" % key)
-            device["endpoints"] = {
-                **{
-                    key: value
-                    for key, value in device["endpoints"].items()
-                    if key == "jsonrpc"
-                },
-                "adb": endpoint,
-            }
-        elif device["platform"] == "linux-flatpak":
-            key = prefix + "_SSH_HOST"
-            host = references.get(key)
-            if not host:
-                raise ValueError("private references have no %s" % key)
-            ssh = dict(device["endpoints"]["ssh"])
-            ssh["host"] = host
-            device["endpoints"] = {
-                **{
-                    key: value
-                    for key, value in device["endpoints"].items()
-                    if key == "jsonrpc"
-                },
-                "ssh": ssh,
-            }
-        else:
-            raise ValueError("unsupported Kodi sync platform")
-        resolved[logical_id] = {
-            "logical_device_id": logical_id,
-            **device,
-        }
+        device = resolve_device(registry, logical_id)
+        resolved[logical_id] = resolve_private_endpoint(
+            device, references, required=True
+        )
     return {
         "publisher": publisher,
         "order": selected,

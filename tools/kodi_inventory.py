@@ -10,11 +10,19 @@ import stat
 from pathlib import Path
 
 try:
-    from kodi_devices import load_registry, resolve_device
+    from kodi_devices import (
+        load_registry,
+        resolve_device,
+        resolve_private_endpoint,
+    )
     from kodi_lifecycle import lifecycle_for_device
     from kodi_transports import transport_for_device
 except ModuleNotFoundError:
-    from tools.kodi_devices import load_registry, resolve_device
+    from tools.kodi_devices import (
+        load_registry,
+        resolve_device,
+        resolve_private_endpoint,
+    )
     from tools.kodi_lifecycle import lifecycle_for_device
     from tools.kodi_transports import transport_for_device
 
@@ -66,8 +74,11 @@ def inventory_device(
     repository = Path(repository).resolve()
     devices_path = repository / devices_file
     references_path = repository / references_file
-    device = resolve_device(load_registry(devices_path), logical_device_id)
     references = load_private_references(references_path)
+    device = resolve_private_endpoint(
+        resolve_device(load_registry(devices_path), logical_device_id),
+        references,
+    )
     transport = transport_for_device(
         device,
         references=references,
