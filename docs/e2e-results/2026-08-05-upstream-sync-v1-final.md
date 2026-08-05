@@ -29,6 +29,11 @@ versions the synchronization mechanism, not the Kodi repository bootstrap.
 - local discovery was a deterministic no-op, stable lock remained unchanged,
   and the complete regression run passed: Umbrella 50, WatchNixtoons2 17,
   mwoScrapers 47 and root repository 325 tests.
+- final operational PR
+  [#126](https://github.com/mwoDevelop/kodi/pull/126) passed both exact-head
+  [push CI](https://github.com/mwoDevelop/kodi/actions/runs/31034041248) and
+  [pull-request CI](https://github.com/mwoDevelop/kodi/actions/runs/31034102176)
+  before merge.
 
 Profile Sync 1.0.2 fixes the case in which an assignment expired after that
 exact signed revision had already been applied. Such a device now remains
