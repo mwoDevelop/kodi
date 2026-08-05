@@ -9,6 +9,7 @@ from tools.kodi_devices import (
     migrate_reinstall_config,
     normalize_registry,
     resolve_device,
+    resolve_private_endpoint,
     validate_registry,
 )
 from tools.kodi_reinstall import load_config
@@ -106,6 +107,37 @@ def test_registry_validation_and_resolution(tmp_path):
     assert device["platform"] == "android"
     assert device["expected"]["model"] == "TV MODEL"
     assert device["endpoints"]["adb"] == "private-tv:5555"
+
+
+def test_private_android_endpoint_overrides_stale_registry_address():
+    device = resolve_device(registry_v2(), "android-tv")
+
+    resolved = resolve_private_endpoint(
+        device,
+        {"KODI_DEVICE_ANDROID_TV_ADB": "192.0.2.50:5555"},
+    )
+
+    assert resolved["endpoints"] == {
+        "adb": "192.0.2.50:5555",
+        "jsonrpc": "http://private-tv:9090",
+    }
+    assert device["endpoints"]["adb"] == "private-tv:5555"
+
+
+def test_private_linux_endpoint_requires_and_overrides_current_host():
+    device = resolve_device(linux_registry(), "linux-consumer")
+
+    with pytest.raises(ValueError, match="KODI_DEVICE_LINUX_CONSUMER_SSH_HOST"):
+        resolve_private_endpoint(device, {}, required=True)
+
+    resolved = resolve_private_endpoint(
+        device,
+        {"KODI_DEVICE_LINUX_CONSUMER_SSH_HOST": "192.0.2.51"},
+        required=True,
+    )
+
+    assert resolved["endpoints"]["ssh"]["host"] == "192.0.2.51"
+    assert device["endpoints"]["ssh"]["host"] == "private-linux"
 
 
 def test_registry_is_default_deny():

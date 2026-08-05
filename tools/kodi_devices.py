@@ -20,6 +20,7 @@ LOGICAL_DEVICE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 CHANNEL = LOGICAL_DEVICE_ID
 ROLES = {"consumer", "publisher"}
 PLATFORMS = {"android", "android-emulator", "linux-flatpak"}
+SAFE_ENV_PART = re.compile(r"^[A-Z0-9_]+$")
 
 
 def _require_string(value, label):
@@ -254,6 +255,59 @@ def resolve_device(registry, logical_device_id):
         "logical_device_id": logical_device_id,
         **device,
     }
+
+
+def device_env_prefix(logical_device_id):
+    part = logical_device_id.upper().replace("-", "_").replace(".", "_")
+    if not SAFE_ENV_PART.fullmatch(part):
+        raise ValueError("logical device id cannot map to an environment key")
+    return "KODI_DEVICE_%s" % part
+
+
+def resolve_private_endpoint(device, references, required=False):
+    """Overlay the current host endpoint from private references.
+
+    The versioned/private registry owns device identity and capabilities. The
+    ignored reference file owns LAN and emulator addresses, which may change
+    without changing that identity.
+    """
+
+    resolved = copy.deepcopy(device)
+    prefix = device_env_prefix(resolved["logical_device_id"])
+    endpoints = resolved["endpoints"]
+    if resolved["platform"] in {"android", "android-emulator"}:
+        key = prefix + "_ADB"
+        endpoint = references.get(key)
+        if required and not endpoint:
+            raise ValueError("private references have no %s" % key)
+        if endpoint:
+            resolved["endpoints"] = {
+                **(
+                    {"jsonrpc": endpoints["jsonrpc"]}
+                    if "jsonrpc" in endpoints
+                    else {}
+                ),
+                "adb": endpoint,
+            }
+    elif resolved["platform"] == "linux-flatpak":
+        key = prefix + "_SSH_HOST"
+        host = references.get(key)
+        if required and not host:
+            raise ValueError("private references have no %s" % key)
+        if host:
+            ssh = dict(endpoints["ssh"])
+            ssh["host"] = host
+            resolved["endpoints"] = {
+                **(
+                    {"jsonrpc": endpoints["jsonrpc"]}
+                    if "jsonrpc" in endpoints
+                    else {}
+                ),
+                "ssh": ssh,
+            }
+    else:
+        raise ValueError("unsupported Kodi sync platform")
+    return resolved
 
 
 def _kodi_major(version):
