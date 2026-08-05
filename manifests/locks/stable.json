@@ -1,5 +1,5 @@
 {
-  "attestation_sha256": "8e9e6f907bade89f648c1e8cb8495403e9511df6fa92b5de64c70bfedbf1205e",
+  "attestation_sha256": "1491a2f0ed17fd43e5c030163f5fe1ac06490de970548fea4380975237ac5495",
   "channel": "stable",
   "components": {
     "plugin.video.umbrella": {
@@ -8,9 +8,9 @@
       "zip_sha256": "06c18891e3190f7eb4156ffb9fe7d3179b25316fcdb3c5c591d8ab4b7c9cab8f"
     },
     "plugin.video.watchnixtoons2.mwodevelop": {
-      "commit": "83560a2a5ccf7ab56724183959688a42b63b9615",
-      "version": "0.26.1",
-      "zip_sha256": "01a84245391da1beef7bc65982b4d47dd517595c533296473b65763e6a1e2312"
+      "commit": "df5f3474c1744b7187041acce37958bca50b49c1",
+      "version": "0.27.1",
+      "zip_sha256": "b0e95a6d559556ea735b72b06aed935ad64870bddc955005090f42cb76d64909"
     },
     "script.module.mwoscrapers": {
       "commit": "bfb7ffdb2fde3b23776cc1e6c25c5c81a07cc938",
@@ -30,7 +30,7 @@
     }
   },
   "schema": 2,
-  "source_artifact_manifest_sha256": "97c479d8ea1758faaa1ec4f9abb88b6b19a2585e8c1b2dbc89b233db8ad78676",
-  "source_index_sha256": "5666205f80b8d669384b26c73e01210e2964ec78a30708115cc7ee217c40f8c8",
-  "source_snapshot_id": "847ba98e1664368ec2f1cb5fdb0fc27c622c87e093618f0cadfba80a9ae5a1c5"
+  "source_artifact_manifest_sha256": "4c33bca236d61be05041d560131aa97a5ad4ef2002f596fa7d62552c1d5eb512",
+  "source_index_sha256": "f9c846ec32b059e2f6194fd5c9032a6735248b92a7104a53d4893dc63b3e36f0",
+  "source_snapshot_id": "6baeb0feb3129ad36ac335592fbe7b692f44e7dfe11054cc1a27845e8ce81548"
 }
