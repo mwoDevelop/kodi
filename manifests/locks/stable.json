@@ -1,5 +1,5 @@
 {
-  "attestation_sha256": "1491a2f0ed17fd43e5c030163f5fe1ac06490de970548fea4380975237ac5495",
+  "attestation_sha256": "671d063ddcdd81404163a52f31e80bc069ac66113b2a3117b69523a0c86077d3",
   "channel": "stable",
   "components": {
     "plugin.video.umbrella": {
@@ -24,13 +24,13 @@
       "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
     },
     "service.mwodevelop.profilesync": {
-      "commit": "d173314aef57bd36e73173c53e35e5de1e23cd1b",
-      "version": "1.0.1",
-      "zip_sha256": "99b05e41c24e3e1c4d1bad83ccb7dbe0a618441065b81ae36cc070b8fae0eb4e"
+      "commit": "86ba4095c4c4d82b9613895539a429370b1378df",
+      "version": "1.0.2",
+      "zip_sha256": "2c644202e185d9f5e80ca6bbdec7cea5181f66b67e84e45bdddf6aad67d5bdea"
     }
   },
   "schema": 2,
-  "source_artifact_manifest_sha256": "4c33bca236d61be05041d560131aa97a5ad4ef2002f596fa7d62552c1d5eb512",
-  "source_index_sha256": "f9c846ec32b059e2f6194fd5c9032a6735248b92a7104a53d4893dc63b3e36f0",
-  "source_snapshot_id": "6baeb0feb3129ad36ac335592fbe7b692f44e7dfe11054cc1a27845e8ce81548"
+  "source_artifact_manifest_sha256": "1c35ca95055bee58f95a84a9b4aa5b4c2c8fdfb4113b84deedf19b1e78b1ac14",
+  "source_index_sha256": "231f627410fb6fddf6ab51d2237cf3e225457597eaa236f57e6f4b97d574222a",
+  "source_snapshot_id": "b88a0d70c1def535adbebbac9ae160b8ace656241c5011cf31315200612b77b7"
 }
