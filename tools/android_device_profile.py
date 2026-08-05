@@ -52,6 +52,7 @@ def validate_profile(document):
         "lockdown",
         "connection_profile_name",
         "reconnect_on_reboot",
+        "private_dns_mode",
         "credential_mode",
         "profile_path_env",
         "tunnel_interface",
@@ -90,6 +91,8 @@ def validate_profile(document):
         "none",
     }:
         raise ValueError("vpn reconnect_on_reboot is invalid")
+    if vpn["private_dns_mode"] not in {"off", "opportunistic"}:
+        raise ValueError("vpn private_dns_mode is invalid")
     if not isinstance(vpn["always_on"], bool):
         raise ValueError("vpn always_on must be boolean")
     if not isinstance(vpn["lockdown"], bool):
@@ -179,17 +182,16 @@ class AdbClient:
     def __init__(self, executable, serial, server_port=None):
         self.executable = executable
         self.serial = serial
-        self.environment = os.environ.copy()
+        self.command = [self.executable]
         if server_port is not None:
-            self.environment["ADB_SERVER_PORT"] = str(server_port)
+            self.command.extend(["-P", str(server_port)])
 
     def shell(self, *arguments):
         result = subprocess.run(
-            [self.executable, "-s", self.serial, "shell", *arguments],
+            [*self.command, "-s", self.serial, "shell", *arguments],
             check=True,
             capture_output=True,
             text=True,
-            env=self.environment,
         )
         return result.stdout.strip().replace("\r", "")
 
@@ -278,6 +280,9 @@ def audit_profile(profile, client, environment):
     package_result = client.shell("pm", "list", "packages", "-e", vpn["package"])
     always_on = client.shell("settings", "get", "secure", "always_on_vpn_app")
     lockdown = client.shell("settings", "get", "secure", "always_on_vpn_lockdown")
+    private_dns_mode = client.shell(
+        "settings", "get", "global", "private_dns_mode"
+    )
     reconnect_on_reboot = client.openvpn_reboot_action(vpn["package"])
     try:
         tunnel = client.shell("ip", "addr", "show", vpn["tunnel_interface"])
@@ -294,6 +299,7 @@ def audit_profile(profile, client, environment):
         "lockdown": lockdown == expected_lockdown,
         "reconnect_on_reboot": reconnect_on_reboot
         == vpn["reconnect_on_reboot"],
+        "private_dns_mode": private_dns_mode == vpn["private_dns_mode"],
         "required_env": not missing_env,
         "private_vpn_profile": private_profile_is_ready(vpn, environment),
         "validated_vpn_tunnel": (
@@ -328,6 +334,9 @@ def apply_profile(profile, client, environment):
     vpn = profile["vpn"]
     client.openvpn_reboot_action(
         vpn["package"], desired=vpn["reconnect_on_reboot"]
+    )
+    client.shell(
+        "settings", "put", "global", "private_dns_mode", vpn["private_dns_mode"]
     )
     if vpn["always_on"]:
         client.shell(

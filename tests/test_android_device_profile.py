@@ -4,11 +4,43 @@ from pathlib import Path
 import pytest
 
 from tools.android_device_profile import (
+    AdbClient,
     apply_profile,
     audit_profile,
     load_profile,
     validate_profile,
 )
+
+
+def test_adb_client_uses_requested_server_port(monkeypatch):
+    calls = []
+
+    class Result:
+        stdout = "X88Pro20\n"
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return Result()
+
+    monkeypatch.setattr("tools.android_device_profile.subprocess.run", fake_run)
+    client = AdbClient("adb-custom", "device:5555", 5038)
+
+    assert client.shell("getprop", "ro.product.model") == "X88Pro20"
+    assert calls == [
+        (
+            [
+                "adb-custom",
+                "-P",
+                "5038",
+                "-s",
+                "device:5555",
+                "shell",
+                "getprop",
+                "ro.product.model",
+            ],
+            {"check": True, "capture_output": True, "text": True},
+        )
+    ]
 
 
 class FakeAdb:
@@ -20,6 +52,7 @@ class FakeAdb:
         self.always_on = "null"
         self.lockdown = "null"
         self.reconnect_on_reboot = "none"
+        self.private_dns_mode = "opportunistic"
 
     def shell(self, *arguments):
         if arguments == ("getprop", "ro.product.model"):
@@ -35,6 +68,8 @@ class FakeAdb:
             "always_on_vpn_lockdown",
         ):
             return self.lockdown
+        if arguments == ("settings", "get", "global", "private_dns_mode"):
+            return self.private_dns_mode
         if arguments[:4] == ("settings", "put", "secure", "always_on_vpn_app"):
             self.always_on = arguments[4]
             return ""
@@ -45,6 +80,9 @@ class FakeAdb:
             "always_on_vpn_lockdown",
         ):
             self.lockdown = arguments[4]
+            return ""
+        if arguments[:4] == ("settings", "put", "global", "private_dns_mode"):
+            self.private_dns_mode = arguments[4]
             return ""
         if arguments == (
             "settings",
@@ -101,6 +139,7 @@ def test_versioned_x88_profile_is_valid_and_contains_no_secret_values():
     assert profile["vpn"]["always_on"] is True
     assert profile["vpn"]["lockdown"] is False
     assert profile["vpn"]["reconnect_on_reboot"] == "connect_latest"
+    assert profile["vpn"]["private_dns_mode"] == "off"
     assert profile["vpn"]["credential_mode"] == "inline_auth_user_pass"
     assert profile["vpn"]["require_validated_tunnel"] is True
     assert profile["vpn"]["bypass_cidrs"] == ["192.168.1.0/24"]
@@ -121,6 +160,7 @@ def test_apply_sets_always_on_without_lockdown_and_is_idempotent(tmp_path):
     assert client.always_on == "net.openvpn.openvpn"
     assert client.lockdown == "0"
     assert client.reconnect_on_reboot == "connect_latest"
+    assert client.private_dns_mode == "off"
     assert second["checks"]["validated_vpn_tunnel"] is True
 
 
@@ -144,4 +184,12 @@ def test_validation_rejects_lockdown_without_always_on():
     profile["vpn"]["lockdown"] = True
 
     with pytest.raises(ValueError, match="requires always_on"):
+        validate_profile(profile)
+
+
+def test_validation_rejects_unsupported_private_dns_mode():
+    profile = repository_profile()
+    profile["vpn"]["private_dns_mode"] = "hostname"
+
+    with pytest.raises(ValueError, match="private_dns_mode is invalid"):
         validate_profile(profile)
