@@ -79,6 +79,17 @@ def _start_kodi(adb, port, serial):
         "cmd package unsuspend %s" % KODI_PACKAGE,
         check=False,
     )
+    # Android TV may destroy Kodi's display surface while the device is asleep.
+    # Wake it before launching so a maintenance restart cannot race the display
+    # lifecycle and crash Kodi during early GUI initialization.
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "input keyevent KEYCODE_WAKEUP",
+        check=False,
+    )
     adb_command(
         adb,
         port,
