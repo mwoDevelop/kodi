@@ -32,6 +32,7 @@ def test_build_rejects_filesystem_root():
 
 def test_testing_index_and_dependency_closure(tmp_path):
     output = build(tmp_path / "repo")
+    lock = json.loads(Path("manifests/locks/testing.json").read_text())
     index = ElementTree.parse(output / "testing/omega/addons.xml").getroot()
     ids = {addon.attrib["id"] for addon in index}
     assert ids == {
@@ -50,7 +51,9 @@ def test_testing_index_and_dependency_closure(tmp_path):
     watchnixtoons = index.find(
         "./addon[@id='plugin.video.watchnixtoons2.mwodevelop']"
     )
-    assert watchnixtoons.attrib["version"] == "0.26.1"
+    assert watchnixtoons.attrib["version"] == lock["components"][
+        "plugin.video.watchnixtoons2.mwodevelop"
+    ]["version"]
     adaptive = watchnixtoons.find(
         "./requires/import[@addon='inputstream.adaptive']"
     )
