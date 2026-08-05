@@ -39,11 +39,13 @@ def test_start_kodi_enables_package_before_launcher(monkeypatch):
 
     assert commands == [
         "cmd package unsuspend org.xbmc.kodi",
+        "input keyevent KEYCODE_WAKEUP",
         "pm enable org.xbmc.kodi",
         "monkey -p org.xbmc.kodi "
         "-c android.intent.category.LAUNCHER 1 >/dev/null",
     ]
     assert options[0] == {"check": False}
+    assert options[1] == {"check": False}
     assert readiness == [("adb", 5038, "serial")]
 
 
