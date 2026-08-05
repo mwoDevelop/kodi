@@ -41,9 +41,12 @@ last verified local image is retained. Cookies and URL header suffixes are
 neither used nor persisted.
 
 The routine profile service deliberately manages a small semantic settings
-allowlist; it does not carry user content or binary artwork. Favourites use a
-separate portable-state adapter so one complete canonical list and its exact
-content-addressed artwork set converge together.
+allowlist plus the canonical favourites document and its content-addressed
+artwork set. It does not distribute credentials, tokens, arbitrary add-on
+settings or rebuildable caches. Those private values remain in ignored host
+snapshots and are applied only by an explicit, per-device rollout. This split
+keeps the cyclic QNAP channel deterministic and safe to sign while still
+allowing a clean Kodi installation to be reconstructed from this host.
 
 The authoritative private rollout membership, publisher and current network
 addresses live in the mode-`0600` `.env`:
@@ -259,6 +262,27 @@ the already verified snapshot instead of replacing the whole profile:
   --allow-addon-upgrade \
   --path userdata/addon_data/plugin.video.umbrella/settings.xml
 ```
+
+When a full source snapshot cannot be exported (for example because Android
+correctly denies ADB access to Profile Sync's mode-`0700` private directory),
+do not weaken the device permissions. Export only the required add-on
+`settings.xml` files into `.kodi-private/` and transactionally apply them:
+
+```bash
+PYTHONPATH=. .venv/bin/python tools/kodi_addon_settings_rollout.py \
+  --serial ADB_ENDPOINT \
+  --setting plugin.video.umbrella=.kodi-private/e2e/umbrella-settings.xml \
+  --setting script.module.mwoscrapers=.kodi-private/e2e/mwoscrapers-settings.xml \
+  --result .kodi-private/e2e/private-addon-settings-rollout.json
+```
+
+The tool accepts only regular files and safe add-on IDs, verifies that each
+target add-on is installed and enabled, and reuses the in-Kodi restore lock,
+journal, rollback and digest verification. It wakes Android TV, restarts Kodi,
+checks that add-on versions did not change, and performs a second semantic
+verification from inside Kodi. Its report contains IDs and digests but never
+setting values. The source XML files and generated report remain ignored and
+must not be committed.
 
 `restore-path` accepts only exact paths present in the verified snapshot
 manifest and limits selective recovery to `userdata/`. For `addon_data`, it

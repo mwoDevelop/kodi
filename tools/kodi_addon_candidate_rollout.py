@@ -28,6 +28,17 @@ REMOTE_MARKER = "/sdcard/Download/mwo-addon-candidate-result.json"
 
 
 def _restart_kodi(adb, port, serial):
+    # Sleeping Android TV devices can accept ADB commands while refusing to
+    # create Kodi's surface. Wake them before starting the package so the
+    # post-install readiness check observes the real application lifecycle.
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "input keyevent KEYCODE_WAKEUP",
+        check=False,
+    )
     adb_command(
         adb,
         port,
