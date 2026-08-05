@@ -27,6 +27,7 @@
         "lockdown",
         "connection_profile_name",
         "reconnect_on_reboot",
+        "private_dns_mode",
         "credential_mode",
         "profile_path_env",
         "tunnel_interface",
@@ -42,6 +43,7 @@
         "reconnect_on_reboot": {
           "enum": ["connect_latest", "restore_connection", "none"]
         },
+        "private_dns_mode": {"enum": ["off", "opportunistic"]},
         "credential_mode": {"const": "inline_auth_user_pass"},
         "profile_path_env": {
           "type": "string",
