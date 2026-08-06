@@ -75,7 +75,11 @@ def read_url(url, limit=MAX_DOWNLOAD, attempts=3):
         except HTTPError as error:
             if error.code in (404, 410):
                 raise SourceUnavailable("%s returned HTTP %s" % (url, error.code)) from error
-            if error.code not in (429, 500, 502, 503, 504):
+            rate_limited = error.code == 403 and (
+                error.headers.get("X-RateLimit-Remaining") == "0"
+                or error.headers.get("Retry-After") is not None
+            )
+            if not rate_limited and error.code not in (429, 500, 502, 503, 504):
                 raise
             last_error = error
         except (TimeoutError, URLError) as error:

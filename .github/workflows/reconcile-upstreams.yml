@@ -28,6 +28,8 @@ jobs:
       - name: Validate control-plane manifests
         run: python -m tools.upstream_sync.cli validate-config
       - name: Discover immutable upstream state
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: >-
           python -m tools.upstream_sync.cli discover
           --output upstream-discovery.json
