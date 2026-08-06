@@ -187,11 +187,16 @@ identities select each Unix principal; the lifecycle probe verifies UID/home,
 Kodi version and ABI, and qualifies `special://home` plus
 `special://profile` from the current Kodi runtime log. Kodi must then be
 stopped before staging starts. `tools/kodi_flatpak_profile_sync_rollout.py`
-does not unpack add-ons or edit the add-on database over SSH: a one-shot
-`autoexec.py` invokes the transactional installer inside Kodi, which performs
-rollback, `UpdateLocalAddons`, enablement, production sync and a sanitized
-result marker. A successful repeat uses sync-only mode and must retain the
-same applied revision with no pending report.
+does not unpack add-ons or edit the add-on database over SSH. After the current
+Kodi log proves that EventServer is ready, a bounded `RunScript(...)` invokes
+the transactional installer inside Kodi, which performs rollback,
+`UpdateLocalAddons`, enablement and a sanitized result marker. Before applying
+the profile, it reconciles the exact stable-lock versions of Umbrella,
+mwoScrapers, its wrapper and WatchNixtoons2 through Kodi's repository APIs.
+Profile Sync 1.0.3 selects Android BoringSSL or Linux OpenSSL EVP without
+changing the Ed25519 wire/key format. A successful repeat rechecks those pins,
+uses sync-only mode and must retain the same applied revision with no pending
+report.
 
 An unreachable NUC is still reported as `UNAVAILABLE` and left unchanged.
 The two account enrollments, tokens, signing keys, installation receipts and

@@ -22,6 +22,7 @@ ADDON_ID = "service.mwodevelop.profilesync"
 REPOSITORY_ID = "repository.mwodevelop"
 MARKER_NAME = "flatpak-rollout-result.json"
 SAFE_STAGE = re.compile(r"^\.mwodevelop-flatpak-[0-9a-f]{16}$")
+SAFE_ADDON_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 MAX_FILES = 4000
 MAX_BYTES = 64 * 1024 * 1024
 
@@ -104,6 +105,74 @@ def _enable(addon_id, timeout=30):
     raise RuntimeError("Kodi refused to enable %s" % addon_id)
 
 
+def _enabled_addon(addon_id, timeout=30):
+    """Enable a freshly discovered add-on before opening its settings."""
+
+    _enable(addon_id, timeout=timeout)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            return xbmcaddon.Addon(addon_id)
+        except RuntimeError:
+            xbmc.sleep(1000)
+    raise RuntimeError("Kodi did not register enabled add-on %s" % addon_id)
+
+
+def _addon_details(addon_id):
+    try:
+        return _rpc(
+            "Addons.GetAddonDetails",
+            {
+                "addonid": addon_id,
+                "properties": ["version", "enabled"],
+            },
+        )["addon"]
+    except (KeyError, RuntimeError):
+        return None
+
+
+def _reconcile_required_addons(addons, timeout=120):
+    if (
+        not isinstance(addons, dict)
+        or not addons
+        or any(
+            not isinstance(addon_id, str)
+            or not SAFE_ADDON_ID.fullmatch(addon_id)
+            or not isinstance(version, str)
+            or not version
+            for addon_id, version in addons.items()
+        )
+    ):
+        raise ValueError("invalid required add-on set")
+    _enable(REPOSITORY_ID)
+    xbmc.executebuiltin("UpdateAddonRepos")
+    xbmc.sleep(5000)
+    installed = {}
+    for addon_id, expected_version in addons.items():
+        deadline = time.monotonic() + timeout
+        next_install = 0
+        while time.monotonic() < deadline:
+            details = _addon_details(addon_id)
+            if details:
+                if not details.get("enabled"):
+                    _enable(addon_id)
+                    details = _addon_details(addon_id)
+                if (
+                    details
+                    and details.get("enabled")
+                    and str(details.get("version")) == expected_version
+                ):
+                    installed[addon_id] = expected_version
+                    break
+            if time.monotonic() >= next_install:
+                xbmc.executebuiltin("InstallAddon(%s)" % addon_id)
+                next_install = time.monotonic() + 10
+            xbmc.sleep(2000)
+        else:
+            raise RuntimeError("Kodi could not install required add-on")
+    return installed
+
+
 def _remove(path):
     if path.is_symlink() or path.is_file():
         path.unlink(missing_ok=True)
@@ -153,7 +222,7 @@ def _sync(profile_root, addon_root, profile_version, repository_version):
     from resources.lib.mwoprofilesync.state import StateStore
     from resources.lib.mwoprofilesync.sync import ReadOnlySync
 
-    addon = xbmcaddon.Addon(ADDON_ID)
+    addon = _enabled_addon(ADDON_ID)
     state = StateStore(profile_data)
     applier = TransactionalApplier(
         profile_data,
@@ -166,7 +235,6 @@ def _sync(profile_root, addon_root, profile_version, repository_version):
     applier.recover()
     sync = ReadOnlySync(addon, state, applier=applier)()
     addon.setSetting("enabled", "true")
-    _enable(ADDON_ID)
     local = state.read()
     enrollment = local.get("enrollment") or {}
     return {
@@ -199,6 +267,7 @@ def _sync_existing(stage):
         "logical_device_id",
         "profile_sync_version",
         "repository_version",
+        "required_addons",
     }:
         raise ValueError("invalid Flatpak sync receipt")
     profile_version = _identity(
@@ -212,6 +281,9 @@ def _sync_existing(stage):
         or repository_version != expected["repository_version"]
     ):
         raise ValueError("installed Flatpak add-on version differs")
+    required_addons = _reconcile_required_addons(
+        expected["required_addons"]
+    )
     result = _sync(
         profile_root,
         addon_root,
@@ -220,6 +292,7 @@ def _sync_existing(stage):
     )
     if result["logical_device_id"] != expected["logical_device_id"]:
         raise ValueError("installed Flatpak enrollment identity differs")
+    result["required_addons"] = required_addons
     return result
 
 
@@ -270,6 +343,17 @@ def _transaction(stage):
         os.replace(supplied, targets["profile-data"])
         xbmc.executebuiltin("UpdateLocalAddons")
         xbmc.sleep(3000)
+        # The filesystem replacement is complete before repository-driven
+        # dependencies are reconciled. Valid add-ons installed afterwards are
+        # intentionally retained if a later Profile Sync apply rolls back.
+        journal.unlink(missing_ok=True)
+        _remove(backup)
+        _remove(work)
+        required_addons = _reconcile_required_addons(
+            json.loads((stage / "expected.json").read_text(encoding="utf-8"))[
+                "required_addons"
+            ]
+        )
         result = _sync(
             profile_root,
             addon_root,
@@ -280,9 +364,7 @@ def _transaction(stage):
         _recover(journal, targets, backup)
         xbmc.executebuiltin("UpdateLocalAddons")
         raise
-    journal.unlink(missing_ok=True)
-    _remove(backup)
-    _remove(work)
+    result["required_addons"] = required_addons
     return result
 
 
@@ -290,7 +372,6 @@ def main():
     stage = Path(sys.argv[1]) if len(sys.argv) == 3 else Path("/")
     mode = sys.argv[2] if len(sys.argv) == 3 else "invalid"
     marker = stage / MARKER_NAME
-    autoexec = Path(xbmcvfs.translatePath("special://profile/autoexec.py"))
     try:
         if mode == "install":
             result = _transaction(stage)
@@ -305,7 +386,6 @@ def main():
             "error_code": getattr(error, "code", None),
         }
     try:
-        autoexec.unlink()
         _write_atomic(marker, result)
     except BaseException as error:
         _write_atomic(

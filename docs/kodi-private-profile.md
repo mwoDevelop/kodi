@@ -104,7 +104,9 @@ is allowed only after the lifecycle probe has qualified the current
 proved the account UID/home and confirmed that Kodi is stopped. The dedicated
 rollout then uploads immutable ZIPs to a temporary Flatpak staging directory;
 ZIP extraction, add-on replacement, rollback, `UpdateLocalAddons`, enablement
-and Profile Sync all execute inside Kodi. It never edits `Addons*.db`.
+and Profile Sync all execute inside Kodi. Stable-lock versions of Umbrella,
+mwoScrapers, the wrapper and WatchNixtoons2 are reconciled through Kodi before
+the managed profile is applied. It never edits `Addons*.db`.
 
 Enroll and verify one qualified Flatpak principal against the current active
 production revision:
