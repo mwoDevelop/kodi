@@ -42,3 +42,15 @@ def test_external_javascript_actions_use_reviewed_node24_commits():
     assert observed == {
         action: {commit} for action, commit in NODE24_ACTIONS.items()
     }
+
+
+def test_upstream_discovery_uses_the_read_only_repository_token():
+    workflow = Path(
+        ".github/workflows/reconcile-upstreams.yml"
+    ).read_text(encoding="utf-8")
+    step = workflow.split(
+        "- name: Discover immutable upstream state", 1
+    )[1].split("- name: Publish read-only report", 1)[0]
+
+    assert "GITHUB_TOKEN: ${{ github.token }}" in step
+    assert "python -m tools.upstream_sync.cli discover" in step
