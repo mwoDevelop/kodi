@@ -182,20 +182,22 @@ current active state. The stored document remains a signed, client-compatible
 candidate assignment. Trusting the TLS response as an unsigned assignment
 remains forbidden.
 
-Linux/Flatpak host support additionally remains read-only until:
+Linux/Flatpak host support uses the same fail-closed gates. Separate pinned SSH
+identities select each Unix principal; the lifecycle probe verifies UID/home,
+Kodi version and ABI, and qualifies `special://home` plus
+`special://profile` from the current Kodi runtime log. Kodi must then be
+stopped before staging starts. `tools/kodi_flatpak_profile_sync_rollout.py`
+does not unpack add-ons or edit the add-on database over SSH: a one-shot
+`autoexec.py` invokes the transactional installer inside Kodi, which performs
+rollback, `UpdateLocalAddons`, enablement, production sync and a sanitized
+result marker. A successful repeat uses sync-only mode and must retain the
+same applied revision with no pending report.
 
-- the NUC is reachable again; separate SSH keys are already enrolled for both
-  accounts and passed positive plus cross-account rejection checks;
-- `special://home` and `special://profile` are qualified from the current
-  Kodi-generated runtime log and checked against canonical SSH account paths;
-- repository bootstrap uses a supported Kodi UI/API path or returns
-  `BOOTSTRAP_REQUIRES_USER`.
-
-The portable-state rollout follows the same gate. An unreachable NUC is
-reported as `UNAVAILABLE`; a reachable NUC still refuses mutation until its
-real in-process profile path is qualified. Android devices do not share this
-blocker because the adapter runs inside Kodi and resolves
-`special://profile` there.
+An unreachable NUC is still reported as `UNAVAILABLE` and left unchanged.
+The two account enrollments, tokens, signing keys, installation receipts and
+evidence remain independent under the ignored private directory. Android
+devices do not need the SSH lifecycle gate because their adapter already runs
+inside Kodi and resolves `special://profile` there.
 
 Android identity profiles use a unique `logical_device_id`, enrollment,
 channel and schedule. Live 2026-07-31 E2E on BlueStacks, Sony TV and X88 Pro
@@ -207,16 +209,15 @@ HTTPS production endpoint.
 Bedroom TV passed this workflow against production 0.2.2: stable Profile Sync
 0.1.8 paired with a unique enrollment, accepted the offline-signed bootstrap,
 applied and reported the exact active revision, and retained a complete
-portable profile with WatchNixtoons2 artwork. Both NUC principals were
-reachable long enough to verify Kodi Flatpak 21.3 and their independent
-runtime mappings; the host then suspended and did not accept Wake-on-LAN, so
-repository installation and pairing remain unclaimed.
+portable profile with WatchNixtoons2 artwork. Both NUC principals have
+independently qualified Kodi Flatpak 21.3 runtime mappings. Their production
+installation and pairing remain a live E2E gate whenever the physical host is
+unreachable; source-level support is not reported as device certification.
 
 Revision schema 3 and administratively bound compatibility tags are now
-implemented in the generator, server and add-on. The remaining live gates are
-an availability-dependent re-audit of Bedroom TV and Linux/Flatpak
-qualification for both NUC accounts; neither is reported as passed while the
-endpoint is unreachable.
+implemented in the generator, server and add-on. Linux/Flatpak certification
+still requires a recorded successful install plus repeat sync for both NUC
+principals; neither is reported as passed while the endpoint is unreachable.
 
 ## Layered routine revisions
 

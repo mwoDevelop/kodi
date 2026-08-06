@@ -98,9 +98,32 @@ E2E uses a temporary verified backend and a distinct one-time enrollment for
 every device, then restores the previous identity settings and state. It must
 not leave a token tied to a temporary endpoint.
 
-Unavailable devices are reported and left unchanged. Linux/Flatpak remains
-read-only until its real in-process `special://profile` path is qualified; the
-tool never guesses a profile path for a write.
+Unavailable devices are reported and left unchanged. Linux/Flatpak mutation
+is allowed only after the lifecycle probe has qualified the current
+`special://home` and `special://profile` mappings from Kodi's runtime log,
+proved the account UID/home and confirmed that Kodi is stopped. The dedicated
+rollout then uploads immutable ZIPs to a temporary Flatpak staging directory;
+ZIP extraction, add-on replacement, rollback, `UpdateLocalAddons`, enablement
+and Profile Sync all execute inside Kodi. It never edits `Addons*.db`.
+
+Enroll and verify one qualified Flatpak principal against the current active
+production revision:
+
+```bash
+.venv/bin/python tools/kodi_flatpak_profile_sync_rollout.py \
+  --device nuc-alek \
+  --revision-id sha256:4c7d728d214a6d31d1d277d2fd6b30957bc2d07d873648df5e0ffda69a1c905e \
+  --profile-sync-sha256 2c644202e185d9f5e80ca6bbdec7cea5181f66b67e84e45bdddf6aad67d5bdea \
+  --repository-sha256 0bde0bf4b61a178cacc07d8ffc2b5006b8374b1ec2c1a12d610ea02c2e6dc287 \
+  --result .kodi-private/e2e/nuc-alek-profile-sync.json
+```
+
+The first successful invocation writes a private, non-secret installation
+receipt. A repeated invocation uses the already installed add-ons and performs
+an in-Kodi sync-only check; this is the reproducible no-change test. Each Unix
+principal keeps an independent enrollment state below the ignored
+`.kodi-private/flatpak-profile-sync/` directory. Access tokens, device signing
+seeds and the offline promoter/publisher seeds never enter Git or CI output.
 
 Kodi rebuilds its add-on database after restore. Media-library databases are
 deferred from schema 1 because replacing a live Kodi database is not an atomic
