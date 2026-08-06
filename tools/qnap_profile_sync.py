@@ -713,16 +713,18 @@ def create_production_pairing(
     }
 
 
-def production_admin_request(
-    session, path, document, idempotency_key
+def _production_loopback_post(
+    session,
+    path,
+    document,
+    idempotency_key=None,
+    base_url="http://127.0.0.1:8766",
 ):
-    """Submit an already signed request through SSH and container loopback."""
-    if not ADMIN_PATH.fullmatch(str(path)):
-        raise QnapError("invalid production admin path")
-    if not isinstance(document, dict):
-        raise QnapError("production admin request must be an object")
-    if not isinstance(idempotency_key, str) or len(idempotency_key) < 8:
-        raise QnapError("invalid production admin idempotency key")
+    if base_url not in {
+        "http://127.0.0.1:8766",
+        "https://127.0.0.1:8765",
+    }:
+        raise QnapError("invalid production loopback endpoint")
     payload = base64.urlsafe_b64encode(
         json.dumps(
             document, sort_keys=True, separators=(",", ":")
@@ -730,12 +732,17 @@ def production_admin_request(
     ).rstrip(b"=").decode("ascii")
     _install, docker = container_station(session)
     program = (
-        "import base64,json,sys,urllib.request;"
+        "import base64,json,ssl,sys,urllib.request;"
         "raw=base64.urlsafe_b64decode(sys.argv[1]+'='*(-len(sys.argv[1])%4));"
-        "request=urllib.request.Request('http://127.0.0.1:8766'+sys.argv[2],"
-        "data=raw,headers={'Content-Type':'application/json',"
-        "'Idempotency-Key':sys.argv[3]},method='POST');"
-        "print(urllib.request.urlopen(request,timeout=15).read().decode())"
+        "headers={'Content-Type':'application/json'};"
+        "headers.update({} if sys.argv[3]=='-' else "
+        "{'Idempotency-Key':sys.argv[3]});"
+        "request=urllib.request.Request(sys.argv[4]+sys.argv[2],"
+        "data=raw,headers=headers,method='POST');"
+        "context=(ssl._create_unverified_context() "
+        "if sys.argv[4].startswith('https:') else None);"
+        "print(urllib.request.urlopen(request,timeout=15,context=context)"
+        ".read().decode())"
     )
     command = (
         production_compose_command(docker)
@@ -746,15 +753,66 @@ def production_admin_request(
         + " "
         + shlex.quote(path)
         + " "
-        + shlex.quote(idempotency_key)
+        + shlex.quote(idempotency_key or "-")
+        + " "
+        + shlex.quote(base_url)
     )
     try:
         response = json.loads(session.execute(command, timeout=120))
     except json.JSONDecodeError as error:
         raise QnapError("production admin returned invalid JSON") from error
     if not isinstance(response, dict):
-        raise QnapError("production admin returned an invalid document")
+        raise QnapError("production loopback returned an invalid document")
     return response
+
+
+def production_pair_request(
+    session,
+    code,
+    logical_device_id,
+    channel,
+    key_id,
+    public_key,
+):
+    """Exchange one pairing code without exposing the production listener."""
+    if not isinstance(code, str) or not re.fullmatch(r"[0-9]{8}", code):
+        raise QnapError("invalid production pairing code")
+    if any(
+        not SAFE_ID.fullmatch(str(value))
+        for value in (logical_device_id, channel, key_id)
+    ):
+        raise QnapError("invalid production pairing identity")
+    if not isinstance(public_key, str) or not re.fullmatch(
+        r"[A-Za-z0-9_-]{43}", public_key
+    ):
+        raise QnapError("invalid production pairing public key")
+    return _production_loopback_post(
+        session,
+        "/v1/pair",
+        {
+            "code": code,
+            "logical_device_id": logical_device_id,
+            "channel": channel,
+            "key_id": key_id,
+            "public_key": public_key,
+        },
+        base_url="https://127.0.0.1:8765",
+    )
+
+
+def production_admin_request(
+    session, path, document, idempotency_key
+):
+    """Submit an already signed request through SSH and container loopback."""
+    if not ADMIN_PATH.fullmatch(str(path)):
+        raise QnapError("invalid production admin path")
+    if not isinstance(document, dict):
+        raise QnapError("production admin request must be an object")
+    if not isinstance(idempotency_key, str) or len(idempotency_key) < 8:
+        raise QnapError("invalid production admin idempotency key")
+    return _production_loopback_post(
+        session, path, document, idempotency_key
+    )
 
 
 def smoke_deploy(session, repository, image, run_id):

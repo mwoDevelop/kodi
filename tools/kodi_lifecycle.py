@@ -8,14 +8,14 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 try:
-    from kodi_transports import (
+    from tools.kodi_transports import (
         AdbTransport,
         ReadOnlyCommand,
         SshTransport,
         TransportError,
     )
 except ModuleNotFoundError:
-    from tools.kodi_transports import (
+    from kodi_transports import (
         AdbTransport,
         ReadOnlyCommand,
         SshTransport,
