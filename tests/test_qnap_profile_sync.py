@@ -3,9 +3,11 @@ from pathlib import PurePosixPath
 import pytest
 
 from tools.qnap_profile_sync import (
+    CONTAINER_STATION_SOCKET,
     PRODUCTION_ROOT,
     QnapError,
     _raid_summary,
+    container_station,
     production_root,
     production_environment,
     production_admin_request,
@@ -16,6 +18,25 @@ from tools.qnap_profile_sync import (
     qnap_connection_settings,
     smoke_root,
 )
+
+
+class ContainerStationSession:
+    def execute(self, command):
+        assert command == (
+            "getcfg container-station Install_Path -f /etc/config/qpkg.conf"
+        )
+        return "/share/CACHEDEV3_DATA/.qpkg/container-station"
+
+
+def test_container_station_uses_gui_managed_docker_socket():
+    install, docker = container_station(ContainerStationSession())
+
+    assert install == "/share/CACHEDEV3_DATA/.qpkg/container-station"
+    assert docker == (
+        f"DOCKER_HOST=unix://{CONTAINER_STATION_SOCKET} "
+        "/share/CACHEDEV3_DATA/.qpkg/container-station/bin/docker"
+    )
+    assert "system-docker.sock" not in docker
 
 
 class PairingSession:

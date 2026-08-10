@@ -8,6 +8,10 @@
     },
     {
       "repository": "mwoDevelop/script.module.mwoscrapers",
+      "workflow": "check-provider-upstreams.yml"
+    },
+    {
+      "repository": "mwoDevelop/script.module.mwoscrapers",
       "workflow": "discover-provider-upstreams.yml"
     },
     {

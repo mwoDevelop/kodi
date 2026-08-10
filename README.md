@@ -107,3 +107,13 @@ python3 tools/kodi_inventory.py bluestacks1 \
 
 See [Private Kodi profile snapshots](docs/kodi-private-profile.md) for the
 security boundary, exact contents, commands, and reproducible device checks.
+
+## Operations
+
+See [Scheduled processes](docs/scheduled-processes.md) for the complete current
+catalogue of GitHub cron workflows, QNAP watchdog and health checks, Kodi
+Profile Sync cadence, write boundaries, and live verification commands.
+
+Use [QNAP image build and deployment](docs/qnap-images.md) for the single
+`build`, `deploy`, `update`, and `status` interface covering all three Kodi
+Container Station images.

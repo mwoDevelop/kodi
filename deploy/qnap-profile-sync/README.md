@@ -1,7 +1,15 @@
 # QNAP profile sync container
 
+For routine builds and deployments shared with the other Kodi QNAP services,
+use [`tools/qnap_images.py`](../../docs/qnap-images.md). The commands below
+remain the lower-level Profile Sync lifecycle and recovery interface.
+
 This is the only supported backend deployment shape. It is intended for a
 Container Station 3 application backed by Docker Compose.
+
+The host lifecycle targets `/var/run/docker.sock`, the Docker engine managed
+and displayed by the Container Station 3 GUI. Do not deploy this project to
+the separate `/var/run/system-docker.sock` engine.
 
 Safety constraints:
 

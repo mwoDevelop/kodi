@@ -1,8 +1,16 @@
 # QNAP provider metadata relay
 
+For routine builds and deployments shared with the other Kodi QNAP services,
+use [`tools/qnap_images.py`](../../docs/qnap-images.md). The commands below
+remain the lower-level relay policy and lifecycle interface.
+
 This stateless Container Station application is the narrow network bridge used
 when a Kodi VPN exit is rejected by a public provider. It does not receive
 Real-Debrid credentials or resolved playback traffic.
+
+The host lifecycle targets `/var/run/docker.sock`, the Docker engine managed
+and displayed by the Container Station 3 GUI. Do not deploy this project to
+the separate `/var/run/system-docker.sock` engine.
 
 Deployment constraints:
 

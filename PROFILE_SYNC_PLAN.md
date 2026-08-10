@@ -1,20 +1,45 @@
 # Plan synchronizacji profili, urządzeń i aktualizacji Kodi
 
-Status: finalny release Android w kwalifikacji; pozostał rollout Linux/Flatpak
+Status: backend i Android częściowo wdrożone; wymagane ponowne wyrównanie X88
+oraz dokończenie rollout Linux/Flatpak
 
-Data: 2026-08-03
+Data: 2026-08-10
 
 Repo nadrzędne: `mwoDevelop/kodi`
 
 Lokalizacja robocza: `/home/mwo/projects/kodi`
 
-Dokument powiązany: `UPSTREAM_SYNC_PLAN.md`
+Dokumenty powiązane: `UPSTREAM_SYNC_PLAN.md` oraz
+`docs/scheduled-processes.md`
 
 Raporty review:
 
 - `docs/PROFILE_SYNC_PLAN_REVIEW.md`;
 - `docs/PROFILE_SYNC_QNAP_PLAN_REVIEW.md`;
 - `docs/PROFILE_SYNC_NUC_PLAN_REVIEW.md`.
+
+Bieżący status operacyjny 2026-08-10:
+
+- backend Profile Sync 0.3.0 i provider relay działają jako zdrowe kontenery
+  Container Station na właściwym daemonie; watchdog działa, ale po objęciu
+  monitoringiem audytu zaakceptowanych providerów poprawnie alarmuje o jego
+  ostatnim nieudanym przebiegu; RAID ma stan `[UU]`;
+- Sony TV ma Profile Sync 1.0.2, spójną tożsamość, przypisaną i zastosowaną tę
+  samą rewizję `home-stable`, wynik `NO_CHANGE`, osiem favourites, siedem
+  przenośnych akcji WatchNixtoons2 i komplet grafik;
+- X88 Pro 20 jest osiągalny, ale utracił Umbrellę, mwoScrapers,
+  WatchNixtoons2 mwoDevelop i sam dodatek Profile Sync; wymaga odbudowy ze
+  stable oraz nowej weryfikacji enrollmentu;
+- oba profile NUC są osiągalne przez SSH i mają Kodi Flatpak 21.3 oraz
+  zakwalifikowane ścieżki runtime; Kodi nie jest uruchomione, `nuc-mwo` ma
+  tylko Umbrellę, a `nuc-alek` nie ma jeszcze zestawu mwoDevelop;
+- BlueStacks i Bedroom TV były niedostępne podczas tej kontroli, dlatego ich
+  wcześniejsze certyfikacje nie są przedstawiane jako bieżący wynik;
+- publiczny stable nadal udostępnia Profile Sync 1.0.2; wersja 1.0.3 pozostaje
+  kandydatem Linux/Flatpak do ukończenia i certyfikacji.
+
+Poniższy „Stan realizacji 2026-07-31” pozostaje historycznym zapisem
+osiągniętej bramy, a nie aktualnym inventory urządzeń.
 
 Stan realizacji 2026-07-31:
 
@@ -177,7 +202,8 @@ Znane cele:
   `arm64-v8a/armeabi-v7a`;
 - QNAP TS-x31P2.
 
-Rzeczywiste adresy pozostają wyłącznie w `.kodi-private`.
+Rzeczywiste adresy i prywatne referencje pozostają wyłącznie w ignorowanych
+przez Git plikach `.kodi-private/devices.json` oraz `.env`.
 
 Istnieją:
 
@@ -199,7 +225,9 @@ Istnieją:
 - obowiązkowy E2E przed publikacją.
 
 Ten mechanizm pozostaje źródłem prawdy dla kodu. Profile użytkownika nie mogą
-go mutować ani omijać.
+go mutować ani omijać. Pełne rozłożenie pięciu workflow GitHub w czasie i ich
+monitoring opisuje `docs/scheduled-processes.md`; ten plan nie duplikuje ich
+cronów.
 
 ### 4.3 QNAP
 
@@ -1314,12 +1342,12 @@ potwierdzą:
 
 | Warstwa | Trigger | Akcja |
 |---|---|---|
-| upstream discovery | codziennie 04:20 | raport i propozycja zmian |
+| upstream code/provider control plane | pięć dziennych slotów UTC | discovery, audyt zaakceptowanych artefaktów, skan i review-gated propozycje zgodnie z `docs/scheduled-processes.md` |
 | kod testing | merge zaakceptowanego PR | deterministyczny build i publikacja |
 | kod stable | ręcznie | promocja tych samych bajtów |
 | repo Kodi klienta | native updater Kodi | synchronizator wymusza jeden refresh tylko przy niespełnionej zależności |
-| profile consumer | start Kodi | sprawdzenie assignment |
-| profile consumer | co 6 h z jitterem | sprawdzenie assignment |
+| profile consumer | 15 s po starcie Kodi | sprawdzenie assignment |
+| profile consumer | co 6 h | sprawdzenie assignment |
 | NUC host bootstrap/restore | wyłącznie ręcznie | SSH jako dokładny użytkownik |
 | NUC runtime sync | start Kodi / co 6 h | dodatek -> QNAP, bez SSH |
 | publisher MVP | ręcznie | candidate |

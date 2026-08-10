@@ -4,7 +4,7 @@ Status: pełny release v1 zakończony
 
 Data bazowa: 2026-07-25
 
-Ostatnia aktualizacja: 2026-08-05
+Ostatnia aktualizacja: 2026-08-10
 
 Repo nadrzędne: `mwoDevelop/kodi`
 
@@ -17,9 +17,15 @@ Raporty review i decyzje:
   planu domknięcia do pełnego release;
 - `docs/UPSTREAM_MALWARE_SCANNING_PLAN.md` — propozycja bezpłatnej,
   fail-closed bramy ClamAV + analizy semantycznej przed wykonaniem i merge
-  kandydata; dokument wymaga osobnego review przed implementacją.
+  kandydata;
+- `docs/scheduled-processes.md` — bieżący katalog wszystkich harmonogramów,
+  granic zapisu, monitoringu i poleceń weryfikacyjnych.
 
 ## 0. Stan realizacji na 2026-08-05
+
+Ta tabela jest historycznym stanem bramy release z podanej daty. Nie służy do
+oceny bieżącego health ani dostępności urządzeń. Aktualny stan procesów
+cyklicznych należy sprawdzać zgodnie z `docs/scheduled-processes.md`.
 
 | Obszar | Stan | Dowód / luka |
 |---|---|---|
@@ -1020,11 +1026,19 @@ rulesetu; ewentualna przyszła App nie może być użyta do ominięcia tej bramy
 ## 14. Harmonogram i idempotencja
 
 GitHub cron jest statyczny i nie jest generowany z manifestu.
-`reconcile-upstreams.yml` uruchamia codziennie o 04:20 UTC discovery wszystkich
-tanich źródeł i reconcile. WatchNixtoons2 ma osobny repo-local slot 04:35 UTC;
-analogiczny slot Umbrelli zostanie rozłożony w czasie. Manifest może wyłączać
-komponent, lecz nie tworzy dynamicznego crona. Godzina nie jest traktowana
-jako SLA GitHub Actions.
+Aktualne dzienne sloty UTC to:
+
+- 04:20 — centralny `reconcile-upstreams.yml`;
+- 04:23 — read-only `check-provider-upstreams.yml`, który ponownie pobiera,
+  weryfikuje i skanuje zaakceptowane artefakty providerów;
+- 04:35 — `mwodevelop-watchnixtoons2-update.yml`;
+- 04:41 — `discover-provider-upstreams.yml` dla obserwacji provenance;
+- 04:50 — `propose-upstream-update.yml` Umbrelli.
+
+Pełny katalog wraz z repozytoriami, granicami zapisu i poleceniami kontroli
+jest w `docs/scheduled-processes.md`. Manifest komponentów może wyłączać
+komponent centralnego reconcile, lecz nie tworzy dynamicznego crona. Godzina
+nie jest traktowana jako SLA GitHub Actions.
 
 Jeżeli później koszt źródeł będzie różny, workflow może zawierać kilka
 statycznych slotów, a `schedule_slot` w manifeście przypisze komponent do
@@ -1066,8 +1080,10 @@ Alerty:
 Alert „brak udanego harmonogramu przez 36 godzin” nie może być wystawiany
 przez monitorowany cron. V1 uruchamia niezależny watchdog poza GitHub Actions
 (preferowany kontener na QNAP), który odpytuje GitHub API o ostatni udany run
-każdego workflow. In-repo watchdog może być dodatkowym sygnałem, ale jego
-wspólna domena awarii jest jawnie udokumentowana.
+każdego z pięciu workflow wymienionych wyżej. Wersjonowany
+`manifests/upstream-watchdog.json` jest źródłem zakresu monitoringu. In-repo
+watchdog może być dodatkowym sygnałem, ale jego wspólna domena awarii jest
+jawnie udokumentowana.
 
 ## 16. Testy
 
@@ -1639,7 +1655,9 @@ deploymentu nie przebudowuje komponentu.
    odpytuje heartbeat workflowów i tworzy alert po 36 godzinach.
 4. Dokument operacyjny opisuje conflict, rewrite, supersede, reject,
    zatrzymanie jednego komponentu, forward-revert oraz containment przez
-   ponowne wdrożenie wcześniejszego immutable snapshotu.
+   ponowne wdrożenie wcześniejszego immutable snapshotu. Katalog procesów i
+   podstawową weryfikację operacyjną utrzymuje
+   `docs/scheduled-processes.md`.
 5. Próba awarii potwierdza, że błąd jednego adaptera nie blokuje raportu
    pozostałych i nie zmienia stable.
 6. Próba containment potwierdza blokadę kolejnych publikacji i brak

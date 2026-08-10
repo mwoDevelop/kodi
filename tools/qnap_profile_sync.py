@@ -47,6 +47,7 @@ INSTALL_PATH = re.compile(
 )
 SMOKE_PORT = 28765
 PRODUCTION_PORT = 18765
+CONTAINER_STATION_SOCKET = "/var/run/docker.sock"
 SMOKE_PROJECT = "qnap-profile-sync-smoke"
 PRODUCTION_PROJECT = "qnap-profile-sync"
 PRODUCTION_ROOT = PurePosixPath(
@@ -227,7 +228,7 @@ def container_station(session):
         raise QnapError("unexpected Container Station installation path")
     docker = "%s/bin/docker" % install
     prefix = (
-        "DOCKER_HOST=unix:///var/run/system-docker.sock "
+        "DOCKER_HOST=unix://%s " % CONTAINER_STATION_SOCKET
         + shlex.quote(docker)
     )
     return install, prefix
@@ -260,6 +261,16 @@ def preflight(session):
     ).split("|")
     if architecture != "armv7l" or engine[:2] != ["armv7l", "overlay2"]:
         raise QnapError("QNAP container architecture or storage driver differs")
+    docker_root = PurePosixPath(engine[2]) if len(engine) == 3 else None
+    expected_suffix = PurePosixPath(
+        "Container/container-station-data/lib/docker"
+    )
+    if docker_root is None or not docker_root.is_relative_to(
+        PurePosixPath("/share")
+    ) or docker_root.parts[-4:] != expected_suffix.parts:
+        raise QnapError(
+            "QNAP Docker engine is not managed by Container Station GUI"
+        )
     raid = _raid_summary(session.execute("cat /proc/mdstat"))
     return {
         "architecture": architecture,
@@ -268,6 +279,7 @@ def preflight(session):
             PurePosixPath(install).relative_to("/share")
         ),
         "docker_version": docker_version,
+        "docker_root": str(docker_root),
         "raid": raid,
         "storage_driver": engine[1],
     }
