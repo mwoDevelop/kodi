@@ -21,6 +21,10 @@ Inspect the running QNAP containers without changing them:
 python tools/qnap_images.py status
 ```
 
+For the watchdog, `status` also reads its persisted functional result and
+reports the check time, workflow count and exact failing workflow names. This
+distinguishes a working fail-closed watchdog from a broken container.
+
 Preview all builds without logging into GHCR or invoking Docker:
 
 ```bash
@@ -79,7 +83,8 @@ python tools/qnap_images.py \
 - Profile Sync deployment retains the existing RAID, TLS, key-registry,
   backup and readiness gates;
 - provider relay deployment retains the stateless Compose policy and live
-  provider probe;
+  provider probe; the external provider probe is retried briefly after local
+  readiness to tolerate startup and upstream response races;
 - watchdog deployment validates its hardened Compose policy and rolls the
   previous Compose files back if the new container cannot publish a complete
   five-workflow status document;

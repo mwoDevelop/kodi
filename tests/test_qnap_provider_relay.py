@@ -3,11 +3,13 @@ from pathlib import Path
 
 import pytest
 
+from tools import qnap_provider_relay
 from tools.qnap_provider_relay import (
     PLACEHOLDER_IMAGE,
     RelayPolicyError,
     render_policy,
     validate_policy,
+    verify,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -70,3 +72,44 @@ def test_policy_rejects_public_bind_volume_and_host_network():
         validate_policy(volume, "production", allow_placeholder=True)
     with pytest.raises(RelayPolicyError, match="host-network"):
         validate_policy(host, "production", allow_placeholder=True)
+
+
+class TransientProviderSession:
+    def __init__(self):
+        self.provider_attempts = 0
+
+    def execute(self, command, allowed=(0,), timeout=None):
+        if "/health" in command:
+            return '{"status":"ok"}'
+        if "/torrentio/stream/" in command:
+            assert allowed == (0, 1)
+            assert timeout == 30
+            self.provider_attempts += 1
+            return "nonempty" if self.provider_attempts == 3 else ""
+        if " ps -a " in command:
+            return "Up 10 seconds (healthy)"
+        if " network ls " in command:
+            return "network-id"
+        if " volume ls " in command:
+            return ""
+        raise AssertionError(command)
+
+
+def test_verify_retries_transient_provider_probe(monkeypatch):
+    session = TransientProviderSession()
+    monkeypatch.setattr(
+        qnap_provider_relay,
+        "container_station",
+        lambda _session: ("/share/install", "docker"),
+    )
+    monkeypatch.setattr(
+        qnap_provider_relay.time,
+        "sleep",
+        lambda _seconds: None,
+    )
+
+    evidence = verify(session, "production", "192.168.1.39")
+
+    assert session.provider_attempts == 3
+    assert evidence["health"] == "ok"
+    assert evidence["provider_metadata_nonempty"] is True

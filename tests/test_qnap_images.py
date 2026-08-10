@@ -198,6 +198,71 @@ def test_all_services_have_action_publishers():
         assert service.github_workflow.endswith(".yml")
 
 
+class StatusSession:
+    def execute(self, command, allowed=(0,), timeout=None):
+        if " inspect " in command:
+            container = command.rsplit(" ", 1)[-1]
+            return json.dumps(
+                [
+                    {
+                        "Config": {"Image": "ghcr.io/example/" + container},
+                        "State": {
+                            "Health": {"Status": "unhealthy"},
+                            "StartedAt": "2026-08-10T00:00:00Z",
+                            "Status": "running",
+                        },
+                    }
+                ]
+            )
+        if "status.json" in command:
+            assert allowed == (0, 1)
+            assert timeout == 10
+            return json.dumps(
+                {
+                    "schema": 1,
+                    "checked_at": "2026-08-10T00:01:00Z",
+                    "healthy": False,
+                    "workflows": [
+                        {
+                            "repository": "mwoDevelop/repo",
+                            "workflow": "audit.yml",
+                            "healthy": False,
+                        },
+                        {
+                            "repository": "mwoDevelop/repo",
+                            "workflow": "sync.yml",
+                            "healthy": True,
+                        },
+                    ],
+                }
+            )
+        raise AssertionError(command)
+
+    def close(self):
+        pass
+
+
+def test_status_explains_watchdog_health(monkeypatch):
+    monkeypatch.setattr(
+        qnap_images,
+        "connect",
+        lambda _repository, _references: StatusSession(),
+    )
+    monkeypatch.setattr(
+        qnap_images,
+        "container_station",
+        lambda _session: ("/share/install", "docker"),
+    )
+
+    watchdog = qnap_images.status(".env")["upstream-watchdog"]
+
+    assert watchdog["runtime_healthy"] is False
+    assert watchdog["workflows"] == 2
+    assert watchdog["workflow_failures"] == [
+        "mwoDevelop/repo/audit.yml"
+    ]
+
+
 def test_selected_services_is_ordered_and_strict():
     available = {"profile-sync": object(), "provider-relay": object()}
     assert qnap_images.selected_services(["all"], available) == [

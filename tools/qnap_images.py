@@ -691,6 +691,42 @@ def status(references, repository=ROOT):
                 "started_at": item["State"]["StartedAt"],
                 "status": item["State"]["Status"],
             }
+        watchdog = rows["upstream-watchdog"]
+        if watchdog.get("status") != "missing":
+            raw = session.execute(
+                docker
+                + " exec qnap-upstream-watchdog-upstream-watchdog-1 "
+                + "cat /run/watchdog/status.json",
+                allowed=(0, 1),
+                timeout=10,
+            )
+            if raw:
+                try:
+                    document = json.loads(raw)
+                except json.JSONDecodeError:
+                    watchdog["runtime_status"] = "invalid"
+                else:
+                    workflows = document.get("workflows", [])
+                    if document.get("schema") == 1 and isinstance(
+                        workflows, list
+                    ):
+                        watchdog.update(
+                            {
+                                "checked_at": document.get("checked_at"),
+                                "runtime_healthy": document.get("healthy"),
+                                "workflow_failures": [
+                                    "%s/%s"
+                                    % (item["repository"], item["workflow"])
+                                    for item in workflows
+                                    if not item.get("healthy")
+                                ],
+                                "workflows": len(workflows),
+                            }
+                        )
+                    else:
+                        watchdog["runtime_status"] = "invalid"
+            else:
+                watchdog["runtime_status"] = "not-ready"
         return rows
     finally:
         session.close()
@@ -779,9 +815,14 @@ def main():
                     item = existing.get(name)
                     if not item:
                         raise ImageError("no built image state for %s" % name)
-                    deployed[name] = deploy(
-                        name, item["image"], args.references
-                    )
+                    try:
+                        deployed[name] = deploy(
+                            name, item["image"], args.references
+                        )
+                    except Exception as error:
+                        raise ImageError(
+                            "%s deployment failed: %s" % (name, error)
+                        ) from error
             result = {
                 "schema": 1,
                 **({"build": built} if args.command == "build" else {}),

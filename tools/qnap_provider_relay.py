@@ -258,7 +258,16 @@ def verify(session, mode, bind):
         )
         + " && printf nonempty"
     )
-    provider_state = session.execute(probe, timeout=30)
+    provider_state = ""
+    for _attempt in range(5):
+        provider_state = session.execute(
+            probe,
+            allowed=(0, 1),
+            timeout=30,
+        )
+        if provider_state == "nonempty":
+            break
+        time.sleep(2)
     if provider_state != "nonempty":
         raise RelayPolicyError("relay provider smoke returned no streams")
     resources = status(session, mode)
