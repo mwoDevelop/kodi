@@ -109,6 +109,66 @@ def test_build_dry_run_is_content_addressed(monkeypatch, tmp_path):
     assert "linux/amd64,linux/arm/v7" in result["command"]
 
 
+def test_actions_build_dry_run_dispatches_exact_pushed_ref(monkeypatch, tmp_path):
+    service = qnap_images.Service(
+        name="profile-sync",
+        image="ghcr.io/mwodevelop/kodi-profile-sync-server",
+        repository=tmp_path,
+        dockerfile=tmp_path / "Dockerfile",
+        platforms=("linux/amd64", "linux/arm/v7"),
+        github_repository="mwoDevelop/kodi-profile-sync-server",
+        github_workflow="container.yml",
+        github_inputs=(("publish_rc", "true"),),
+    )
+    monkeypatch.setattr(
+        qnap_images,
+        "source_identity",
+        lambda _service, require_clean: {
+            "commit": "d" * 40,
+            "dirty": False,
+        },
+    )
+    monkeypatch.setattr(qnap_images, "_remote_ref", lambda *_args: "main")
+
+    result = qnap_images.build_with_actions(service, dry_run=True)
+
+    assert result["tag"].endswith(":sha-" + "d" * 40)
+    assert result["command"] == [
+        "gh",
+        "workflow",
+        "run",
+        "container.yml",
+        "--repo",
+        "mwoDevelop/kodi-profile-sync-server",
+        "--ref",
+        "main",
+        "--field",
+        "publish_rc=true",
+    ]
+
+
+def test_tag_digest_extracts_manifest_digest(monkeypatch):
+    monkeypatch.setattr(
+        qnap_images,
+        "_run",
+        lambda *_args, **_kwargs: type(
+            "Result",
+            (),
+            {"stdout": "Name: test\nDigest: sha256:%s\n" % ("e" * 64)},
+        )(),
+    )
+
+    assert qnap_images._tag_digest("example.invalid/image:test") == (
+        "sha256:" + "e" * 64
+    )
+
+
+def test_all_services_have_action_publishers():
+    for service in qnap_images.services().values():
+        assert service.github_repository.startswith("mwoDevelop/")
+        assert service.github_workflow.endswith(".yml")
+
+
 def test_selected_services_is_ordered_and_strict():
     available = {"profile-sync": object(), "provider-relay": object()}
     assert qnap_images.selected_services(["all"], available) == [

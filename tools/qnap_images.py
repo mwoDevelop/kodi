@@ -64,6 +64,10 @@ class Service:
     dockerfile: Path
     platforms: tuple[str, ...]
     build_revision: bool = False
+    github_repository: str = ""
+    github_workflow: str = ""
+    github_tag: str = "sha-{commit}"
+    github_inputs: tuple[tuple[str, str], ...] = ()
 
 
 def services(profile_sync_repository=None):
@@ -79,6 +83,10 @@ def services(profile_sync_repository=None):
             Path("Dockerfile"),
             ("linux/amd64", "linux/arm/v7"),
             True,
+            "mwoDevelop/kodi-profile-sync-server",
+            "container.yml",
+            "sha-{commit}",
+            (("publish_rc", "true"),),
         ),
         "provider-relay": Service(
             "provider-relay",
@@ -87,6 +95,8 @@ def services(profile_sync_repository=None):
             Path("relay/Dockerfile"),
             ("linux/amd64", "linux/arm/v7"),
             True,
+            "mwoDevelop/script.module.mwoscrapers",
+            "relay-image.yml",
         ),
         "upstream-watchdog": Service(
             "upstream-watchdog",
@@ -94,6 +104,10 @@ def services(profile_sync_repository=None):
             ROOT,
             Path("deploy/qnap-upstream-watchdog/Dockerfile"),
             ("linux/amd64", "linux/arm64", "linux/arm/v7"),
+            False,
+            "mwoDevelop/kodi",
+            "build-upstream-watchdog.yml",
+            "{commit}",
         ),
     }
 
@@ -236,6 +250,167 @@ def build(service, builder, dry_run=False):
         "image": reference,
         "source_commit": identity["commit"],
         "tag": tag,
+    }
+
+
+def _remote_ref(service, commit):
+    upstream = _run(
+        (
+            "git",
+            "-C",
+            service.repository,
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            "@{upstream}",
+        ),
+        check=False,
+    )
+    candidates = []
+    if upstream.returncode == 0 and upstream.stdout.strip().startswith(
+        "origin/"
+    ):
+        candidates.append(upstream.stdout.strip().removeprefix("origin/"))
+    containing = _run(
+        (
+            "git",
+            "-C",
+            service.repository,
+            "for-each-ref",
+            "--format=%(refname:short)",
+            "--contains",
+            commit,
+            "refs/remotes/origin",
+        )
+    ).stdout.splitlines()
+    candidates.extend(
+        item.removeprefix("origin/")
+        for item in containing
+        if item.startswith("origin/") and item != "origin/HEAD"
+    )
+    for ref in dict.fromkeys(candidates):
+        remote = _run(
+            ("git", "ls-remote", "--exit-code", "origin", "refs/heads/" + ref),
+            cwd=service.repository,
+            check=False,
+        )
+        if remote.returncode == 0 and remote.stdout.split()[0] == commit:
+            return ref
+    raise ImageError(
+        "%s commit is not the head of a pushed origin branch" % service.name
+    )
+
+
+def _workflow_run(service, commit, ref, started_at):
+    command = [
+        "gh",
+        "workflow",
+        "run",
+        service.github_workflow,
+        "--repo",
+        service.github_repository,
+        "--ref",
+        ref,
+    ]
+    for key, value in service.github_inputs:
+        command.extend(("--field", "%s=%s" % (key, value)))
+    _run(command, capture=False)
+    for _attempt in range(30):
+        raw = _run(
+            (
+                "gh",
+                "run",
+                "list",
+                "--repo",
+                service.github_repository,
+                "--workflow",
+                service.github_workflow,
+                "--event",
+                "workflow_dispatch",
+                "--branch",
+                ref,
+                "--limit",
+                "10",
+                "--json",
+                "databaseId,headSha,createdAt,url",
+            )
+        ).stdout
+        runs = json.loads(raw)
+        matching = [
+            item
+            for item in runs
+            if item.get("headSha") == commit
+            and dt.datetime.fromisoformat(
+                item["createdAt"].replace("Z", "+00:00")
+            )
+            >= started_at
+        ]
+        if matching:
+            return max(matching, key=lambda item: item["databaseId"])
+        time.sleep(2)
+    raise ImageError("GitHub Actions run did not appear after dispatch")
+
+
+def _tag_digest(tag):
+    output = _run(("docker", "buildx", "imagetools", "inspect", tag)).stdout
+    match = re.search(r"^Digest:\s+(sha256:[a-f0-9]{64})$", output, re.MULTILINE)
+    if not match:
+        raise ImageError("could not resolve immutable digest for %s" % tag)
+    return match.group(1)
+
+
+def build_with_actions(service, dry_run=False):
+    identity = source_identity(service, require_clean=not dry_run)
+    commit = identity["commit"]
+    ref = _remote_ref(service, commit)
+    tag = "%s:%s" % (
+        service.image,
+        service.github_tag.format(commit=commit),
+    )
+    command = [
+        "gh",
+        "workflow",
+        "run",
+        service.github_workflow,
+        "--repo",
+        service.github_repository,
+        "--ref",
+        ref,
+    ]
+    for key, value in service.github_inputs:
+        command.extend(("--field", "%s=%s" % (key, value)))
+    if dry_run:
+        return {
+            "command": command,
+            "image": service.image,
+            "source_commit": commit,
+            "source_dirty": identity["dirty"],
+            "tag": tag,
+        }
+    started_at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=5)
+    run = _workflow_run(service, commit, ref, started_at)
+    _run(
+        (
+            "gh",
+            "run",
+            "watch",
+            str(run["databaseId"]),
+            "--repo",
+            service.github_repository,
+            "--exit-status",
+            "--interval",
+            "5",
+        ),
+        capture=False,
+    )
+    verify_platforms(tag, service.platforms)
+    digest = _tag_digest(tag)
+    return {
+        "built_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "image": "%s@%s" % (service.image, digest),
+        "source_commit": commit,
+        "tag": tag,
+        "workflow_run": run["url"],
     }
 
 
@@ -528,6 +703,11 @@ def main():
         item = sub.add_parser(command)
         item.add_argument("services", nargs="*", default=["all"])
         item.add_argument("--builder", default="mwodevelop-kodi")
+        item.add_argument(
+            "--publisher",
+            choices=("actions", "local"),
+            default="actions",
+        )
         item.add_argument("--dry-run", action="store_true")
     sub.add_parser("status")
     args = parser.parse_args()
@@ -538,15 +718,22 @@ def main():
             available = services(args.profile_sync_repository)
             names = selected_services(args.services, available)
             if args.command in {"build", "update"}:
-                ensure_builder(args.builder, args.dry_run)
-                login_ghcr(args.dry_run)
+                if args.publisher == "local":
+                    ensure_builder(args.builder, args.dry_run)
+                    login_ghcr(args.dry_run)
                 existing = (
                     load_state(args.state)["images"]
                     if Path(args.state).is_file()
                     else {}
                 )
                 built = {
-                    name: build(available[name], args.builder, args.dry_run)
+                    name: (
+                        build(available[name], args.builder, args.dry_run)
+                        if args.publisher == "local"
+                        else build_with_actions(
+                            available[name], args.dry_run
+                        )
+                    )
                     for name in names
                 }
                 if args.dry_run:

@@ -7,11 +7,11 @@ Container Station applications:
 - `provider-relay`;
 - `upstream-watchdog`.
 
-It builds multi-architecture images, pushes them to GHCR, verifies the
-required manifest platforms, records immutable digest references under the
-Git-ignored `.kodi-private/qnap-images.json`, and deploys only those digests.
-The build refuses a dirty source repository, so an image always maps to an
-exact Git commit.
+It dispatches repository-owned GitHub Actions builds, pushes multi-architecture
+images to GHCR, verifies the required manifest platforms, records immutable
+digest references under the Git-ignored `.kodi-private/qnap-images.json`, and
+deploys only those digests. The build refuses a dirty or unpushed source
+repository, so an image always maps to an exact Git commit.
 
 ## Common commands
 
@@ -27,7 +27,8 @@ Preview all builds without logging into GHCR or invoking Docker:
 python tools/qnap_images.py build all --dry-run
 ```
 
-Build and push all images, then deploy their recorded immutable digests:
+Build and push all images through GitHub Actions, then deploy their recorded
+immutable digests:
 
 ```bash
 python tools/qnap_images.py build all
@@ -38,6 +39,15 @@ The combined form is:
 
 ```bash
 python tools/qnap_images.py update all
+```
+
+The GitHub Actions publisher is the default. It avoids distributing a local
+long-lived `write:packages` token and waits for every workflow to finish before
+resolving and recording its GHCR digest. An explicitly authenticated local
+Buildx build remains available when needed:
+
+```bash
+python tools/qnap_images.py build all --publisher local
 ```
 
 Replace `all` with one or more names for a partial operation:
@@ -58,9 +68,11 @@ python tools/qnap_images.py \
 
 ## Safety boundary
 
-- `build` requires clean source repositories and an authenticated `gh` CLI;
-- GHCR credentials are passed to `docker login` over stdin and are never
-  written to the image-state file;
+- `build` requires clean source repositories whose exact commits are the heads
+  of pushed `origin` branches, plus an authenticated `gh` CLI;
+- the default publisher uses short-lived repository `GITHUB_TOKEN` credentials
+  inside Actions; the optional local publisher passes GHCR credentials to
+  `docker login` over stdin and never writes them to the image-state file;
 - Buildx publishes immutable multi-platform manifests and the script verifies
   their required `linux/amd64`, `linux/arm/v7` and, for the watchdog,
   `linux/arm64` entries;
