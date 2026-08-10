@@ -359,6 +359,25 @@ def _tag_digest(tag):
     return match.group(1)
 
 
+def _published_reference(service, tag):
+    last_error = None
+    for _attempt in range(18):
+        try:
+            verify_platforms(tag, service.platforms)
+            return "%s@%s" % (service.image, _tag_digest(tag))
+        except (
+            ImageError,
+            json.JSONDecodeError,
+            subprocess.CalledProcessError,
+        ) as error:
+            last_error = error
+            time.sleep(5)
+    raise ImageError(
+        "published image did not become readable: %s (%s)"
+        % (tag, last_error)
+    )
+
+
 def build_with_actions(service, dry_run=False):
     identity = source_identity(service, require_clean=not dry_run)
     commit = identity["commit"]
@@ -403,11 +422,10 @@ def build_with_actions(service, dry_run=False):
         ),
         capture=False,
     )
-    verify_platforms(tag, service.platforms)
-    digest = _tag_digest(tag)
+    reference = _published_reference(service, tag)
     return {
         "built_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "image": "%s@%s" % (service.image, digest),
+        "image": reference,
         "source_commit": commit,
         "tag": tag,
         "workflow_run": run["url"],

@@ -163,6 +163,35 @@ def test_tag_digest_extracts_manifest_digest(monkeypatch):
     )
 
 
+def test_published_reference_retries_registry_propagation(monkeypatch):
+    service = qnap_images.Service(
+        name="service",
+        image="ghcr.io/mwodevelop/service",
+        repository=qnap_images.ROOT,
+        dockerfile=qnap_images.Path("Dockerfile"),
+        platforms=("linux/amd64",),
+    )
+    attempts = []
+
+    def verify(*_args):
+        attempts.append(True)
+        if len(attempts) == 1:
+            raise qnap_images.subprocess.CalledProcessError(1, "inspect")
+
+    monkeypatch.setattr(qnap_images, "verify_platforms", verify)
+    monkeypatch.setattr(
+        qnap_images,
+        "_tag_digest",
+        lambda _tag: "sha256:" + "f" * 64,
+    )
+    monkeypatch.setattr(qnap_images.time, "sleep", lambda _seconds: None)
+
+    assert qnap_images._published_reference(service, "image:tag") == (
+        "ghcr.io/mwodevelop/service@sha256:" + "f" * 64
+    )
+    assert len(attempts) == 2
+
+
 def test_all_services_have_action_publishers():
     for service in qnap_images.services().values():
         assert service.github_repository.startswith("mwoDevelop/")
