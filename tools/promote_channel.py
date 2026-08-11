@@ -122,7 +122,10 @@ def inject_candidate(dist, candidate_dir):
 def prepare_snapshot_lock(snapshot, attestation_path, current_stable, output):
     metadata = verify_bundle(snapshot)
     attestation = verify_device_attestation(attestation_path, snapshot)
-    attestation_digest = sha256_bytes(canonical_json(attestation))
+    # Stable deployment downloads this exact release asset and verifies its
+    # byte digest before validating the signed document. Preserve that digest
+    # here; a canonical JSON digest would identify different bytes.
+    attestation_digest = sha256_bytes(Path(attestation_path).read_bytes())
     testing = metadata["testing_lock"]
     stable = json.loads(json.dumps(testing))
     stable.update(

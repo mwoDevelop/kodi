@@ -166,6 +166,14 @@ def _snapshot_and_attestation(tmp_path):
 
 def test_snapshot_lock_is_content_addressed_and_applies_only_once(tmp_path):
     snapshot, attestation = _snapshot_and_attestation(tmp_path)
+    # Exercise a valid but non-canonical asset representation. The stable lock
+    # must bind the bytes published in the release, not a re-serialized object.
+    attestation_document = json.loads(attestation.read_text())
+    attestation.write_text(
+        json.dumps(attestation_document, indent=4, sort_keys=False) + "\n",
+        encoding="utf-8",
+    )
+    attestation_asset_sha256 = hashlib.sha256(attestation.read_bytes()).hexdigest()
     stable_lock = tmp_path / "stable.json"
     stable_lock.write_text(
         json.dumps({"schema": 1, "channel": "stable", "components": {}})
@@ -182,5 +190,6 @@ def test_snapshot_lock_is_content_addressed_and_applies_only_once(tmp_path):
     assert promoted["source_snapshot_id"] == candidate["snapshot_id"]
     assert promoted["attestation_id"] == candidate["attestation_id"]
     assert promoted["attestation_sha256"] == candidate["attestation_sha256"]
+    assert promoted["attestation_sha256"] == attestation_asset_sha256
     with pytest.raises(ValueError, match="changed after candidate preparation"):
         promote_channel.apply_snapshot_lock_candidate(bundle, stable_lock)
