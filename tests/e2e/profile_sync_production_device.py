@@ -11,7 +11,12 @@ import tempfile
 import time
 from pathlib import Path
 
-from tools.kodi_devices import load_registry, resolve_device
+from tools.kodi_devices import (
+    load_registry,
+    resolve_device,
+    resolve_private_endpoint,
+)
+from tools.kodi_inventory import load_private_references
 from tools.kodi_profile import (
     AdbEventClient,
     AdbJsonRpcClient,
@@ -24,6 +29,13 @@ REMOTE_PROBE = "/sdcard/Download/.mwo-profile-sync-production-probe.py"
 REMOTE_CONFIG = "/sdcard/Download/.mwo-profile-sync-production-config.json"
 REMOTE_CA = "/sdcard/Download/.mwo-profile-sync-production-ca.pem"
 REMOTE_MARKER = "/sdcard/Download/.mwo-profile-sync-production-result.json"
+
+
+def resolve_android_device(devices_path, references_path, logical_device_id):
+    registry = load_registry(Path(devices_path).resolve())
+    device = resolve_device(registry, logical_device_id)
+    references = load_private_references(Path(references_path).resolve())
+    return resolve_private_endpoint(device, references, required=True)
 
 
 def write_local_config(repository, config, logical_device_id):
@@ -85,6 +97,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", required=True)
     parser.add_argument("--devices", type=Path, required=True)
+    parser.add_argument("--references", type=Path, default=repository / ".env")
     parser.add_argument("--server-url", required=True)
     parser.add_argument("--ca-certificate", type=Path, required=True)
     parser.add_argument("--pairing-file", type=Path)
@@ -98,8 +111,7 @@ def main():
     )
     parser.add_argument("--adb-server-port", type=int, default=5038)
     args = parser.parse_args()
-    registry = load_registry(args.devices.resolve())
-    device = resolve_device(registry, args.device)
+    device = resolve_android_device(args.devices, args.references, args.device)
     serial = device["endpoints"]["adb"]
     model = adb_output(
         args.adb,

@@ -171,6 +171,9 @@ def configure(
             api_error = report.get("authentication_api_error")
             if api_error is not None:
                 transport_summary += " (API error %s)" % api_error
+            missing_module = report.get("error_module")
+            if isinstance(missing_module, str) and missing_module:
+                transport_summary += " (module %s)" % missing_module
             raise RuntimeError(
                 "Rapideo private adapter failed: %s at %s%s"
                 % (
