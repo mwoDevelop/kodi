@@ -17,27 +17,13 @@ from tools.kodi_flatpak_profile_sync_rollout import rollout
 from tools.kodi_stable_artifacts import prepare
 
 
-def active_revision(device):
-    state = ROOT / ".kodi-private/flatpak-profile-sync" / device / "state.json"
-    if not state.is_file() or state.is_symlink():
-        raise ValueError("Flatpak device has no private enrollment state")
-    document = json.loads(state.read_text(encoding="utf-8"))
-    enrollment = document.get("enrollment") or {}
-    if enrollment.get("logical_device_id") != device:
-        raise ValueError("Flatpak enrollment identity differs")
-    revision = document.get("assigned_revision") or document.get("applied_revision")
-    if not isinstance(revision, str) or not revision.startswith("sha256:"):
-        raise ValueError("Flatpak enrollment has no assigned revision")
-    return revision
-
-
 def stable_rollout(device):
     prepared = prepare(ROOT)
     profile = prepared["addons"]["service.mwodevelop.profilesync"]
     repository = prepared["repository"]
     args = SimpleNamespace(
         device=device,
-        revision_id=active_revision(device),
+        revision_id=None,
         server_url=None,
         references=".env",
         devices=".kodi-private/devices.json",

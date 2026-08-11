@@ -358,6 +358,8 @@ def bootstrap_active(repository: Path, logical_id: str) -> dict:
                     "status": "NO_CHANGE",
                     "active_revision": state["active_revision"],
                     "backup": evidence["backup_id"],
+                    "enrollment_id": enrollment["enrollment_id"],
+                    "assignment": document,
                 }
         assignment = _assignment(
             enrollment,
@@ -380,6 +382,8 @@ def bootstrap_active(repository: Path, logical_id: str) -> dict:
             "status": "BOOTSTRAPPED",
             "active_revision": state["active_revision"],
             "backup": evidence["backup_id"],
+            "enrollment_id": enrollment["enrollment_id"],
+            "assignment": assignment,
         }
     finally:
         session.close()
