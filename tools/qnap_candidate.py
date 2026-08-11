@@ -51,6 +51,30 @@ def _reuse_approval(name, service, prior, input_sha256, commit):
 def _download_approval(service, run_id, destination):
     destination.mkdir(parents=True, exist_ok=False, mode=0o700)
     destination.chmod(0o700)
+    artifacts = json.loads(
+        _run(
+            (
+                "gh",
+                "api",
+                "repos/%s/actions/runs/%s/artifacts?per_page=100"
+                % (service.github_repository, run_id),
+            )
+        )
+    ).get("artifacts", [])
+    approval_artifacts = [
+        item["name"]
+        for item in artifacts
+        if (
+            isinstance(item, dict)
+            and isinstance(item.get("name"), str)
+            and item["name"].startswith("qnap-image-approval-")
+            and not item.get("expired", False)
+        )
+    ]
+    if len(approval_artifacts) != 1:
+        raise RuntimeError(
+            "workflow did not publish exactly one QNAP approval artifact"
+        )
     _run(
         (
             "gh",
@@ -59,6 +83,8 @@ def _download_approval(service, run_id, destination):
             run_id,
             "--repo",
             service.github_repository,
+            "--name",
+            approval_artifacts[0],
             "--dir",
             destination,
         )
