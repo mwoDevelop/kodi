@@ -67,6 +67,19 @@ class RepositoryIndexNotReady(RuntimeError):
     pass
 
 
+def execute_kodi_builtin(adb, port, serial, command):
+    try:
+        with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
+            jsonrpc.call(
+                "XBMC.ExecuteBuiltin",
+                {"command": command, "wait": False},
+            )
+        return "jsonrpc"
+    except (OSError, RuntimeError, TimeoutError):
+        AdbEventClient(adb, port, serial).execute_builtin(command)
+        return "eventserver"
+
+
 def _start_kodi(adb, port, serial):
     # BlueStacks may leave Kodi suspended or disabled after force-stop.
     # Unsuspending is best-effort for older Android builds; enabling an already
@@ -775,7 +788,6 @@ def assign_addon_origins_in_kodi(
         )
     try:
         _start_kodi(adb, port, target["serial"])
-        events = AdbEventClient(adb, port, target["serial"])
         started = time.monotonic()
         result = None
         while time.monotonic() - started < timeout:
@@ -787,7 +799,10 @@ def assign_addon_origins_in_kodi(
                 "rm -f '%s'" % ORIGIN_MARKER,
                 check=False,
             )
-            events.execute_builtin(
+            execute_kodi_builtin(
+                adb,
+                port,
+                target["serial"],
                 "RunScript(%s,%s,%s)"
                 % (ORIGIN_SCRIPT, ORIGIN_MAPPING, ORIGIN_MARKER)
             )
@@ -811,7 +826,9 @@ def assign_addon_origins_in_kodi(
             if result and result.get("error_type") != "RepositoryIndexNotReady":
                 break
             result = None
-            events.execute_builtin("UpdateAddonRepos")
+            execute_kodi_builtin(
+                adb, port, target["serial"], "UpdateAddonRepos"
+            )
             time.sleep(10)
         if result is None:
             raise TimeoutError("Kodi origin assignment did not finish")
