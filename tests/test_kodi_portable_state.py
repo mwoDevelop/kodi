@@ -17,6 +17,7 @@ from tools.kodi_portable_state import (
     recover,
     validate_bundle,
 )
+from tools.kodi_portable_state_rollout import _current_bundle
 
 
 JPEG = b"\xff\xd8\xff\xe0" + b"portable-artwork"
@@ -76,6 +77,14 @@ def test_bundle_is_deterministic_exact_and_idempotent(tmp_path):
     assert (target / STATE_NAME).is_file()
     assert not (target / JOURNAL_NAME).exists()
     assert not (target / BACKUP_NAME).exists()
+    parsed = (target / "favourites.xml").read_text(encoding="utf-8")
+    (target / "favourites.xml").write_text(
+        parsed.replace("<favourites>\n", "<favourites>").replace(
+            "\n</favourites>", "</favourites>"
+        ),
+        encoding="utf-8",
+    )
+    assert apply_bundle(target, first)["status"] == "NO_CHANGE"
 
 
 def test_bundle_rejects_missing_or_extra_artwork(tmp_path):
@@ -128,6 +137,11 @@ def test_bundle_preserves_refresh_manifest_and_enforces_exact_directory(
     assert {
         path.name for path in (target / "favourite-artwork").iterdir()
     } == {image_hash + ".jpg", "manifest.json"}
+    (target / "favourite-artwork/manifest.json").write_text(
+        json.dumps({"schema": 1, "entries": {}, "device_local": True}),
+        encoding="utf-8",
+    )
+    assert apply_bundle(target, bundle)["status"] == "NO_CHANGE"
 
 
 def test_apply_failure_recovers_previous_profile(tmp_path, monkeypatch):
@@ -164,3 +178,38 @@ def test_recover_rejects_untrusted_journal(tmp_path):
 
     with pytest.raises(ValueError, match="journal"):
         recover(tmp_path)
+
+
+def test_current_bundle_pointer_is_content_addressed_and_path_safe(tmp_path):
+    source = tmp_path / "source"
+    write_profile(source)
+    private = tmp_path / ".kodi-private/portable-state"
+    private.mkdir(parents=True)
+    bundle = private / "bundle.zip"
+    manifest = build_bundle(source, bundle)
+    pointer = private / "current.json"
+    pointer.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "bundle_id": manifest["bundle_id"],
+                "filename": bundle.name,
+            }
+        )
+    )
+
+    selected, observed = _current_bundle(tmp_path)
+
+    assert selected == bundle
+    assert observed == manifest
+    pointer.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "bundle_id": manifest["bundle_id"],
+                "filename": "../bundle.zip",
+            }
+        )
+    )
+    with pytest.raises(RuntimeError, match="filename"):
+        _current_bundle(tmp_path)

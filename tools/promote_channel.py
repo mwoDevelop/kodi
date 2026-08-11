@@ -135,6 +135,7 @@ def prepare_snapshot_lock(snapshot, attestation_path, current_stable, output):
                 "promotion_artifact_manifest_sha256"
             ],
             "attestation_sha256": attestation_digest,
+            "attestation_id": attestation["attestation_id"],
         }
     )
     current = json.loads(Path(current_stable).read_text(encoding="utf-8"))
@@ -143,6 +144,7 @@ def prepare_snapshot_lock(snapshot, attestation_path, current_stable, output):
         "base_lock_sha256": sha256_bytes(canonical_json(current)),
         "proposed_lock_sha256": sha256_bytes(canonical_json(stable)),
         "snapshot_id": metadata["snapshot_id"],
+        "attestation_id": attestation["attestation_id"],
         "attestation_sha256": attestation_digest,
     }
     candidate = {**identity, "candidate_id": sha256_bytes(canonical_json(identity))}
@@ -168,6 +170,7 @@ def apply_snapshot_lock_candidate(bundle, stable_lock):
             "base_lock_sha256",
             "proposed_lock_sha256",
             "snapshot_id",
+            "attestation_id",
             "attestation_sha256",
         )
     }
@@ -180,6 +183,7 @@ def apply_snapshot_lock_candidate(bundle, stable_lock):
         raise ValueError("proposed stable lock digest mismatch")
     if (
         proposed.get("source_snapshot_id") != candidate["snapshot_id"]
+        or proposed.get("attestation_id") != candidate["attestation_id"]
         or proposed.get("attestation_sha256") != candidate["attestation_sha256"]
     ):
         raise ValueError("stable lock lost snapshot provenance")

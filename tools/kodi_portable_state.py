@@ -349,33 +349,135 @@ def recover(profile_root):
     return True
 
 
-def _matches(profile_root, manifest):
+def _favourites_semantics(payload):
+    root, _artwork = validate_favourites(payload)
+    def action(value):
+        value = (value or "").strip()
+        if "plugin.video.watchnixtoons2.mwodevelop" in value:
+            operations = sorted(set(re.findall(r"action[A-Za-z]+", value)))
+            return "plugin.video.watchnixtoons2.mwodevelop|%s" % ",".join(
+                operations
+            )
+        return value
+
+    return [
+        (
+            node.attrib.get("name", ""),
+            node.attrib.get("thumb", ""),
+            action(node.text),
+        )
+        for node in root.findall("favourite")
+    ]
+
+
+def _semantic_digests(items):
+    return [digest(canonical_json(list(item))) for item in items]
+
+
+def _match_details(profile_root, manifest, bundle):
     profile_root = Path(profile_root)
+    mismatched = []
+    semantic_difference = None
     for item in manifest["adapters"][ADAPTER_ID]["files"]:
+        # The refresh manifest contains per-device observation metadata and
+        # may be rewritten after startup. Favourites and content-addressed
+        # artwork bytes remain the deterministic convergence boundary.
+        if item["path"] == "favourite-artwork/manifest.json":
+            continue
         path = profile_root.joinpath(*PurePosixPath(item["path"]).parts)
-        if (
+        differs = (
             not path.is_file()
             or path.is_symlink()
             or path.stat().st_size != item["size"]
             or digest(path.read_bytes()) != item["sha256"]
-        ):
-            return False
+        )
+        if differs and item["path"] == "favourites.xml" and path.is_file():
+            with zipfile.ZipFile(bundle, "r") as archive:
+                expected = archive.read("payload/favourites.xml")
+            observed_semantics = _favourites_semantics(path.read_bytes())
+            expected_semantics = _favourites_semantics(expected)
+            differs = observed_semantics != expected_semantics
+            if differs:
+                expected_root, _ = validate_favourites(expected)
+                observed_root, _ = validate_favourites(path.read_bytes())
+                def action_shapes(root):
+                    return [
+                        {
+                            "current_addon": "plugin.video.watchnixtoons2.mwodevelop"
+                            in (node.text or ""),
+                            "operations": sorted(
+                                set(re.findall(r"action[A-Za-z]+", node.text or ""))
+                            ),
+                            "length": len(node.text or ""),
+                        }
+                        for node in root.findall("favourite")
+                    ]
+                semantic_difference = {
+                    "expected": _semantic_digests(expected_semantics),
+                    "observed": _semantic_digests(observed_semantics),
+                    "fields": {
+                        field: {
+                            "expected": [digest(value.encode("utf-8")) for value in values],
+                            "observed": [digest(value.encode("utf-8")) for value in observed_values],
+                        }
+                        for field, values, observed_values in (
+                            (
+                                "name",
+                                [item[0] for item in expected_semantics],
+                                [item[0] for item in observed_semantics],
+                            ),
+                            (
+                                "thumb",
+                                [item[1] for item in expected_semantics],
+                                [item[1] for item in observed_semantics],
+                            ),
+                            (
+                                "action",
+                                [item[2] for item in expected_semantics],
+                                [item[2] for item in observed_semantics],
+                            ),
+                        )
+                    },
+                    "action_shapes": {
+                        "expected": action_shapes(expected_root),
+                        "observed": action_shapes(observed_root),
+                    },
+                }
+        if differs:
+            mismatched.append(item["path"])
     expected_artwork = {
         PurePosixPath(item["path"]).name
         for item in manifest["adapters"][ADAPTER_ID]["files"]
         if item["path"].startswith("favourite-artwork/")
+        and item["path"] != "favourite-artwork/manifest.json"
     }
     artwork_root = profile_root / "favourite-artwork"
     observed = (
         {
             path.name
             for path in artwork_root.iterdir()
-            if path.is_file() and not path.is_symlink()
+            if path.is_file()
+            and not path.is_symlink()
+            and path.name != "manifest.json"
         }
         if artwork_root.is_dir()
         else set()
     )
-    return observed == expected_artwork
+    return {
+        "matches": not mismatched and observed == expected_artwork,
+        "mismatched_paths": mismatched,
+        "missing_artwork": sorted(expected_artwork.difference(observed)),
+        "unexpected_artwork": sorted(observed.difference(expected_artwork)),
+        **(
+            {"favourites_semantic_digests": semantic_difference}
+            if semantic_difference is not None
+            else {}
+        ),
+    }
+
+
+def _matches(profile_root, manifest, bundle):
+    return _match_details(profile_root, manifest, bundle)["matches"]
 
 
 def apply_bundle(profile_root, bundle):
@@ -383,7 +485,7 @@ def apply_bundle(profile_root, bundle):
     profile_root.mkdir(parents=True, exist_ok=True)
     recovered = recover(profile_root)
     manifest = validate_bundle(bundle)
-    if _matches(profile_root, manifest):
+    if _matches(profile_root, manifest, bundle):
         _atomic_write(
             profile_root / STATE_NAME, canonical_json(manifest) + b"\n"
         )
@@ -429,7 +531,7 @@ def apply_bundle(profile_root, bundle):
             (profile_root / "favourite-artwork").mkdir(mode=0o700)
         journal["phase"] = "installed"
         _write_journal(journal_path, journal)
-        if not _matches(profile_root, manifest):
+        if not _matches(profile_root, manifest, bundle):
             raise RuntimeError("portable-state post-apply health check failed")
     except Exception:
         recover(profile_root)
@@ -462,6 +564,18 @@ def profile_summary(profile_root):
         for name in sorted(artwork_names)
         if not (profile_root / "favourite-artwork" / name).is_file()
     ]
+    artwork_root = profile_root / "favourite-artwork"
+    artwork_inventory = (
+        sorted(
+            path.name
+            for path in artwork_root.iterdir()
+            if path.is_file()
+            and not path.is_symlink()
+            and SAFE_ARTWORK.fullmatch(path.name)
+        )
+        if artwork_root.is_dir()
+        else []
+    )
     return {
         "favourites": len(root.findall("favourite")),
         "watchnixtoons2": len(watch),
@@ -475,6 +589,10 @@ def profile_summary(profile_root):
             for node in watch
         ),
         "favourites_sha256": digest(payload),
+        "favourites_semantic_sha256": digest(
+            canonical_json(_favourites_semantics(payload))
+        ),
+        "artwork_inventory_sha256": digest(canonical_json(artwork_inventory)),
         "missing_artwork_files": missing_files,
     }
 
@@ -502,6 +620,10 @@ def main():
             result = build_bundle(profile, sys.argv[4])
         elif mode == "apply" and len(sys.argv) == 5:
             result = apply_bundle(profile, sys.argv[4])
+        elif mode == "verify" and len(sys.argv) == 5:
+            result = _match_details(
+                profile, validate_bundle(sys.argv[4]), sys.argv[4]
+            )
         else:
             raise ValueError("invalid portable-state mode or arguments")
         _write_marker(marker, {"ok": True, **result})

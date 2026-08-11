@@ -14,6 +14,14 @@ niezmienne odniesienia do digestów w ignorowanym przez Git pliku
 lub niewypchnięte repozytorium źródłowe, dlatego obraz zawsze odpowiada dokładnemu
 commitowi Git.
 
+W produkcyjnym release autorytatywnym źródłem jest jednak publiczny,
+zreviewowany `manifests/locks/qnap-stable.json`, a nie ten prywatny cache.
+`tools/kodi_ops.py release` uruchamia build tylko po zmianie deterministycznego
+hasha zadeklarowanych inputów. Każdy workflow publikuje approval zawierający
+immutable digest obrazu, commit, input hash, platformy, SHA raportu skanera i
+run ID. `tools/qnap_candidate.py` składa komplet trzech approval w jeden asset
+testing, a PR promocji kopiuje dokładnie jego bajty do stable locka.
+
 ## Typowe polecenia
 
 Sprawdź działające kontenery QNAP bez ich zmiany:
@@ -39,6 +47,11 @@ zapisane, niezmienne digesty:
 python tools/qnap_images.py build all
 python tools/qnap_images.py deploy all
 ```
+
+To interfejs niskopoziomowy do diagnostyki i kontrolowanych prac serwisowych.
+Rutynowy rollout wykonuj przez `tools/kodi_ops.py rollout`; wtedy deploy jest
+dozwolony wyłącznie z zatwierdzonego stable locka, pod zdalną blokadą i z
+kontrolą CAS obserwowanego runtime.
 
 Połączona forma to:
 

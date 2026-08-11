@@ -78,8 +78,13 @@ def main():
             "provider.comet": "true",
             "provider.comet.endpoint": comet,
         }
+        module_changed = any(
+            addon.getSetting(key) != value
+            for key, value in module_expected.items()
+        )
         for key, value in module_expected.items():
-            addon.setSetting(key, value)
+            if addon.getSetting(key) != value:
+                addon.setSetting(key, value)
         if any(
             addon.getSetting(key) != value
             for key, value in module_expected.items()
@@ -91,26 +96,34 @@ def main():
             "external_provider.name": "mwoscrapers",
             "external_provider.module": MODULE_ID,
         }
+        umbrella_changed = any(
+            umbrella.getSetting(key) != value
+            for key, value in umbrella_expected.items()
+        )
         for key, value in umbrella_expected.items():
-            umbrella.setSetting(key, value)
+            if umbrella.getSetting(key) != value:
+                umbrella.setSetting(key, value)
         if any(
             umbrella.getSetting(key) != value
             for key, value in umbrella_expected.items()
         ):
             raise RuntimeError("Umbrella provider binding did not converge")
+        changed = module_changed or umbrella_changed
         stage = "cache-clear"
-        cache_mode = "file-reset"
+        cache_mode = "not-needed"
         cache_path = xbmcvfs.translatePath(
             "special://profile/addon_data/plugin.video.umbrella/providers.db"
         )
-        if os.path.exists(cache_path):
+        if changed and os.path.exists(cache_path):
             os.remove(cache_path)
-        if os.path.exists(cache_path):
+            cache_mode = "file-reset"
+        if changed and os.path.exists(cache_path):
             raise RuntimeError("Umbrella provider cache file remains")
         report.update(
             {
-                "cache_cleared": True,
+                "cache_cleared": changed,
                 "cache_clear_mode": cache_mode,
+                "changed": changed,
                 "comet_enabled": True,
                 "comet_endpoint_class": "public",
                 "external_provider_enabled": True,

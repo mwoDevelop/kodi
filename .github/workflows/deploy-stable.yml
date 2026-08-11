@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "manifests/locks/stable.json"
+      - "manifests/locks/qnap-stable.json"
       - ".github/workflows/deploy-stable.yml"
   workflow_dispatch:
     inputs:
@@ -56,6 +57,9 @@ jobs:
           else
             exit 1
           fi
+      - name: Verify approved QNAP deployment lock
+        if: steps.lock.outputs.publish == 'true'
+        run: python tools/qnap_lock.py validate --lock manifests/locks/qnap-stable.json
       - name: Resolve and download the exact promoted snapshot
         if: steps.lock.outputs.publish == 'true'
         env:
@@ -85,6 +89,20 @@ jobs:
         run: |
           python tools/snapshot_bundle.py verify promoted-snapshot.tar \
             > promoted-snapshot.json
+          snapshot_id="$(python -c 'import json; print(json.load(open("manifests/locks/stable.json"))["source_snapshot_id"])')"
+          attestation_id="$(python -c 'import json; print(json.load(open("manifests/locks/stable.json"))["attestation_id"])')"
+          attestation_sha256="$(python -c 'import json; print(json.load(open("manifests/locks/stable.json"))["attestation_sha256"])')"
+          case "$attestation_id" in
+            *[!0-9a-f]*|'') exit 1 ;;
+          esac
+          test "${#attestation_id}" -eq 64
+          filename="device-attestation-$attestation_id.json"
+          gh release download "testing-snapshot-$snapshot_id" \
+            --pattern "$filename"
+          test "$(sha256sum "$filename" | cut -d' ' -f1)" = "$attestation_sha256"
+          python tools/device_attestation.py verify \
+            --snapshot promoted-snapshot.tar \
+            --attestation "$filename" > /dev/null
           snapshot_commit="$(
             python -c 'import json; print(json.load(open("promoted-snapshot.json"))["repository_commit"])'
           )"

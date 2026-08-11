@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import ipaddress
 import json
 import re
@@ -68,6 +69,7 @@ class Service:
     github_workflow: str = ""
     github_tag: str = "sha-{commit}"
     github_inputs: tuple[tuple[str, str], ...] = ()
+    input_paths: tuple[str, ...] = ()
 
 
 def services(profile_sync_repository=None):
@@ -87,6 +89,7 @@ def services(profile_sync_repository=None):
             "container.yml",
             "sha-{commit}",
             (("publish_rc", "true"),),
+            ("Dockerfile", "pyproject.toml", "README.md", "src"),
         ),
         "provider-relay": Service(
             "provider-relay",
@@ -97,6 +100,7 @@ def services(profile_sync_repository=None):
             True,
             "mwoDevelop/script.module.mwoscrapers",
             "relay-image.yml",
+            input_paths=("relay/Dockerfile", "relay/mwoscrapers_relay"),
         ),
         "upstream-watchdog": Service(
             "upstream-watchdog",
@@ -108,6 +112,11 @@ def services(profile_sync_repository=None):
             "mwoDevelop/kodi",
             "build-upstream-watchdog.yml",
             "{commit}",
+            input_paths=(
+                "deploy/qnap-upstream-watchdog/Dockerfile",
+                "tools/upstream_watchdog.py",
+                "manifests/upstream-watchdog.json",
+            ),
         ),
     }
 
@@ -145,6 +154,44 @@ def source_identity(service, require_clean=True):
             % service.name
         )
     return {"commit": commit, "dirty": dirty}
+
+
+def source_input_sha256(service, commit=None):
+    """Hash exact tracked build inputs and build policy at an exact commit."""
+    identity = source_identity(service, require_clean=False)
+    commit = commit or identity["commit"]
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ImageError("source commit is not exact")
+    if not service.input_paths:
+        raise ImageError("service has no declared build inputs: %s" % service.name)
+    tree = subprocess.run(
+        (
+            "git",
+            "-C",
+            str(service.repository),
+            "ls-tree",
+            "-r",
+            commit,
+            "--",
+            *service.input_paths,
+        ),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.encode("utf-8")
+    if not tree:
+        raise ImageError("declared build inputs did not resolve to tracked files")
+    policy = json.dumps(
+        {
+            "dockerfile": str(service.dockerfile),
+            "platforms": list(service.platforms),
+            "build_revision": service.build_revision,
+            "input_paths": list(service.input_paths),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(policy + b"\0" + tree).hexdigest()
 
 
 def ensure_builder(builder, dry_run=False):
@@ -429,6 +476,7 @@ def build_with_actions(service, dry_run=False):
         "source_commit": commit,
         "tag": tag,
         "workflow_run": run["url"],
+        "workflow_run_id": str(run["databaseId"]),
     }
 
 

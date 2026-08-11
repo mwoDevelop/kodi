@@ -9,6 +9,7 @@ import os
 import sys
 import tempfile
 import time
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -308,6 +309,31 @@ def _prepare_and_export(adb, port, serial, private_root):
         else:
             os.replace(temporary, output)
             output.chmod(0o600)
+        current = private_root / "current.json"
+        current_document = {
+            "schema": 1,
+            "bundle_id": manifest["bundle_id"],
+            "filename": output.name,
+        }
+        current_payload = (
+            json.dumps(current_document, indent=2, sort_keys=True) + "\n"
+        )
+        if not current.is_file() or current.read_text(encoding="utf-8") != current_payload:
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                prefix=".current-",
+                suffix=".json",
+                dir=private_root,
+                delete=False,
+            ) as pointer:
+                pointer.write(current_payload)
+                pointer.flush()
+                os.fsync(pointer.fileno())
+                temporary_pointer = Path(pointer.name)
+            temporary_pointer.chmod(0o600)
+            os.replace(temporary_pointer, current)
+            current.chmod(0o600)
         return output, manifest, artwork
     finally:
         if temporary.exists():
@@ -326,6 +352,19 @@ def _apply_android(adb, port, serial, bundle):
         timeout=120,
     )
     return result
+
+
+def _verify_android(adb, port, serial, bundle):
+    _push_tools(adb, port, serial)
+    adb_command(adb, port, serial, "push", str(bundle), REMOTE_BUNDLE)
+    return run_kodi_script(
+        adb,
+        port,
+        serial,
+        "RunScript(%s,verify,%s,%s,%s)"
+        % (REMOTE_STATE_SCRIPT, PROFILE, REMOTE_MARKER, REMOTE_BUNDLE),
+        timeout=60,
+    )
 
 
 def _android_available(adb, port, serial):
@@ -411,23 +450,67 @@ def audit(inventory, repository, adb, port):
     return results
 
 
-def converge(inventory, repository, adb, port):
+def _current_bundle(repository):
+    private_root = repository / ".kodi-private/portable-state"
+    pointer = private_root / "current.json"
+    if not pointer.is_file() or pointer.is_symlink():
+        raise RuntimeError("portable-state current bundle is not published")
+    document = json.loads(pointer.read_text(encoding="utf-8"))
+    if set(document) != {"schema", "bundle_id", "filename"} or document["schema"] != 1:
+        raise RuntimeError("portable-state current pointer is invalid")
+    filename = document["filename"]
+    if not isinstance(filename, str) or Path(filename).name != filename:
+        raise RuntimeError("portable-state current filename is invalid")
+    bundle = private_root / filename
+    if not bundle.is_file() or bundle.is_symlink():
+        raise RuntimeError("portable-state current bundle is missing")
+    manifest = validate_bundle(bundle)
+    if manifest["bundle_id"] != document["bundle_id"]:
+        raise RuntimeError("portable-state current pointer differs from bundle")
+    return bundle, manifest
+
+
+def _bundle_semantic_identity(bundle, manifest):
+    from tools.kodi_portable_state import _favourites_semantics, canonical_json, digest
+
+    with zipfile.ZipFile(bundle, "r") as archive:
+        favourites = archive.read("payload/favourites.xml")
+    artwork = sorted(
+        Path(item["path"]).name
+        for item in manifest["adapters"]["kodi.favourites"]["files"]
+        if item["path"].startswith("favourite-artwork/")
+        and item["path"] != "favourite-artwork/manifest.json"
+    )
+    return {
+        "favourites_semantic_sha256": digest(
+            canonical_json(_favourites_semantics(favourites))
+        ),
+        "artwork_inventory_sha256": digest(canonical_json(artwork)),
+    }
+
+
+def converge(inventory, repository, adb, port, publish=True):
     publisher_id = inventory["publisher"]
-    publisher = inventory["devices"][publisher_id]
-    if publisher["platform"] not in {"android", "android-emulator"}:
-        raise ValueError("portable-state publisher must currently use ADB")
-    publisher_serial = publisher["endpoints"]["adb"]
-    if not _android_available(adb, port, publisher_serial):
-        raise RuntimeError("portable-state publisher is unavailable")
-    try:
-        bundle, manifest, artwork = _prepare_and_export(
-            adb,
-            port,
-            publisher_serial,
-            repository / ".kodi-private/portable-state",
-        )
-    finally:
-        _cleanup(adb, port, publisher_serial)
+    if publish:
+        publisher = inventory["devices"][publisher_id]
+        if publisher["platform"] not in {"android", "android-emulator"}:
+            raise ValueError("portable-state publisher must currently use ADB")
+        publisher_serial = publisher["endpoints"]["adb"]
+        if not _android_available(adb, port, publisher_serial):
+            raise RuntimeError("portable-state publisher is unavailable")
+        try:
+            bundle, manifest, artwork = _prepare_and_export(
+                adb,
+                port,
+                publisher_serial,
+                repository / ".kodi-private/portable-state",
+            )
+        finally:
+            _cleanup(adb, port, publisher_serial)
+    else:
+        bundle, manifest = _current_bundle(repository)
+        artwork = {"migrated_actions": 0}
+    expected_identity = _bundle_semantic_identity(bundle, manifest)
     results = {}
     for logical_id in inventory["order"]:
         device = inventory["devices"][logical_id]
@@ -457,7 +540,25 @@ def converge(inventory, repository, adb, port):
                 raise RuntimeError(
                     "Profile Sync identity profile did not converge"
                 )
-            applied = _apply_android(adb, port, serial, bundle)
+            observed_before = _android_probe(adb, port, serial)
+            if (
+                all(
+                    observed_before.get(key) == value
+                    for key, value in expected_identity.items()
+                )
+                and not observed_before.get("missing_artwork_files")
+                and profile_sync.get("status") == "NO_CHANGE"
+                and profile_sync.get("assigned_revision")
+                and profile_sync.get("assigned_revision")
+                == profile_sync.get("applied_revision")
+            ):
+                applied = {
+                    "status": "NO_CHANGE",
+                    "bundle_id": manifest["bundle_id"],
+                    "source": "profile-sync-authority",
+                }
+            else:
+                applied = _apply_android(adb, port, serial, bundle)
             if (
                 applied["status"] == "APPLIED"
                 or logical_id == publisher_id
@@ -466,14 +567,23 @@ def converge(inventory, repository, adb, port):
                 _restart(adb, port, serial)
             observed = _android_probe(adb, port, serial)
             profile_sync = _profile_sync_probe(adb, port, serial)
-            if (
-                observed.get("favourites_sha256")
-                != manifest["adapters"]["kodi.favourites"]["files"][0][
-                    "sha256"
-                ]
-                or observed.get("missing_artwork_files")
+            verified_bundle = _verify_android(adb, port, serial, bundle)
+            if not verified_bundle.get("matches") or observed.get(
+                "missing_artwork_files"
             ):
                 raise RuntimeError("post-rollout portable-state mismatch")
+            if not (
+                profile_sync.get("enabled")
+                and profile_sync.get("paired")
+                and profile_sync.get("identity_consistent")
+                and profile_sync.get("server_url_configured")
+                and profile_sync.get("ca_certificate_configured")
+                and profile_sync.get("has_access_token")
+                and profile_sync.get("has_signing_seed")
+            ):
+                raise RuntimeError(
+                    "Profile Sync production identity is incomplete"
+                )
             results[logical_id] = {
                 "status": "CONVERGED",
                 "apply_status": applied["status"],
@@ -518,7 +628,9 @@ def converge(inventory, repository, adb, port):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("audit", "sync"))
+    parser.add_argument(
+        "command", choices=("audit", "sync", "publish", "apply")
+    )
     parser.add_argument(
         "--adb", default="/home/mwo/android-sdk/platform-tools/adb"
     )
@@ -561,11 +673,15 @@ def main():
         }
     else:
         converged = converge(
-            inventory, ROOT, args.adb, args.adb_server_port
+            inventory,
+            ROOT,
+            args.adb,
+            args.adb_server_port,
+            publish=args.command in {"sync", "publish"},
         )
         result = {
             "schema": 1,
-            "operation": "sync",
+            "operation": args.command,
             "started_utc": started,
             "finished_utc": utc_now(),
             **converged,

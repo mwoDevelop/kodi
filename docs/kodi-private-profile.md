@@ -228,11 +228,22 @@ odniesienia do wartości w ignorowanym pliku mode-`0600` `.env`:
 ```
 
 Adapter Rapideo działa po oficjalnym uzgodnieniu dodatku i przed ostatecznym
-sprawdzeniem przywracania. Zapisuje ustawienia poprzez Kodi, odrzuca stary token,
-wykonuje nowe logowanie i weryfikuje punkt końcowy konta. Tymczasowy plik danych
-uwierzytelniających i oczyszczony wynik są zawsze usuwane z pamięci współdzielonej
-Android. Ani raport przywracania, ani argumenty procesu nie zawierają poświadczeń ani
-tokenów. Dostępna jest również samodzielna idempotentna ponowna próba:
+sprawdzeniem przywracania. Pełny rollout najpierw eksportuje zweryfikowany token z
+urządzenia wskazanego przez `KODI_SYNC_PUBLISHER` do ignorowanego pliku
+`.kodi-private/rapideo/token.json` w trybie `0600`. Adapter ustawia go poprzez Kodi i
+weryfikuje punkt końcowy konta. Dopiero gdy nie ma autorytatywnego tokenu, wykonuje
+logowanie danymi z `.env`. Nie usuwa już działającego tokenu przed udanym
+uwierzytelnieniem, więc błąd sieci lub VPN nie niszczy poprzedniej sesji.
+
+Tymczasowy plik danych uwierzytelniających i oczyszczony wynik są zawsze usuwane z
+pamięci współdzielonej Android. Ani raport przywracania, ani argumenty procesu nie
+zawierają poświadczeń ani tokenów. Token można bezpiecznie odświeżyć niezależnie:
+
+```bash
+.venv/bin/python tools/kodi_rapideo_token.py export --device sony-tv
+```
+
+Dostępna jest również samodzielna idempotentna ponowna próba konfiguracji urządzenia:
 
 ```bash
 .venv/bin/python tools/kodi_rapideo_configure.py \

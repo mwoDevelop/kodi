@@ -180,5 +180,7 @@ def test_snapshot_lock_is_content_addressed_and_applies_only_once(tmp_path):
 
     assert promoted["schema"] == 2
     assert promoted["source_snapshot_id"] == candidate["snapshot_id"]
+    assert promoted["attestation_id"] == candidate["attestation_id"]
+    assert promoted["attestation_sha256"] == candidate["attestation_sha256"]
     with pytest.raises(ValueError, match="changed after candidate preparation"):
         promote_channel.apply_snapshot_lock_candidate(bundle, stable_lock)

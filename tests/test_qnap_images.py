@@ -1,5 +1,6 @@
 import json
 import stat
+import subprocess
 
 import pytest
 
@@ -196,6 +197,53 @@ def test_all_services_have_action_publishers():
     for service in qnap_images.services().values():
         assert service.github_repository.startswith("mwoDevelop/")
         assert service.github_workflow.endswith(".yml")
+        assert service.input_paths
+
+
+def test_source_input_hash_ignores_unrelated_tracked_files(tmp_path):
+    repository = tmp_path / "source"
+    repository.mkdir()
+    (repository / "Dockerfile").write_text("FROM scratch\n")
+    (repository / "app.py").write_text("print('one')\n")
+    (repository / "unrelated.txt").write_text("first\n")
+    subprocess.run(("git", "init", "-q", repository), check=True)
+    subprocess.run(("git", "-C", repository, "add", "."), check=True)
+    subprocess.run(
+        (
+            "git", "-C", repository, "-c", "user.name=test",
+            "-c", "user.email=test@example.invalid", "commit", "-qm", "one",
+        ),
+        check=True,
+    )
+    service = qnap_images.Service(
+        "example",
+        "ghcr.io/mwodevelop/example",
+        repository,
+        qnap_images.Path("Dockerfile"),
+        ("linux/amd64",),
+        input_paths=("Dockerfile", "app.py"),
+    )
+    first = qnap_images.source_input_sha256(service)
+    (repository / "unrelated.txt").write_text("second\n")
+    subprocess.run(("git", "-C", repository, "add", "."), check=True)
+    subprocess.run(
+        (
+            "git", "-C", repository, "-c", "user.name=test",
+            "-c", "user.email=test@example.invalid", "commit", "-qm", "two",
+        ),
+        check=True,
+    )
+    assert qnap_images.source_input_sha256(service) == first
+    (repository / "app.py").write_text("print('two')\n")
+    subprocess.run(("git", "-C", repository, "add", "."), check=True)
+    subprocess.run(
+        (
+            "git", "-C", repository, "-c", "user.name=test",
+            "-c", "user.email=test@example.invalid", "commit", "-qm", "three",
+        ),
+        check=True,
+    )
+    assert qnap_images.source_input_sha256(service) != first
 
 
 class StatusSession:

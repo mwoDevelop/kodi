@@ -130,6 +130,17 @@ granice bezpieczeństwa, dokładną zawartość, polecenia i powtarzalne kontrol
 
 ## Operacje
 
+Do typowych operacji używaj jednego orchestratora:
+
+```bash
+.venv/bin/python tools/kodi_ops.py rollout --dry-run
+.venv/bin/python tools/kodi_ops.py rollout
+.venv/bin/python tools/kodi_ops.py release --dry-run
+```
+
+Pełne przykłady full/scoped rollout, resume, release z ręcznym approval i
+bezpiecznego restore opisuje [instrukcja operacji Kodi](docs/kodi-operations.md).
+
 Zobacz [indeks dokumentacji](docs/README.md), który prowadzi do instrukcji
 operacyjnych, architektury, review i materiałów historycznych.
 

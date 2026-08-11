@@ -12,6 +12,7 @@ kompilacji.
 | Obszar | Dokument | Cel |
 |---|---|---|
 | Repozytorium Kodi | [Główny plik README](../README.md) | Zainstaluj stable/testing, zbuduj repozytorium i uruchom jego odtwarzalne E2E |
+| Release, rollout i restore | [Operacje Kodi](kodi-operations.md) | Jeden wznawialny interfejs, canary, przykłady wywołań, wyniki i kody wyjścia |
 | Profile prywatne | [Prywatne migawki profilu Kodi](kodi-private-profile.md) | Tworzenie kopii zapasowych, przywracanie, tożsamość urządzenia, stan przenośny i granice bezpieczeństwa |
 | Automatyzacja cykliczna | [Procesy cykliczne](scheduled-processes.md) | Workflow cron GitHub, watchdog QNAP, częstotliwość Profile Sync i weryfikacja na żywo |
 | Kontenery QNAP | [Cykl życia obrazu QNAP](qnap-images.md) | Twórz, publikuj, wdrażaj i sprawdzaj trzy obrazy Container Station |
@@ -37,6 +38,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | Synchronizacja upstream | [Plan synchronizacji upstream](../UPSTREAM_SYNC_PLAN.md) |
 | Bramka bezpieczeństwa upstream | [Projekt skanowania w poszukiwaniu złośliwego oprogramowania](UPSTREAM_MALWARE_SCANNING_PLAN.md) |
 | Usunięcie zgodności legacy | [Plan usunięcia kodu legacy](../LEGACY_REMOVAL_PLAN.md) |
+| Orchestrator operacji | [Plan release, rollout i restore](../KODI_OPS_PLAN.md) |
 | Cykl życia formatów | [Schematy bieżące i legacy](schema-lifecycle.md) |
 | Wstępny rekonesans repozytorium | [Rekord etapu 0](ETAP0.md) |
 | Początkowa linia bazowa upstream | [Wartość bazowa upstream z 25.07.2026 r.](upstream-sync-baseline-2026-07-25.md) |
@@ -50,6 +52,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 - [Review architektury Upstream Sync](UPSTREAM_SYNC_PLAN_REVIEW.md)
 - [Review pełnego wydania Upstream
   Sync](UPSTREAM_SYNC_FULL_RELEASE_REVIEW_2026-07-29.md)
+- [Review planu release, rollout i restore](KODI_OPS_PLAN_REVIEW.md)
 
 ## Dowody z testów i wdrożenia
 
@@ -64,7 +67,7 @@ zarejestrowanym czasie; nie potwierdza aktualnego stanu urządzenia ani usługi.
 | Co jest opublikowane w stable lub testing? | `manifests/locks/stable.json` i `manifests/locks/testing.json` |
 | Które drzewo źródłowe tworzy każdy dodatek? | `manifests/components.json` |
 | Które zadania są zaplanowane? | `.github/workflows/` plus [Zaplanowane procesy](scheduled-processes.md) |
-| Który digest obrazu QNAP jest wdrożony? | ignorowany `.kodi-private/qnap-images.json` oraz `python tools/qnap_images.py status` |
+| Który digest obrazu QNAP jest zatwierdzony i wdrożony? | `manifests/locks/qnap-stable.json`, jeśli został wydany, oraz live `python tools/qnap_images.py status`; prywatny `.kodi-private/qnap-images.json` jest tylko cache builda |
 | Które urządzenia i endpointy są zarządzane? | ignorowane `.env` i `.kodi-private/devices.json` |
 | Czy określone wdrożenie zakończyło się powodzeniem? | jego datowany raport w [dowodach E2E](e2e-results/README.md) |
 

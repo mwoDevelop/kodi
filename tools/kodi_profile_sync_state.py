@@ -112,6 +112,10 @@ def probe(addon, profile):
         "read_only": settings["read_only"].strip().casefold() == "true",
         "status": state.get("status", "UNKNOWN"),
         "paired": enrollment is not None,
+        "enrollment_id": enrollment.get("enrollment_id") if enrollment else None,
+        "enrollment_generation": (
+            enrollment.get("enrollment_generation") if enrollment else None
+        ),
         "enrollment_logical_device_id": enrollment_logical,
         "enrollment_channel": enrollment_channel,
         "identity_consistent": bool(enrollment)
