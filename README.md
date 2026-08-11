@@ -99,16 +99,21 @@ bazy danych. Nieszyfrowane migawki są ograniczone do ignorowanego przez Git kat
 obejmujący zweryfikowaną dezinstalację, czyszczenie danych Kodi, instalację APK
 dopasowanego do ABI, przywrócenie migawki oraz kontrolę dodatków i skórki na żywo.
 
-Prywatny rejestr urządzeń akceptuje starszy schemat 1 i schemat 2. Przeprowadź
-migrację atomowo po próbie bez zmian, jawnie oznaczając emulatory:
+Prywatny rejestr urządzeń i konfiguracja reinstalacji używają wyłącznie schema 2.
+Zachowane backupy schema 1 obsługuje izolowany migrator offline. Najpierw wykonaj
+próbę bez zmian, a dopiero potem zastosuj migrację:
 
 ```bash
-python3 tools/kodi_devices.py migrate-registry \
+python3 tools/migrate_legacy.py config \
   --platform bluestacks1=android-emulator
-python3 tools/kodi_devices.py migrate-registry \
+python3 tools/migrate_legacy.py config \
   --platform bluestacks1=android-emulator \
-  --yes
+  --apply
 ```
+
+`python3 tools/legacy_inventory.py` zapisuje zredagowany raport w
+`.kodi-private/legacy-inventory.json`. Zestaw recovery o niezmiennej zawartości
+buduje `python3 tools/build_legacy_migration_kit.py`.
 
 Inwentaryzacja platformy w trybie tylko do odczytu ustala neutralny transport i cykl
 życia Kodi bez wyświetlania endpointów, nazw użytkowników, katalogów domowych ani

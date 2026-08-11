@@ -36,11 +36,14 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | Dziennik wdrożenia Profile Sync | [Zapis stanu realizacji](profile-sync-implementation.md) |
 | Synchronizacja upstream | [Plan synchronizacji upstream](../UPSTREAM_SYNC_PLAN.md) |
 | Bramka bezpieczeństwa upstream | [Projekt skanowania w poszukiwaniu złośliwego oprogramowania](UPSTREAM_MALWARE_SCANNING_PLAN.md) |
+| Usunięcie zgodności legacy | [Plan usunięcia kodu legacy](../LEGACY_REMOVAL_PLAN.md) |
+| Cykl życia formatów | [Schematy bieżące i legacy](schema-lifecycle.md) |
 | Wstępny rekonesans repozytorium | [Rekord etapu 0](ETAP0.md) |
 | Początkowa linia bazowa upstream | [Wartość bazowa upstream z 25.07.2026 r.](upstream-sync-baseline-2026-07-25.md) |
 
 ## Recenzje i zapisy decyzji
 
+- [Review planu usunięcia kodu legacy](LEGACY_REMOVAL_PLAN_REVIEW.md)
 - [Review architektury Profile Sync](PROFILE_SYNC_PLAN_REVIEW.md)
 - [Review Profile Sync na QNAP](PROFILE_SYNC_QNAP_PLAN_REVIEW.md)
 - [Review Profile Sync na NUC/Flatpak](PROFILE_SYNC_NUC_PLAN_REVIEW.md)

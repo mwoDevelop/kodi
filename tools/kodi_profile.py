@@ -31,6 +31,7 @@ except ModuleNotFoundError:
 
 
 SCHEMA = 1
+LEGACY_WATCH_ID = "plugin.video.watchnixtoons2"
 KODI_PACKAGE = "org.xbmc.kodi"
 KODI_ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
 PRIVATE_ROOT_NAME = ".kodi-private"
@@ -79,20 +80,17 @@ def glob_regex(pattern):
 
 def load_policy(path):
     document = json.loads(Path(path).read_text(encoding="utf-8"))
-    if document.get("schema") not in (SCHEMA, 2):
+    if document.get("schema") != 2:
         raise ValueError("unsupported Kodi profile policy")
-    if document.get("schema") == 2:
-        scopes = document.get("scopes")
-        if not isinstance(scopes, dict) or not isinstance(
-            scopes.get("disaster_recovery"), dict
-        ):
-            raise ValueError("Kodi profile policy lacks disaster recovery scope")
+    scopes = document.get("scopes")
+    if not isinstance(scopes, dict) or not isinstance(
+        scopes.get("disaster_recovery"), dict
+    ):
+        raise ValueError("Kodi profile policy lacks disaster recovery scope")
     return document
 
 
 def disaster_recovery_policy(policy):
-    if policy.get("schema") == 1:
-        return policy
     if policy.get("schema") == 2:
         return policy["scopes"]["disaster_recovery"]
     raise ValueError("unsupported Kodi profile policy")
@@ -649,6 +647,31 @@ def verify_snapshot(snapshot):
     return manifest
 
 
+def snapshot_restore_status(snapshot, manifest=None):
+    """Classify restore eligibility without changing the immutable snapshot."""
+    snapshot = Path(snapshot).resolve()
+    manifest = manifest or verify_snapshot(snapshot)
+    files = manifest.get("files", {})
+    if any(
+        relative == "addons/%s" % LEGACY_WATCH_ID
+        or relative.startswith("addons/%s/" % LEGACY_WATCH_ID)
+        or relative == "userdata/addon_data/%s" % LEGACY_WATCH_ID
+        or relative.startswith("userdata/addon_data/%s/" % LEGACY_WATCH_ID)
+        for relative in files
+    ) or any(
+        isinstance(item, dict) and item.get("id") == LEGACY_WATCH_ID
+        for item in manifest.get("addons", [])
+    ):
+        return "LEGACY_QUARANTINED"
+    favourites = snapshot / "payload/userdata/favourites.xml"
+    if favourites.is_file() and (
+        "plugin://%s/" % LEGACY_WATCH_ID
+        in favourites.read_text(encoding="utf-8", errors="replace")
+    ):
+        return "LEGACY_QUARANTINED"
+    return "CURRENT"
+
+
 def _selected_restore_files(manifest, relative_paths=None):
     if relative_paths is None:
         return manifest["files"]
@@ -730,6 +753,11 @@ def _build_restore_archive(
     semantic_addon_settings=False,
 ):
     manifest = verify_snapshot(snapshot)
+    if snapshot_restore_status(snapshot, manifest) != "CURRENT":
+        raise ValueError(
+            "LEGACY_QUARANTINED: modernize the snapshot with the offline "
+            "WatchNixtoons2 migrator before restore"
+        )
     selected_files = _selected_restore_files(manifest, relative_paths)
     if operation_id is not None and not re.fullmatch(
         r"[0-9a-f]{32}", operation_id

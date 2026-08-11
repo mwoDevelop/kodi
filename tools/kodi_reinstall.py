@@ -157,13 +157,11 @@ def load_config(path, repository):
     path = resolve_private_path(repository, path)
     document = json.loads(path.read_text(encoding="utf-8"))
     schema = document.get("schema")
-    if schema not in (1, 2):
+    if schema != 2:
         raise ValueError("unsupported Kodi reinstall config")
     targets = document.get("targets")
     if not isinstance(targets, list) or not targets:
         raise ValueError("Kodi reinstall config has no targets")
-    if schema == 1:
-        return path, targets
     devices_value = document.get(
         "devices_file", ".kodi-private/devices.json"
     )

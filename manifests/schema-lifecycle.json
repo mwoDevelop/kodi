@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "formats": {
+    "device_registry": {
+      "current": [2],
+      "legacy": [1],
+      "production_reader": "tools/kodi_devices.py",
+      "offline_migrator": "tools/migrations/legacy_config.py"
+    },
+    "disaster_recovery_snapshot": {
+      "current": [1],
+      "legacy": [],
+      "production_reader": "tools/kodi_profile.py",
+      "content_classifiers": ["watchnixtoons2_legacy"]
+    },
+    "favourite_artwork_manifest": {
+      "current": [1],
+      "legacy": [],
+      "production_reader": "tools/favourite_artwork.py"
+    },
+    "portable_state": {
+      "current": [1],
+      "legacy": [],
+      "production_reader": "tools/kodi_portable_state.py"
+    },
+    "profile_policy": {
+      "current": [2],
+      "legacy": [1],
+      "production_reader": "tools/kodi_profile.py",
+      "offline_migrator": "tools/migrations/legacy_policy.py"
+    },
+    "profile_sync_local_state": {
+      "current": [1],
+      "legacy": [],
+      "production_reader": "profile-sync-addon/resources/lib/mwoprofilesync/sync.py"
+    },
+    "profile_sync_revision": {
+      "current": [2, 3],
+      "legacy": [],
+      "production_reader": "profile-sync-addon/resources/lib/mwoprofilesync/sync.py"
+    },
+    "reinstall_config": {
+      "current": [2],
+      "legacy": [1],
+      "production_reader": "tools/kodi_reinstall.py",
+      "offline_migrator": "tools/migrations/legacy_config.py"
+    },
+    "stable_lock": {
+      "current": [2],
+      "legacy": [],
+      "production_reader": "tools/build_repo.py"
+    },
+    "testing_lock": {
+      "current": [1],
+      "legacy": [],
+      "production_reader": "tools/build_repo.py"
+    }
+  }
+}

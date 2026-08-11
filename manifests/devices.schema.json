@@ -2,28 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://mwodevelop.github.io/kodi/schemas/devices.schema.json",
   "title": "mwoDevelop private Kodi device inventory",
-  "oneOf": [
-    {
-      "$ref": "#/$defs/registryV1"
-    },
-    {
-      "$ref": "#/$defs/registryV2"
-    }
-  ],
+  "$ref": "#/$defs/registryV2",
   "$defs": {
-    "registryV1": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["schema", "devices"],
-      "properties": {
-        "schema": {
-          "const": 1
-        },
-        "devices": {
-          "$ref": "#/$defs/devicesV1"
-        }
-      }
-    },
     "registryV2": {
       "type": "object",
       "additionalProperties": false,
@@ -35,16 +15,6 @@
         "devices": {
           "$ref": "#/$defs/devicesV2"
         }
-      }
-    },
-    "devicesV1": {
-      "type": "object",
-      "minProperties": 1,
-      "propertyNames": {
-        "$ref": "#/$defs/logicalId"
-      },
-      "additionalProperties": {
-        "$ref": "#/$defs/deviceV1"
       }
     },
     "devicesV2": {
@@ -186,35 +156,6 @@
       "type": "string",
       "format": "uri",
       "pattern": "^https?://"
-    },
-    "deviceV1": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "display_name",
-        "roles",
-        "expected",
-        "endpoints",
-        "profile_channel"
-      ],
-      "properties": {
-        "display_name": {
-          "type": "string",
-          "minLength": 1
-        },
-        "roles": {
-          "$ref": "#/$defs/roles"
-        },
-        "expected": {
-          "$ref": "#/$defs/expectedAndroid"
-        },
-        "endpoints": {
-          "$ref": "#/$defs/adbEndpoints"
-        },
-        "profile_channel": {
-          "$ref": "#/$defs/logicalId"
-        }
-      }
     },
     "deviceV2": {
       "type": "object",

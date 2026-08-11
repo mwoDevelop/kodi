@@ -5,9 +5,6 @@ import pytest
 
 from tools.kodi_devices import (
     load_registry,
-    migrate_registry,
-    migrate_reinstall_config,
-    normalize_registry,
     resolve_device,
     resolve_private_endpoint,
     validate_registry,
@@ -17,10 +14,13 @@ from tools.kodi_reinstall import load_config
 
 def registry():
     return {
-        "schema": 1,
+        "schema": 2,
         "devices": {
             "android-tv": {
                 "display_name": "Android TV",
+                "physical_host_id": "android-tv-host",
+                "principal_id": "principal-android-tv",
+                "platform": "android",
                 "roles": ["consumer"],
                 "expected": {
                     "model": "TV MODEL",
@@ -38,10 +38,8 @@ def registry():
 
 
 def registry_v2(platform="android"):
-    document = normalize_registry(
-        registry(),
-        platforms={"android-tv": platform},
-    )
+    document = json.loads(json.dumps(registry()))
+    document["devices"]["android-tv"]["platform"] = platform
     return document
 
 
@@ -107,6 +105,16 @@ def test_registry_validation_and_resolution(tmp_path):
     assert device["platform"] == "android"
     assert device["expected"]["model"] == "TV MODEL"
     assert device["endpoints"]["adb"] == "private-tv:5555"
+
+
+def test_registry_rejects_retired_schema_one():
+    document = registry()
+    document["schema"] = 1
+    for field in ("physical_host_id", "principal_id", "platform"):
+        document["devices"]["android-tv"].pop(field)
+
+    with pytest.raises(ValueError, match="unsupported device inventory schema"):
+        validate_registry(document)
 
 
 def test_private_android_endpoint_overrides_stale_registry_address():
@@ -180,41 +188,6 @@ def test_registry_v2_rejects_ssh_for_android():
         validate_registry(document)
 
 
-def test_registry_migration_is_atomic_idempotent_and_preserves_endpoints(
-    tmp_path,
-):
-    path = tmp_path / "devices.json"
-    write_json(path, registry())
-    path.chmod(0o600)
-
-    migrated, changed = migrate_registry(
-        path,
-        platforms={"android-tv": "android-emulator"},
-    )
-
-    assert changed is True
-    assert migrated["schema"] == 2
-    assert migrated["devices"]["android-tv"]["platform"] == "android-emulator"
-    assert migrated["devices"]["android-tv"]["endpoints"] == (
-        registry()["devices"]["android-tv"]["endpoints"]
-    )
-    assert path.with_suffix(".json.schema1.bak").is_file()
-    assert path.stat().st_mode & 0o777 == 0o600
-
-    second, changed = migrate_registry(path)
-
-    assert changed is False
-    assert second == migrated
-
-
-def test_registry_migration_rejects_unknown_override(tmp_path):
-    path = tmp_path / "devices.json"
-    write_json(path, registry())
-
-    with pytest.raises(ValueError, match="unknown devices"):
-        migrate_registry(path, platforms={"missing": "android"})
-
-
 def test_schema_two_reinstall_resolves_inventory(tmp_path, monkeypatch):
     repository = tmp_path / "repo"
     private = repository / ".kodi-private"
@@ -281,55 +254,6 @@ def test_schema_two_reinstall_rejects_endpoint_duplication(
     )
     with pytest.raises(ValueError, match="duplicates device inventory"):
         load_config(config, repository)
-
-
-def test_migration_preserves_target_data_and_creates_backup(tmp_path):
-    repository = tmp_path / "repo"
-    private = repository / ".kodi-private"
-    private.mkdir(parents=True)
-    config = private / "kodi-reinstall.json"
-    devices = private / "devices.json"
-    write_json(
-        config,
-        {
-            "schema": 1,
-            "targets": [
-                {
-                    "name": "emulator-master",
-                    "serial": "private-emulator:5555",
-                    "expected_model": "EMULATOR",
-                    "expected_kodi_version": "21.3",
-                    "snapshot": ".kodi-private/snapshot",
-                    "apk": ".kodi-private/kodi.apk",
-                    "apk_sha256": "b" * 64,
-                }
-            ],
-        },
-    )
-
-    migrated_devices, migrated_config = migrate_reinstall_config(
-        config,
-        devices,
-        repository,
-        publishers=["emulator-master"],
-        platforms={"emulator-master": "android-emulator"},
-    )
-
-    assert migrated_config["schema"] == 2
-    assert migrated_devices["schema"] == 2
-    assert (
-        migrated_devices["devices"]["emulator-master"]["platform"]
-        == "android-emulator"
-    )
-    assert migrated_config["targets"][0]["logical_device_id"] == "emulator-master"
-    assert "serial" not in migrated_config["targets"][0]
-    assert migrated_devices["devices"]["emulator-master"]["roles"] == [
-        "consumer",
-        "publisher",
-    ]
-    assert config.with_suffix(".json.schema1.bak").is_file()
-    assert config.stat().st_mode & 0o777 == 0o600
-    assert devices.stat().st_mode & 0o777 == 0o600
 
 
 def test_schema_two_reinstall_rejects_linux_before_transport(
