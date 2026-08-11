@@ -121,7 +121,11 @@ def prepare(repository=ROOT):
                 approval.chmod(0o600)
                 build_runs[name] = "reused"
             else:
-                built = qnap_images.build_with_actions(service)
+                # This command is consumed as one JSON document by kodi_ops.
+                # Keep the nested workflow watcher out of stdout.
+                built = qnap_images.build_with_actions(
+                    service, stream_progress=False
+                )
                 source = _download_approval(
                     service,
                     built["workflow_run_id"],
