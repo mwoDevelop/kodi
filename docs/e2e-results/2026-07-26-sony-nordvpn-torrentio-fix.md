@@ -1,60 +1,60 @@
-# Sony Android TV: NordVPN / Torrentio diagnosis
+# Sony Android TV: Diagnoza NordVPN / Torrentio
 
-Date: 2026-07-26
+Data: 26.07.2026
 
-## Outcome
+## Wynik
 
-The Sony installation was healthy and Real-Debrid authorization was valid.
-The failure was isolated to the current NordVPN route: Torrentio returned HTTP
-403 on Sony while the same requests returned HTTP 200 on BlueStacks and from
-the development host.
+Instalacja Sony przebiegła prawidłowo, a autoryzacja Real-Debrid była ważna. Błąd został
+odizolowany w bieżącej trasie NordVPN: Torrentio zwrócił HTTP 403 na Sony, podczas gdy
+te same żądania zwróciły HTTP 200 na BlueStacks i od hosta programistycznego.
 
-NordVPN remains connected on the TV. Android TV split tunneling excludes Kodi
-from the VPN while other selected applications continue to use the tunnel.
-After that change, Torrentio and Umbrella searches and playback work on Sony.
+NordVPN pozostaje podłączony do telewizora. Dzielone tunelowanie Android TV wyklucza
+Kodi z VPN, podczas gdy inne wybrane aplikacje nadal korzystają z tunelu. Po tej zmianie
+wyszukiwanie i odtwarzanie Torrentio i Umbrella będzie działać na Sony.
 
-## Controlled network probe
+## Kontrolowana sonda sieciowa
 
-| Endpoint | Sony through NordVPN | Sony with Kodi excluded | BlueStacks control |
+| Punkt końcowy | Sony do NordVPN | Sony z wyłączeniem Kodi | Sterowanie BlueStacks |
 | --- | ---: | ---: | ---: |
 | Real-Debrid `/time` | HTTP 200 | HTTP 200 | HTTP 200 |
-| Torrentio, Sintel | HTTP 403 / 0 streams | HTTP 200 / 5 streams | HTTP 200 / 5 streams |
-| Torrentio, House of the Dragon S03E01 | HTTP 403 / 0 streams | HTTP 200 / 122 streams | HTTP 200 / 122 streams |
+| Torrentio, Sintel | Strumienie HTTP 403 / 0 | HTTP 200 / 5 strumieni | HTTP 200 / 5 strumieni |
+| Torrentio, Dom Smoka S03E01 | Strumienie HTTP 403 / 0 | Strumienie HTTP 200/122 | Strumienie HTTP 200/122 |
 
-The split-tunnel network capabilities exclude Kodi UID 10196. The VPN
-interface remains connected and validated, and other application UIDs remain
-assigned to it.
+Możliwości sieci z podzielonym tunelem wykluczają Kodi UID 10196. Interfejs VPN
+pozostaje podłączony i zweryfikowany, a inne UID aplikacji pozostają do niego
+przypisane.
 
-## Sony configuration changes
+## Zmiany konfiguracji Sony
 
-- NordVPN split tunneling enabled; Kodi excluded from the tunnel.
-- Umbrella provider cache TTL changed from 48 to 6 hours.
-- Umbrella provider cache cleared after a local backup.
-- Umbrella debugging enabled at level 1.
-- `rd_cloud.enabled` left disabled, matching the user's workaround.
-- `realdebrid.saveToCloud` disabled to match the working BlueStacks profile.
-- Filename and uncached-source filters were not tightened, because that could
-  hide otherwise usable results.
+- Włączone dzielone tunelowanie NordVPN; Kodi wykluczony z tunelu.
+- Czas TTL pamięci podręcznej dostawcy Umbrella zmieniono z 48 na 6 godzin.
+- Pamięć podręczna dostawcy Umbrella została wyczyszczona po utworzeniu lokalnej kopii
+  zapasowej.
+- Debugowanie Umbrella włączone na poziomie 1.
+- `rd_cloud.enabled` pozostawiono wyłączone, zgodnie z obejściem użytkownika.
+- `realdebrid.saveToCloud` wyłączony, aby pasował do działającego profilu BlueStacks.
+- Filtry nazw plików i źródeł niezapisanych w pamięci podręcznej nie zostały dokręcone,
+  ponieważ mogłoby to ukryć użyteczne wyniki.
 
-The new provider database contains four cache entries after the controlled
-tests. Real-Debrid reauthorization was not needed.
+Nowa baza danych dostawców zawiera cztery wpisy w pamięci podręcznej po kontrolowanych
+testach. Ponowna autoryzacja Real-Debrid nie była potrzebna.
 
-## Device E2E results
+## Wyniki urządzenia E2E
 
-| Device | Case | Result | Resolve | Observed playback |
+| Urządzenie | Sprawa | Wynik | Rozwiąż | Obserwowane odtwarzanie |
 | --- | --- | --- | ---: | ---: |
-| Sony Android TV / Kodi 21.2 | Sintel | played | 20.552 s | 16.162 s |
-| Sony Android TV / Kodi 21.2 | House of the Dragon S01E01 | played | 26.574 s | 16.172 s |
-| Sony Android TV / Kodi 21.2 | House of the Dragon S03E01 | played | 18.378 s | 16.147 s |
-| BlueStacks1 / Kodi 21.3 | House of the Dragon S03E01 | played | 16.110 s | 16.054 s |
+| Sony Android TV / Kodi 21.2 | Sintel | grał | 20,552 s | 16,162 s |
+| Sony Android TV / Kodi 21.2 | Dom Smoka S01E01 | grał | 26,574 s | 16,172 s |
+| Sony Android TV / Kodi 21.2 | Dom Smoka S03E01 | grał | 18,378 s | 16,147 s |
+| BlueStacks1 / Kodi 21.3 | Dom Smoka S03E01 | grał | 16,110 s | 16,054 s |
 
-The focused TV search for `House of the Dragon` also passed on both devices
-and returned the exact series. Reports contain no credentials, magnets, or
-resolved media URLs.
+Skupione wyszukiwanie telewizyjne dla `House of the Dragon` również przeszło na oba
+urządzenia i zwróciło dokładną serię. Raporty nie zawierają żadnych danych
+uwierzytelniających, magnesów ani ustalonych adresów URL multimediów.
 
-## Reproduction
+## Powielanie
 
-Playback:
+Odtwarzanie nagranego dźwięku:
 
 ```bash
 .venv/bin/python tests/e2e/sony_kodi_matrix.py \
@@ -68,7 +68,7 @@ Playback:
   --result docs/e2e-results/sony-hotd-s03e01.json
 ```
 
-TV search:
+Wyszukiwanie telewizji:
 
 ```bash
 .venv/bin/python tests/e2e/umbrella_search_e2e.py \
@@ -81,8 +81,10 @@ TV search:
   --result docs/e2e-results/sony-tv-search.json
 ```
 
-References:
+Referencje:
 
-- [Real-Debrid VPN cooperation list](https://real-debrid.com/vpn)
-- [NordVPN on Android TV](https://support.nordvpn.com/hc/en-us/articles/19928244437777-Installing-and-using-NordVPN-on-Android-TV-or-Nvidia-Shield)
-- [NordVPN split tunneling](https://support.nordvpn.com/hc/en-us/articles/19618692366865-What-is-Split-Tunneling-and-how-to-use-it)
+- [Lista współpracy VPN Real-Debrid](https://real-debrid.com/vpn)
+- [NordVPN na Android
+  TV](https://support.nordvpn.com/hc/en-us/articles/19928244437777-Installing-and-using-NordVPN-on-Android-TV-or-Nvidia-Shield)
+- [Tunel dzielony
+  NordVPN](https://support.nordvpn.com/hc/en-us/articles/19618692366865-What-is-Split-Tunneling-and-how-to-use-it)

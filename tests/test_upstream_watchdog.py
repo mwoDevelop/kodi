@@ -1,6 +1,44 @@
 import datetime as dt
+import re
+from pathlib import Path
 
 from tools.upstream_watchdog import evaluate, load_manifest
+
+
+SCHEDULED_WORKFLOWS = {
+    ("mwoDevelop/kodi", "reconcile-upstreams.yml"): (
+        Path(".github/workflows/reconcile-upstreams.yml"),
+        "20 4 * * *",
+    ),
+    (
+        "mwoDevelop/script.module.mwoscrapers",
+        "check-provider-upstreams.yml",
+    ): (
+        Path("mwoscrapers/.github/workflows/check-provider-upstreams.yml"),
+        "23 4 * * *",
+    ),
+    (
+        "mwoDevelop/script.module.mwoscrapers",
+        "discover-provider-upstreams.yml",
+    ): (
+        Path("mwoscrapers/.github/workflows/discover-provider-upstreams.yml"),
+        "41 4 * * *",
+    ),
+    ("mwoDevelop/umbrellaplug.github.io", "propose-upstream-update.yml"): (
+        Path("umbrella/.github/workflows/propose-upstream-update.yml"),
+        "50 4 * * *",
+    ),
+    (
+        "mwoDevelop/ch.repo",
+        "mwodevelop-watchnixtoons2-update.yml",
+    ): (
+        Path(
+            "watchnixtoons2/.github/workflows/"
+            "mwodevelop-watchnixtoons2-update.yml"
+        ),
+        "35 4 * * *",
+    ),
+}
 
 
 def _manifest():
@@ -68,4 +106,27 @@ def test_watchdog_rejects_failure_and_stale_success():
 
 def test_versioned_manifest_is_valid():
     loaded = load_manifest("manifests/upstream-watchdog.json")
-    assert len(loaded["workflows"]) == 4
+    assert len(loaded["workflows"]) == 5
+    assert {
+        (item["repository"], item["workflow"])
+        for item in loaded["workflows"]
+    } == set(SCHEDULED_WORKFLOWS)
+
+
+def test_scheduled_process_catalog_matches_workflows():
+    catalogue = Path("docs/scheduled-processes.md").read_text(
+        encoding="utf-8"
+    )
+    for (_repository, workflow), (path, cron) in SCHEDULED_WORKFLOWS.items():
+        source = path.read_text(encoding="utf-8")
+        assert re.search(
+            r'^\s*-\s+cron:\s*["\']%s["\']\s*$' % re.escape(cron),
+            source,
+            flags=re.MULTILINE,
+        )
+        minute, hour, _day, _month, _weekday = cron.split()
+        assert workflow in catalogue
+        assert "%s:%s codziennie" % (
+            hour.zfill(2),
+            minute.zfill(2),
+        ) in catalogue

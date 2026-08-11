@@ -3,18 +3,40 @@ from pathlib import PurePosixPath
 import pytest
 
 from tools.qnap_profile_sync import (
+    CONTAINER_STATION_SOCKET,
     PRODUCTION_ROOT,
     QnapError,
     _raid_summary,
+    container_station,
     production_root,
     production_environment,
     production_admin_request,
+    production_pair_request,
     production_backup_paths,
     create_production_pairing,
     validate_production_files,
     qnap_connection_settings,
     smoke_root,
 )
+
+
+class ContainerStationSession:
+    def execute(self, command):
+        assert command == (
+            "getcfg container-station Install_Path -f /etc/config/qpkg.conf"
+        )
+        return "/share/CACHEDEV3_DATA/.qpkg/container-station"
+
+
+def test_container_station_uses_gui_managed_docker_socket():
+    install, docker = container_station(ContainerStationSession())
+
+    assert install == "/share/CACHEDEV3_DATA/.qpkg/container-station"
+    assert docker == (
+        f"DOCKER_HOST=unix://{CONTAINER_STATION_SOCKET} "
+        "/share/CACHEDEV3_DATA/.qpkg/container-station/bin/docker"
+    )
+    assert "system-docker.sock" not in docker
 
 
 class PairingSession:
@@ -232,3 +254,39 @@ def test_production_admin_uses_container_loopback_and_restricts_path(
         production_admin_request(
             session, "/health", {}, "admin-test-0002"
         )
+
+
+def test_production_pairing_exchange_uses_private_container_loopback(
+    monkeypatch,
+):
+    class Session:
+        command = None
+
+        def execute(self, command, timeout=30):
+            self.command = command
+            assert timeout == 120
+            return '{"access_token":"secret","logical_device_id":"nuc-alek"}'
+
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.container_station",
+        lambda _session: ("/container-station", "/usr/bin/docker"),
+    )
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.production_compose_command",
+        lambda _docker: "docker compose",
+    )
+    session = Session()
+
+    result = production_pair_request(
+        session,
+        "12345678",
+        "nuc-alek",
+        "home-stable",
+        "device-0123456789abcdef",
+        "A" * 43,
+    )
+
+    assert result["logical_device_id"] == "nuc-alek"
+    assert "exec -T profile-sync" in session.command
+    assert "127.0.0.1:8765" in session.command
+    assert "12345678" not in session.command

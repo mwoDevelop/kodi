@@ -1,4 +1,4 @@
-# Niezależny review planu synchronizacji upstream
+# Niezależna recenzja planu synchronizacji upstream
 
 Data review: 2026-07-25
 
@@ -6,7 +6,7 @@ Przedmiot: `UPSTREAM_SYNC_PLAN.md`
 
 Tryb: niezależny reviewer, bez prawa edycji plików
 
-## 1. Zakres review
+## 1. Zakres recenzji
 
 Reviewer sprawdził plan względem:
 
@@ -79,7 +79,7 @@ Te punkty również zostały dodane do planu.
 - forward-revert zamiast podmiany opublikowanego ZIP-a;
 - dry-run, rzeczywisty PR, publiczny smoke i BlueStacks E2E jako kolejne bramy.
 
-## 6. Wynik review
+## 6. Wynik recenzji
 
 Plan po korektach jest logicznie wykonalny pod warunkiem zachowania kolejności
 wdrożenia. Nie wolno włączać writera ani rulesetów przed:
@@ -93,7 +93,7 @@ Największym ryzykiem pozostaje certyfikowanie ruchomego kanału testing.
 Pierwsze wdrożenie musi zatem serializować kandydatów i certyfikować cały,
 adresowalny snapshot, a nie pojedynczy dodatek w oderwaniu od pozostałych.
 
-## 7. Follow-up review po pierwszej korekcie
+## 7. Ponowna recenzja po pierwszej korekcie
 
 Reviewer ponownie sprawdził zaktualizowany plan. Potwierdził zamknięcie
 H1–H10 oraz M1–M9, po czym znalazł dwie nowe luki high i trzy medium:

@@ -1,8 +1,12 @@
 # Plan projektu Kodi: Umbrella, MwoScrapers i wspólne repozytorium dodatków
 
-Status: stable opublikowane; Umbrella 6.7.81.18, MwoScrapers 0.1.6,
-wrapper 0.1.1, WatchNixtoons2 0.26.1 i Profile Sync 0.1.6 przeszły
-certyfikację exact snapshotu oraz promocję testing → stable bez rebuilda
+Status: zaimplementowany plan architektoniczny; poniższe wersje i raporty są
+historycznym zapisem realizacji. Bieżącą zawartość kanałów określają
+`manifests/locks/stable.json` i `manifests/locks/testing.json`.
+
+Nawigacja: `docs/README.md` rozdziela aktualne instrukcje operacyjne od planów,
+review i datowanych dowodów E2E.
+
 Data rozpoznania: 2026-07-24
 Konto docelowe GitHub: `mwoDevelop`
 Lokalny katalog nadrzędny: `/home/mwo/projects/kodi`
@@ -366,7 +370,7 @@ brak sekretów RD w providerze oraz matryca urządzeń z VPN i bez dostępnego
 QNAP. Preferowane są adaptery publicznego API o pokryciu uzupełniającym, a nie
 hurtowy import całych paczek Coco/Viper/Magneto.
 
-### 5.6 Opcjonalny provider metadata relay
+### 5.6 Opcjonalny przekaźnik metadanych providerów
 
 VPN pozostaje włączony dla Kodi i całego ruchu Real-Debrid. Jeżeli publiczny
 provider odrzuca adres wyjściowy VPN kodem HTTP 403, adapter może użyć osobno
@@ -884,7 +888,7 @@ Zapisać:
 
 ## 14. Kolejność realizacji
 
-### Etap 0 — proof-of-contract, legal i model wydania
+### Etap 0 — potwierdzenie kontraktu, licencje i model wydania
 
 - zamrozić pełny kontrakt Umbrella↔provider na przypiętym commicie;
 - potwierdzić, że Umbrella jest właścicielem deduplikacji między
@@ -1148,7 +1152,7 @@ do rozwiązywania źródeł. Docelowy przepływ pozostaje rozdzielony:
   przy celowo niedostępnym relayu, bez ujawniania endpointów, magnetów i
   tokenów w raporcie.
 
-### 18.2 Generyczny fallback providerów
+### 18.2 Generyczny mechanizm awaryjny providerów
 
 - zachować skonfigurowany endpoint jako pierwszy kandydat;
 - w bazowym adapterze Stremio wyliczać uporządkowaną, zdeduplikowaną listę:
@@ -1164,7 +1168,7 @@ do rozwiązywania źródeł. Docelowy przepływ pozostaje rozdzielony:
 - nigdy nie przekazywać do relaya ani providera tokenu Real-Debrid lub
   rozwiązanego URL.
 
-### 18.3 Testy, rollout i kryteria akceptacji
+### 18.3 Testy, wdrożenie i kryteria akceptacji
 
 - testy jednostkowe obejmują: sukces relaya, awarię relaya i sukces publiczny,
   awarię wszystkich kandydatów, pusty poprawny wynik bez fallbacku,

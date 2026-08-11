@@ -1,54 +1,56 @@
-# Etap 0 evidence
+# Dowody etapu 0
 
-Date: 2026-07-24
+Data: 24.07.2026
 
-## Contract
+## Umowa
 
-Pinned Umbrella base:
-`fb1fa4fe7fdab82091a6502da3f3610df2dcf71f` (`6.7.81`).
+Przypięta podstawa Umbrella: `fb1fa4fe7fdab82091a6502da3f3610df2dcf71f` (`6.7.81`).
 
-Umbrella dynamically imports the configured add-on's `lib` directory and calls
-`<module>.sources(ret_all=...)`. Each returned provider class implements:
+Umbrella dynamicznie importuje skonfigurowany katalog `lib` dodatku i wywołuje
+`<module>.sources(ret_all=...)`. Każda zwrócona klasa dostawcy implementuje:
 
-- `hasMovies`, `hasEpisodes`, `pack_capable`, and `priority`;
+- `hasMovies`, `hasEpisodes`, `pack_capable` i `priority`;
 - `sources(data, hostDict)`;
-- normalized torrent result dictionaries consumed by Umbrella.
+- znormalizowane słowniki wyników torrentów wykorzystywane przez Umbrella.
 
-MwoScrapers implements that interface without copying provider source code.
-Umbrella remains responsible for cross-provider deduplication and resolution.
+MwoScrapers implementuje ten interfejs bez kopiowania kodu źródłowego providerów.
+Umbrella pozostaje odpowiedzialna za deduplikację i rozstrzyganie wyników między
+providerami.
 
-## Upstream evidence
+## Dowody dotyczące upstreamu
 
-| Family | Version | Pinned SHA-256 |
+| Rodzina | Wersja | Przypięty SHA-256 |
 |---|---:|---|
 | Coco | 1.0.39 | `c6de1ad7ae612fe22a5b102504b9b6f7cebe8fe961de321bdae86b5dced5af59` |
 | Viper | 1.5.4 | `9c089bdffa6f30a0a987dfaf289c15eebddeaefc786171609e4e2ef6793f8f4a` |
 | Magneto | 6.07.04 | `f46f4d4f25453f3683beebd00bf35ab181e0588da32a4e8dd73917db27615427` |
 
-The packages declare GPL-3.0 in `addon.xml`, but contain no separate license
-file and do not establish a complete per-file ownership chain. Consequently,
-no provider file was copied. Torrentio and Comet are original adapters against
-the public Stremio-compatible JSON shape, with offline fixtures.
+Pakiety deklarują GPL-3.0 w `addon.xml`, ale nie zawierają oddzielnego pliku licencji i
+nie ustanawiają pełnego łańcucha własności poszczególnych plików. W związku z tym żaden
+plik providera nie został skopiowany. Torrentio i Comet to oryginalne adaptery
+obsługujące publiczny format JSON zgodny ze Stremio i wyposażone w testy offline.
 
-## Import threat model
+## Model zagrożeń podczas importu
 
-`mwoscrapers/tools/safe_ingest.py` inventories ZIPs without extraction or
-module import. It rejects traversal, absolute and Windows drive paths,
-symlinks, device files, nested archives, duplicate/case-colliding paths,
-excessive file counts, sizes, and compression ratios.
+`mwoscrapers/tools/safe_ingest.py` inwentaryzuje pliki ZIP bez ekstrakcji i importu
+modułów. Odrzuca próby wyjścia poza katalog, ścieżki bezwzględne i ścieżki Windows,
+dowiązania symboliczne, pliki urządzeń, zagnieżdżone archiwa, ścieżki zduplikowane lub
+kolidujące wielkością liter oraz przekroczenia limitów liczby plików, rozmiaru i
+współczynnika kompresji.
 
-The scheduled audit has `contents: read`, no secrets, pinned Actions, a
-concurrency lock, and uploads only the generated report for 14 days.
+Zaplanowany audyt ma uprawnienie `contents: read`, nie otrzymuje sekretów, używa
+przypiętych wersji GitHub Actions i blokady współbieżności oraz przechowuje wyłącznie
+wygenerowany raport przez 14 dni.
 
-## Release spike
+## Próba procesu wydania
 
-The main repository builds a complete Pages snapshot from pinned submodule
-commits. ZIP timestamps, permissions, order, and compression settings are
-fixed. Two independent builds must be byte-identical before publication.
+Główne repozytorium tworzy kompletną migawkę Pages z przypiętych commitów submodułów.
+Sygnatury czasowe ZIP, uprawnienia, kolejność i ustawienia kompresji są stałe. Przed
+publikacją dwie niezależne kompilacje muszą być identyczne pod względem bajtów.
 
-GitHub Pages uses `<hashes>false>` because it cannot serve Kodi's
-`content-sha256` response header. CI and the post-deployment smoke test verify
-the explicit SHA-256 manifest instead.
+GitHub Pages używa `<hashes>false>`, ponieważ nie może obsłużyć nagłówka odpowiedzi
+`content-sha256` Kodi. Zamiast tego CI i test dymu po wdrożeniu weryfikują jawny
+manifest SHA-256.
 
-Stable initially contains only its repository add-on. Testing contains
-Umbrella `6.7.81.1` and MwoScrapers `0.1.0`.
+Kanał stable początkowo zawiera tylko dodatek repozytorium. Kanał testing zawiera
+Umbrella `6.7.81.1` i MwoScrapers `0.1.0`.

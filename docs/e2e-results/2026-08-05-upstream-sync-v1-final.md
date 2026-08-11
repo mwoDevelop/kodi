@@ -1,99 +1,97 @@
-# Upstream Sync v1 final release certification
+# Certyfikat wersji ostatecznej upstream Sync v1
 
-Date: 2026-08-05
+Data: 2026-08-05
 
-The content-addressed testing snapshot
-`b88a0d70c1def535adbebbac9ae160b8ace656241c5011cf31315200612b77b7`
-was certified and promoted to stable without rebuilding component archives.
-The repository add-on intentionally remains at version `1.0.0`; this release
-versions the synchronization mechanism, not the Kodi repository bootstrap.
+Migawka testing `b88a0d70c1def535adbebbac9ae160b8ace656241c5011cf31315200612b77b7` z
+adresowaną zawartością została certyfikowana i awansowana do wersji stable bez
+konieczności przebudowywania archiwów komponentów. Dodatek repozytorium celowo pozostaje
+w wersji `1.0.0`; w tej wersji wersjonuje się mechanizm synchronizacji, a nie bootstrap
+repozytorium Kodi.
 
-## Immutable release evidence
+## Niezmienny dowód wydania
 
-- protected device certification
-  [run 31028742156](https://github.com/mwoDevelop/kodi/actions/runs/31028742156)
-  passed on BlueStacks1 and X88 Pro 20;
-- reviewed stable promotion PR
-  [#125](https://github.com/mwoDevelop/kodi/pull/125) merged exact snapshot
-  `b88a0d70c1de…`;
-- stable deployment
-  [run 31029695984](https://github.com/mwoDevelop/kodi/actions/runs/31029695984)
-  passed;
-- the public stable Profile Sync 1.0.2 archive has SHA-256
-  `2c644202e185d9f5e80ca6bbdec7cea5181f66b67e84e45bdddf6aad67d5bdea`,
-  identical to the certified testing archive;
-- stable records source index SHA-256
-  `231f627410fb6fddf6ab51d2237cf3e225457597eaa236f57e6f4b97d574222a`
-  and artifact manifest SHA-256
-  `1c35ca95055bee58f95a84a9b4aa5b4c2c8fdfb4113b84deedf19b1e78b1ac14`;
-- local discovery was a deterministic no-op, stable lock remained unchanged,
-  and the complete regression run passed: Umbrella 50, WatchNixtoons2 17,
-  mwoScrapers 47 and root repository 325 tests.
-- final operational PR
-  [#126](https://github.com/mwoDevelop/kodi/pull/126) passed both exact-head
-  [push CI](https://github.com/mwoDevelop/kodi/actions/runs/31034041248) and
-  [pull-request CI](https://github.com/mwoDevelop/kodi/actions/runs/31034102176)
-  before merge.
+- certyfikacja urządzenia chronionego [run
+  31028742156](https://github.com/mwoDevelop/kodi/actions/runs/31028742156) przekazana
+  na BlueStacks1 i X88 Pro 20;
+- przejrzano promocję stable PR [#125](https://github.com/mwoDevelop/kodi/pull/125)
+  połączono dokładną migawkę `b88a0d70c1de…`;
+- Wdrożenie stable [uruchom
+  31029695984](https://github.com/mwoDevelop/kodi/actions/runs/31029695984) zakończone
+  sukcesem;
+- publiczne archiwum stable Profile Sync 1.0.2 ma SHA-256
+  `2c644202e185d9f5e80ca6bbdec7cea5181f66b67e84e45bdddf6aad67d5bdea`, identyczne z
+  certyfikowanym archiwum testing;
+- stable rejestruje indeks źródła SHA-256
+  `231f627410fb6fddf6ab51d2237cf3e225457597eaa236f57e6f4b97d574222a` i manifest
+  artefaktu SHA-256 `1c35ca95055bee58f95a84a9b4aa5b4c2c8fdfb4113b84deedf19b1e78b1ac14`;
+- lokalne wykrywanie zakończyło się deterministycznym niepowodzeniem, blokada stable
+  pozostała niezmieniona, a pełny przebieg regresji przeszedł pomyślnie: testy Umbrella
+  50, WatchNixtoons2 17, mwoScrapers 47 i repozytorium głównego 325.
+- końcowy operacyjny PR [#126](https://github.com/mwoDevelop/kodi/pull/126) przeszedł
+  zarówno dokładne [push
+  CI](https://github.com/mwoDevelop/kodi/actions/runs/31034041248), jak i [pull-request
+  CI](https://github.com/mwoDevelop/kodi/actions/runs/31034102176) przed połączeniem.
 
-Profile Sync 1.0.2 fixes the case in which an assignment expired after that
-exact signed revision had already been applied. Such a device now remains
-healthy instead of incorrectly rejecting its current state. Its component CI
-and the three upstream component workflows use pinned actions compatible with
-the Node 24 runtime. The reviewed root component-pointer PR
-[#124](https://github.com/mwoDevelop/kodi/pull/124) preserved exact release
-bytes.
+Profile Sync 1.0.2 naprawia przypadek, w którym przypisanie wygasło po zastosowaniu
+dokładnie tej podpisanej wersji. Takie urządzenie pozostaje teraz zdrowe, zamiast
+błędnie odrzucać swój aktualny stan. Jego komponent CI i trzy komponenty upstream
+workflow wykorzystują przypięte akcje kompatybilne ze środowiskiem wykonawczym Node 24.
+Przeglądany wskaźnik komponentu głównego PR
+[#124](https://github.com/mwoDevelop/kodi/pull/124) zachował dokładne bajty wydania.
 
-## Stable device matrix
+## Matryca urządzenia stable
 
-| Device | Stable add-ons | Umbrella | WatchNixtoons2 | Profile Sync / portable state |
+| Urządzenie | Dodatki stable | Umbrella | WatchNixtoons2 | Profile Sync / stan przenośny |
 | --- | --- | --- | --- | --- |
-| BlueStacks1 | exact stable versions and origins | search + resolver + playback pass | playback pass | 1.0.2, `NO_CHANGE`, pass |
-| X88 Pro 20 | exact stable versions and origins | search + resolver + playback pass | playback pass | 1.0.2, `NO_CHANGE`, pass |
-| Sony TV | stable Profile Sync | previously certified playback; portable audit repeated | portable audit repeated | 1.0.2, `NO_CHANGE`, pass |
-| Bedroom TV | stable Profile Sync | previously certified playback; portable audit repeated | portable audit repeated | 1.0.2, `NO_CHANGE`, pass |
+| BlueStacks1 | dokładne wersje i pochodzenie stable | wyszukiwanie + rozwiązanie + przepustka odtwarzania | przepustka odtwarzania | 1.0.2, `NO_CHANGE`, pass |
+| X88 Pro 20 | dokładne wersje i pochodzenie stable | wyszukiwanie + rozwiązanie + przepustka odtwarzania | przepustka odtwarzania | 1.0.2, `NO_CHANGE`, pass |
+| Sony TV | stable Profile Sync | wcześniej certyfikowane odtwarzanie; audyt przenośny powtórzony | audyt przenośny powtórzony | 1.0.2, `NO_CHANGE`, pass |
+| Bedroom TV | stable Profile Sync | wcześniej certyfikowane odtwarzanie; audyt przenośny powtórzony | audyt przenośny powtórzony | 1.0.2, `NO_CHANGE`, pass |
 
-All four Android devices use distinct production enrollments on channel
-`home-stable` and converge on active revision
-`sha256:4c7d728d214a6d31d1d277d2fd6b30957bc2d07d873648df5e0ffda69a1c905e`.
-Each has the same eight favourites, seven portable WatchNixtoons2 actions and
-no missing artwork. Private machine-readable evidence is retained outside Git
-under `.kodi-private/e2e/`.
+Wszystkie cztery urządzenia Android wykorzystują różne rejestracje produkcyjne na kanale
+`home-stable` i są zbieżne w aktywnej wersji
+`sha256:4c7d728d214a6d31d1d277d2fd6b30957bc2d07d873648df5e0ffda69a1c905e`. Każdy ma te
+same osiem ulubionych, siedem przenośnych akcji WatchNixtoons2 i nie brakuje żadnych
+grafik. Prywatne dowody nadające się do odczytu maszynowego są przechowywane poza Gitem
+pod `.kodi-private/e2e/`.
 
-X88 required recovery from device-local drift before it passed. Repository and
-custom add-on directories were rebuilt from exact stable ZIPs; the incomplete
-official `script.module.urllib3` was replaced with Kodi's verified 2.2.3 ZIP;
-Profile Sync received a new unique enrollment; and missing Umbrella/Real-Debrid
-and mwoScrapers settings were transactionally restored from private host
-state. The reusable settings rollout now uses Kodi's restore lock, rollback,
-post-restart semantic verification and sanitized evidence. A second sync
-returned `NO_CHANGE`, followed by the complete X88 playback matrix.
+X88 wymagał przywrócenia sprawności po dryfie lokalnym urządzeniu, zanim został
+zaliczony. Repozytorium i niestandardowe katalogi dodatków zostały odbudowane z
+dokładnych plików ZIP stable; niekompletny oficjalny `script.module.urllib3` został
+zastąpiony zweryfikowanym ZIPem 2.2.3 Kodi; Profile Sync otrzymał nową, unikalną
+rejestrację; a brakujące ustawienia Umbrella/Real-Debrid i mwoScrapers zostały
+przywrócone transakcyjnie ze stanu hosta prywatnego. Wdrożenie ustawień wielokrotnego
+użytku wykorzystuje teraz blokadę przywracania Kodi, rollback, weryfikację semantyczną
+po ponownym uruchomieniu i oczyszczone dowody. Druga synchronizacja zwróciła
+`NO_CHANGE`, po którym nastąpiła pełna macierz odtwarzania X88.
 
-The testing repository remains available only as an explicit certification
-channel on selected canary-capable devices. Every released mwoDevelop add-on
-used by the matrix is owned by the stable origin. Bedroom TV remains
-stable-only. The testing repository is not removed automatically because a
-repository uninstall can delete dependent add-ons or `addon_data`; disabling
-or retiring it requires a separately verified migration.
+Repozytorium testing pozostaje dostępne wyłącznie jako jawny kanał certyfikacji na
+wybranych urządzeniach obsługujących technologię Canary. Każdy wydany dodatek mwoDevelop
+używany przez matrix jest własnością pochodzenia stable. Bedroom TV pozostaje wyłącznie
+stable. Repozytorium testing nie jest usuwane automatycznie, ponieważ dezinstalacja
+repozytorium może spowodować usunięcie zależnych dodatków lub `addon_data`; wyłączenie
+lub wycofanie go wymaga osobno zweryfikowanej migracji.
 
-## Scheduled operation and security
+## Zaplanowane działanie i bezpieczeństwo
 
-The central reconcile workflow, Umbrella updater, WatchNixtoons2 updater and
-mwoScrapers provider discovery have current successful scheduled/no-op runs.
-The central manual verification
-[run 31027430984](https://github.com/mwoDevelop/kodi/actions/runs/31027430984)
-also passed. The independent QNAP watchdog is running and healthy from an
-immutable image with a read-only filesystem and `unless-stopped` restart
-policy.
+Centralne uzgadnianie workflow, aktualizatora Umbrella, aktualizatora WatchNixtoons2 i
+wykrywania dostawców mwoScrapers mają aktualnie pomyślne zaplanowane uruchomienia/brak
+operacji. Centralna weryfikacja ręczna [run
+31027430984](https://github.com/mwoDevelop/kodi/actions/runs/31027430984) również
+przeszła pomyślnie. Niezależny watchdog QNAP działa i jest zdrowy z niezmiennego obrazu
+z systemem plików tylko do odczytu i polityką restartu `unless-stopped`.
 
-Foreign candidates pass the fail-closed ClamAV and semantic policy gate before
-they can reach a writer. The positive/negative malware drill, including its
-EICAR rejection path, passed in
-[run 30822178765](https://github.com/mwoDevelop/kodi/actions/runs/30822178765).
-No upstream component is auto-merged into a product branch, and stable
-promotion remains a reviewed manual decision over exact certified bytes.
+Zagraniczni kandydaci przechodzą przez fail-closed ClamAV i bramkę polityki
+semantycznej, zanim będą mogli dotrzeć do pisarza. Test dotyczący
+pozytywnego/negatywnego złośliwego oprogramowania, w tym ścieżka odrzucenia EICAR,
+został przekazany w [uruchom
+30822178765](https://github.com/mwoDevelop/kodi/actions/runs/30822178765). Żaden
+komponent upstream nie jest automatycznie łączony w gałąź produktu, a promocja stable
+pozostaje sprawdzoną, ręczną decyzją na podstawie dokładnych certyfikowanych bajtów.
 
-Both configured NUC/Flatpak principals were retried on the release date, but
-the host was unreachable over both ICMP and SSH (`No route to host`). They are
-therefore an explicit availability exception, not reported as passing and not
-misclassified as a software regression. Their read-only qualification remains
-the next action when the host returns; no Android release work is blocked.
+Obydwa skonfigurowane podmioty główne NUC/Flatpak zostały ponowione w dniu wydania, ale
+host był nieosiągalny zarówno przez ICMP, jak i SSH (`No route to host`). Stanowią zatem
+wyraźny wyjątek dotyczący dostępności i nie są zgłaszane jako przemijające ani błędnie
+klasyfikowane jako regresja oprogramowania. Ich kwalifikacja tylko do odczytu pozostaje
+następną akcją po powrocie gospodarza; żadna praca związana z wydaniem Android nie jest
+zablokowana.

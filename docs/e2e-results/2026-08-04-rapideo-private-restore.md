@@ -1,31 +1,32 @@
-# Rapideo private restore certification — 2026-08-04
+# Certyfikat przywracania prywatnego Rapideo — 2026-08-04
 
-## Scope
+## Zakres
 
-The clean-restore workflow gained an allow-listed private add-on adapter
-registry. The first adapter reads `RAPIDEO_USER` and `RAPIDEO_PASS` from an
-ignored mode-`0600` reference file, configures the official Rapideo add-on,
-forces a fresh login, verifies the account endpoint and removes all temporary
-Android credential material. Reports contain transport and boolean health
-evidence only.
+workflow do czystego przywracania uzyskał rejestr dozwolonych prywatnych adapterów
+dodatków. Pierwszy adapter odczytuje `RAPIDEO_USER` i `RAPIDEO_PASS` z ignorowanego
+pliku referencyjnego trybu `0600`, konfiguruje oficjalny dodatek Rapideo, wymusza nowe
+logowanie, weryfikuje punkt końcowy konta i usuwa wszystkie tymczasowe materiały
+uwierzytelniające Android. Raporty zawierają wyłącznie dowody dotyczące transportu i
+stanu logicznego.
 
-## Automated certification
+## Automatyczna certyfikacja
 
-- full Python suite: `317 passed`;
-- CI-equivalent `tests/e2e/run.sh`: `317 passed` after two deterministic
-  repository builds;
+- pełny pakiet Python: `317 passed`;
+- Odpowiednik CI `tests/e2e/run.sh`: `317 passed` po dwóch deterministycznych
+  kompilacjach repozytoriów;
 - `git diff --check`: pass;
-- private adapter unit and restore integration tests: pass.
+- prywatna jednostka adaptera i przywracanie testów integracyjnych: pass.
 
-## Device evidence
+## Dowód urządzenia
 
-| Device | Restore/configuration result | Rapideo result |
+| Urządzenie | Wynik przywracania/konfiguracji | Wynik Rapideo |
 |---|---|---|
-| BlueStacks1 (`SM-S901E`) | `restore-only` pass; 4,287 files; Kodi 21.3; Aeon Nox Silvo; required add-ons verified | Rapideo 1.5.0; HTTP 200 JSON login and account; fresh token present |
-| Sony TV | existing profile retained; standalone idempotent adapter pass | Rapideo 1.5.0; HTTP 200 JSON login and account; fresh token present |
-| X88 Pro 20 | profile/default add-on phases passed; final private phase blocked | active OpenVPN exit returned HTTP 200 `text/html` from the Rapideo login endpoint |
-| Bedroom TV | Kodi transport recovered after restart; settings applied | active NordVPN path returned HTTP 200 JSON with API error 4 and no token |
+| BlueStacks1 (`SM-S901E`) | Przepustka `restore-only`; 4287 plików; Kodi 21,3; Aeon Nox Silvo; wymagane dodatki zweryfikowane | Rapideo 1.5.0; Logowanie i konto HTTP 200 JSON; obecny świeży token |
+| Sony TV | istniejący profil zachowany; samodzielna idempotentna przepustka adaptera | Rapideo 1.5.0; Logowanie i konto HTTP 200 JSON; obecny świeży token |
+| X88 Pro 20 | zaliczone fazy profilu/domyślnego dodatku; zablokowana ostatnia faza prywatna | aktywne wyjście OpenVPN zwróciło HTTP 200 `text/html` z punktu końcowego logowania Rapideo |
+| Bedroom TV | Transport Kodi przywrócony po ponownym uruchomieniu; ustawienia zastosowane | aktywna ścieżka NordVPN zwróciła HTTP 200 JSON z błędem API 4 i brakiem tokena |
 
-No credential, token, account identity, API response body or resolved media URL
-was printed or stored in this report. The two VPN-specific failures remain
-explicit rollout blockers rather than being weakened to warnings.
+W tym raporcie nie wydrukowano ani nie zapisano żadnych danych uwierzytelniających,
+tokenów, tożsamości konta, treści odpowiedzi API ani rozpoznanego adresu URL
+multimediów. Dwie awarie specyficzne dla VPN nadal stanowią wyraźne blokady wdrożeniowe,
+a nie są osłabiane do ostrzeżeń.

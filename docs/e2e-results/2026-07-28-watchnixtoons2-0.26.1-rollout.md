@@ -1,69 +1,66 @@
-# WatchNixtoons2 0.26.1 rollout
+# Wdrożenie WatchNixtoons2 0.26.1
 
-Date: 2026-07-28
+Data: 28.07.2026
 
-## Artifact and publication
+## Artefakt i publikacja
 
-- fork commit: `83560a2a5ccf7ab56724183959688a42b63b9615`;
-- upstream release: `0.26` at
-  `6b3183f56aef4e90ba1f0eb067c88ad2bc69e593`;
-- downstream version: `0.26.1`;
-- deterministic/public ZIP SHA-256:
+- zatwierdzenie wideł: `83560a2a5ccf7ab56724183959688a42b63b9615`;
+- Wersja upstream: `0.26` i `6b3183f56aef4e90ba1f0eb067c88ad2bc69e593`;
+- Wersja downstream: `0.26.1`;
+- deterministyczny/publiczny ZIP SHA-256:
   `01a84245391da1beef7bc65982b4d47dd517595c533296473b65763e6a1e2312`;
-- testing publication:
-  <https://github.com/mwoDevelop/kodi/actions/runs/30373242032>;
-- public artifact:
+- Publikacja testing: <https://github.com/mwoDevelop/kodi/actions/runs/30373242032>;
+- artefakt publiczny:
   <https://mwodevelop.github.io/kodi/testing/omega/plugin.video.watchnixtoons2.mwodevelop/plugin.video.watchnixtoons2.mwodevelop-0.26.1.zip>.
 
-The public ZIP was downloaded and its digest was checked before each rollout.
-Kodi performed each update through its `Install from zip file` GUI. Kodi leaves
-the `installed.origin` field empty for this path; the source is proven by the
-public URL and matching digest rather than by claiming a repository-manager
-origin.
+Pobrano publiczny plik ZIP i przed każdym wdrożeniem sprawdzano jego streszczenie. Kodi
+przeprowadzał każdą aktualizację poprzez swój graficzny interfejs użytkownika `Install
+from zip file`. Kodi pozostawia puste pole `installed.origin` dla tej ścieżki; źródło
+jest potwierdzane poprzez publiczny adres URL i pasujący skrót, a nie przez twierdzenie
+o pochodzeniu menedżera repozytorium.
 
-## Device matrix
+## Matryca urządzenia
 
-All three devices resolved the same content path,
-`mao-episode-17-english-subbed`, selected the `480 (SD)` source and reported
-the same total duration of 25:19.
+Wszystkie trzy urządzenia rozwiązały tę samą ścieżkę treści,
+`mao-episode-17-english-subbed`, wybrały źródło `480 (SD)` i zgłosiły ten sam łączny
+czas trwania wynoszący 25:19.
 
-| Device | Kodi | Add-on | Resolve | Playback evidence |
+| Urządzenie | Kodi | Dodatek | Rozwiąż | Dowody odtwarzania |
 |---|---:|---:|---:|---|
-| BlueStacks1 (`127.0.0.1:5715`) | 21.3 | 0.26.1 | 2.009 s | input stream, demux, AAC decoder, 12 s progression |
-| Sony TV (`192.168.1.12:5555`) | 21.3 | 0.26.1 | 5.056 s | input stream, demux, AAC decoder, 12 s progression |
-| Bedroom TV (`192.168.1.18:5555`) | 21.3 | 0.26.1 | 2.021 s | input stream, demux, AAC decoder, 12 s progression |
+| BlueStacks1 (`127.0.0.1:5715`) | 21,3 | 0.26.1 | 2,009 s | strumień wejściowy, demux, dekoder AAC, progresja 12 s |
+| Sony TV (`192.168.1.12:5555`) | 21,3 | 0.26.1 | 5,056 s | strumień wejściowy, demux, dekoder AAC, progresja 12 s |
+| Bedroom TV (`192.168.1.18:5555`) | 21,3 | 0.26.1 | 2,021 s | strumień wejściowy, demux, dekoder AAC, progresja 12 s |
 
-Sanitized machine-readable reports:
+Oczyszczone raporty do odczytu maszynowego:
 
 - [BlueStacks1](2026-07-28-bluestacks1-watchnixtoons2-0.26.1.json)
 - [Sony TV](2026-07-28-sony-watchnixtoons2-0.26.1.json)
 - [Bedroom TV](2026-07-28-bedroom-tv-watchnixtoons2-0.26.1.json)
 
-## Bedroom TV profile rollout
+## Wdrożenie profilu Bedroom TV
 
-The same device also received Profile Sync `0.1.6` from
-`repository.mwodevelop.testing`. The add-on E2E paired the device with an
-ephemeral local backend, completed an authenticated heartbeat, verified a
-signed candidate and confirmed that read-only mode did not apply the candidate.
-The installed origin in Kodi's add-on database was
-`repository.mwodevelop.testing`.
+To samo urządzenie otrzymało również Profile Sync `0.1.6` od
+`repository.mwodevelop.testing`. Dodatek E2E sparował urządzenie z tymczasowym lokalnym
+backendem, wykonał uwierzytelniony puls, zweryfikował podpisanego kandydata i
+potwierdził, że kandydat nie ma zastosowania w trybie tylko do odczytu. Zainstalowanym
+źródłem w bazie danych dodatku Kodi był `repository.mwodevelop.testing`.
 
-Sanitized machine-readable report:
-[Bedroom TV Profile Sync](2026-07-28-bedroom-tv-profile-sync-0.1.6.json).
+Oczyszczony raport do odczytu maszynowego: [Bedroom TV Profile
+Sync](2026-07-28-bedroom-tv-profile-sync-0.1.6.json).
 
-## Cyclic update proof
+## Dowód cyklicznej aktualizacji
 
-The first remote cycle prepared a content-addressed candidate in a read-only
-job, verified it in the writer job and opened reviewed PR
-<https://github.com/mwoDevelop/ch.repo/pull/5>. The post-merge cycle initially
-found that a fresh checkout did not contain the accepted immutable upstream
-object. PR <https://github.com/mwoDevelop/ch.repo/pull/7> fixed that by fetching
-the exact accepted commit when absent.
+Pierwszy cykl zdalny przygotował merytorycznie zaadresowanego kandydata na stanowisko
+tylko do odczytu, zweryfikował go na stanowisku piszącego i otworzył recenzowane PR
+<https://github.com/mwoDevelop/ch.repo/pull/5>. Cykl po połączeniu początkowo wykazał,
+że nowa kasa nie zawierała zaakceptowanego, niezmiennego obiektu upstream. PR
+<https://github.com/mwoDevelop/ch.repo/pull/7> naprawił to, pobierając dokładnie
+zaakceptowane zatwierdzenie, gdy jest nieobecne.
 
-The final second cycle completed successfully and skipped candidate
-preparation, artifact upload and PR creation as a true no-op:
+Ostatni drugi cykl zakończył się pomyślnie i pominął przygotowanie kandydatów,
+przesłanie artefaktów i tworzenie PR, co okazało się prawdziwym niepowodzeniem:
 <https://github.com/mwoDevelop/ch.repo/actions/runs/30374992303>.
 
-`mwonuc` was unreachable at `192.168.1.25` during this rollout (`No route to
-host`), so no NUC mutation was attempted. Its two account-specific SSH keys
-remain installed and previously passed cross-account rejection tests.
+`mwonuc` był nieosiągalny w momencie `192.168.1.25` podczas tego wdrożenia (`No route to
+host`), więc nie podjęto próby mutacji NUC. Jego dwa klucze SSH specyficzne dla konta
+pozostają zainstalowane i przeszły wcześniej testy odrzucania dla wielu kont.

@@ -1,18 +1,26 @@
-# QNAP provider metadata relay
+# Przekaźnik metadanych providerów na QNAP
 
-This stateless Container Station application is the narrow network bridge used
-when a Kodi VPN exit is rejected by a public provider. It does not receive
-Real-Debrid credentials or resolved playback traffic.
+W przypadku rutynowych buildów i wdrożeń współdzielonych z innymi usługami Kodi na QNAP
+użyj [`tools/qnap_images.py`](../../docs/qnap-images.md). Poniższe polecenia pozostają
+polityką przekazywania niższego poziomu i interfejsem cyklu życia.
 
-Deployment constraints:
+Ta bezstanowa aplikacja Container Station jest wąskim mostem sieciowym używanym, gdy
+adres wyjściowy VPN Kodi jest odrzucany przez publicznego providera. Nie otrzymuje poświadczeń
+Real-Debrid ani rozwiązanego ruchu związanego z odtwarzaniem.
 
-- pin `MWO_RELAY_IMAGE` by GHCR digest;
-- bind production to an explicit private QNAP LAN address, never `0.0.0.0`;
-- do not add volumes, secrets, host networking or elevated capabilities;
-- keep the fixed provider/path allowlist in the image;
-- use the isolated loopback smoke before replacing the production project.
+Cykl życia hosta dotyczy `/var/run/docker.sock`, silnika Docker zarządzanego i
+wyświetlanego przez GUI Container Station 3. Nie wdrażaj tego projektu w oddzielnym
+silniku `/var/run/system-docker.sock`.
 
-Validate the Compose policy:
+Ograniczenia wdrożeniowe:
+
+- przypnij `MWO_RELAY_IMAGE` przez digest GHCR;
+- powiąż produkcję z jawnym prywatnym adresem LAN QNAP, nigdy `0.0.0.0`;
+- nie dodawaj woluminów, wpisów tajnych, sieci hostów ani zwiększonych możliwości;
+- zachowaj w obrazie stałą listę dozwolonych providerów i ścieżek;
+- użyj izolowanego testu smoke na loopbacku przed wymianą projektu produkcyjnego.
+
+Sprawdź politykę Compose:
 
 ```bash
 python tools/qnap_provider_relay.py policy \
@@ -21,7 +29,6 @@ python tools/qnap_provider_relay.py policy \
   --allow-placeholder
 ```
 
-The host lifecycle tool uploads only this Compose file and a mode-0600
-environment file. Smoke mode uses a unique directory and project; after
-verification, run its matching `destroy` command to remove all containers,
-networks and control files.
+Narzędzie cyklu życia hosta przesyła tylko ten plik Compose i plik środowiska w trybie
+`0600`. Tryb smoke wykorzystuje unikalny katalog i projekt; po weryfikacji uruchom
+pasujące polecenie `destroy`, aby usunąć wszystkie kontenery, sieci i pliki kontrolne.

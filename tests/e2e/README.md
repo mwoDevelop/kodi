@@ -1,37 +1,37 @@
-# Reproducible E2E
+# Powtarzalne E2E
 
-Run from any directory:
+Uruchom z dowolnego katalogu:
 
 ```bash
 /home/mwo/projects/kodi/tests/e2e/run.sh
 ```
 
-The script:
+Skrypt:
 
-1. removes only `/home/mwo/projects/kodi/.e2e`;
-2. builds two complete repository snapshots;
-3. compares them recursively;
-4. starts a temporary local HTTP repository;
-5. starts with Umbrella only and resolves MwoScrapers recursively from its
-   required Kodi dependencies;
-6. loads the external provider registry;
-7. compiles the isolated downstream resolver files;
-8. executes repository structure, dependency, provenance, and ZIP safety tests.
+1. usuwa tylko `/home/mwo/projects/kodi/.e2e`;
+2. buduje dwie kompletne migawki repozytorium;
+3. porównuje je rekurencyjnie;
+4. uruchamia tymczasowe lokalne repozytorium HTTP;
+5. zaczyna się tylko od Umbrella i rozwiązuje rekurencyjnie MwoScrapers na podstawie
+   wymaganych zależności Kodi;
+6. ładuje rejestr dostawców zewnętrznych;
+7. kompiluje izolowane pliki programu tłumaczącego downstream;
+8. wykonuje testy struktury repozytorium, zależności, pochodzenia i bezpieczeństwa ZIP.
 
-Container form:
+Formularz kontenera:
 
 ```bash
 /home/mwo/projects/kodi/tests/e2e/run-docker.sh
 ```
 
-The container wrapper requires a running Docker daemon. CI uses the native
-script in a fresh GitHub runner, which provides the same clean-filesystem
-property without requiring Docker-in-Docker.
+Opakowanie kontenera wymaga działającego demona Docker. CI używa natywnego skryptu w
+nowym programie uruchamiającym GitHub, który zapewnia tę samą właściwość czystego
+systemu plików bez konieczności stosowania Docker-in-Docker.
 
 ## BlueStacks1 / Kodi 21.3
 
-Build `dist`, connect ADB to the `BlueStacks1` instance, then prepare a
-recoverable device test:
+Zbuduj `dist`, podłącz ADB do instancji `BlueStacks1`, a następnie przygotuj test
+urządzenia do odzyskania:
 
 ```bash
 python tests/e2e/bluestacks_e2e.py \
@@ -40,12 +40,12 @@ python tests/e2e/bluestacks_e2e.py \
   --backup-dir .device-backups/bluestacks1-$(date +%Y%m%d-%H%M%S)
 ```
 
-The clean dependency test requires Umbrella and MwoScrapers to be absent before
-`prepare`; the script records that state after backing up the existing profile.
-Install the copied repository ZIP and only Umbrella through Kodi's own add-on
-manager, as printed by the script. Then validate installed IDs, versions,
-their owning repository (`origin` in Kodi's add-on database), automatic
-MwoScrapers installation, and the Kodi log:
+Czysty test zależności wymaga nieobecności Umbrella i MwoScrapers przed `prepare`;
+skrypt rejestruje ten stan po utworzeniu kopii zapasowej istniejącego profilu.
+Zainstaluj skopiowane repozytorium ZIP i tylko Umbrella za pośrednictwem własnego
+menedżera dodatków Kodi, zgodnie z wydrukiem skryptu. Następnie sprawdź zainstalowane
+identyfikatory, wersje, repozytorium (`origin` w bazie danych dodatku Kodi),
+automatyczną instalację MwoScrapers i dziennik Kodi:
 
 ```bash
 python tests/e2e/bluestacks_e2e.py \
@@ -55,14 +55,14 @@ python tests/e2e/bluestacks_e2e.py \
   --result docs/e2e-results/bluestacks1.json
 ```
 
-The testing repository is expected by default. To exercise the production
-channel, pass `--expected-origin repository.mwodevelop` to both `prepare` and
-`verify`. This also selects the stable repository ZIP and fails if either
-component remains attached to the testing channel.
+Domyślnie oczekiwane jest repozytorium testing. Aby skorzystać z kanału produkcyjnego,
+przekaż `--expected-origin repository.mwodevelop` zarówno do `prepare`, jak i `verify`.
+Spowoduje to również wybranie ZIP repozytorium stable i zakończy się niepowodzeniem,
+jeśli którykolwiek komponent pozostanie podłączony do kanału testing.
 
-After a controlled Sintel search, source selection, at least 30 seconds of
-playback, and stopping Kodi's player, validate the media pipeline from the
-redacted-safe log markers:
+Po kontrolowanym wyszukiwaniu Sintel, wyborze źródła, co najmniej 30 sekundach
+odtwarzania i zatrzymaniu odtwarzacza Kodi, sprawdź potok multimediów na podstawie
+zredagowanych, bezpiecznych znaczników dziennika:
 
 ```bash
 python tests/e2e/bluestacks_e2e.py \
@@ -74,11 +74,11 @@ python tests/e2e/bluestacks_e2e.py \
   --observed-seconds 30
 ```
 
-This intentional three-phase design respects Android scoped storage and tests
-the real Kodi repository path instead of injecting files into Kodi's profile.
+Ten celowy projekt trójfazowy uwzględnia pamięć masową o określonym zakresie Android i
+testuje rzeczywistą ścieżkę repozytorium Kodi zamiast wstrzykiwać pliki do profilu Kodi.
 
-Verify the public file-source URL through Kodi's own HTTP directory and ZIP
-engines:
+Zweryfikuj publiczny adres URL źródła pliku za pomocą własnego katalogu HTTP Kodi i
+silników ZIP:
 
 ```bash
 python tests/e2e/kodi_http_source.py \
@@ -86,17 +86,16 @@ python tests/e2e/kodi_http_source.py \
   --serial emulator-5554
 ```
 
-The check fails unless Kodi lists `repository.mwodevelop-1.0.0.zip`, downloads
-and opens that archive, finds the `repository.mwodevelop` root, and reads its
-`addon.xml` manifest.
+Sprawdzanie kończy się niepowodzeniem, chyba że Kodi wyświetli listę
+`repository.mwodevelop-1.0.0.zip`, pobierze i otworzy to archiwum, znajdzie katalog
+główny `repository.mwodevelop` i odczyta jego manifest `addon.xml`.
 
-## WatchNixtoons2 on BlueStacks1
+## WatchNixtoons2 na BlueStacks1
 
-Install `WatchNixtoons2 (mwoDevelop)` from the stable repository through Kodi's
-GUI. Open `Latest Releases`, record the item count and available qualities,
-play a selected quality for a controlled interval, then stop playback. Validate
-the stable ownership, cleanup state, deterministic artifact, and Kodi media
-pipeline with:
+Zainstaluj `WatchNixtoons2 (mwoDevelop)` z repozytorium stable poprzez GUI Kodi. Otwórz
+`Latest Releases`, zapisz liczbę elementów i dostępną jakość, odtwarzaj wybraną jakość
+przez kontrolowany interwał, a następnie zatrzymaj odtwarzanie. Sprawdź własność stable,
+stan czyszczenia, artefakt deterministyczny i potok mediów Kodi za pomocą:
 
 ```bash
 python tests/e2e/watchnixtoons2_bluestacks.py \
@@ -109,15 +108,15 @@ python tests/e2e/watchnixtoons2_bluestacks.py \
   --result docs/e2e-results/2026-07-25-bluestacks1-watchnixtoons2.json
 ```
 
-The verifier is read-only on the Kodi profile. It fails unless the mwoDevelop
-add-on is enabled and owned by the stable repository, the legacy add-on and
-testing repository are absent, and the latest matching playback log contains
-input stream, demuxer, audio decoder, and clean player-close markers.
+Weryfikator jest przeznaczony tylko do odczytu w profilu Kodi. Nie powiedzie się, chyba
+że dodatek mwoDevelop jest włączony i jest własnością repozytorium stable, nie ma
+starszego dodatku i repozytorium testing, a najnowszy pasujący dziennik odtwarzania
+zawiera strumień wejściowy, demuxer, dekoder audio i czyste znaczniki zamknięcia
+odtwarzacza.
 
 ## Sony Android TV / Kodi 21.3
 
-Use an isolated ADB server when another local Android client keeps replacing
-the default server:
+Użyj izolowanego serwera ADB, gdy inny lokalny klient Android zastępuje serwer domyślny:
 
 ```bash
 /home/mwo/android-sdk/platform-tools/adb -P 5038 start-server
@@ -125,9 +124,9 @@ the default server:
 export ADB_SERVER_SOCKET=tcp:localhost:5038
 ```
 
-The Umbrella matrix can invoke a real autoplay URL through acknowledged Kodi
-JSON-RPC, observes the player, and stores redacted Kodi and Umbrella resolver
-diagnostics. Forward Kodi's TCP JSON-RPC port first:
+Matryca Umbrella może wywołać prawdziwy adres URL autoodtwarzania poprzez zatwierdzony
+Kodi JSON-RPC, obserwuje odtwarzacz i przechowuje zredagowaną diagnostykę resolwera Kodi
+i Umbrella. Najpierw przekaż port TCP JSON-RPC Kodi:
 
 ```bash
 /home/mwo/android-sdk/platform-tools/adb \
@@ -144,10 +143,9 @@ diagnostics. Forward Kodi's TCP JSON-RPC port first:
   --result docs/e2e-results/sony-umbrella-matrix.json
 ```
 
-For the deterministic WatchNixtoons2 playback test, first select `Auto Play
-Highest Quality` in the add-on's Playback Method setting. The runner validates
-the live `Latest Releases` catalogue and a known episode through Kodi's media
-pipeline:
+W przypadku deterministycznego testu odtwarzania WatchNixtoons2, najpierw wybierz `Auto
+Play Highest Quality` w ustawieniu metody odtwarzania dodatku. Biegacz sprawdza aktualny
+katalog `Latest Releases` i znany odcinek w mediach Kodi:
 
 ```bash
 .venv/bin/python tests/e2e/sony_watchnixtoons2.py \
@@ -159,12 +157,13 @@ pipeline:
   --result docs/e2e-results/sony-watchnixtoons2.json
 ```
 
-Both reports omit credentials, magnets, and resolved media URLs.
+Obydwa raporty pomijają dane uwierzytelniające, magnesy i rozwiązane adresy URL
+multimediów.
 
-Before a resolver matrix, the sanitized Real-Debrid probe can distinguish an
-invalid account from Real-Debrid's supported `disabled_endpoint` cache-check
-mode. It runs inside Kodi and emits only account type, HTTP/error codes and
-timings; it never exports the token or account identity:
+Przed matrycą resolwera oczyszczona sonda Real-Debrid może odróżnić nieprawidłowe konto
+od trybu sprawdzania pamięci podręcznej `disabled_endpoint` obsługiwanego przez
+Real-Debrid. Działa wewnątrz Kodi i emituje tylko typ konta, kody HTTP/błędów i czasy;
+nigdy nie eksportuje tokena ani tożsamości konta:
 
 ```bash
 .venv/bin/python tools/kodi_umbrella_rd_probe.py \
@@ -173,9 +172,10 @@ timings; it never exports the token or account identity:
   --serial 192.168.1.8:5555
 ```
 
-The focused search regression opens Umbrella's real virtual keyboard, submits a
-term, and verifies that Kodi receives a matching directory result. It fails
-immediately if a stale `source_progress` modal is still blocking the UI:
+Skoncentrowana regresja wyszukiwania otwiera prawdziwą wirtualną klawiaturę Umbrella,
+przesyła termin i sprawdza, czy Kodi otrzymuje pasujący wynik z katalogu. Natychmiast
+kończy się niepowodzeniem, jeśli nieaktualny mod `source_progress` nadal blokuje
+interfejs użytkownika:
 
 ```bash
 .venv/bin/python tests/e2e/umbrella_search_e2e.py \
@@ -188,12 +188,12 @@ immediately if a stale `source_progress` modal is still blocking the UI:
   --result docs/e2e-results/sony-umbrella-search.json
 ```
 
-Omit `--media-type tv` (or pass `--media-type movie`) for movie searches.
+Pomiń `--media-type tv` (lub pomiń `--media-type movie`) przy wyszukiwaniu filmów.
 
 ## BlueStacks1 / Kodi 21.3
 
-BlueStacks may expose Kodi's JSON-RPC only on the guest loopback interface.
-Forward it through the exact `BlueStacks1` ADB target:
+BlueStacks może udostępniać JSON-RPC Kodi tylko w interfejsie sprzężenia zwrotnego
+gościa. Prześlij go przez dokładny cel ADB `BlueStacks1`:
 
 ```bash
 export ADB_SERVER_SOCKET=tcp:localhost:5038
@@ -210,12 +210,12 @@ export ADB_SERVER_SOCKET=tcp:localhost:5038
   --result docs/e2e-results/bluestacks1-umbrella-matrix.json
 ```
 
-The ADB port is dynamic; confirm that `127.0.0.1:5555` still identifies the
-`Rvc64`/`BlueStacks1` instance before running the command. JSON-RPC access must
-also be enabled in Kodi for the duration of the test and restored afterwards.
+Port ADB jest dynamiczny; przed uruchomieniem polecenia potwierdź, że `127.0.0.1:5555`
+nadal identyfikuje instancję `Rvc64`/`BlueStacks1`. Dostęp JSON-RPC musi być również
+włączony w Kodi na czas trwania testu, a następnie przywrócony.
 
-The same focused search check uses the forwarded JSON-RPC endpoint in
-BlueStacks:
+Ta sama kontrola wyszukiwania ukierunkowanego wykorzystuje przekazany punkt końcowy
+JSON-RPC w BlueStacks:
 
 ```bash
 .venv/bin/python tests/e2e/umbrella_search_e2e.py \
@@ -228,10 +228,10 @@ BlueStacks:
   --result docs/e2e-results/bluestacks1-umbrella-search.json
 ```
 
-## Profile Sync apply/rollback canary
+## Test canary zastosowania i rollbacku Profile Sync
 
-Run a reversible real-device canary of the installed stable Profile Sync
-applier:
+Uruchom odwracalny kanarek na urządzeniu rzeczywistym zainstalowanego aplikatora stable
+Profile Sync:
 
 ```bash
 PYTHONPATH=. .venv/bin/python \
@@ -242,16 +242,16 @@ PYTHONPATH=. .venv/bin/python \
   --result .kodi-private/e2e/x88pro20-profile-sync-apply.json
 ```
 
-The probe performs one successful managed Umbrella setting apply, restores
-the original value, injects a failure after the first write of a second
-transaction, and requires rollback, quarantine, journal cleanup and exact
-settings restoration. Private Profile Sync state is restored byte-for-byte
-inside Kodi and never leaves the device.
+Sonda wykonuje jedno pomyślne zastosowanie zarządzanego ustawienia Umbrella, przywraca
+pierwotną wartość, zgłasza błąd po pierwszym zapisie drugiej transakcji i wymaga
+rollback, kwarantanny, oczyszczenia dziennika i przywrócenia dokładnych ustawień.
+Prywatny stan Profile Sync jest przywracany bajt po bajcie wewnątrz Kodi i nigdy nie
+opuszcza urządzenia.
 
-## Profile Sync production TLS and signed-report step
+## Produkcyjny TLS Profile Sync i etap podpisanego raportu
 
-Create a one-time pairing file on the host without printing the code, then
-configure or synchronize one Android endpoint through the real QNAP service:
+Utwórz jednorazowy plik parowania na hoście bez drukowania kodu, a następnie skonfiguruj
+lub zsynchronizuj jeden punkt końcowy Android za pośrednictwem prawdziwej usługi QNAP:
 
 ```bash
 python tools/qnap_profile_sync.py --references .env \
@@ -269,7 +269,7 @@ PYTHONPATH=. .venv/bin/python \
   --channel home-stable --action configure
 ```
 
-The in-Kodi probe copies only the public CA certificate, keeps enrollment
-secrets inside Kodi and emits a sanitized marker. `--action sync` additionally
-requires the signed assignment, exact revision apply and signed report to
-complete with no pending report.
+Sonda in-Kodi kopiuje tylko publiczny certyfikat urzędu certyfikacji, przechowuje
+tajemnice rejestracji w Kodi i emituje oczyszczony znacznik. `--action sync` wymaga
+dodatkowo podpisanego przypisania, zastosowania dokładnej wersji i podpisanego raportu,
+aby nie był on w toku.

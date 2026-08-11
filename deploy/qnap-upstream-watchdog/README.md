@@ -1,12 +1,24 @@
-# QNAP upstream synchronization watchdog
+# Watchdog synchronizacji upstream na QNAP
 
-This independent Container Station service polls the latest run of every
-scheduled upstream workflow. It becomes unhealthy when a workflow is missing,
-failed, or older than 36 hours, so a missing GitHub cron cannot hide itself.
+W przypadku rutynowych kompilacji i wdrożeń współdzielonych z innymi usługami Kodi QNAP,
+użyj [`tools/qnap_images.py`](../../docs/qnap-images.md).
 
-The service uses only public GitHub API reads. It has no repository write
-token, volumes, published ports, capabilities, or writable root filesystem.
-Deploy only an immutable multi-architecture GHCR digest:
+Ta niezależna usługa Container Station odpytuje najnowsze uruchomienie każdego
+cyklicznego workflow upstream. Zgłasza `unhealthy`, gdy brakuje workflow, zakończył się
+on błędem albo jest starszy niż 36 godzin, dzięki czemu brakujący cron GitHub jest widoczny.
+
+Proces odpytuje GitHub co sześć godzin; Container Station ocenia ostatni utrwalony wynik
+co pięć minut. Wersjonowany manifest obejmuje centralne uzgadnianie, audyt zaakceptowanych
+providerów i artefaktów, discovery providerów, Umbrella i WatchNixtoons2. Zobacz pełny
+[katalog procesów cyklicznych](../../docs/scheduled-processes.md), aby poznać
+własność, granice zapisu i polecenia weryfikacji.
+
+Usługa korzysta wyłącznie z publicznych odczytów API GitHub. Nie ma tokena zapisu
+repozytorium, woluminów, opublikowanych portów, dodatkowych capabilities ani zapisywalnego
+głównego systemu plików. Wdrażaj wyłącznie niezmienny wieloarchitekturowy digest GHCR.
+
+Uruchom Compose na `/var/run/docker.sock`, silniku zarządzanym i wyświetlanym przez GUI
+Container Station 3. Nie używaj oddzielnego silnika `/var/run/system-docker.sock`.
 
 ```bash
 docker compose \
@@ -14,6 +26,6 @@ docker compose \
   -f deploy/qnap-upstream-watchdog/compose.yaml config
 ```
 
-Configure Container Station/QTS to notify on an unhealthy container. The
-status document stays in a 1 MiB tmpfs and contains only workflow IDs, times,
-conclusions, and repository names.
+Skonfiguruj Container Station/QTS tak, aby powiadamiał o niezdrowym kontenerze. Dokument
+statusu pozostaje w pliku tmpfs o rozmiarze 1 MiB i zawiera tylko identyfikatory
+workflow, czasy, wnioski i nazwy repozytoriów.

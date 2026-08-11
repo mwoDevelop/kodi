@@ -1,4 +1,4 @@
-# Niezależny review planu QNAP Profile Sync
+# Niezależna recenzja planu QNAP Profile Sync
 
 Data: 2026-07-27
 

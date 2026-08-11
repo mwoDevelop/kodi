@@ -1,4 +1,4 @@
-# Review planu Profile Sync: NUC, Flatpak i wiele kont
+# Recenzja planu Profile Sync: NUC, Flatpak i wiele kont
 
 Data: 2026-07-27
 

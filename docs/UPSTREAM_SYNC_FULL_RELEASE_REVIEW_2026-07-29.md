@@ -1,4 +1,4 @@
-# Niezależny review planu pełnego release upstream sync
+# Niezależna recenzja planu pełnego wydania synchronizacji upstream
 
 Data: 2026-07-29
 

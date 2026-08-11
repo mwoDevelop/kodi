@@ -24,10 +24,13 @@ def result(returncode=0, stdout="", stderr=""):
 
 def android_device():
     registry = {
-        "schema": 1,
+        "schema": 2,
         "devices": {
             "android-tv": {
                 "display_name": "Android TV",
+                "physical_host_id": "android-tv-host",
+                "principal_id": "principal-android-tv",
+                "platform": "android",
                 "roles": ["consumer"],
                 "expected": {
                     "model": "TV MODEL",

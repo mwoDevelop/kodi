@@ -1,40 +1,40 @@
-# QNAP Profile Sync synthetic smoke
+# QNAP Profile Sync dym syntetyczny
 
-Date: 2026-07-27
+Data: 27.07.2026
 
-Scope: Stage 6A only. The run used synthetic public-key data, a one-time
-directory outside `/share/ProfileSync`, a loopback-only port and restart
-policy `no`. It did not contain Kodi profiles, user credentials, tokens or
-production keys.
+Zakres: tylko etap 6A. W przebiegu wykorzystano syntetyczne dane klucza publicznego,
+jednorazowy katalog poza `/share/ProfileSync`, port obsługujący tylko pętlę zwrotną i
+zasady ponownego uruchamiania `no`. Nie zawierał profili Kodi, danych
+uwierzytelniających użytkowników, tokenów ani kluczy produkcyjnych.
 
-## Immutable image
+## Niezmienny obraz
 
-- server version: 0.1.0;
-- build commit: `b5ece3776f877634f9574def249a4612f49dacc8`;
+- wersja serwera: 0.1.0;
+- zatwierdzenie kompilacji: `b5ece3776f877634f9574def249a4612f49dacc8`;
 - manifest:
   `ghcr.io/mwodevelop/kodi-profile-sync-server@sha256:9df7716d8b6606a1657f9dce77752105a8ce6036a974f975b3adc993d44c6671`;
-- verified platforms: `linux/amd64`, `linux/arm/v7`;
-- release workflow:
+- sprawdzone platformy: `linux/amd64`, `linux/arm/v7`;
+- zwolnij workflow:
   <https://github.com/mwoDevelop/kodi-profile-sync-server/actions/runs/30300480694>.
 
-## Live QNAP evidence
+## Dowody na żywo QNAP
 
-- host architecture: `armv7l`;
+- architektura hosta: `armv7l`;
 - Docker: `26.1.4-qnap2`;
-- Compose: `2.27.1-qnap1`;
-- storage driver: `overlay2`;
-- main array remained degraded and rebuilding (`[U_]`, approximately 30.2%
-  during the successful run), so production was not attempted;
-- Compose project: `qnap-profile-sync-smoke`;
-- published endpoint: QNAP loopback port 28765 only;
-- `/ready`: `ready`, API `v1`, database schema 2, verified registry mode;
-- a manual process restart returned to `ready`;
-- a controlled stop made the endpoint unavailable;
-- starting the same immutable deployment returned it to `ready`.
+- Utwórz: `2.27.1-qnap1`;
+- sterownik pamięci masowej: `overlay2`;
+- główny układ pozostał uszkodzony i odbudowywał się (`[U_]`, około 30,2% podczas
+  pomyślnego przebiegu), więc nie podjęto próby produkcji;
+- Utwórz projekt: `qnap-profile-sync-smoke`;
+- opublikowany punkt końcowy: tylko port pętli zwrotnej QNAP 28765;
+- `/ready`: `ready`, API `v1`, schemat bazy danych 2, tryb rejestracji zweryfikowanej;
+- ręczny restart procesu powrócił do `ready`;
+- kontrolowane zatrzymanie spowodowało, że punkt końcowy stał się niedostępny;
+- uruchomienie tego samego niezmiennego wdrożenia spowodowało zwrócenie go do `ready`.
 
-## Cleanup evidence
+## Dowody oczyszczenia
 
-After verification, Compose down and the guarded cleanup completed:
+Po weryfikacji, Utwórz i zakończono strzeżone czyszczenie:
 
 ```json
 {
@@ -45,10 +45,10 @@ After verification, Compose down and the guarded cleanup completed:
 }
 ```
 
-No autostart, tunnel, anonymous volume, Compose network or smoke directory
-remained. Production `/share/ProfileSync` paths were never used.
+Nie pozostał żaden autostart, tunel, anonimowy wolumin, sieć Compose ani katalog dymu.
+Ścieżki produkcyjne `/share/ProfileSync` nigdy nie były używane.
 
-## Reproducible host flow
+## Powtarzalny przepływ hosta
 
 ```bash
 cd /home/mwo/projects/kodi
@@ -68,5 +68,5 @@ cd /home/mwo/projects/kodi
 .venv/bin/python tools/qnap_profile_sync.py status
 ```
 
-The tool requires the private mode-0600 `.env` and a pinned QNAP host key.
-It never prints the host, username or password.
+Narzędzie wymaga trybu prywatnego 0600 `.env` i przypiętego klucza hosta QNAP. Nigdy nie
+drukuje hosta, nazwy użytkownika ani hasła.

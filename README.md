@@ -1,66 +1,79 @@
-# mwoDevelop Kodi repository
+# Repozytorium mwoDevelop Kodi
 
-Reproducible publisher for the `mwoDevelop` Umbrella fork, MwoScrapers, and
-WatchNixtoons2.
+Powtarzalny system publikacji forków `mwoDevelop`: Umbrella, MwoScrapers,
+WatchNixtoons2 i Profile Sync.
 
-## Build
+## Dokumentacja
+
+Zacznij od [indeksu dokumentacji](docs/README.md). Oddziela on aktualne instrukcje operacyjne
+od planów architektury, zapisów przeglądów i historycznych dowodów E2E.
+
+| Zadanie | Dokument |
+|---|---|
+| Zainstaluj, zbuduj lub uruchom repozytorium E2E | Ten plik README |
+| Przywróć lub zsynchronizuj konfigurację użytkownika Kodi | [Prywatne profile Kodi](docs/kodi-private-profile.md) |
+| Obsługuj obrazy QNAP | [Cykl życia obrazu QNAP](docs/qnap-images.md) |
+| Sprawdź zaplanowaną automatyzację i kontrole stanu | [Procesy cykliczne](docs/scheduled-processes.md) |
+| Uruchom lub rozszerz testy E2E | [Przewodnik po testach E2E](tests/e2e/README.md) |
+| Znajdź datowany wynik wdrożenia | [Indeks dowodów E2E](docs/e2e-results/README.md) |
+
+## Budowanie
 
 ```bash
 python3 tools/build_repo.py --output dist
 python3 -m pytest
 ```
 
-The build is deterministic: independent stable/testing locks, component
-commits, file contents, and fixed ZIP metadata completely define `dist/`.
+Kompilacja jest deterministyczna: niezależne locki stable/testing, commity
+komponentów, zawartość plików i stałe metadane ZIP całkowicie definiują `dist/`.
 
-## Install stable
+## Instalacja kanału stable
 
-Add this address as a Kodi file source:
+Dodaj ten adres jako źródło plików w Kodi:
 
 <https://mwodevelop.github.io/kodi/repo>
 
-Then use `Add-ons -> Install from zip file`, open that source and install
+Następnie wybierz `Add-ons -> Install from zip file`, otwórz to źródło i zainstaluj
 `repository.mwodevelop-1.0.0.zip`.
 
-The repository ZIP is also available directly from:
+Plik ZIP repozytorium jest także dostępny bezpośrednio pod adresem:
 
 <https://mwodevelop.github.io/kodi/repository.mwodevelop-1.0.0.zip>
 
-Open `mwoDevelop Add-ons`, then install Umbrella only. Kodi automatically
-installs the MwoScrapers module as its required technical dependency.
-`MwoScrapers Manager` is an optional, separately installable Program add-on
-that opens provider settings and reports their enabled/disabled state.
+Otwórz `mwoDevelop Add-ons`, a następnie zainstaluj żądane widoczne dodatki: Umbrella,
+WatchNixtoons2 (mwoDevelop), mwoDevelop Profile Sync lub MwoScrapers Manager. Instalacja
+Umbrella powoduje automatyczną instalację modułu technicznego MwoScrapers. Oddzielnie
+widoczny menedżer otwiera ustawienia providerów i pokazuje, które z nich są włączone.
 
-## Install testing
+## Instalacja kanału testing
 
-Install `repository.mwodevelop.testing-1.0.0.zip` from:
+Zainstaluj `repository.mwodevelop.testing-1.0.0.zip` z:
 
 <https://mwodevelop.github.io/kodi/repository.mwodevelop.testing-1.0.0.zip>
 
-Use testing only for release candidates. The channel contains Umbrella, the
-technical `script.module.mwoscrapers` dependency, and the separately visible
-`script.mwoscrapers` manager. WatchNixtoons2 release candidates are published
-here for side-by-side playback testing before promotion to stable.
+Używaj kanału testing wyłącznie dla kandydatów do wydania. Zawiera te same rodzaje dodatków co
+stable, ale jego dokładne wersje mogą się różnić w trakcie testowania kandydata.
+Autorytatywnym opisem zawartości obu kanałów są pliki w `manifests/locks/`.
 
-## Reproducible E2E
+## Powtarzalne E2E
 
 ```bash
 tests/e2e/run.sh
 ```
 
-or in an isolated container:
+lub w izolowanym kontenerze:
 
 ```bash
 tests/e2e/run-docker.sh
 ```
 
-The scenario performs two independent builds, compares every byte, serves the
-repository over HTTP, installs Umbrella and recursively resolves MwoScrapers
-from the repository metadata, validates the provider contract, and compiles the
-downstream resolver.
+Scenariusz przeprowadza dwie niezależne kompilacje, porównuje każdy bajt, obsługuje
+udostępnia repozytorium przez HTTP, instaluje Umbrella i rekursywnie rozwiązuje
+zależność MwoScrapers na podstawie metadanych repozytorium, sprawdza kontrakt
+providerów oraz kompiluje downstreamowy resolver.
 
-To align the provider configuration on an Android Kodi target and invalidate
-only Umbrella's provider cache, run:
+Aby wyrównać konfigurację providerów na docelowym urządzeniu Android z Kodi i
+unieważnić wyłącznie cache providerów Umbrella, uruchom:
 
 ```bash
 python3 tools/kodi_mwoscrapers_configure.py \
@@ -69,35 +82,42 @@ python3 tools/kodi_mwoscrapers_configure.py \
   --comet-endpoint https://comet.feels.legal
 ```
 
-For a LAN device whose VPN exit is rejected by Torrentio, pass the private
-relay `/torrentio` endpoint instead. The adapter always retains its public
-Torrentio fallback; Comet, Real-Debrid credentials, magnet resolution and the
-final media URL never pass through that relay.
+W przypadku urządzenia LAN, którego adres wyjściowy VPN jest odrzucany przez
+Torrentio, podaj zamiast tego prywatny endpoint przekaźnika `/torrentio`. Adapter
+zawsze zachowuje publiczny fallback Torrentio. Zapytania do Comet, poświadczenia
+Real-Debrid, rozwiązywanie magnetów i końcowy adres URL materiału nigdy nie
+przechodzą przez ten przekaźnik.
 
-## Private Kodi configuration
+## Prywatna konfiguracja Kodi
 
-`tools/kodi_profile.py` exports and restores installed add-ons, their settings
-and credentials, and the selected skin while excluding caches and generated
-databases. Unencrypted snapshots are restricted to the Git-ignored
-`.kodi-private/` directory.
+`tools/kodi_profile.py` eksportuje i przywraca zainstalowane dodatki, ich ustawienia i
+dane uwierzytelniające oraz wybraną skórkę, wykluczając pamięci podręczne i wygenerowane
+bazy danych. Nieszyfrowane migawki są ograniczone do ignorowanego przez Git katalogu
+`.kodi-private/`.
 
-`tools/kodi_reinstall.py` adds a dry-run-first host workflow for a verified
-uninstall, Kodi storage cleanup, ABI-matched APK installation, snapshot
-restore, and live add-on/skin validation.
+`tools/kodi_reinstall.py` udostępnia wykonywany z hosta workflow typu dry-run-first,
+obejmujący zweryfikowaną dezinstalację, czyszczenie danych Kodi, instalację APK
+dopasowanego do ABI, przywrócenie migawki oraz kontrolę dodatków i skórki na żywo.
 
-The private device inventory accepts legacy schema 1 and schema 2. Migrate it
-atomically after a dry run, marking emulators explicitly:
+Prywatny rejestr urządzeń i konfiguracja reinstalacji używają wyłącznie schema 2.
+Zachowane backupy schema 1 obsługuje izolowany migrator offline. Najpierw wykonaj
+próbę bez zmian, a dopiero potem zastosuj migrację:
 
 ```bash
-python3 tools/kodi_devices.py migrate-registry \
+python3 tools/migrate_legacy.py config \
   --platform bluestacks1=android-emulator
-python3 tools/kodi_devices.py migrate-registry \
+python3 tools/migrate_legacy.py config \
   --platform bluestacks1=android-emulator \
-  --yes
+  --apply
 ```
 
-Read-only platform inventory resolves the neutral transport and Kodi lifecycle
-without printing endpoints, usernames, home paths or private references:
+`python3 tools/legacy_inventory.py` zapisuje zredagowany raport w
+`.kodi-private/legacy-inventory.json`. Zestaw recovery o niezmiennej zawartości
+buduje `python3 tools/build_legacy_migration_kit.py`.
+
+Inwentaryzacja platformy w trybie tylko do odczytu ustala neutralny transport i cykl
+życia Kodi bez wyświetlania endpointów, nazw użytkowników, katalogów domowych ani
+odniesień do prywatnych danych:
 
 ```bash
 python3 tools/kodi_inventory.py bluestacks1 \
@@ -105,5 +125,18 @@ python3 tools/kodi_inventory.py bluestacks1 \
   --adb-server-port 5038
 ```
 
-See [Private Kodi profile snapshots](docs/kodi-private-profile.md) for the
-security boundary, exact contents, commands, and reproducible device checks.
+Zobacz [Prywatne migawki profili Kodi](docs/kodi-private-profile.md), aby poznać
+granice bezpieczeństwa, dokładną zawartość, polecenia i powtarzalne kontrole urządzeń.
+
+## Operacje
+
+Zobacz [indeks dokumentacji](docs/README.md), który prowadzi do instrukcji
+operacyjnych, architektury, review i materiałów historycznych.
+
+Zobacz [Procesy cykliczne](docs/scheduled-processes.md), aby poznać aktualny katalog
+workflow cron GitHub, monitoring QNAP, częstotliwość działania Kodi Profile Sync,
+granice zapisu i polecenia weryfikacji na żywo.
+
+Instrukcja [budowania i wdrażania obrazów QNAP](docs/qnap-images.md) opisuje wspólny
+interfejs `build`, `deploy`, `update` i `status` dla wszystkich trzech obrazów
+Container Station używanych przez projekt Kodi.

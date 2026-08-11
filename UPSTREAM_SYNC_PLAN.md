@@ -2,9 +2,13 @@
 
 Status: pełny release v1 zakończony
 
+Charakter dokumentu: plan architektoniczny i historyczny zapis bram release.
+Bieżące harmonogramy i polecenia kontroli opisuje
+`docs/scheduled-processes.md`; pełną nawigację zapewnia `docs/README.md`.
+
 Data bazowa: 2026-07-25
 
-Ostatnia aktualizacja: 2026-08-05
+Ostatnia aktualizacja: 2026-08-10
 
 Repo nadrzędne: `mwoDevelop/kodi`
 
@@ -17,9 +21,15 @@ Raporty review i decyzje:
   planu domknięcia do pełnego release;
 - `docs/UPSTREAM_MALWARE_SCANNING_PLAN.md` — propozycja bezpłatnej,
   fail-closed bramy ClamAV + analizy semantycznej przed wykonaniem i merge
-  kandydata; dokument wymaga osobnego review przed implementacją.
+  kandydata;
+- `docs/scheduled-processes.md` — bieżący katalog wszystkich harmonogramów,
+  granic zapisu, monitoringu i poleceń weryfikacyjnych.
 
 ## 0. Stan realizacji na 2026-08-05
+
+Ta tabela jest historycznym stanem bramy release z podanej daty. Nie służy do
+oceny bieżącego health ani dostępności urządzeń. Aktualny stan procesów
+cyklicznych należy sprawdzać zgodnie z `docs/scheduled-processes.md`.
 
 | Obszar | Stan | Dowód / luka |
 |---|---|---|
@@ -1020,11 +1030,19 @@ rulesetu; ewentualna przyszła App nie może być użyta do ominięcia tej bramy
 ## 14. Harmonogram i idempotencja
 
 GitHub cron jest statyczny i nie jest generowany z manifestu.
-`reconcile-upstreams.yml` uruchamia codziennie o 04:20 UTC discovery wszystkich
-tanich źródeł i reconcile. WatchNixtoons2 ma osobny repo-local slot 04:35 UTC;
-analogiczny slot Umbrelli zostanie rozłożony w czasie. Manifest może wyłączać
-komponent, lecz nie tworzy dynamicznego crona. Godzina nie jest traktowana
-jako SLA GitHub Actions.
+Aktualne dzienne sloty UTC to:
+
+- 04:20 — centralny `reconcile-upstreams.yml`;
+- 04:23 — read-only `check-provider-upstreams.yml`, który ponownie pobiera,
+  weryfikuje i skanuje zaakceptowane artefakty providerów;
+- 04:35 — `mwodevelop-watchnixtoons2-update.yml`;
+- 04:41 — `discover-provider-upstreams.yml` dla obserwacji provenance;
+- 04:50 — `propose-upstream-update.yml` Umbrelli.
+
+Pełny katalog wraz z repozytoriami, granicami zapisu i poleceniami kontroli
+jest w `docs/scheduled-processes.md`. Manifest komponentów może wyłączać
+komponent centralnego reconcile, lecz nie tworzy dynamicznego crona. Godzina
+nie jest traktowana jako SLA GitHub Actions.
 
 Jeżeli później koszt źródeł będzie różny, workflow może zawierać kilka
 statycznych slotów, a `schedule_slot` w manifeście przypisze komponent do
@@ -1047,7 +1065,7 @@ Idempotencja:
 - `force-with-lease` oraz kontrola poprzedniego Candidate-ID zapobiegają
   nadpisaniu ręcznej zmiany brancha botowego.
 
-## 15. Monitoring i raportowanie
+## 15. Monitorowanie i raportowanie
 
 Każdy run zapisuje GitHub job summary z tabelą:
 
@@ -1066,8 +1084,10 @@ Alerty:
 Alert „brak udanego harmonogramu przez 36 godzin” nie może być wystawiany
 przez monitorowany cron. V1 uruchamia niezależny watchdog poza GitHub Actions
 (preferowany kontener na QNAP), który odpytuje GitHub API o ostatni udany run
-każdego workflow. In-repo watchdog może być dodatkowym sygnałem, ale jego
-wspólna domena awarii jest jawnie udokumentowana.
+każdego z pięciu workflow wymienionych wyżej. Wersjonowany
+`manifests/upstream-watchdog.json` jest źródłem zakresu monitoringu. In-repo
+watchdog może być dodatkowym sygnałem, ale jego wspólna domena awarii jest
+jawnie udokumentowana.
 
 ## 16. Testy
 
@@ -1230,7 +1250,7 @@ Status etapów:
 | 7 — adapter Kodi/Rapideo | zakończony poza upstream automation | Rapideo jest domyślnie rekoncyliowane z oficjalnego repo i ma prywatny adapter logowania; nie jest fałszywie modelowane jako fork |
 | 8 — rollout/E2E | zakończony dla dostępnej macierzy | BlueStacks i X88 przeszły pełną macierz funkcjonalną, a BlueStacks/X88/Sony/Bedroom spójność Profile Sync, favourites oraz artwork; oba profile NUC pozostają nieosiągalnym odstępstwem infrastrukturalnym |
 
-### Etap 0 — zapis baseline
+### Etap 0 — zapis stanu bazowego
 
 Rezultat:
 
@@ -1369,7 +1389,7 @@ Rezultat:
 Kryterium zakończenia: zmiana wersji lub bajtów Rapideo jest wykrywana i
 raportowana z pełnym provenance.
 
-### Etap 8 — rollout MVP i E2E
+### Etap 8 — wdrożenie MVP i E2E
 
 Rezultat:
 
@@ -1446,7 +1466,7 @@ Writer legacy i nowy writer nie mogą działać równolegle dla tego samego
 komponentu. Cutover jest atomowy: wyłączenie starego schedule, potwierdzenie
 rulesetu i dopiero włączenie nowego write path.
 
-## 21. Plan domknięcia do pełnego release
+## 21. Plan domknięcia do pełnego wydania
 
 ### 21.1 Pakiet A — Umbrella PR automation
 
@@ -1490,7 +1510,7 @@ Kryterium odbioru: ręczna modyfikacja brancha zatrzymuje automat, retry
 odtwarza brakujący PR/check, a ten sam bezpieczny kandydat nie generuje
 churnu.
 
-### 21.3 Pakiet C — provider provenance i quarantine
+### 21.3 Pakiet C — pochodzenie providerów i kwarantanna
 
 1. Zmienić discovery na wyniki per provider z osobną osią osiągalności
    accepted/observed URL oraz typowaną policy.
@@ -1639,13 +1659,15 @@ deploymentu nie przebudowuje komponentu.
    odpytuje heartbeat workflowów i tworzy alert po 36 godzinach.
 4. Dokument operacyjny opisuje conflict, rewrite, supersede, reject,
    zatrzymanie jednego komponentu, forward-revert oraz containment przez
-   ponowne wdrożenie wcześniejszego immutable snapshotu.
+   ponowne wdrożenie wcześniejszego immutable snapshotu. Katalog procesów i
+   podstawową weryfikację operacyjną utrzymuje
+   `docs/scheduled-processes.md`.
 5. Próba awarii potwierdza, że błąd jednego adaptera nie blokuje raportu
    pozostałych i nie zmienia stable.
 6. Próba containment potwierdza blokadę kolejnych publikacji i brak
    nadpisania ZIP-a, a próba forward-revert używa wyższej wersji.
 
-### 21.9 Kolejność rollout i wydanie
+### 21.9 Kolejność wdrożenia i wydanie
 
 1. `shadow`: wszystkie adaptery wykonują discovery/prepare bez zapisu i
    przechodzą deterministyczny retry/no-op; liczba godzin od wdrożenia sama w
@@ -1670,7 +1692,7 @@ deploymentu nie przebudowuje komponentu.
    utworzony po tej promocji, aby release notes wskazywały już potwierdzony
    wynik produkcyjny.
 
-### 21.10 Definition of Done pełnego release
+### 21.10 Kryteria ukończenia pełnego wydania
 
 Pełny release jest ukończony dopiero, gdy:
 

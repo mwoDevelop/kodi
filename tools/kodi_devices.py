@@ -5,16 +5,11 @@ from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
 import json
-import os
 import re
-import shutil
-import tempfile
 from pathlib import Path
 
 
-LEGACY_SCHEMA = 1
 SCHEMA = 2
 LOGICAL_DEVICE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 CHANNEL = LOGICAL_DEVICE_ID
@@ -86,31 +81,6 @@ def _validate_jsonrpc(endpoints, logical_id):
         raise ValueError("%s has invalid JSON-RPC endpoint" % logical_id)
 
 
-def _validate_v1_device(logical_id, device):
-    allowed = {
-        "display_name",
-        "roles",
-        "expected",
-        "endpoints",
-        "profile_channel",
-    }
-    if set(device) != allowed:
-        raise ValueError("%s device has unsupported or missing fields" % logical_id)
-    _require_string(device["display_name"], "%s display_name" % logical_id)
-    _validate_roles(device["roles"], logical_id)
-    _validate_expected(device["expected"], logical_id)
-    endpoints = device["endpoints"]
-    if (
-        not isinstance(endpoints, dict)
-        or "adb" not in endpoints
-        or not set(endpoints).issubset({"adb", "jsonrpc"})
-    ):
-        raise ValueError("%s has invalid endpoints" % logical_id)
-    _require_string(endpoints["adb"], "%s ADB endpoint" % logical_id)
-    _validate_jsonrpc(endpoints, logical_id)
-    _validate_channel(device["profile_channel"], logical_id)
-
-
 def _validate_v2_device(logical_id, device):
     allowed = {
         "display_name",
@@ -175,7 +145,7 @@ def validate_registry(document):
     if not isinstance(document, dict) or set(document) != {"schema", "devices"}:
         raise ValueError("device inventory has unsupported top-level fields")
     schema = document.get("schema")
-    if schema not in {LEGACY_SCHEMA, SCHEMA}:
+    if schema != SCHEMA:
         raise ValueError("unsupported device inventory schema")
     devices = document.get("devices")
     if not isinstance(devices, dict) or not devices:
@@ -187,55 +157,19 @@ def validate_registry(document):
             raise ValueError("invalid logical device id: %r" % logical_id)
         if not isinstance(device, dict):
             raise ValueError("%s device must be an object" % logical_id)
-        if schema == LEGACY_SCHEMA:
-            _validate_v1_device(logical_id, device)
-        else:
-            _validate_v2_device(logical_id, device)
-    if schema == SCHEMA:
-        identities = [
-            (item["physical_host_id"], item["principal_id"])
-            for item in devices.values()
-        ]
-        if len(identities) != len(set(identities)):
-            raise ValueError("duplicate physical_host_id/principal_id identity")
+        _validate_v2_device(logical_id, device)
+    identities = [
+        (item["physical_host_id"], item["principal_id"])
+        for item in devices.values()
+    ]
+    if len(identities) != len(set(identities)):
+        raise ValueError("duplicate physical_host_id/principal_id identity")
     return document
 
 
-def _default_principal_id(logical_id):
-    digest = hashlib.sha256(logical_id.encode("utf-8")).hexdigest()[:16]
-    return "principal-%s" % digest
-
-
-def normalize_registry(document, platforms=None):
+def normalize_registry(document):
     validate_registry(document)
-    if document["schema"] == SCHEMA:
-        return copy.deepcopy(document)
-    platform_map = dict(platforms or {})
-    unknown = sorted(set(platform_map).difference(document["devices"]))
-    if unknown:
-        raise ValueError(
-            "platform override references unknown devices: %s"
-            % ", ".join(unknown)
-        )
-    devices = {}
-    for logical_id, device in document["devices"].items():
-        platform = platform_map.get(logical_id, "android")
-        if platform not in {"android", "android-emulator"}:
-            raise ValueError(
-                "legacy ADB device %s cannot migrate to %s"
-                % (logical_id, platform)
-            )
-        devices[logical_id] = {
-            "display_name": device["display_name"],
-            "physical_host_id": logical_id,
-            "principal_id": _default_principal_id(logical_id),
-            "platform": platform,
-            "roles": copy.deepcopy(device["roles"]),
-            "expected": copy.deepcopy(device["expected"]),
-            "endpoints": copy.deepcopy(device["endpoints"]),
-            "profile_channel": device["profile_channel"],
-        }
-    return validate_registry({"schema": SCHEMA, "devices": devices})
+    return copy.deepcopy(document)
 
 
 def load_registry(path):
@@ -310,144 +244,6 @@ def resolve_private_endpoint(device, references, required=False):
     return resolved
 
 
-def _kodi_major(version):
-    match = re.match(r"^(\d+)", str(version))
-    if not match:
-        raise ValueError("invalid Kodi version: %r" % version)
-    return int(match.group(1))
-
-
-def _atomic_private_json(path, document):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    path.parent.chmod(0o700)
-    payload = json.dumps(document, indent=2, sort_keys=True) + "\n"
-    descriptor, temporary = tempfile.mkstemp(
-        prefix=".%s." % path.name,
-        dir=str(path.parent),
-        text=True,
-    )
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.chmod(temporary, 0o600)
-        os.replace(temporary, path)
-        directory = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
-    path.chmod(0o600)
-
-
-def migrate_registry(path, platforms=None):
-    path = Path(path).resolve()
-    document = json.loads(path.read_text(encoding="utf-8"))
-    validate_registry(document)
-    if document["schema"] == SCHEMA:
-        return normalize_registry(document), False
-    migrated = normalize_registry(document, platforms=platforms)
-    before = {
-        logical_id: copy.deepcopy(device["endpoints"])
-        for logical_id, device in document["devices"].items()
-    }
-    after = {
-        logical_id: copy.deepcopy(device["endpoints"])
-        for logical_id, device in migrated["devices"].items()
-    }
-    if before != after:
-        raise RuntimeError("registry migration changed existing endpoints")
-    backup = path.with_suffix(path.suffix + ".schema1.bak")
-    if backup.exists():
-        backup_document = json.loads(backup.read_text(encoding="utf-8"))
-        if backup_document != document:
-            raise FileExistsError("registry migration backup differs from input")
-    else:
-        shutil.copy2(path, backup)
-        backup.chmod(0o600)
-    _atomic_private_json(path, migrated)
-    return migrated, True
-
-
-def migrate_reinstall_config(
-    config_path,
-    devices_path,
-    repository,
-    publishers=(),
-    platforms=None,
-):
-    config_path = Path(config_path).resolve()
-    devices_path = Path(devices_path).resolve()
-    repository = Path(repository).resolve()
-    document = json.loads(config_path.read_text(encoding="utf-8"))
-    if document.get("schema") != 1 or not isinstance(
-        document.get("targets"), list
-    ):
-        raise ValueError("migration requires a schema 1 reinstall config")
-    publisher_set = set(publishers)
-    devices = {}
-    targets = []
-    for target in document["targets"]:
-        logical_id = target.get("name")
-        if not isinstance(logical_id, str) or not LOGICAL_DEVICE_ID.fullmatch(
-            logical_id
-        ):
-            raise ValueError("target name is not a valid logical device id")
-        if logical_id in devices:
-            raise ValueError("duplicate logical device: %s" % logical_id)
-        roles = ["consumer"]
-        if logical_id in publisher_set:
-            roles.append("publisher")
-        devices[logical_id] = {
-            "display_name": logical_id,
-            "roles": roles,
-            "expected": {
-                "model": target["expected_model"],
-                "kodi_major": _kodi_major(target["expected_kodi_version"]),
-            },
-            "endpoints": {"adb": target["serial"]},
-            "profile_channel": "home-stable",
-        }
-        migrated = {
-            key: value
-            for key, value in target.items()
-            if key not in {"name", "serial", "expected_model"}
-        }
-        migrated["logical_device_id"] = logical_id
-        targets.append(migrated)
-    unknown_publishers = sorted(publisher_set.difference(devices))
-    if unknown_publishers:
-        raise ValueError(
-            "unknown publisher devices: %s" % ", ".join(unknown_publishers)
-        )
-    registry = normalize_registry(
-        {"schema": LEGACY_SCHEMA, "devices": devices},
-        platforms=platforms,
-    )
-    try:
-        devices_relative = devices_path.relative_to(repository).as_posix()
-    except ValueError as error:
-        raise ValueError("devices inventory must be below repository") from error
-    migrated_config = {
-        "schema": 2,
-        "devices_file": devices_relative,
-        "targets": targets,
-    }
-    backup = config_path.with_suffix(config_path.suffix + ".schema1.bak")
-    if backup.exists() or devices_path.exists():
-        raise FileExistsError("migration output or backup already exists")
-    shutil.copy2(config_path, backup)
-    backup.chmod(0o600)
-    _atomic_private_json(devices_path, registry)
-    _atomic_private_json(config_path, migrated_config)
-    return registry, migrated_config
-
-
 def main():
     repository = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser()
@@ -459,32 +255,6 @@ def main():
     resolve = subparsers.add_parser("resolve")
     resolve.add_argument("logical_device_id")
     resolve.add_argument("--devices", default=".kodi-private/devices.json")
-    migrate = subparsers.add_parser("migrate-reinstall")
-    migrate.add_argument(
-        "--config", default=".kodi-private/kodi-reinstall.json"
-    )
-    migrate.add_argument(
-        "--devices", default=".kodi-private/devices.json"
-    )
-    migrate.add_argument("--publisher", action="append", default=[])
-    migrate.add_argument(
-        "--platform",
-        action="append",
-        default=[],
-        metavar="LOGICAL_ID=PLATFORM",
-    )
-    migrate.add_argument("--yes", action="store_true")
-    migrate_registry_parser = subparsers.add_parser("migrate-registry")
-    migrate_registry_parser.add_argument(
-        "--devices", default=".kodi-private/devices.json"
-    )
-    migrate_registry_parser.add_argument(
-        "--platform",
-        action="append",
-        default=[],
-        metavar="LOGICAL_ID=PLATFORM",
-    )
-    migrate_registry_parser.add_argument("--yes", action="store_true")
     args = parser.parse_args()
     devices_path = repository / args.devices
     if args.command == "validate":
@@ -516,61 +286,7 @@ def main():
             )
         )
         return 0
-    if not args.yes:
-        target = (
-            "private device registry"
-            if args.command == "migrate-registry"
-            else "private reinstall config"
-        )
-        print("Re-run with --yes to migrate the %s." % target)
-        return 0
-    platforms = {}
-    for item in args.platform:
-        logical_id, separator, platform = item.partition("=")
-        if (
-            not separator
-            or not LOGICAL_DEVICE_ID.fullmatch(logical_id)
-            or platform not in PLATFORMS
-        ):
-            raise ValueError(
-                "platform must use LOGICAL_ID=android|android-emulator|linux-flatpak"
-            )
-        if logical_id in platforms:
-            raise ValueError("duplicate platform override: %s" % logical_id)
-        platforms[logical_id] = platform
-    if args.command == "migrate-registry":
-        registry, changed = migrate_registry(devices_path, platforms=platforms)
-        print(
-            json.dumps(
-                {
-                    "schema": registry["schema"],
-                    "changed": changed,
-                    "devices": sorted(registry["devices"]),
-                },
-                indent=2,
-            )
-        )
-        return 0
-    registry, config = migrate_reinstall_config(
-        repository / args.config,
-        devices_path,
-        repository,
-        publishers=args.publisher,
-        platforms=platforms,
-    )
-    print(
-        json.dumps(
-            {
-                "schema": config["schema"],
-                "devices": sorted(registry["devices"]),
-                "targets": [
-                    item["logical_device_id"] for item in config["targets"]
-                ],
-            },
-            indent=2,
-        )
-    )
-    return 0
+    raise AssertionError("unhandled command")
 
 
 if __name__ == "__main__":

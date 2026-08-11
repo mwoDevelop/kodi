@@ -1,45 +1,47 @@
-# Portable Kodi state convergence E2E — 2026-07-30
+# Przenośna konwergencja stanu Kodi E2E — 30.07.2026
 
-The deterministic `kodi.favourites` bundle was exported from the registered
-Sony TV publisher and applied through Kodi's own process.
+Deterministyczny pakiet `kodi.favourites` został wyeksportowany od zarejestrowanego
+wydawcy Sony TV i zastosowany poprzez własny proces Kodi.
 
-Bundle:
-`sha256:4da887aa98967d543c782245c7f467697671dfd8c35d48c9a27242ba73a29708`
+Pakiet: `sha256:4da887aa98967d543c782245c7f467697671dfd8c35d48c9a27242ba73a29708`
 
-| Logical device | Result | Favourites | WatchNixtoons2 | Portable artwork | Current fork actions |
+| Urządzenie logiczne | Wynik | Ulubione | WatchNixtoons2 | Przenośna grafika | Bieżące działania na forku |
 | --- | --- | ---: | ---: | ---: | ---: |
 | `bluestacks1` | `NO_CHANGE` | 8 | 7 | 7 | 7 |
 | `sony-tv` | `NO_CHANGE` | 8 | 7 | 7 | 7 |
 | `x88pro20` | `NO_CHANGE` | 8 | 7 | 7 | 7 |
-| `bedroom-tv` | `UNAVAILABLE` (ADB offline) | — | — | — | — |
+| `bedroom-tv` | `UNAVAILABLE` (nieaktywny ADB) | — | — | — | — |
 | `nuc-mwo` | `UNAVAILABLE` (SSH) | — | — | — | — |
 | `nuc-alek` | `UNAVAILABLE` (SSH) | — | — | — | — |
 
-Before convergence, BlueStacks had no favourites; X88 had five WatchNixtoons2
-entries referencing five absent local files; Sony had seven portable images
-but all seven actions still targeted the legacy add-on ID. The publisher
-materialization completed with seven verified images, seven migrated actions
-and zero failures. The post-apply in-Kodi probes confirmed the exact
-`favourites.xml` digest and no missing referenced artwork on every reachable
-target.
+Przed konwergencją BlueStacks nie miał faworytów; X88 miał pięć wpisów WatchNixtoons2
+odnoszących się do pięciu nieobecnych plików lokalnych; Firma Sony miała siedem
+przenośnych obrazów, ale wszystkie siedem działań nadal dotyczyło starszego
+identyfikatora dodatku. Materializacja wydawcy zakończyła się siedmioma zweryfikowanymi
+obrazami, siedmioma przeniesionymi akcjami i zerową liczbą niepowodzeń. Sondy w Kodi po
+zastosowaniu potwierdziły dokładne zestawienie `favourites.xml` i brak brakujących
+grafik referencyjnych na każdym osiągalnym celu.
 
-The private machine-readable evidence is retained at
+Prywatne dowody nadające się do odczytu maszynowego są przechowywane w
 `.kodi-private/e2e/2026-07-30-portable-and-profile-sync-final.json`.
 
-The same final rollout configured each reachable device with its own Profile
-Sync logical ID, `home-stable`, a 15-second startup delay, six-hour interval
-and read-only safety mode. All remained deliberately unpaired because no
-persistent authenticated HTTPS backend is deployed.
+W tym samym ostatecznym wdrożeniu każde osiągalne urządzenie miało własny identyfikator
+logiczny Profile Sync, `home-stable`, 15-sekundowe opóźnienie uruchamiania,
+sześciogodzinny interwał i tryb bezpieczeństwa tylko do odczytu. Wszystkie celowo
+pozostały niesparowane, ponieważ nie wdrożono żadnego trwałego uwierzytelnionego
+backendu HTTPS.
 
-A separate verified-backend E2E then passed on all three devices:
+Następnie oddzielny zweryfikowany backend E2E został przekazany na wszystkie trzy
+urządzenia:
 
-- unique one-time pairing and local-only token/signing seed;
-- authenticated heartbeat and signed candidate assignment;
-- preservation of the prepared identity profile after E2E cleanup;
-- successful settings apply plus injected-failure rollback;
-- clean journal and byte-exact settings restoration.
+- unikalne, jednorazowe parowanie i materiał siewny tokenu/podpisu dostępny wyłącznie
+  lokalnie;
+- uwierzytelnione bicie serca i podpisane zadanie kandydata;
+- zachowanie przygotowanego profilu tożsamości po oczyszczeniu E2E;
+- obowiązują pomyślne ustawienia oraz wstrzyknięta awaria rollback;
+- wyczyść dziennik i przywróć ustawienia z dokładnością do bajtów.
 
-Private evidence:
+Prywatny dowód:
 
 - `.kodi-private/e2e/2026-07-30-profile-sync-identity-preserving-e2e.json`;
 - `.kodi-private/e2e/2026-07-30-DEVICE-profile-sync-apply.json`;

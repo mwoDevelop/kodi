@@ -1,28 +1,28 @@
-# BlueStacks1 E2E — 2026-07-24
+# BlueStacks1 E2E — 24.07.2026
 
-- Device: `BlueStacks1` (`127.0.0.1:5556`)
+- Urządzenie: `BlueStacks1` (`127.0.0.1:5556`)
 - Kodi: `21.2`
-- Repository: `repository.mwodevelop.testing` `1.0.0`
-- Umbrella playback build: `6.7.81.4`
+- Repozytorium: `repository.mwodevelop.testing` `1.0.0`
+- Kompilacja odtwarzania Umbrella: `6.7.81.4`
 - MwoScrapers: `0.1.1`
-- External provider selected through Kodi GUI: `script.module.mwoscrapers`
-- Test content: `Sintel` (2010), IMDb `tt1727587`
-- Sources displayed: 5, all from Torrentio through MwoScrapers
-- Real-Debrid attempts before success: 4
-- Kodi player: internal video player, speed `1`
-- Observed playback: 31 seconds of 14:48
-- Test-window RD codes `34` / `35`: 0 / 0
-- Result: PASS
+- Dostawca zewnętrzny wybrany poprzez GUI Kodi: `script.module.mwoscrapers`
+- Treść testu: `Sintel` (2010), IMDb `tt1727587`
+- Wyświetlane źródła: 5, wszystkie od Torrentio do MwoScrapers
+- Próby Real-Debrid przed sukcesem: 4
+- Odtwarzacz Kodi: wewnętrzny odtwarzacz wideo, prędkość `1`
+- Obserwowane odtwarzanie: 31 sekund 14:48
+- Kody RD okna testowego `34` / `35`: 0 / 0
+- Wynik: PASS
 
-The earlier `Big Buck Bunny` control run proved a mislabeled provider result:
-the selected hash was named as the test movie but Real-Debrid exposed a
-different 2025 file. Umbrella rejected it without playback. This distinguishes
-bad source metadata from transport/resolver failure.
+Wcześniejsze uruchomienie kontrolne `Big Buck Bunny` wykazało błędnie oznakowany wynik
+dostawcy: wybrany skrót został nazwany filmem testowym, ale Real-Debrid ujawnił inny
+plik 2025. Umbrella odrzucił to bez odtwarzania. To odróżnia złe metadane źródłowe od
+awarii transportu/resolwera.
 
-During the successful Sintel run, one candidate returned an empty unrestrict
-URL. Playback continued with the next source; the resulting diagnostic
-`None.endswith` was fixed by the forward release `6.7.81.5`.
+Podczas udanego uruchomienia Sintel jeden kandydat zwrócił pusty, nieograniczony adres
+URL. Odtwarzanie było kontynuowane z następnym źródłem; wynikająca z tego diagnostyka
+`None.endswith` została naprawiona w wydaniu przednim `6.7.81.5`.
 
-Installation and device validation are reproducible with
-`tests/e2e/bluestacks_e2e.py`; deterministic repository HTTP E2E is
+Instalacja i walidacja urządzenia są powtarzalne w przypadku
+`tests/e2e/bluestacks_e2e.py`; deterministyczne repozytorium HTTP E2E to
 `tests/e2e/run.sh`.

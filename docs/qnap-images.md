@@ -1,0 +1,95 @@
+# Budowanie i wdrażanie obrazów QNAP
+
+`tools/qnap_images.py` jest wspólnym punktem wejścia na hoście dla trzech aplikacji Kodi
+Container Station:
+
+- `profile-sync`;
+- `provider-relay`;
+- `upstream-watchdog`.
+
+Uruchamia należące do repozytorium buildy GitHub Actions, publikuje obrazy
+wieloarchitekturowe do GHCR, weryfikuje wymagane platformy manifestów, rejestruje
+niezmienne odniesienia do digestów w ignorowanym przez Git pliku
+`.kodi-private/qnap-images.json` i wdraża wyłącznie te digesty. Build odrzuca brudne
+lub niewypchnięte repozytorium źródłowe, dlatego obraz zawsze odpowiada dokładnemu
+commitowi Git.
+
+## Typowe polecenia
+
+Sprawdź działające kontenery QNAP bez ich zmiany:
+
+```bash
+python tools/qnap_images.py status
+```
+
+W przypadku watchdoga `status` odczytuje również utrwalony wynik działania i zgłasza
+czas kontroli, liczbę workflow i dokładne nazwy workflow zakończonych błędem. Pozwala to odróżnić
+działający watchdog fail-closed od uszkodzonego kontenera.
+
+Podejrzyj wszystkie buildy bez logowania do GHCR i bez uruchamiania Dockera:
+
+```bash
+python tools/qnap_images.py build all --dry-run
+```
+
+Zbuduj i opublikuj wszystkie obrazy przez GitHub Actions, a następnie wdróż ich
+zapisane, niezmienne digesty:
+
+```bash
+python tools/qnap_images.py build all
+python tools/qnap_images.py deploy all
+```
+
+Połączona forma to:
+
+```bash
+python tools/qnap_images.py update all
+```
+
+Domyślnym mechanizmem publikacji jest GitHub Actions. Pozwala to uniknąć lokalnego,
+długotrwałego tokena `write:packages`; skrypt czeka na zakończenie każdego workflow,
+a następnie ustala i zapisuje digest GHCR. W razie potrzeby dostępna jest jawnie uwierzytelniona
+lokalna kompilacja Buildx:
+
+```bash
+python tools/qnap_images.py build all --publisher local
+```
+
+W operacji częściowej zastąp `all` jedną lub kilkoma nazwami:
+
+```bash
+python tools/qnap_images.py update upstream-watchdog
+python tools/qnap_images.py build profile-sync provider-relay
+```
+
+Domyślnym checkoutem serwera Profile Sync jest katalog równorzędny
+`../kodi-profile-sync-server`. W razie potrzeby zastąp go jawnie:
+
+```bash
+python tools/qnap_images.py \
+  --profile-sync-repository /path/to/kodi-profile-sync-server \
+  build profile-sync
+```
+
+## Granica bezpieczeństwa
+
+- `build` wymaga czystych repozytoriów źródłowych, których dokładne commity są
+  headami wypchniętych gałęzi `origin`, oraz uwierzytelnionego CLI `gh`;
+- domyślny wydawca używa krótkotrwałych poświadczeń repozytorium `GITHUB_TOKEN` w ramach
+  GitHub Actions; opcjonalny wydawca lokalny przekazuje poświadczenia GHCR do
+  `docker login` przez standardowe wejście i nigdy nie zapisuje ich w pliku stanu obrazu;
+- Buildx publikuje niezmienne manifesty wieloplatformowe, a skrypt weryfikuje wymagane
+  wpisy `linux/amd64`, `linux/arm/v7` i, w przypadku watchdoga, `linux/arm64`;
+- wdrożenie Profile Sync zachowuje istniejącą macierz RAID, TLS, rejestr kluczy, kopie
+  zapasowe i bramki gotowości;
+- wdrożenie przekaźnika providerów zachowuje bezstanową politykę Compose i sondę
+  providera na żywo; sonda zewnętrznego providera jest krótko ponawiana po osiągnięciu
+  lokalnej gotowości, aby tolerować wyścigi podczas uruchamiania i odpowiedzi upstream;
+- wdrożenie watchdoga sprawdza wzmocnione zasady Compose i wycofuje poprzednie
+  pliki Compose, jeśli nowy kontener nie może opublikować pełnego dokumentu statusu
+  pięciu workflow;
+- watchdog może działać poprawnie, ale celowo zgłaszać `unhealthy`, gdy jeden z
+  monitorowanych workflow GitHub zakończył się błędem. Wdrożenie nie ukrywa tej awarii upstream.
+
+Wszystkie trzy aplikacje wykorzystują `/var/run/docker.sock`, silnik zarządzany przez
+GUI Container Station. Skrypt nigdy nie kieruje operacji do QNAP `system-docker`.

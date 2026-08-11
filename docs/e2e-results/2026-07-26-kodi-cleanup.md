@@ -1,76 +1,76 @@
-# Kodi cleanup and Android regression — 2026-07-26
+# Oczyszczanie Kodi i regresja Android — 26.07.2026
 
-## Final state
+## Stan końcowy
 
-The BlueStacks1 (`Rvc64`, Kodi 21.3) and Sony BRAVIA Android TV (Kodi 21.2)
-installations contain only these enabled repositories:
+Instalacje BlueStacks1 (`Rvc64`, Kodi 21.3) i Sony BRAVIA Android TV (Kodi 21.2)
+zawierają tylko te włączone repozytoria:
 
 - `repository.mwodevelop` 1.0.0;
-- `repository.xbmc.org`, the official Kodi repository.
+- `repository.xbmc.org`, oficjalne repozytorium Kodi.
 
-The only file-manager source on both devices is:
+Jedynym źródłem menedżera plików na obu urządzeniach jest:
 
 `mwodevelop -> https://mwodevelop.github.io/kodi/repo/`
 
-The final database and on-disk add-on manifests agree:
+Ostateczna baza danych i manifesty dodatków na dysku są zgodne:
 
-| Add-on | Version | Origin |
+| Dodatek | Wersja | Pochodzenie |
 | --- | ---: | --- |
 | Umbrella (mwoDevelop) | 6.7.81.11 | `repository.mwodevelop` |
-| WatchNixtoons2 (mwoDevelop) | 0.25.2 | `repository.mwodevelop` |
-| MwoScrapers module | 0.1.3 | `repository.mwodevelop` |
-| MwoScrapers Manager | 0.1.1 | `repository.mwodevelop` |
+| WatchNixtoons2 (mwoDevelop) | 0,25,2 | `repository.mwodevelop` |
+| Moduł MwoScrapers | 0.1.3 | `repository.mwodevelop` |
+| Menedżer MwoScrapers | 0.1.1 | `repository.mwodevelop` |
 
-Rapideo and its repository were removed. Legacy package-cache entries for
-Rapideo, ViperScrapers, ResolveURL, POV, IPTV Lister, MicroJenScrapers,
-YouTube helpers, SpeedTester, and Umbrella 6.7.81.10 were also removed where
-present: 8 ZIPs on BlueStacks1 and 39 ZIPs on Sony. None of the corresponding
-legacy add-ons were installed at deletion time.
+Rapideo i jego repozytorium zostały usunięte. Starsze wpisy pamięci podręcznej pakietów
+dla Rapideo, ViperScrapers, ResolveURL, POV, IPTV Lister, MicroJenScrapers, pomocników
+YouTube, SpeedTester i Umbrella 6.7.81.10 również zostały usunięte, jeśli były obecne: 8
+ZIP na BlueStacks1 i 39 ZIP na Sony. W momencie usuwania nie był zainstalowany żaden z
+odpowiednich starszych dodatków.
 
-Fresh device backups are stored outside the repository in:
+Świeże kopie zapasowe urządzeń są przechowywane poza repozytorium w:
 
 `/home/mwo/.local/share/kodi-cleanup-backups/20260726/`
 
-## Resolver correction
+## Korekcja modułu przeliczającego
 
-Sony exposed an Umbrella provider compatibility error while resolving
-`Breaking Bad S01E01`:
+Sony ujawniło błąd zgodności dostawcy Umbrella podczas rozwiązywania `Breaking Bad
+S01E01`:
 
 `AttributeError: 'source' object has no attribute 'sources_packs'`
 
-Umbrella 6.7.81.11 isolates the optional provider capability behind a
-downstream adapter. Providers without pack support are skipped for pack
-searches; pack-capable providers receive unchanged arguments and results.
-The downstream suite passed 28 tests, including reconstruction from the
-upstream base plus the registered patch series.
+Umbrella 6.7.81.11 izoluje możliwości opcjonalnego dostawcy za adapterem downstream.
+Dostawcy bez obsługi pakietów są pomijani przy wyszukiwaniu pakietów; dostawcy
+obsługujący pakiety otrzymują niezmienione argumenty i wyniki. Zestaw downstream
+przeszedł 28 testów, w tym rekonstrukcję z bazy upstream oraz zarejestrowaną serię
+poprawek.
 
-The exact public stable ZIP has SHA-256:
+Dokładny publiczny stable ZIP ma SHA-256:
 
 `c37ba5e4d557c7ec76a6b9d2f6bc2ea2f65ade0e3697a8085b985c0933e98d5d`
 
-It was promoted byte-for-byte from testing. The Kodi repository add-on
-remains version 1.0.0.
+Był promowany bajt po bajcie z testing. Dodatek repozytorium Kodi pozostaje w wersji
+1.0.0.
 
-## Device E2E results
+## Wyniki urządzenia E2E
 
-Each resolver case ran independently to prevent a timed-out Kodi window from
-affecting the next case.
+Każdy przypadek rozpoznawania nazw działał niezależnie, aby zapobiec wpływowi
+przekroczenia limitu czasu okna Kodi na następny przypadek.
 
-| Device | Case | Result | Resolve | Observed |
+| Urządzenie | Sprawa | Wynik | Rozwiąż | Zaobserwowano |
 | --- | --- | --- | ---: | ---: |
-| BlueStacks1 | Umbrella / Sintel | played | 19.767 s | 12.034 s |
-| BlueStacks1 | Umbrella / Breaking Bad S01E01 | played | 15.735 s | 12.043 s |
-| Sony | Umbrella / Sintel | played | 19.149 s | 12.137 s |
-| Sony | Umbrella / Breaking Bad S01E01 | unplayable source set, no resolver exception | n/a | n/a |
-| BlueStacks1 | WatchNixtoons2 / Mao Episode 17 | played | 11.039 s | 12 s |
-| Sony | WatchNixtoons2 / Mao Episode 17 | played | 16.451 s | 12 s |
+| BlueStacks1 | Umbrella / Sintel | grał | 19,767 s | 12,034 s |
+| BlueStacks1 | Umbrella / Breaking Bad S01E01 | grał | 15,735 s | 12,043 s |
+| Sony | Umbrella / Sintel | grał | 19,149 s | 12,137 s |
+| Sony | Umbrella / Breaking Bad S01E01 | nieodtwarzalny zestaw źródeł, brak wyjątku w programie rozpoznawania nazw | nie dotyczy | nie dotyczy |
+| BlueStacks1 | WatchNixtoons2 / Mao Odcinek 17 | grał | 11,039 s | 12 s |
+| Sony | WatchNixtoons2 / Mao Odcinek 17 | grał | 16,451 s | 12 s |
 
-Both WatchNixtoons2 runs also loaded the live `Latest Releases` catalogue and
-recorded 15 distinct sample entries. The Sony Breaking Bad run did not find a
-usable stream, but the former `sources_packs` exception is absent; the same
-case played successfully on BlueStacks1.
+Obydwa przebiegi WatchNixtoons2 załadowały także aktualny katalog `Latest Releases` i
+zarejestrowały 15 różnych przykładowych wpisów. Uruchomienie Sony Breaking Bad nie
+znalazło użytecznego strumienia, ale nie ma poprzedniego wyjątku `sources_packs`; ta
+sama sprawa została pomyślnie rozegrana na BlueStacks1.
 
-Machine-readable reports:
+Raporty do odczytu maszynowego:
 
 - [BlueStacks1 / Sintel](2026-07-26-cleanup-bluestacks1-sintel.json)
 - [BlueStacks1 / Breaking Bad](2026-07-26-cleanup-bluestacks1-breaking-bad.json)
@@ -79,12 +79,14 @@ Machine-readable reports:
 - [Sony / Breaking Bad](2026-07-26-cleanup-sony-breaking-bad.json)
 - [Sony / WatchNixtoons2](2026-07-26-cleanup-sony-watchnixtoons2.json)
 
-## Restored state
+## Stan przywrócony
 
-Temporary autoplay and WatchNixtoons2 test settings were removed or restored.
-Umbrella play modes are back to `0`, `sources.retryall` is back to `true`, and
-the original debugging choices were restored (`true` on BlueStacks1, `false`
-on Sony). BlueStacks1 EventServer access from all interfaces is back to
-`false`, and its temporary ADB JSON-RPC forwarding was removed.
+Tymczasowe ustawienia autoodtwarzania i ustawienia testowe WatchNixtoons2 zostały
+usunięte lub przywrócone. Tryby odtwarzania Umbrella powróciły do ​​`0`,
+`sources.retryall` powróciły do ​​`true` i przywrócono oryginalne opcje debugowania
+(`true` na BlueStacks1, `false` na Sony). Dostęp do serwera zdarzeń BlueStacks1 ze
+wszystkich interfejsów powrócił do `false`, a tymczasowe przekazywanie ADB JSON-RPC
+zostało usunięte.
 
-Both devices were started successfully after the final stopped-database audit.
+Obydwa urządzenia zostały pomyślnie uruchomione po ostatecznym audycie zatrzymanej bazy
+danych.

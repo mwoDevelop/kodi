@@ -126,6 +126,41 @@ def test_production_configs_are_isolated_per_invocation(tmp_path):
         second.unlink(missing_ok=True)
 
 
+def test_production_probe_uses_private_current_adb_endpoint(tmp_path):
+    devices = tmp_path / "devices.json"
+    references = tmp_path / ".env"
+    devices.write_text(
+        json.dumps(
+            {
+                "schema": 2,
+                "devices": {
+                    "x88pro20": {
+                        "display_name": "X88",
+                        "physical_host_id": "x88-host",
+                        "principal_id": "principal-x88",
+                        "platform": "android",
+                        "roles": ["consumer"],
+                        "expected": {"model": "X88Pro20", "kodi_major": 21},
+                        "endpoints": {"adb": "192.0.2.8:5555"},
+                        "profile_channel": "home-stable",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    references.write_text(
+        "KODI_DEVICE_X88PRO20_ADB=192.0.2.7:5555\n", encoding="utf-8"
+    )
+    references.chmod(0o600)
+
+    device = production_device.resolve_android_device(
+        devices, references, "x88pro20"
+    )
+
+    assert device["endpoints"]["adb"] == "192.0.2.7:5555"
+
+
 def test_addon_probe_refuses_failed_state_restoration(monkeypatch):
     monkeypatch.setattr(
         addon_device,

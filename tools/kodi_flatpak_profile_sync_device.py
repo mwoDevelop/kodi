@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import shutil
@@ -22,8 +23,69 @@ ADDON_ID = "service.mwodevelop.profilesync"
 REPOSITORY_ID = "repository.mwodevelop"
 MARKER_NAME = "flatpak-rollout-result.json"
 SAFE_STAGE = re.compile(r"^\.mwodevelop-flatpak-[0-9a-f]{16}$")
+SAFE_ADDON_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 MAX_FILES = 4000
 MAX_BYTES = 64 * 1024 * 1024
+CURRENT_STAGE = "startup"
+
+
+def _set_stage(name):
+    global CURRENT_STAGE
+    if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9_]{1,64}", name):
+        raise ValueError("invalid Flatpak rollout stage name")
+    CURRENT_STAGE = name
+
+
+def _safe_error_code(error):
+    chain = []
+    current = error
+    while current is not None and current not in chain:
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    for item in chain:
+        code = getattr(item, "code", None)
+        if isinstance(code, (str, int)) and code is not None:
+            return code
+    message = " ".join(str(item).lower() for item in chain)
+    classifications = (
+        ("unknown addon id", "unknown_addon_id"),
+        ("timed out", "timeout"),
+        ("connection refused", "connection_refused"),
+        ("certificate", "certificate_error"),
+        ("signature", "signature_error"),
+        ("favourites json-rpc failed", "favourites_rpc_failed"),
+        ("returned invalid favourites", "invalid_favourites_response"),
+        ("favourites changed during apply", "favourites_changed_during_apply"),
+        ("favourites health check", "favourites_health_check"),
+        ("artwork health check", "artwork_health_check"),
+        ("failure report is pending", "failure_report_pending"),
+        ("success report", "success_report_pending"),
+    )
+    for needle, classification in classifications:
+        if needle in message:
+            return classification
+    return None
+
+
+def _safe_error_origin(error):
+    current = error
+    seen = []
+    while current is not None and current not in seen:
+        seen.append(current)
+        current = current.__cause__ or current.__context__
+    leaf = seen[-1]
+    traceback = leaf.__traceback__
+    if traceback is None:
+        return None
+    while traceback.tb_next is not None:
+        traceback = traceback.tb_next
+    filename = Path(traceback.tb_frame.f_code.co_filename).name
+    function = traceback.tb_frame.f_code.co_name
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", filename) or not re.fullmatch(
+        r"[A-Za-z0-9_<>.-]{1,128}", function
+    ):
+        return None
+    return "%s:%s" % (filename, function)
 
 
 def _write_atomic(path, document):
@@ -70,6 +132,79 @@ def _extract_candidate(archive_path, addon_id, output):
     return root, addon.get("version")
 
 
+def _extract_artifact_candidates(stage, addons, artifacts, directory, output):
+    if (
+        not isinstance(addons, dict)
+        or not addons
+        or not isinstance(artifacts, dict)
+        or set(artifacts) != set(addons)
+    ):
+        raise ValueError("invalid required Flatpak artifact set")
+    required_root = stage / directory
+    if not required_root.is_dir() or required_root.is_symlink():
+        raise ValueError("required Flatpak artifact directory is missing")
+    candidates = {}
+    for addon_id, version in addons.items():
+        artifact = artifacts[addon_id]
+        expected_filename = addon_id + ".zip"
+        if (
+            not SAFE_ADDON_ID.fullmatch(addon_id)
+            or not isinstance(version, str)
+            or not version
+            or not isinstance(artifact, dict)
+            or set(artifact) != {"filename", "sha256", "version"}
+            or artifact.get("filename") != expected_filename
+            or artifact.get("version") != version
+            or not re.fullmatch(r"[0-9a-f]{64}", artifact.get("sha256", ""))
+        ):
+            raise ValueError("invalid required Flatpak artifact metadata")
+        archive = required_root / expected_filename
+        if (
+            not archive.is_file()
+            or archive.is_symlink()
+            or hashlib.sha256(archive.read_bytes()).hexdigest()
+            != artifact["sha256"]
+        ):
+            raise ValueError("required Flatpak artifact digest differs")
+        root, candidate_version = _extract_candidate(
+            archive, addon_id, output / addon_id
+        )
+        if candidate_version != version:
+            raise ValueError("required Flatpak artifact version differs")
+        candidates[addon_id] = root
+    if {path.name for path in required_root.iterdir()} != {
+        artifact["filename"] for artifact in artifacts.values()
+    }:
+        raise ValueError("unexpected required Flatpak artifact")
+    return candidates
+
+
+def _extract_required_candidates(stage, expected, output):
+    return _extract_artifact_candidates(
+        stage,
+        expected.get("required_addons"),
+        expected.get("required_artifacts"),
+        "required",
+        output,
+    )
+
+
+def _extract_dependency_candidates(stage, expected, output):
+    artifacts = expected.get("dependency_artifacts")
+    addons = (
+        {
+            addon_id: metadata.get("version")
+            for addon_id, metadata in artifacts.items()
+        }
+        if isinstance(artifacts, dict)
+        and all(isinstance(metadata, dict) for metadata in artifacts.values())
+        else None
+    )
+    return _extract_artifact_candidates(
+        stage, addons, artifacts, "dependencies", output
+    )
+
+
 def _rpc(method, params):
     response = json.loads(
         xbmc.executeJSONRPC(
@@ -89,6 +224,47 @@ def _rpc(method, params):
     return response.get("result")
 
 
+class KodiRpcUnavailable(RuntimeError):
+    def __init__(self, code=None):
+        super().__init__("Kodi JSON-RPC is not ready")
+        self.code = code if isinstance(code, int) else None
+
+
+def _wait_favourites_api(timeout=60):
+    deadline = time.monotonic() + timeout
+    last_code = None
+    while time.monotonic() < deadline:
+        try:
+            response = json.loads(
+                xbmc.executeJSONRPC(
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": "mwo-flatpak-readiness",
+                            "method": "Favourites.GetFavourites",
+                            "params": {
+                                "properties": [
+                                    "path",
+                                    "window",
+                                    "windowparameter",
+                                    "thumbnail",
+                                ]
+                            },
+                        },
+                        separators=(",", ":"),
+                    )
+                )
+            )
+        except (TypeError, ValueError):
+            response = None
+        if isinstance(response, dict) and "error" not in response:
+            return
+        error = response.get("error") if isinstance(response, dict) else None
+        last_code = error.get("code") if isinstance(error, dict) else None
+        xbmc.sleep(2000)
+    raise KodiRpcUnavailable(last_code)
+
+
 def _enable(addon_id, timeout=30):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -102,6 +278,139 @@ def _enable(addon_id, timeout=30):
             pass
         xbmc.sleep(1000)
     raise RuntimeError("Kodi refused to enable %s" % addon_id)
+
+
+def _enabled_addon(addon_id, timeout=30):
+    """Enable a freshly discovered add-on before opening its settings."""
+
+    _enable(addon_id, timeout=timeout)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            return xbmcaddon.Addon(addon_id)
+        except RuntimeError:
+            xbmc.sleep(1000)
+    raise RuntimeError("Kodi did not register enabled add-on %s" % addon_id)
+
+
+def _addon_details(addon_id):
+    try:
+        return _rpc(
+            "Addons.GetAddonDetails",
+            {
+                "addonid": addon_id,
+                "properties": ["version", "enabled"],
+            },
+        )["addon"]
+    except (KeyError, RuntimeError):
+        return None
+
+
+def _addon_openable(addon_id):
+    try:
+        xbmcaddon.Addon(addon_id)
+        return True
+    except RuntimeError:
+        return False
+
+
+def _reconcile_required_addons(addons, timeout=120, stage=None):
+    if (
+        not isinstance(addons, dict)
+        or not addons
+        or any(
+            not isinstance(addon_id, str)
+            or not SAFE_ADDON_ID.fullmatch(addon_id)
+            or not isinstance(version, str)
+            or not version
+            for addon_id, version in addons.items()
+        )
+    ):
+        raise ValueError("invalid required add-on set")
+    _enable(REPOSITORY_ID)
+    xbmc.executebuiltin("UpdateAddonRepos")
+    xbmc.sleep(5000)
+    installed = {}
+    for addon_id, expected_version in addons.items():
+        request = stage / "install-request.json" if stage else None
+        try:
+            deadline = time.monotonic() + timeout
+            next_install = 0
+            while time.monotonic() < deadline:
+                details = _addon_details(addon_id)
+                if details:
+                    if not details.get("enabled"):
+                        _enable(addon_id)
+                        details = _addon_details(addon_id)
+                    if (
+                        details
+                        and details.get("enabled")
+                        and str(details.get("version")) == expected_version
+                        and _addon_openable(addon_id)
+                    ):
+                        installed[addon_id] = expected_version
+                        break
+                if time.monotonic() >= next_install:
+                    if request:
+                        _write_atomic(
+                            request,
+                            {"addon_id": addon_id, "schema": 1},
+                        )
+                    xbmc.executebuiltin("InstallAddon(%s)" % addon_id)
+                    next_install = time.monotonic() + 10
+                xbmc.sleep(2000)
+            else:
+                raise RuntimeError("Kodi could not install required add-on")
+        finally:
+            if request:
+                request.unlink(missing_ok=True)
+    return installed
+
+
+def _verify_required_addons(addons, timeout=30):
+    if (
+        not isinstance(addons, dict)
+        or not addons
+        or any(
+            not isinstance(addon_id, str)
+            or not SAFE_ADDON_ID.fullmatch(addon_id)
+            or not isinstance(version, str)
+            or not version
+            for addon_id, version in addons.items()
+        )
+    ):
+        raise ValueError("invalid required add-on set")
+    verified = {}
+    for addon_id, expected_version in addons.items():
+        _enable(addon_id, timeout=timeout)
+        details = _addon_details(addon_id)
+        if (
+            not details
+            or not details.get("enabled")
+            or str(details.get("version")) != expected_version
+        ):
+            raise RuntimeError("Kodi did not register required stable add-on")
+        verified[addon_id] = expected_version
+    return verified
+
+
+def _candidate_dependencies(candidates):
+    managed = set(candidates)
+    dependencies = set()
+    for root in candidates.values():
+        addon = ElementTree.parse(root / "addon.xml").getroot()
+        for node in addon.findall("./requires/import"):
+            addon_id = node.get("addon", "")
+            if (
+                node.get("optional", "false").lower() == "true"
+                or addon_id == "xbmc.python"
+                or addon_id in managed
+            ):
+                continue
+            if not SAFE_ADDON_ID.fullmatch(addon_id):
+                raise ValueError("invalid required dependency identity")
+            dependencies.add(addon_id)
+    return sorted(dependencies)
 
 
 def _remove(path):
@@ -138,6 +447,9 @@ def _identity(addon_xml, expected_id):
 
 def _sync(profile_root, addon_root, profile_version, repository_version):
     profile_data = profile_root / "addon_data" / ADDON_ID
+    _set_stage("wait_favourites_api")
+    _wait_favourites_api()
+    _set_stage("initialize_profile_sync")
     _enable(REPOSITORY_ID)
     addon_root_text = str(addon_root / ADDON_ID)
     if addon_root_text not in sys.path:
@@ -153,7 +465,7 @@ def _sync(profile_root, addon_root, profile_version, repository_version):
     from resources.lib.mwoprofilesync.state import StateStore
     from resources.lib.mwoprofilesync.sync import ReadOnlySync
 
-    addon = xbmcaddon.Addon(ADDON_ID)
+    addon = _enabled_addon(ADDON_ID)
     state = StateStore(profile_data)
     applier = TransactionalApplier(
         profile_data,
@@ -164,9 +476,9 @@ def _sync(profile_root, addon_root, profile_version, repository_version):
         ),
     )
     applier.recover()
+    _set_stage("apply_profile_sync")
     sync = ReadOnlySync(addon, state, applier=applier)()
     addon.setSetting("enabled", "true")
-    _enable(ADDON_ID)
     local = state.read()
     enrollment = local.get("enrollment") or {}
     return {
@@ -193,12 +505,16 @@ def _paths(stage):
 
 
 def _sync_existing(stage):
+    _set_stage("validate_sync_receipt")
     stage, addon_root, profile_root = _paths(stage)
     expected = json.loads((stage / "expected.json").read_text(encoding="utf-8"))
     if set(expected) != {
         "logical_device_id",
         "profile_sync_version",
         "repository_version",
+        "required_addons",
+        "required_artifacts",
+        "dependency_artifacts",
     }:
         raise ValueError("invalid Flatpak sync receipt")
     profile_version = _identity(
@@ -212,6 +528,11 @@ def _sync_existing(stage):
         or repository_version != expected["repository_version"]
     ):
         raise ValueError("installed Flatpak add-on version differs")
+    _set_stage("reconcile_required_addons")
+    required_addons = _reconcile_required_addons(
+        expected["required_addons"]
+    )
+    _set_stage("apply_profile_sync")
     result = _sync(
         profile_root,
         addon_root,
@@ -220,10 +541,12 @@ def _sync_existing(stage):
     )
     if result["logical_device_id"] != expected["logical_device_id"]:
         raise ValueError("installed Flatpak enrollment identity differs")
+    result["required_addons"] = required_addons
     return result
 
 
 def _transaction(stage):
+    _set_stage("validate_install_payload")
     stage, addon_root, profile_root = _paths(stage)
     supplied = stage / "profile-data"
     required = {
@@ -245,22 +568,82 @@ def _transaction(stage):
         "repository-addon": addon_root / REPOSITORY_ID,
         "profile-data": profile_root / "addon_data" / ADDON_ID,
     }
+    expected = json.loads(
+        (stage / "expected.json").read_text(encoding="utf-8")
+    )
+    if set(expected) != {
+        "dependency_artifacts",
+        "logical_device_id",
+        "profile_sync_version",
+        "repository_version",
+        "required_addons",
+        "required_artifacts",
+    }:
+        raise ValueError("invalid Flatpak installation receipt")
+    expected_required = expected.get("required_addons")
+    expected_dependencies = expected.get("dependency_artifacts")
+    if (
+        not isinstance(expected_required, dict)
+        or not expected_required
+        or any(
+            not isinstance(addon_id, str)
+            or not SAFE_ADDON_ID.fullmatch(addon_id)
+            for addon_id in expected_required
+        )
+    ):
+        raise ValueError("invalid required Flatpak add-on set")
+    if (
+        not isinstance(expected_dependencies, dict)
+        or not expected_dependencies
+        or any(
+            not isinstance(addon_id, str)
+            or not SAFE_ADDON_ID.fullmatch(addon_id)
+            for addon_id in expected_dependencies
+        )
+    ):
+        raise ValueError("invalid Flatpak dependency artifact set")
+    if set(expected_required) & set(expected_dependencies):
+        raise ValueError("Flatpak dependency artifacts overlap managed add-ons")
+    targets.update(
+        {
+            "required-" + addon_id: addon_root / addon_id
+            for addon_id in expected_required
+        }
+    )
+    targets.update(
+        {
+            "dependency-" + addon_id: addon_root / addon_id
+            for addon_id in expected_dependencies
+        }
+    )
     for target in targets.values():
         if target.parent not in {addon_root, profile_root / "addon_data"}:
             raise ValueError("unsafe Flatpak rollout target")
+    _set_stage("recover_previous_transaction")
     _recover(journal, targets, backup)
     _remove(work)
     work.mkdir(mode=0o700)
+    _set_stage("extract_verified_artifacts")
     profile_candidate, profile_version = _extract_candidate(
         stage / "profile-sync.zip", ADDON_ID, work / "profile"
     )
     repository_candidate, repository_version = _extract_candidate(
         stage / "repository.zip", REPOSITORY_ID, work / "repository"
     )
+    required_candidates = _extract_required_candidates(
+        stage, expected, work / "required"
+    )
+    dependency_candidates = _extract_dependency_candidates(
+        stage, expected, work / "dependencies"
+    )
+    all_candidates = {**required_candidates, **dependency_candidates}
+    if _candidate_dependencies(all_candidates):
+        raise ValueError("Flatpak dependency artifact closure is incomplete")
     existing = [name for name, target in targets.items() if target.exists()]
     backup.mkdir(mode=0o700)
     _write_atomic(journal, {"schema": 1, "existing": existing})
     try:
+        _set_stage("install_verified_artifacts")
         for name, target in targets.items():
             if name in existing:
                 os.replace(target, backup / name)
@@ -268,21 +651,35 @@ def _transaction(stage):
         os.replace(profile_candidate, targets["profile-addon"])
         os.replace(repository_candidate, targets["repository-addon"])
         os.replace(supplied, targets["profile-data"])
+        for addon_id, candidate in required_candidates.items():
+            os.replace(candidate, targets["required-" + addon_id])
+        for addon_id, candidate in dependency_candidates.items():
+            os.replace(candidate, targets["dependency-" + addon_id])
         xbmc.executebuiltin("UpdateLocalAddons")
         xbmc.sleep(3000)
+        _set_stage("reconcile_required_addons")
+        _reconcile_required_addons(
+            expected["required_addons"], stage=stage
+        )
+        _set_stage("verify_required_addons")
+        required_addons = _verify_required_addons(
+            expected["required_addons"]
+        )
+        _set_stage("apply_profile_sync")
         result = _sync(
             profile_root,
             addon_root,
             profile_version,
             repository_version,
         )
+        journal.unlink(missing_ok=True)
+        _remove(backup)
+        _remove(work)
     except BaseException:
         _recover(journal, targets, backup)
         xbmc.executebuiltin("UpdateLocalAddons")
         raise
-    journal.unlink(missing_ok=True)
-    _remove(backup)
-    _remove(work)
+    result["required_addons"] = required_addons
     return result
 
 
@@ -290,7 +687,6 @@ def main():
     stage = Path(sys.argv[1]) if len(sys.argv) == 3 else Path("/")
     mode = sys.argv[2] if len(sys.argv) == 3 else "invalid"
     marker = stage / MARKER_NAME
-    autoexec = Path(xbmcvfs.translatePath("special://profile/autoexec.py"))
     try:
         if mode == "install":
             result = _transaction(stage)
@@ -302,10 +698,11 @@ def main():
         result = {
             "ok": False,
             "error_type": type(error).__name__,
-            "error_code": getattr(error, "code", None),
+            "error_code": _safe_error_code(error),
+            "error_origin": _safe_error_origin(error),
+            "error_stage": CURRENT_STAGE,
         }
     try:
-        autoexec.unlink()
         _write_atomic(marker, result)
     except BaseException as error:
         _write_atomic(
@@ -313,7 +710,9 @@ def main():
             {
                 "ok": False,
                 "error_type": type(error).__name__,
-                "error_code": getattr(error, "code", None),
+                "error_code": _safe_error_code(error),
+                "error_origin": _safe_error_origin(error),
+                "error_stage": CURRENT_STAGE,
             },
         )
     finally:

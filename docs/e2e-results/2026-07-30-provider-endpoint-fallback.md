@@ -1,101 +1,104 @@
-# MwoScrapers provider endpoint fallback
+# Rezerwowy punkt końcowy dostawcy MwoScrapers
 
-Date: 2026-07-30
+Data: 2026-07-30
 
-## Outcome
+## Wynik
 
-The diagnosis confirmed a real runtime gap in MwoScrapers 0.1.6: after a
-private provider endpoint was configured, a transport or protocol failure
-returned an empty source list without trying the provider's public endpoint.
-The endpoint default in settings was valid, but it was not a runtime fallback.
+Diagnoza potwierdziła rzeczywistą lukę w czasie wykonywania w MwoScrapers 0.1.6: po
+skonfigurowaniu punktu końcowego prywatnego dostawcy, awaria transportu lub protokołu
+zwróciła pustą listę źródeł bez sprawdzania publicznego punktu końcowego dostawcy.
+Domyślny punkt końcowy w ustawieniach był prawidłowy, ale nie był to powrót do
+środowiska wykonawczego.
 
-Candidate 0.1.7 fixes the gap in the shared Stremio adapter:
+Kandydat 0.1.7 naprawia lukę we współdzielonym adapterze Stremio:
 
-- a configured endpoint remains first;
-- the code-owned public endpoint is the unique second candidate;
-- transport, HTTP, JSON and stream-contract failures advance to the next
-  candidate;
-- a valid empty response is authoritative and is not duplicated;
-- provider health fails only after every endpoint candidate fails.
+- skonfigurowany punkt końcowy pozostaje pierwszy;
+- publiczny punkt końcowy będący własnością kodu jest unikalnym drugim kandydatem;
+- awarie transportu, HTTP, JSON i kontraktu strumieniowego przechodzą na następnego
+  kandydata;
+- ważna pusta odpowiedź jest wiarygodna i nie jest powielana;
+- kondycja dostawcy kończy się niepowodzeniem dopiero po niepowodzeniu każdego kandydata
+  na punkt końcowy.
 
-The QNAP relay remained healthy throughout the test: one healthy container,
-one Compose network and no volumes. It is still a stateless, credential-free
-metadata optimization. No Real-Debrid operation passes through it.
+Przekaźnik QNAP pozostawał sprawny przez cały test: jeden sprawny kontener, jedna sieć
+Compose i brak woluminów. Jest to nadal bezstanowa optymalizacja metadanych wolna od
+poświadczeń. Nie przechodzi przez nią żadna operacja Real-Debrid.
 
-## Provider inventory
+## Inwentarz dostawcy
 
-MwoScrapers contains two original Stremio-contract adapters:
+MwoScrapers zawiera dwa oryginalne adaptery kontraktowe Stremio:
 
-- Torrentio is enabled by default and returned 5 sources for `Sintel` plus 49
-  for `Breaking Bad S01E01`;
-- Comet is opt-in and its current unconfigured public endpoint returned HTTP
-  403 on the host and every tested Kodi runtime.
+- Torrentio jest domyślnie włączone i zwraca 5 źródeł dla `Sintel` plus 49 dla `Breaking
+  Bad S01E01`;
+- Comet jest opcjonalny i jego bieżący nieskonfigurowany publiczny punkt końcowy zwrócił
+  HTTP 403 na hoście i w każdym testowanym środowisku wykonawczym Kodi.
 
-Keeping Comet disabled is therefore correct. The
-[current Comet project](https://github.com/g0ldyy/comet) expects a configured
-instance and can itself integrate debrid services, which is not the passive
-provider boundary used by MwoScrapers. It must not be enabled only to make the
-provider count look larger.
+Dlatego prawidłowe jest pozostawienie wyłączonego Comet. [bieżący projekt
+Comet](https://github.com/g0ldyy/comet) oczekuje skonfigurowanej instancji i sam może
+integrować usługi debridowania, co nie jest pasywną granicą dostawcy używaną przez
+MwoScrapers. Nie można jej włączać tylko po to, aby liczba dostawców wyglądała na
+większą.
 
-## Exact candidate
+## Dokładny kandydat
 
-- repository: `mwoDevelop/script.module.mwoscrapers`;
-- commit: `47b4135b5b7401059ce805256c13881699f189a3`;
-- version: `0.1.7`;
-- candidate ZIP SHA-256:
+- repozytorium: `mwoDevelop/script.module.mwoscrapers`;
+- zatwierdzenie: `47b4135b5b7401059ce805256c13881699f189a3`;
+- wersja: `0.1.7`;
+- kandydat ZIP SHA-256:
   `f12494ee9fde346fc0f80effdc0030af42fb70ae6ff098f63c3dcc6dd87f7b39`;
 - PR: `mwoDevelop/script.module.mwoscrapers#11`.
 
-Local gates passed:
+Minęły lokalne bramy:
 
-- 45 MwoScrapers tests;
-- Ruff;
-- add-on validation;
-- two atomic candidate-rollout tests;
-- deterministic repository build.
+- 45 testów MwoScrapers;
+- Batalion;
+- weryfikacja dodatku;
+- dwa atomowe testy kandydatów do wdrożenia;
+- deterministyczna kompilacja repozytorium.
 
-GitHub checks passed in runs `30577640978`, `30577659268` and `30577659233`,
-including the exact-head malware scan, tests and relay-image build.
+GitHub sprawdza w seriach `30577640978`, `30577659268` i `30577659233`, w tym dokładne
+skanowanie pod kątem złośliwego oprogramowania, testy i kompilację obrazu
+przekaźnikowego.
 
-## Device matrix
+## Matryca urządzenia
 
-| Device | Configured path | Configured results | Unavailable relay behavior | Playback |
+| Urządzenie | Skonfigurowana ścieżka | Skonfigurowane wyniki | Niedostępne zachowanie przekaźnika | Odtwarzanie |
 | --- | --- | --- | --- | --- |
-| BlueStacks1 | public | 5 / 49 | relay error, public success, 5 | movie 12.141 s; episode 12.146 s |
-| Sony TV | LAN relay | 5 / 49 | relay error, public attempted but HTTP 403 | movie 12.276 s; episode 12.485 s |
-| X88 Pro 20 | LAN relay | 5 / 49 | relay error, public success, 5 | movie 12.161 s; episode 12.430 s |
-| Bedroom TV | unavailable | not run | not run | not run |
+| BlueStacks1 | publiczne | 5 / 49 | błąd przekaźnika, sukces publiczny, 5 | film 12,141 s; odcinek 12.146 s |
+| Sony TV | Przekaźnik LAN | 5 / 49 | błąd przekaźnika, próba publiczna, ale HTTP 403 | film 12,276 s; odcinek 12,485 s |
+| X88 Pro 20 | Przekaźnik LAN | 5 / 49 | błąd przekaźnika, sukces publiczny, 5 | film 12,161 s; odcinek 12.430 s |
+| Bedroom TV | niedostępne | nie biegać | nie biegać | nie biegać |
 
-All six completed playback cases used Umbrella 6.7.81.18. BlueStacks and Sony
-reports directly recorded `realdebrid.add_magnet` and `Played file as
-resolve`. X88 Android scoped storage denied shell access to `umbrella.log`, so
-an in-Kodi boolean probe read the same log and confirmed both markers without
-exporting log lines, URLs, hashes or credentials.
+Wszystkie sześć ukończonych przypadków odtwarzania korzystało z Umbrella 6.7.81.18.
+Raporty BlueStacks i Sony bezpośrednio zarejestrowały `realdebrid.add_magnet` i `Played
+file as resolve`. Pamięć masowa X88 Android odmówiła dostępu powłoki do `umbrella.log`,
+więc sonda logiczna w Kodi odczytała ten sam dziennik i potwierdziła oba znaczniki bez
+eksportowania linii dziennika, adresów URL, skrótów lub poświadczeń.
 
-The source fingerprints remained consistent where the existing matrix could
-read Umbrella's log:
+Odciski źródłowe pozostały spójne tam, gdzie istniejąca matryca mogła odczytać dziennik
+Umbrella:
 
 - `Sintel`: `5a6b52180d6a015e`;
 - `Breaking Bad S01E01`: `6f39c1e78d9c75c4`.
 
-## VPN limitation
+## Ograniczenie VPN
 
-Sony's NordVPN exit still receives HTTP 403 from public Torrentio. Version
-0.1.7 removes the software dependency on QNAP by always attempting the public
-fallback, but it cannot override an upstream decision to block a VPN address.
-On that specific network route, successful searching still needs either the
-healthy relay, a different VPN exit, or excluding all of Kodi from the VPN.
-Android TV NordVPN offers application-level, not per-domain, split tunneling,
-so excluding Kodi would also move Real-Debrid traffic outside the VPN and was
-not applied.
+Wyjście Sony NordVPN nadal odbiera HTTP 403 z publicznego Torrentio. Wersja 0.1.7 usuwa
+zależność oprogramowania od QNAP, zawsze próbując publicznego rozwiązania awaryjnego,
+ale nie może zastąpić decyzji upstream o zablokowaniu adresu VPN. Na tej konkretnej
+trasie sieciowej pomyślne wyszukiwanie nadal wymaga sprawnego przekaźnika, innego
+wyjścia VPN lub wykluczenia wszystkich Kodi z VPN. Android TV NordVPN oferuje dzielone
+tunelowanie na poziomie aplikacji, a nie na domenę, więc wykluczenie Kodi spowodowałoby
+również przeniesienie ruchu Real-Debrid poza VPN i nie zostało zastosowane.
 
-Resolving remains independent of QNAP in every case: MwoScrapers returns
-magnet metadata, then Umbrella alone submits the selected magnet to
-Real-Debrid and receives the playable URL.
+Rozwiązywanie pozostaje niezależne od QNAP w każdym przypadku: MwoScrapers zwraca
+metadane magnesu, następnie Umbrella samodzielnie przesyła wybrany magnes do Real-Debrid
+i otrzymuje odtwarzalny adres URL.
 
-## Reproducible commands
+## Powtarzalne polecenia
 
-Build the exact candidate using a testing lock override, then apply it with:
+Zbuduj dokładnego kandydata, używając obejścia blokady testing, a następnie zastosuj go
+za pomocą:
 
 ```bash
 .venv/bin/python tools/kodi_addon_candidate_rollout.py \
@@ -105,21 +108,22 @@ Build the exact candidate using a testing lock override, then apply it with:
   --serial DEVICE
 ```
 
-Run the sanitized configured/public/unavailable-relay matrix with:
+Uruchom oczyszczoną macierz skonfigurowanego/publicznego/niedostępnego przekaźnika za
+pomocą:
 
 ```bash
 .venv/bin/python tools/kodi_mwoscrapers_endpoint_probe.py \
   --serial DEVICE
 ```
 
-Run movie and episode playback with `tests/e2e/sony_kodi_matrix.py`.
+Uruchom odtwarzanie filmów i odcinków za pomocą `tests/e2e/sony_kodi_matrix.py`.
 
-## Publication status
+## Stan publikacji
 
-The exact candidate is installed on BlueStacks1, Sony TV and X88 Pro 20.
-Publication is intentionally pending because branch protection rejected an
-administrative merge without one approving review from a different account
-with write access. No testing/stable lock, repository add-on version or public
-artifact was changed. After legal approval of PR 11, the same commit must be
-published to testing, verified byte-for-byte, rolled out again from the public
-repository, and only then promoted to stable.
+Dokładny kandydat jest zainstalowany na BlueStacks1, Sony TV i X88 Pro 20. Publikacja
+celowo oczekuje na oczekiwanie, ponieważ ochrona oddziału odrzuciła połączenie
+administracyjne bez zatwierdzania recenzji z innego konta z dostępem do zapisu. Nie
+zmieniono blokady testing/stable, wersji dodatku do repozytorium ani artefaktu
+publicznego. Po prawnym zatwierdzeniu PR 11, to samo zatwierdzenie musi zostać
+opublikowane w testing, zweryfikowane bajt po bajcie, ponownie wypuszczone z publicznego
+repozytorium, a dopiero potem awansowane do stable.

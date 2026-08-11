@@ -127,6 +127,8 @@ def main():
         )
     except Exception as error:  # noqa: BLE001 - Kodi runtime boundary
         report["error_type"] = type(error).__name__
+        if isinstance(error, ModuleNotFoundError):
+            report["error_module"] = str(error.name or "")[:128]
     finally:
         _write(marker_path, report)
 

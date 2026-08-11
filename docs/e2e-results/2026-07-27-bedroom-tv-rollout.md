@@ -1,52 +1,54 @@
-# Bedroom TV rollout checkpoint
+# Punkt kontrolny wdrożenia Bedroom TV
 
-Date: 2026-07-27
+Data: 27.07.2026
 
-Target: private registry device `bedroom-tv` (Google TV Streamer, Android 14,
-ARMv7 Kodi userspace).
+Cel: urządzenie z prywatnym rejestrem `bedroom-tv` (Google TV Streamer, Android 14,
+przestrzeń użytkownika ARMv7 Kodi).
 
-## Completed
+## Ukończono
 
-- read-only lifecycle inventory passed on Kodi 21.2;
-- a private rollback snapshot was created before mutation;
-- Kodi was upgraded to 21.3;
-- the verified Sony Android TV snapshot was restored through the in-process
-  Kodi restore path (4,277 managed files);
-- Aeon Nox Silvo was activated;
-- `repository.mwodevelop` 1.0.0, Umbrella 6.7.81.14, MwoScrapers 0.1.3,
-  the MwoScrapers wrapper 0.1.1 and WatchNixtoons2 0.25.2 were present with
-  the expected stable origin.
+- inwentarz cyklu życia tylko do odczytu przekazany w Kodi 21.2;
+- przed mutacją utworzono prywatną migawkę rollback;
+- Kodi został zaktualizowany do wersji 21.3;
+- zweryfikowana migawka Sony Android TV została przywrócona za pomocą ścieżki
+  przywracania Kodi w procesie (4277 zarządzanych plików);
+- Aktywowano Aeon Nox Silvo;
+- `repository.mwodevelop` 1.0.0, Umbrella 6.7.81.14, MwoScrapers 0.1.3, opakowanie
+  MwoScrapers 0.1.1 i WatchNixtoons2 0.25.2 były obecne z oczekiwanym pochodzeniem
+  stable.
 
-## Live defects found
+## Znaleziono defekty na żywo
 
-1. A corrupt legacy `plugin.video.pov/addon.xml` containing only zero bytes
-   prevented snapshot inventory. The host exporter now preserves corrupt
-   payload bytes for rollback but does not mark such an add-on as safe to
-   re-enable.
-2. Android 14 did not permit the direct ADB profile path before Kodi first
-   created it. The target now uses the supported in-process restore mode.
-3. Google TV can freeze a background Kodi process when HDMI/ambient mode takes
-   focus. Device E2E must wake the target and keep Kodi foregrounded.
-4. The first playback checks stopped before provider resolution because a
-   fresh restore has an empty Umbrella cache version marker. Umbrella
-   6.7.81.15 treats that legacy marker as version zero and is published to
-   testing; stable remains on 6.7.81.14 until the device rerun passes.
-5. Device automation now prefers Kodi JSON-RPC for builtins and retains
-   EventServer only as a fallback, avoiding a blocking Android `nc`.
+1. Uszkodzona starsza wersja `plugin.video.pov/addon.xml` zawierająca tylko zero bajtów
+   uniemożliwiała inwentaryzację migawek. Eksporter hosta zachowuje teraz uszkodzone
+   bajty ładunku dla rollback, ale nie oznacza takiego dodatku jako bezpiecznego do
+   ponownego włączenia.
+2. Android 14 nie zezwalał na bezpośrednią ścieżkę profilu ADB, zanim Kodi go po raz
+   pierwszy utworzył. Obiekt docelowy korzysta teraz z obsługiwanego trybu przywracania
+   w procesie.
+3. Google TV może zawiesić proces Kodi w tle, gdy ustawiony zostanie tryb HDMI/ambient.
+   Urządzenie E2E musi obudzić cel i utrzymać Kodi na pierwszym planie.
+4. Pierwsze sprawdzanie odtwarzania zostało zatrzymane przed rozwiązaniem dostawcy,
+   ponieważ świeże przywracanie ma pusty znacznik wersji pamięci podręcznej Umbrella.
+   Umbrella 6.7.81.15 traktuje ten starszy znacznik jako wersję zerową i jest
+   publikowany w testing; stable pozostaje w wersji 6.7.81.14, dopóki nie minie ponowne
+   uruchomienie urządzenia.
+5. Automatyzacja urządzeń preferuje teraz Kodi JSON-RPC dla wbudowanych i zachowuje
+   EventServer tylko jako rezerwę, unikając blokowania Android `nc`.
 
-## Host and publication evidence
+## Dowody dotyczące gospodarza i publikacji
 
-- all 116 root repository E2E tests passed;
-- Umbrella's 40 downstream tests and deterministic 27-patch reconstruction
-  passed;
-- the testing publication workflow completed successfully:
+- wszystkie 116 testów E2E repozytoriów głównych przeszło pomyślnie;
+- Pomyślnie przeszło 40 testów downstream Umbrella i deterministyczną rekonstrukcję 27
+  poprawek;
+- publikacja testing workflow została ukończona pomyślnie:
   <https://github.com/mwoDevelop/kodi/actions/runs/30299301112>;
-- the public testing index exposes Umbrella 6.7.81.15 and
+- publiczny indeks testing eksponuje Umbrella 6.7.81.15 i
   `service.mwodevelop.profilesync` 0.1.6.
 
-## Reproducible continuation
+## Powtarzalna kontynuacja
 
-After Bedroom TV is powered on and ADB is authorized:
+Po włączeniu zasilania Bedroom TV i autoryzacji ADB:
 
 ```bash
 cd /home/mwo/projects/kodi
@@ -60,13 +62,13 @@ PYTHONPATH=. .venv/bin/python \
   --result .kodi-private/e2e/bedroom-tv-profile-sync-0.1.6.json
 ```
 
-Then install/update Umbrella 6.7.81.15 from the testing channel and rerun at
-least one movie and one episode through the resolver matrix. Promote to stable
-only after the service log has no fresh-cache `ValueError` and both cases
-reach controlled playback.
+Następnie zainstaluj/zaktualizuj Umbrella 6.7.81.15 z kanału testing i ponownie uruchom
+co najmniej jeden film i jeden odcinek za pomocą matrycy przelicznika. Przejdź do stable
+dopiero wtedy, gdy dziennik usług nie zawiera świeżej pamięci podręcznej `ValueError` i
+oba przypadki osiągną kontrolowane odtwarzanie.
 
-## Deferred target
+## Odroczony cel
 
-`mwonuc` did not accept TCP/22 during this checkpoint. Its private registry
-entries and per-account SSH keys cannot be safely qualified or rolled out
-until the host is reachable; no NUC mutation was attempted.
+`mwonuc` nie zaakceptował protokołu TCP/22 podczas tego punktu kontrolnego. Nie można
+bezpiecznie zakwalifikować ani wdrożyć jego wpisów do rejestru prywatnego ani kluczy SSH
+przypisanych do konta, dopóki host nie będzie osiągalny; nie podjęto próby mutacji NUC.

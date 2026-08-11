@@ -1,80 +1,75 @@
-# Profile Sync 0.1.8 stable rollout
+# Wdrożenie Profile Sync 0.1.8 stable
 
-Date: 2026-07-31
+Data: 2026-07-31
 
-## Released artifacts
+## Zwolnione artefakty
 
-- Kodi add-on: `service.mwodevelop.profilesync` 0.1.8;
-- add-on commit: `69fd1921906e32a2e1bd4e5106690ebe103b41a2`;
-- public stable ZIP SHA-256:
+- Dodatek Kodi: `service.mwodevelop.profilesync` 0.1.8;
+- zatwierdzenie dodatku: `69fd1921906e32a2e1bd4e5106690ebe103b41a2`;
+- publiczny stable ZIP SHA-256:
   `0542cad64b30c2491ae42ce1b4a07011d002ba1de6b064092443cea1ba942574`;
-- immutable testing snapshot:
+- niezmienna migawka testing:
   `b89c7205c1a6a40f573c24bc1a9e68725da066c3b5b49a50d5308ada05d50698`;
-- QNAP server: 0.2.1, build
-  `git:0e36e579078c57034be05b440c933096e5807007`;
-- QNAP image:
+- Serwer QNAP: 0.2.1, kompilacja `git:0e36e579078c57034be05b440c933096e5807007`;
+- Obraz QNAP:
   `ghcr.io/mwodevelop/kodi-profile-sync-server@sha256:166a4303b083daf23a10e18d4ffc756e0b16d3aedb9a073583c755addc20390f`.
 
-`repository.mwodevelop` intentionally remains version 1.0.0.
+`repository.mwodevelop` celowo pozostaje w wersji 1.0.0.
 
-## Promotion evidence
+## Dowody promocyjne
 
-- testing publication run: `30640650514`;
-- device certification run: `30643501928`;
-- exact-snapshot promotion run: `30644134769`;
-- reviewed promotion PR: `#93`;
-- stable deployment run: `30644515552`.
+- Nakład publikacji testing: `30640650514`;
+- przebieg certyfikacji urządzenia: `30643501928`;
+- Promocja dokładnej migawki: `30644134769`;
+- recenzja promocji PR: `#93`;
+- Uruchomienie wdrożenia stable: `30644515552`.
 
-The certification ran against BlueStacks and X88 Pro 20. The stable workflow
-copied the certified snapshot payload without rebuilding component ZIPs. A
-post-deploy HTTP check downloaded the public stable ZIP and reproduced the
-SHA-256 above.
+Certyfikacja dotyczyła BlueStacks i X88 Pro 20. stable workflow skopiował certyfikowany
+ładunek migawki bez konieczności przebudowywania komponentów ZIP. Kontrola HTTP po
+wdrożeniu pobrała publiczny plik ZIP stable i odtworzyła powyższy SHA-256.
 
-## Device results
+## Wyniki urządzenia
 
-| Device | Kodi | Stable origin | Isolated signed check | Production sync | Apply/rollback |
+| Urządzenie | Kodi | Pochodzenie stable | Izolowany czek podpisany | Synchronizacja produkcji | Zastosuj/rollback |
 |---|---:|---|---|---|---|
-| BlueStacks1 | 21.3 | pass | pass | pass | pass |
-| X88 Pro 20 | 21.3 | pass | pass | pass | pass |
-| Sony TV | 21.3 | pass | pass | paired; active revision discovered | pass |
+| BlueStacks1 | 21,3 | przejść | przejść | przejść | przejść |
+| X88 Pro 20 | 21,3 | przejść | przejść | przejść | przejść |
+| Sony TV | 21,3 | przejść | przejść | sparowany; odkryto aktywną wersję | przejść |
 
-BlueStacks and X88 retained their original production enrollment byte-for-byte
-after the isolated test. Sony received a separate production enrollment. No
-pairing code, access token, signing seed or credential is present in this
-report. One-time pairing files were removed after use.
+Po izolowanym teście BlueStacks i X88 zachowały oryginalny bajt po bajcie z rejestracji
+produkcyjnej. Sony otrzymało oddzielną rejestrację produkcyjną. W tym raporcie nie ma
+kodu parowania, tokena dostępu, materiału początkowego podpisu ani poświadczeń.
+Jednorazowe pliki parowania zostały usunięte po użyciu.
 
-After the Sony enrollment, backup `production-final-20260731` was downloaded
-from QNAP, encrypted off-NAS with AES-256-GCM and re-opened only in memory.
-SQLite reported schema 2, `integrity_check=ok`, three enrollments and two
-signed canary reports. The encrypted file has mode `0600`; the downloaded
-plaintext was removed.
+Po rejestracji Sony kopia zapasowa `production-final-20260731` została pobrana z QNAP,
+zaszyfrowana poza serwerem NAS za pomocą AES-256-GCM i ponownie otwarta tylko w pamięci.
+SQLite zgłosił schemat 2, `integrity_check=ok`, trzy rejestracje i dwa podpisane raporty
+Canary. Zaszyfrowany plik ma tryb `0600`; pobrany tekst jawny został usunięty.
 
-The X88 production probe exposed a lossy one-shot EventServer launch. The E2E
-harness now prefers JSON-RPC and falls back to EventServer. The isolated probe
-also now removes production state only inside its temporary transaction,
-waits for an explicit cleanup marker and restores the original state before
-reporting success.
+Sonda produkcyjna X88 ujawniła jednorazowe, stratne uruchomienie EventServera. Uprząż
+E2E preferuje teraz JSON-RPC i wraca do EventServer. Izolowana sonda usuwa teraz również
+stan produkcyjny tylko w ramach swojej tymczasowej transakcji, czeka na wyraźny znacznik
+czyszczenia i przywraca pierwotny stan przed zgłoszeniem powodzenia.
 
-## Portable state and repositories
+## Stan przenośny i repozytoria
 
-The final read-only audit on BlueStacks, X88 and Sony returned `OK` for every
-device and the same favourites digest. Each had:
+Ostateczny audyt tylko do odczytu dotyczący BlueStacks, X88 i Sony zwrócił `OK` dla
+każdego urządzenia i ten sam skrót ulubionych. Każdy miał:
 
-- 8 favourites;
-- 7 current WatchNixtoons2 actions;
-- 7 portable WatchNixtoons2 items;
-- no missing artwork files;
-- a unique, consistent Profile Sync logical identity and production
-  enrollment.
+- 8 ulubionych;
+- 7 aktualnych akcji WatchNixtoons2;
+- 7 przenośnych elementów WatchNixtoons2;
+- brak brakujących plików graficznych;
+- unikalna, spójna tożsamość logiczna Profile Sync i rejestracja produkcyjna.
 
-After promotion, the testing repository was removed from BlueStacks and X88.
-All three devices expose only `repository.mwodevelop` 1.0.0 and the official
-Kodi repository, and all five mwoDevelop components have stable origin.
+Po promocji repozytorium testing zostało usunięte z BlueStacks i X88. Wszystkie trzy
+urządzenia udostępniają tylko `repository.mwodevelop` 1.0.0 i oficjalne repozytorium
+Kodi, a wszystkie pięć komponentów mwoDevelop ma pochodzenie stable.
 
-Bedroom TV and both NUC accounts were unavailable and are deliberately not
-reported as passing this final rollout.
+Bedroom TV i oba konta NUC były niedostępne i celowo nie zgłaszano, że pomyślnie
+przeszły ostateczne wdrożenie.
 
-## Reproducible checks
+## Powtarzalne kontrole
 
 ```bash
 PYTHON=/path/to/venv/bin/python tests/e2e/run.sh
@@ -95,5 +90,5 @@ PYTHONPATH=. /path/to/venv/bin/python \
   --references /path/to/private/.env
 ```
 
-The repository build was generated twice and compared recursively. The final
-suite result was `275 passed`.
+Kompilacja repozytorium została wygenerowana dwukrotnie i porównana rekurencyjnie.
+Ostatecznym wynikiem pakietu był `275 passed`.

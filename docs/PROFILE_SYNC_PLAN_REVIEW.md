@@ -1,4 +1,4 @@
-# Niezależny review planu synchronizacji profili Kodi
+# Niezależna recenzja planu synchronizacji profili Kodi
 
 Data review: 2026-07-27
 
@@ -79,7 +79,7 @@ service startuje wewnątrz procesu Kodi, instalacja dodatku jest operacją
 asynchroniczną, a ingerencja w dane innych dodatków wymaga jawnej zgody i nie
 powinna opierać się na bezwarunkowej podmianie plików.
 
-## 6. Follow-up review po pierwszej korekcie
+## 6. Ponowna recenzja po pierwszej korekcie
 
 Reviewer ponownie sprawdził pełny plan. Wskazał trzy pozostające luki high i
 siedem medium; wszystkie zostały uznane za zasadne:
