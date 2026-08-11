@@ -1,6 +1,7 @@
 import json
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -17,7 +18,10 @@ from tools.kodi_portable_state import (
     recover,
     validate_bundle,
 )
-from tools.kodi_portable_state_rollout import _current_bundle
+from tools.kodi_portable_state_rollout import (
+    _current_bundle,
+    _ensure_kodi_started,
+)
 
 
 JPEG = b"\xff\xd8\xff\xe0" + b"portable-artwork"
@@ -213,3 +217,33 @@ def test_current_bundle_pointer_is_content_addressed_and_path_safe(tmp_path):
     )
     with pytest.raises(RuntimeError, match="filename"):
         _current_bundle(tmp_path)
+
+
+@pytest.mark.parametrize("running", [True, False])
+def test_portable_publisher_starts_kodi_only_when_not_running(
+    monkeypatch, running
+):
+    commands = []
+    ready = []
+
+    def adb_command(_adb, _port, _serial, *argv, **_kwargs):
+        commands.append(argv)
+        if argv == ("shell", "pidof org.xbmc.kodi"):
+            return SimpleNamespace(
+                returncode=0 if running else 1,
+                stdout="1234\n" if running else "",
+            )
+        return SimpleNamespace(returncode=0, stdout="")
+
+    monkeypatch.setattr(
+        "tools.kodi_portable_state_rollout.adb_command", adb_command
+    )
+    monkeypatch.setattr(
+        "tools.kodi_portable_state_rollout._wait_for_kodi_ready",
+        lambda *_args: ready.append(True),
+    )
+
+    _ensure_kodi_started("adb", 5038, "device")
+
+    assert len(commands) == (1 if running else 2)
+    assert ready == ([] if running else [True])

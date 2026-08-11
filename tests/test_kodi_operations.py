@@ -10,7 +10,9 @@ from tools.kodi_operations.model import OperationPlan, PlanStep, StepResult
 from tools.kodi_operations.model import RunStatus
 from tools.kodi_operations.runner import (
     DeviceUnavailable,
+    OperationAdapterError,
     OperationRunner,
+    ProductionExecutor,
     StepOutcome,
 )
 from tools.kodi_operations.store import RunStore, StoreError
@@ -318,3 +320,22 @@ def test_exception_text_and_sentinel_secret_never_enter_run_documents(
 
     assert code == 5
     assert sentinel not in persisted
+
+
+def test_portable_dispatch_retries_once_and_preserves_hard_failure(monkeypatch):
+    executor = object.__new__(ProductionExecutor)
+    calls = []
+
+    def portable(command, device_id):
+        calls.append((command, device_id))
+        raise OperationAdapterError("portable-state")
+
+    monkeypatch.setattr(executor, "_portable", portable)
+    monkeypatch.setattr(
+        "tools.kodi_operations.runner.time.sleep", lambda _seconds: None
+    )
+
+    with pytest.raises(OperationAdapterError):
+        executor._portable_with_retry("publish", "sony-tv")
+
+    assert calls == [("publish", "sony-tv"), ("publish", "sony-tv")]

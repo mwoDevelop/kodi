@@ -187,6 +187,14 @@ class ProductionExecutor:
             "missing_artwork_files": device.get("missing_artwork_files"),
         }
 
+    def _portable_with_retry(self, command: str, device_id: str) -> dict[str, Any]:
+        """Retry one transient in-Kodi dispatch without masking a hard failure."""
+        try:
+            return self._portable(command, device_id)
+        except OperationAdapterError:
+            time.sleep(3)
+            return self._portable(command, device_id)
+
     def _android_converge(self, device_id: str) -> StepOutcome:
         serial = self.fleet["devices"][device_id]["endpoints"]["adb"]
         stable = self._run_json(
@@ -272,14 +280,10 @@ class ProductionExecutor:
             timeout=600,
             adapter="umbrella-private",
         )
-        try:
-            portable = self._portable("apply", device_id)
-        except OperationAdapterError:
-            # Kodi can still be completing UpdateLocalAddons or a settings
-            # flush after the preceding adapters. One bounded retry preserves
-            # fail-closed behavior while avoiding a false device regression.
-            time.sleep(3)
-            portable = self._portable("apply", device_id)
+        # Kodi can still be completing UpdateLocalAddons or a settings flush
+        # after the preceding adapters. One bounded retry preserves fail-closed
+        # behavior while avoiding a false device regression.
+        portable = self._portable_with_retry("apply", device_id)
         if portable["status"] != "CONVERGED":
             raise RuntimeError("portable state did not converge")
         changed = any(
@@ -789,7 +793,9 @@ class ProductionExecutor:
                 timeout=120,
                 adapter="umbrella-private",
             )
-            published = self._portable("publish", self.fleet["publisher"])
+            published = self._portable_with_retry(
+                "publish", self.fleet["publisher"]
+            )
             if published["status"] != "CONVERGED":
                 raise RuntimeError("portable-state publisher did not converge")
             command = [

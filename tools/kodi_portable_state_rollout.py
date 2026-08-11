@@ -212,6 +212,29 @@ def _restart(adb, port, serial):
     _wait_for_kodi_ready(adb, port, serial)
 
 
+def _ensure_kodi_started(adb, port, serial):
+    running = adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "pidof %s" % KODI_PACKAGE,
+        check=False,
+        text=True,
+    )
+    if running.returncode == 0 and (running.stdout or "").strip():
+        return
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
+        % KODI_PACKAGE,
+    )
+    _wait_for_kodi_ready(adb, port, serial)
+
+
 def _android_probe(adb, port, serial):
     _push_tools(adb, port, serial)
     return run_kodi_script(
@@ -259,6 +282,7 @@ def _configure_profile_sync(
 
 
 def _prepare_and_export(adb, port, serial, private_root):
+    _ensure_kodi_started(adb, port, serial)
     _push_tools(adb, port, serial, include_artwork=True)
     artwork = run_kodi_script(
         adb,
