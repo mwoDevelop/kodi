@@ -128,6 +128,16 @@ def _database_state(path: Path) -> dict:
                 """
             )
         ]
+        assignments = [
+            dict(row)
+            for row in database.execute(
+                """
+                SELECT enrollment_id, revision_id, assignment_kind, document
+                FROM assignments WHERE channel=?
+                """,
+                (CHANNEL,),
+            )
+        ]
         return {
             "active_revision": channel["active_revision"],
             "candidate_revision": channel["candidate_revision"],
@@ -135,6 +145,7 @@ def _database_state(path: Path) -> dict:
             "manifest": json.loads(revision["manifest"]),
             "enrollments": enrollments,
             "reports": reports,
+            "assignments": assignments,
         }
     finally:
         database.close()
@@ -314,6 +325,64 @@ def _require_report(state: dict, enrollment_id: str, revision: str, kind: str):
     ]
     if not matches or matches[-1]["result"] != "success":
         raise RuntimeError("required Profile Sync %s report is missing" % kind)
+
+
+def bootstrap_active(repository: Path, logical_id: str) -> dict:
+    """Attach a fresh signed v2 assignment to a newly paired enrollment."""
+
+    session = connect(repository, ".env")
+    try:
+        backup, evidence = _backup(session, repository, "bootstrap-%s" % logical_id)
+        state = _database_state(backup)
+        enrollment = _latest_enrollments(state, {logical_id})[logical_id]
+        current = None
+        for item in state["assignments"]:
+            if item["enrollment_id"] == enrollment["enrollment_id"]:
+                current = item
+                break
+        if current is not None:
+            try:
+                document = json.loads(current["document"])
+            except (TypeError, json.JSONDecodeError):
+                document = {}
+            if (
+                current["assignment_kind"] == "active"
+                and current["revision_id"] == state["active_revision"]
+                and document.get("schema") == 2
+                and document.get("channel_generation") == state["generation"]
+                and document.get("enrollment_generation")
+                == enrollment["generation"]
+                and int(document.get("expires_at", 0)) >= int(time.time())
+            ):
+                return {
+                    "status": "NO_CHANGE",
+                    "active_revision": state["active_revision"],
+                    "backup": evidence["backup_id"],
+                }
+        assignment = _assignment(
+            enrollment,
+            state["active_revision"],
+            state["generation"],
+            "active",
+            repository,
+        )
+        assignment_id = assignment["assignment_id"].split(":", 1)[1]
+        _admin(
+            session,
+            "bootstrap_active",
+            "publish",
+            "/v1/channels/%s/bootstrap-assignments" % CHANNEL,
+            assignment,
+            "portable-bootstrap-%s" % assignment_id,
+            repository,
+        )
+        return {
+            "status": "BOOTSTRAPPED",
+            "active_revision": state["active_revision"],
+            "backup": evidence["backup_id"],
+        }
+    finally:
+        session.close()
 
 
 def converge(repository: Path, adb: str, port: int, canaries: list[str]) -> dict:

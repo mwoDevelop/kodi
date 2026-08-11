@@ -8,6 +8,7 @@ from tools.profile_sync_portable_release import (
     _database_state,
     _latest_enrollments,
     _portable_export,
+    bootstrap_active,
 )
 
 
@@ -57,6 +58,10 @@ def test_database_state_and_latest_enrollment_are_exact(tmp_path):
           enrollment_id TEXT, revision_id TEXT, assignment_kind TEXT,
           result TEXT
         );
+        CREATE TABLE assignments (
+          enrollment_id TEXT, channel TEXT, revision_id TEXT,
+          assignment_kind TEXT, document TEXT
+        );
         """
     )
     revision = "sha256:" + "a" * 64
@@ -91,3 +96,63 @@ def test_database_state_and_latest_enrollment_are_exact(tmp_path):
 def test_latest_enrollment_fails_closed_for_unenrolled_device():
     with pytest.raises(RuntimeError, match="device-b"):
         _latest_enrollments({"enrollments": []}, {"device-b"})
+
+
+def test_bootstrap_active_signs_only_a_missing_current_assignment(
+    monkeypatch, tmp_path
+):
+    revision = "sha256:" + "a" * 64
+    state = {
+        "active_revision": revision,
+        "generation": 4,
+        "enrollments": [
+            {
+                "enrollment_id": "enr:new00000",
+                "logical_device_id": "device-a",
+                "generation": 2,
+                "channel": "home-stable",
+                "target_tags": '["android:arm64","home"]',
+                "revoked": 0,
+            }
+        ],
+        "assignments": [],
+    }
+
+    class Session:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    session = Session()
+    calls = []
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release.connect",
+        lambda *_args: session,
+    )
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release._backup",
+        lambda *_args: (tmp_path, {"backup_id": "backup-1"}),
+    )
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release._database_state",
+        lambda *_args: state,
+    )
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release._assignment",
+        lambda *_args: {"assignment_id": "sha256:" + "b" * 64},
+    )
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release._admin",
+        lambda *args: calls.append(args),
+    )
+
+    result = bootstrap_active(tmp_path, "device-a")
+
+    assert result["status"] == "BOOTSTRAPPED"
+    assert calls[0][1:4] == (
+        "bootstrap_active",
+        "publish",
+        "/v1/channels/home-stable/bootstrap-assignments",
+    )
+    assert session.closed is True

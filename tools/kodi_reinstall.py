@@ -440,9 +440,15 @@ def reconcile_default_addons(adb, port, target):
     if not manifest:
         return None
     try:
-        from kodi_default_addons import reconcile_android
+        from kodi_default_addons import (
+            load_official_dependencies,
+            reconcile_android,
+        )
     except ModuleNotFoundError:
-        from tools.kodi_default_addons import reconcile_android
+        from tools.kodi_default_addons import (
+            load_official_dependencies,
+            reconcile_android,
+        )
 
     return reconcile_android(
         adb,
@@ -451,6 +457,10 @@ def reconcile_default_addons(adb, port, target):
         manifest,
         target["default_addons_cache"],
         assign_origins=False,
+        official_dependencies=load_official_dependencies(
+            Path(__file__).resolve().parents[1]
+            / "manifests/kodi-official-dependencies.json"
+        ),
     )
 
 

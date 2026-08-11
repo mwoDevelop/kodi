@@ -242,6 +242,35 @@ class ProductionExecutor:
             ],
             adapter="mwoscrapers",
         )
+        profile_sync = self._run_json(
+            [
+                sys.executable,
+                "tools/kodi_android_profile_sync.py",
+                "--device",
+                device_id,
+                "--adb",
+                self.adb,
+                "--adb-server-port",
+                str(self.adb_server_port),
+            ],
+            timeout=600,
+            adapter="profile-sync",
+        )
+        umbrella_private = self._run_json(
+            [
+                sys.executable,
+                "tools/kodi_umbrella_settings.py",
+                "apply",
+                "--device",
+                device_id,
+                "--adb",
+                self.adb,
+                "--adb-server-port",
+                str(self.adb_server_port),
+            ],
+            timeout=600,
+            adapter="umbrella-private",
+        )
         portable = self._portable("apply", device_id)
         if portable["status"] != "CONVERGED":
             raise RuntimeError("portable state did not converge")
@@ -295,6 +324,8 @@ class ProductionExecutor:
                     if providers.get("ok")
                     else providers.get("result", providers.get("status"))
                 ),
+                "profile_sync": profile_sync.get("status", "pass"),
+                "umbrella_private": umbrella_private.get("status"),
                 "portable": portable,
                 "diagnostics": diagnostics,
             },
@@ -736,6 +767,21 @@ class ProductionExecutor:
                 ],
                 timeout=120,
                 adapter="rapideo-token",
+            )
+            self._run_json(
+                [
+                    sys.executable,
+                    "tools/kodi_umbrella_settings.py",
+                    "export",
+                    "--device",
+                    self.fleet["publisher"],
+                    "--adb",
+                    self.adb,
+                    "--adb-server-port",
+                    str(self.adb_server_port),
+                ],
+                timeout=120,
+                adapter="umbrella-private",
             )
             published = self._portable("publish", self.fleet["publisher"])
             if published["status"] != "CONVERGED":

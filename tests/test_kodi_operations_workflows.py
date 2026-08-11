@@ -31,7 +31,6 @@ def test_all_qnap_builds_publish_scanned_immutable_approvals():
     workflows = (
         ".github/workflows/build-upstream-watchdog.yml",
         "mwoscrapers/.github/workflows/relay-image.yml",
-        "../kodi-profile-sync-server/.github/workflows/container.yml",
     )
 
     for path in workflows:
@@ -41,6 +40,15 @@ def test_all_qnap_builds_publish_scanned_immutable_approvals():
         assert "security_report_sha256" in workflow
         assert "input_sha256" in workflow
         assert "workflow_run_id" in workflow
+
+    # Profile Sync is a sibling source repository on the operator host, but it
+    # is deliberately not part of this checkout in GitHub-hosted CI. Its own
+    # repository tests the approval-producing workflow; this repository tests
+    # the pinned service contract used to consume that approval.
+    qnap = text("tools/qnap_images.py")
+    assert '"mwoDevelop/kodi-profile-sync-server"' in qnap
+    assert '"container.yml"' in qnap
+    assert '("Dockerfile", "pyproject.toml", "README.md", "src")' in qnap
 
 
 def test_deploy_requires_both_reviewed_locks():

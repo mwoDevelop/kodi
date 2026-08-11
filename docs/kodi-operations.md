@@ -163,6 +163,13 @@ Używa wyłącznie przypiętego prywatnego bundle oraz aktywnej rewizji. Po każ
 przebiegu brama wymaga kompletnych grafik, aktualnych akcji WatchNixtoons2 i
 spójnej, sparowanej tożsamości Profile Sync.
 
+Androidowy adapter nie ufa samej obecności ustawień Profile Sync. Przy poprawnej
+tożsamości wymaga podpisanego przypisania aktywnej rewizji oraz zgodności
+`assigned_revision == applied_revision`. Brak enrollmentu tworzy jednorazowy kod
+na QNAP, paruje dokładny logical device ID, publikuje świeże przypisanie schema 2
+i wykonuje sync. Istniejąca obca tożsamość jest błędem fail-closed i nie jest
+automatycznie zastępowana.
+
 ## Rapideo i VPN X88
 
 Pełny rollout eksportuje istniejący, zweryfikowany token Rapideo z publishera do
@@ -170,6 +177,18 @@ Pełny rollout eksportuje istniejący, zweryfikowany token Rapideo z publishera 
 token przez krótkotrwały plik, usuwa go z pamięci współdzielonej po wykonaniu i
 nie kasuje poprzedniego tokenu przed udanym uwierzytelnieniem. Raport zawiera
 wyłącznie stan oraz hash tokenu, nigdy jego wartość.
+
+Przed Rapideo adapter porównuje każdy plik sześciu przypiętych zależności z
+oficjalnym, zweryfikowanym SHA-256 ZIP-a Kodi Omega. Sama zgodna wersja w bazie
+Kodi nie wystarcza. Brakujący lub zmieniony plik naprawia tylko wskazany moduł;
+pełny drugi przebieg musi zwrócić dla zależności `unchanged`.
+
+Pełny rollout eksportuje też prywatne ustawienia Umbrella z publishera do
+`.kodi-private/umbrella/settings.xml` w trybie `0600`. Na urządzeniu zachowuje
+kompletny, działający zestaw danych Real-Debrid; autorytatywnej kopii używa jako
+recovery tylko wtedy, gdy brakuje któregoś wymaganego pola. Ustawia wtedy przez
+API Kodi wyłącznie pięć pól uwierzytelnienia oraz flagę włączenia. Nie kopiuje
+całego pliku ustawień i nie nadpisuje tokenów legalnie odświeżonych lokalnie.
 
 X88 używa profilu `NordVPN-PL314-TCP443-Auto-X88`, z wyłączeniem
 `192.168.1.0/24` z tunelu, always-on i `connect_latest` po restarcie. Prywatny
