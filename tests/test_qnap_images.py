@@ -148,6 +148,64 @@ def test_actions_build_dry_run_dispatches_exact_pushed_ref(monkeypatch, tmp_path
     ]
 
 
+def test_actions_build_can_capture_nested_workflow_progress(monkeypatch, tmp_path):
+    service = qnap_images.Service(
+        name="example",
+        image="ghcr.io/mwodevelop/example",
+        repository=tmp_path,
+        dockerfile=tmp_path / "Dockerfile",
+        platforms=("linux/amd64",),
+        github_repository="mwoDevelop/example",
+        github_workflow="container.yml",
+    )
+    monkeypatch.setattr(
+        qnap_images,
+        "source_identity",
+        lambda *_args, **_kwargs: {"commit": "d" * 40, "dirty": False},
+    )
+    monkeypatch.setattr(qnap_images, "_remote_ref", lambda *_args: "main")
+    monkeypatch.setattr(
+        qnap_images,
+        "_workflow_run",
+        lambda *_args: {
+            "databaseId": 123,
+            "url": "https://example.invalid/run/123",
+        },
+    )
+    monkeypatch.setattr(
+        qnap_images,
+        "_published_reference",
+        lambda *_args: service.image + "@sha256:" + "e" * 64,
+    )
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append((tuple(argv), kwargs))
+        return type("Result", (), {"stdout": ""})()
+
+    monkeypatch.setattr(qnap_images, "_run", run)
+
+    result = qnap_images.build_with_actions(service, stream_progress=False)
+
+    assert result["workflow_run_id"] == "123"
+    assert calls == [
+        (
+            (
+                "gh",
+                "run",
+                "watch",
+                "123",
+                "--repo",
+                "mwoDevelop/example",
+                "--exit-status",
+                "--interval",
+                "5",
+            ),
+            {"capture": True},
+        )
+    ]
+
+
 def test_tag_digest_extracts_manifest_digest(monkeypatch):
     monkeypatch.setattr(
         qnap_images,

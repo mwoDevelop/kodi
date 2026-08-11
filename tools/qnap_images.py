@@ -425,7 +425,7 @@ def _published_reference(service, tag):
     )
 
 
-def build_with_actions(service, dry_run=False):
+def build_with_actions(service, dry_run=False, stream_progress=True):
     identity = source_identity(service, require_clean=not dry_run)
     commit = identity["commit"]
     ref = _remote_ref(service, commit)
@@ -467,7 +467,7 @@ def build_with_actions(service, dry_run=False):
             "--interval",
             "5",
         ),
-        capture=False,
+        capture=not stream_progress,
     )
     reference = _published_reference(service, tag)
     return {
