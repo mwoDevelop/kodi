@@ -9,7 +9,7 @@
     "package": "net.openvpn.openvpn",
     "always_on": true,
     "lockdown": false,
-    "connection_profile_name": "NordVPN PL145 UDP Auto X88",
+    "connection_profile_name": "NordVPN-PL314-TCP443-Auto-X88",
     "reconnect_on_reboot": "connect_latest",
     "private_dns_mode": "off",
     "credential_mode": "inline_auth_user_pass",

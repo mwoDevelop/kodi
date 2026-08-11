@@ -76,6 +76,50 @@ def test_fetch_artifact_rejects_digest_mismatch(tmp_path):
         )
 
 
+def test_official_dependency_repair_checks_archive_bytes(monkeypatch, tmp_path):
+    dependency = {
+        "id": "script.module.urllib3",
+        "version": "2.2.3",
+        "sha256": "a" * 64,
+        "url": (
+            "https://mirrors.kodi.tv/addons/omega/"
+            "script.module.urllib3/script.module.urllib3-2.2.3.zip"
+        ),
+    }
+    artifact = tmp_path / "urllib3.zip"
+    artifact.write_bytes(b"candidate")
+    applied = []
+    monkeypatch.setattr(defaults, "fetch_artifact", lambda *_args: artifact)
+    monkeypatch.setattr(
+        defaults,
+        "addon_details",
+        lambda *_args: {"enabled": True, "version": "2.2.3"},
+    )
+    monkeypatch.setattr(
+        defaults,
+        "installed_archive_matches",
+        lambda *_args: False,
+    )
+    monkeypatch.setattr(
+        defaults,
+        "rollout",
+        lambda *_args, **_kwargs: applied.append(_args[4]) or {},
+    )
+
+    actions = defaults.reconcile_official_dependencies(
+        "adb", 5038, "serial", [dependency], tmp_path, 180
+    )
+
+    assert applied == ["script.module.urllib3"]
+    assert actions == [
+        {
+            "addon": "script.module.urllib3",
+            "action": "repaired",
+            "version": "2.2.3",
+        }
+    ]
+
+
 def test_reconcile_repairs_only_a_database_absent_orphan(
     monkeypatch, tmp_path
 ):

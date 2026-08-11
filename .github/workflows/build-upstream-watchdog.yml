@@ -19,6 +19,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Export exact tracked head
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/candidate-tree"
+          git archive HEAD | tar -x -C "$RUNNER_TEMP/candidate-tree"
+      - name: Scan exact head before executing the Docker build
+        uses: ./.github/actions/upstream-malware-scan
+        with:
+          candidate-path: ${{ runner.temp }}/candidate-tree
+          output: ${{ runner.temp }}/watchdog-security-report.json
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679fd # v4.6.0
         with:
@@ -37,3 +49,47 @@ jobs:
           sbom: true
       - name: Record immutable image digest
         run: echo "${{ steps.build.outputs.digest }}"
+      - name: Compose exact QNAP image approval
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir qnap-approval
+          cp "$RUNNER_TEMP/watchdog-security-report.json" \
+            qnap-approval/watchdog-security-report.json
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          paths = [
+              "deploy/qnap-upstream-watchdog/Dockerfile",
+              "tools/upstream_watchdog.py",
+              "manifests/upstream-watchdog.json",
+          ]
+          tree = subprocess.check_output(
+              ["git", "ls-tree", "-r", os.environ["GITHUB_SHA"], "--", *paths]
+          )
+          policy = json.dumps({
+              "dockerfile": "deploy/qnap-upstream-watchdog/Dockerfile",
+              "platforms": ["linux/amd64", "linux/arm64", "linux/arm/v7"],
+              "build_revision": False,
+              "input_paths": paths,
+          }, sort_keys=True, separators=(",", ":")).encode()
+          report = pathlib.Path("qnap-approval/watchdog-security-report.json")
+          approval = {
+              "schema": 1,
+              "service": "upstream-watchdog",
+              "image": "ghcr.io/mwodevelop/kodi-upstream-watchdog@" + os.environ["DIGEST"],
+              "source_repository": os.environ["GITHUB_REPOSITORY"],
+              "source_commit": os.environ["GITHUB_SHA"],
+              "input_sha256": hashlib.sha256(policy + b"\0" + tree).hexdigest(),
+              "platforms": ["linux/amd64", "linux/arm64", "linux/arm/v7"],
+              "security_report_sha256": hashlib.sha256(report.read_bytes()).hexdigest(),
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+          }
+          pathlib.Path("qnap-approval/qnap-image-approval.json").write_text(
+              json.dumps(approval, indent=2, sort_keys=True) + "\n"
+          )
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: qnap-image-approval-upstream-watchdog-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qnap-approval/
+          retention-days: 90

@@ -18,6 +18,7 @@ from tools.kodi_flatpak_profile_sync_rollout import (
     _cleanup_command,
     _event_packets,
     _event_server_ready,
+    _replace_private_document,
     _send_staged_event_builtin,
     _stage_event_packets,
     build_settings,
@@ -100,6 +101,20 @@ def test_flatpak_uses_published_profile_sync_port_unless_overridden():
     assert profile_sync_server_url(
         "192.0.2.39", "https://sync.example.invalid:9443"
     ) == "https://sync.example.invalid:9443"
+
+
+def test_flatpak_bootstrap_document_rotates_atomically_and_stays_private(
+    tmp_path,
+):
+    destination = tmp_path / "bootstrap.json"
+
+    assert _replace_private_document(destination, '{"revision":"old"}\n')
+    assert stat.S_IMODE(destination.stat().st_mode) == 0o600
+    assert _replace_private_document(destination, '{"revision":"new"}\n')
+    assert destination.read_text(encoding="utf-8") == '{"revision":"new"}\n'
+    assert not _replace_private_document(
+        destination, '{"revision":"new"}\n'
+    )
 
 
 def test_flatpak_required_addons_cover_managed_settings_and_favourites():

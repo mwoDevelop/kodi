@@ -36,15 +36,11 @@ from tools import build_repo
 from tools.kodi_inventory import load_private_references
 from tools.kodi_lifecycle import lifecycle_for_device
 from tools.kodi_transports import transport_for_device
-from tools.profile_sync_admin import (
-    sign_admin_request,
-    sign_bootstrap_assignment,
-)
+from tools.profile_sync_portable_release import bootstrap_active
 from tools.qnap_profile_sync import (
     PRODUCTION_PORT,
     connect as connect_qnap,
     create_production_pairing,
-    production_admin_request,
     production_pair_request,
 )
 
@@ -445,6 +441,39 @@ def _remote_command(transport, command, timeout=30):
     return result.stdout.strip()
 
 
+def _replace_private_document(path, payload):
+    path = Path(path)
+    if path.exists() or path.is_symlink():
+        metadata = path.lstat()
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or path.is_symlink()
+            or stat.S_IMODE(metadata.st_mode) & 0o077
+        ):
+            raise ValueError("existing private document is unsafe")
+        if path.read_text(encoding="utf-8") == payload:
+            return False
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".%s." % path.name, dir=str(path.parent)
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.chmod(0o600)
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return True
+
+
 def _process_paths(operation):
     return {
         "kpid": "/tmp/mwo-kodi-%s.pid" % operation,
@@ -618,7 +647,9 @@ def rollout(args):
     probe = lifecycle.probe_kodi()
     if probe["running"] or not probe["runtime_paths_qualified"]:
         raise RuntimeError("Flatpak Kodi must be stopped and path-qualified")
-    if not REVISION.fullmatch(args.revision_id):
+    if args.revision_id is not None and not REVISION.fullmatch(
+        args.revision_id
+    ):
         raise ValueError("invalid active revision")
     expected_tags = ["home", "linux-flatpak:%s" % probe["abi"][0]]
     private_dir = repository / args.private_root / args.device
@@ -699,58 +730,21 @@ def rollout(args):
             finally:
                 pairing_path.unlink(missing_ok=True)
                 qnap.close()
-        assignment = sign_bootstrap_assignment(
-            device["profile_channel"],
-            enrollment["enrollment_id"],
-            args.revision_id,
-            expected_tags,
-            "promoter-production",
-            repository / args.signing_seeds,
-            repository / args.key_registry,
-        )
+        bootstrap = bootstrap_active(repository, args.device)
+        if bootstrap["enrollment_id"] != enrollment["enrollment_id"]:
+            raise ValueError("Flatpak bootstrap enrollment identity differs")
+        if (
+            args.revision_id is not None
+            and args.revision_id != bootstrap["active_revision"]
+        ):
+            raise ValueError("requested Flatpak revision is not active")
+        args.revision_id = bootstrap["active_revision"]
+        assignment = bootstrap["assignment"]
         serialized_assignment = (
             json.dumps(assignment, sort_keys=True, separators=(",", ":"))
             + "\n"
         )
-        if bootstrap_path.exists():
-            if (
-                bootstrap_path.read_text(encoding="utf-8")
-                != serialized_assignment
-            ):
-                raise ValueError("private Flatpak bootstrap assignment differs")
-        else:
-            bootstrap_path.write_text(serialized_assignment, encoding="utf-8")
-            bootstrap_path.chmod(0o600)
-        idempotency = "bootstrap-%s-%s" % (
-            args.device,
-            hashlib.sha256(
-                (
-                    enrollment["enrollment_id"]
-                    + "\0"
-                    + args.revision_id
-                ).encode("utf-8")
-            ).hexdigest()[:24],
-        )
-        admin = sign_admin_request(
-            "bootstrap_active",
-            assignment,
-            "publish",
-            idempotency,
-            "publisher-production",
-            repository / args.signing_seeds,
-            repository / args.key_registry,
-        )
-        qnap = connect_qnap(repository, args.references)
-        try:
-            production_admin_request(
-                qnap,
-                "/v1/channels/%s/bootstrap-assignments"
-                % device["profile_channel"],
-                admin,
-                idempotency,
-            )
-        finally:
-            qnap.close()
+        _replace_private_document(bootstrap_path, serialized_assignment)
         required = required_addons(repository, args.required_addons)
         required_artifacts = required_addon_artifacts(repository, required)
         dependency_artifacts = official_dependency_artifacts(repository)
@@ -942,23 +936,44 @@ def rollout(args):
                     time.sleep(2)
             finally:
                 _remote_command(transport, _cleanup_command(operation))
-            if (
-                not result
-                or not result.get("ok")
-                or result.get("profile_sync_version") != profile_version
-                or result.get("repository_version") != repository_version
-                or result.get("logical_device_id") != args.device
-                or result.get("applied_revision") != args.revision_id
-                or result.get("pending_report")
-                or result.get("required_addons") != required
-            ):
+            verification = {
+                "marker": bool(result),
+                "ok": bool(result and result.get("ok")),
+                "profile_sync_version": bool(
+                    result
+                    and result.get("profile_sync_version") == profile_version
+                ),
+                "repository_version": bool(
+                    result
+                    and result.get("repository_version") == repository_version
+                ),
+                "logical_device_id": bool(
+                    result and result.get("logical_device_id") == args.device
+                ),
+                "applied_revision": bool(
+                    result
+                    and result.get("applied_revision") == args.revision_id
+                ),
+                "pending_report": bool(
+                    result and not result.get("pending_report")
+                ),
+                "required_addons": bool(
+                    result and result.get("required_addons") == required
+                ),
+            }
+            mismatches = [
+                name for name, matches in verification.items() if not matches
+            ]
+            if mismatches:
                 raise RuntimeError(
-                    "Flatpak in-Kodi Profile Sync verification failed: %s/%s at %s (%s)"
+                    "Flatpak in-Kodi Profile Sync verification failed: "
+                    "%s/%s at %s (%s); mismatches=%s"
                     % (
                         (result or {}).get("error_type") or "timeout",
                         (result or {}).get("error_code") or "unclassified",
                         (result or {}).get("error_stage") or "unknown_stage",
                         (result or {}).get("error_origin") or "unknown_origin",
+                        ",".join(mismatches),
                     )
                 )
             remote_profile_data = posixpath.join(

@@ -16,7 +16,8 @@ import zipfile
 from pathlib import Path
 
 try:
-    from kodi_devices import load_registry, resolve_device
+    from kodi_devices import load_registry, resolve_device, resolve_private_endpoint
+    from kodi_inventory import load_private_references
     from kodi_profile import (
         KODI_ROOT,
         KODI_PACKAGE,
@@ -33,7 +34,12 @@ try:
         verify_snapshot,
     )
 except ModuleNotFoundError:
-    from tools.kodi_devices import load_registry, resolve_device
+    from tools.kodi_devices import (
+        load_registry,
+        resolve_device,
+        resolve_private_endpoint,
+    )
+    from tools.kodi_inventory import load_private_references
     from tools.kodi_profile import (
         KODI_ROOT,
         KODI_PACKAGE,
@@ -192,6 +198,14 @@ def load_config(path, repository):
         raise ValueError("invalid default add-on private profiles")
     if not isinstance(references_file, str) or not references_file:
         raise ValueError("invalid private references path")
+    references_path = Path(references_file)
+    if not references_path.is_absolute():
+        references_path = repository / references_path
+    references = (
+        load_private_references(references_path)
+        if references_path.is_file()
+        else {}
+    )
     try:
         from kodi_private_addons import validate_profiles
     except ModuleNotFoundError:
@@ -216,7 +230,9 @@ def load_config(path, repository):
         logical_id = target.get("logical_device_id")
         if not isinstance(logical_id, str):
             raise ValueError("schema 2 target lacks logical_device_id")
-        device = resolve_device(registry, logical_id)
+        device = resolve_private_endpoint(
+            resolve_device(registry, logical_id), references
+        )
         if device["platform"] not in {"android", "android-emulator"}:
             raise ValueError(
                 "%s uses unsupported reinstall platform %s"
@@ -424,9 +440,15 @@ def reconcile_default_addons(adb, port, target):
     if not manifest:
         return None
     try:
-        from kodi_default_addons import reconcile_android
+        from kodi_default_addons import (
+            load_official_dependencies,
+            reconcile_android,
+        )
     except ModuleNotFoundError:
-        from tools.kodi_default_addons import reconcile_android
+        from tools.kodi_default_addons import (
+            load_official_dependencies,
+            reconcile_android,
+        )
 
     return reconcile_android(
         adb,
@@ -435,6 +457,10 @@ def reconcile_default_addons(adb, port, target):
         manifest,
         target["default_addons_cache"],
         assign_origins=False,
+        official_dependencies=load_official_dependencies(
+            Path(__file__).resolve().parents[1]
+            / "manifests/kodi-official-dependencies.json"
+        ),
     )
 
 

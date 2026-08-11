@@ -17,11 +17,11 @@ from zipfile import ZipFile
 
 try:
     from kodi_addon_candidate_rollout import rollout
-    from kodi_profile import AdbEventClient, AdbJsonRpcClient
+    from kodi_profile import AdbEventClient, AdbJsonRpcClient, adb_command
     from kodi_reinstall import assign_addon_origins_in_kodi
 except ModuleNotFoundError:
     from tools.kodi_addon_candidate_rollout import rollout
-    from tools.kodi_profile import AdbEventClient, AdbJsonRpcClient
+    from tools.kodi_profile import AdbEventClient, AdbJsonRpcClient, adb_command
     from tools.kodi_reinstall import assign_addon_origins_in_kodi
 
 
@@ -29,6 +29,8 @@ SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 KINDS = {"repository", "module", "plugin"}
 LICENSES = {"GPL-2.0-only", "GPL-3.0-only", "not-declared"}
+OFFICIAL_PREFIX = "https://mirrors.kodi.tv/addons/omega/"
+REMOTE_ADDONS = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi/addons"
 
 
 def _digest(path):
@@ -85,6 +87,31 @@ def load_manifest(path):
     return document
 
 
+def load_official_dependencies(path):
+    document = json.loads(Path(path).read_text(encoding="utf-8"))
+    dependencies = document.get("dependencies")
+    if document.get("schema") != 1 or not isinstance(dependencies, dict):
+        raise ValueError("invalid Kodi official dependency manifest")
+    result = []
+    for addon_id, metadata in sorted(dependencies.items()):
+        if (
+            not SAFE_ID.fullmatch(str(addon_id))
+            or not isinstance(metadata, dict)
+            or set(metadata) != {"sha256", "url", "version"}
+            or not isinstance(metadata["version"], str)
+            or not metadata["version"]
+            or not isinstance(metadata["sha256"], str)
+            or not SHA256.fullmatch(metadata["sha256"])
+            or not isinstance(metadata["url"], str)
+            or not metadata["url"].startswith(OFFICIAL_PREFIX)
+        ):
+            raise ValueError("invalid Kodi official dependency metadata")
+        result.append({"id": addon_id, **metadata})
+    if not result:
+        raise ValueError("Kodi official dependency manifest is empty")
+    return result
+
+
 def validate_archive(path, addon):
     total = 0
     with ZipFile(path) as archive:
@@ -139,6 +166,95 @@ def fetch_artifact(addon, cache_dir, opener=urllib.request.urlopen):
     return destination
 
 
+def installed_archive_matches(adb, port, serial, archive, addon_id):
+    """Verify every immutable ZIP member without trusting Kodi's version DB."""
+
+    with tempfile.TemporaryDirectory(prefix="kodi-addon-audit-") as temporary:
+        destination = Path(temporary) / addon_id
+        result = adb_command(
+            adb,
+            port,
+            serial,
+            "pull",
+            REMOTE_ADDONS + "/" + addon_id,
+            str(destination),
+            check=False,
+            text=True,
+            timeout=90,
+        )
+        if result.returncode or not destination.is_dir():
+            return False
+        with ZipFile(archive) as zipped:
+            for member in zipped.infolist():
+                if member.is_dir():
+                    continue
+                relative = PurePosixPath(member.filename)
+                if not relative.parts or relative.parts[0] != addon_id:
+                    return False
+                installed = destination.joinpath(*relative.parts[1:])
+                if (
+                    installed.is_symlink()
+                    or not installed.is_file()
+                    or installed.stat().st_size != member.file_size
+                    or _digest(installed)
+                    != hashlib.sha256(zipped.read(member)).hexdigest()
+                ):
+                    return False
+    return True
+
+
+def reconcile_official_dependencies(
+    adb,
+    port,
+    serial,
+    dependencies,
+    cache_dir,
+    timeout,
+):
+    actions = []
+    for dependency in dependencies:
+        artifact = fetch_artifact(dependency, cache_dir)
+        current = addon_details(adb, port, serial, dependency["id"])
+        intact = bool(
+            current
+            and current.get("enabled")
+            and str(current.get("version")) == dependency["version"]
+            and installed_archive_matches(
+                adb,
+                port,
+                serial,
+                artifact,
+                dependency["id"],
+            )
+        )
+        if intact:
+            actions.append(
+                {
+                    "addon": dependency["id"],
+                    "action": "unchanged",
+                    "version": dependency["version"],
+                }
+            )
+            continue
+        rollout(
+            adb,
+            port,
+            serial,
+            artifact,
+            dependency["id"],
+            dependency["version"],
+            timeout,
+        )
+        actions.append(
+            {
+                "addon": dependency["id"],
+                "action": "repaired" if current else "installed",
+                "version": dependency["version"],
+            }
+        )
+    return actions
+
+
 def addon_details(adb, port, serial, addon_id):
     try:
         with AdbJsonRpcClient(adb, port, serial) as rpc:
@@ -170,7 +286,16 @@ def reconcile_android(
     cache_dir,
     timeout=180,
     assign_origins=True,
+    official_dependencies=None,
 ):
+    dependency_actions = reconcile_official_dependencies(
+        adb,
+        port,
+        serial,
+        official_dependencies,
+        cache_dir,
+        timeout,
+    ) if official_dependencies else []
     prepared = [(addon, fetch_artifact(addon, cache_dir)) for addon in manifest["addons"]]
     results = []
     events = AdbEventClient(adb, port, serial)
@@ -202,7 +327,17 @@ def reconcile_android(
         if addon["kind"] == "repository":
             events.execute_builtin("UpdateAddonRepos")
             time.sleep(3)
-    origins = {addon["id"]: addon["origin"] for addon in manifest["addons"] if "origin" in addon}
+    origins = {
+        **{
+            dependency["id"]: "repository.xbmc.org"
+            for dependency in (official_dependencies or [])
+        },
+        **{
+            addon["id"]: addon["origin"]
+            for addon in manifest["addons"]
+            if "origin" in addon
+        },
+    }
     if origins and assign_origins:
         assign_addon_origins_in_kodi(
             adb,
@@ -217,7 +352,13 @@ def reconcile_android(
         if not details or not details.get("enabled") or str(details.get("version")) != addon["version"]:
             raise RuntimeError("default add-on verification failed: %s" % addon["id"])
         verified[addon["id"]] = addon["version"]
-    return {"schema": 1, "serial": serial, "result": "pass", "addons": verified, "actions": results}
+    return {
+        "schema": 1,
+        "serial": serial,
+        "result": "pass",
+        "addons": verified,
+        "actions": [*dependency_actions, *results],
+    }
 
 
 def main():
@@ -225,6 +366,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", default="manifests/kodi-default-addons.json")
     parser.add_argument("--cache-dir", default=".kodi-private/cache/default-addons")
+    parser.add_argument(
+        "--dependencies-manifest",
+        default="manifests/kodi-official-dependencies.json",
+    )
     parser.add_argument("--serial", required=True)
     parser.add_argument("--adb", default="/home/mwo/android-sdk/platform-tools/adb")
     parser.add_argument("--adb-server-port", type=int, default=5038)
@@ -236,6 +381,9 @@ def main():
     cache_dir = Path(args.cache_dir)
     if not cache_dir.is_absolute():
         cache_dir = root / cache_dir
+    dependencies_path = Path(args.dependencies_manifest)
+    if not dependencies_path.is_absolute():
+        dependencies_path = root / dependencies_path
     result = reconcile_android(
         args.adb,
         args.adb_server_port,
@@ -243,6 +391,7 @@ def main():
         load_manifest(manifest_path),
         cache_dir,
         timeout=args.timeout,
+        official_dependencies=load_official_dependencies(dependencies_path),
     )
     print(json.dumps(result, indent=2, sort_keys=True))
 

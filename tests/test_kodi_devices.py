@@ -225,6 +225,47 @@ def test_schema_two_reinstall_resolves_inventory(tmp_path, monkeypatch):
     assert targets[0]["expected_model"] == "TV MODEL"
 
 
+def test_schema_two_reinstall_uses_current_private_endpoint(tmp_path, monkeypatch):
+    repository = tmp_path / "repo"
+    private = repository / ".kodi-private"
+    private.mkdir(parents=True)
+    config = private / "kodi-reinstall.json"
+    write_json(private / "devices.json", registry())
+    write_json(
+        config,
+        {
+            "schema": 2,
+            "devices_file": ".kodi-private/devices.json",
+            "targets": [
+                {
+                    "logical_device_id": "android-tv",
+                    "expected_kodi_version": "21.3",
+                    "snapshot": ".kodi-private/snapshot",
+                    "apk": ".kodi-private/kodi.apk",
+                    "apk_sha256": "a" * 64,
+                }
+            ],
+        },
+    )
+    references = repository / ".env"
+    references.write_text(
+        "KODI_DEVICE_ANDROID_TV_ADB=192.0.2.50:5555\n",
+        encoding="utf-8",
+    )
+    references.chmod(0o600)
+
+    class Result:
+        returncode = 0
+
+    monkeypatch.setattr(
+        "tools.kodi_profile.subprocess.run", lambda *args, **kwargs: Result()
+    )
+
+    _path, targets = load_config(config, repository)
+
+    assert targets[0]["serial"] == "192.0.2.50:5555"
+
+
 def test_schema_two_reinstall_rejects_endpoint_duplication(
     tmp_path, monkeypatch
 ):

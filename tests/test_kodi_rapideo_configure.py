@@ -83,6 +83,7 @@ def test_configure_cleans_remote_credentials_and_returns_sanitized_report(
         "schema": 1,
         "username": "secret-user",
         "password": "secret-pass",
+        "authtoken": None,
     }
     serialized = json.dumps(result)
     assert "secret-user" not in serialized

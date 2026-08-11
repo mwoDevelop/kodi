@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import stat
 import subprocess
 import tempfile
 import time
@@ -33,6 +34,28 @@ REMOTE_CONFIG = "/sdcard/Download/.mwo-rapideo-credentials.json"
 REMOTE_REPORT = "/sdcard/Download/.mwo-rapideo-configure.json"
 ADAPTER = "rapideo-v1"
 ENVIRONMENT_NAMES = ("RAPIDEO_USER", "RAPIDEO_PASS")
+
+
+def load_authoritative_token(path):
+    if path is None:
+        return None
+    source = Path(path).expanduser().resolve()
+    if not source.exists():
+        return None
+    metadata = source.lstat()
+    if (
+        source.is_symlink()
+        or not stat.S_ISREG(metadata.st_mode)
+        or stat.S_IMODE(metadata.st_mode) & 0o077
+    ):
+        raise ValueError("Rapideo token cache is not a private regular file")
+    document = json.loads(source.read_text(encoding="utf-8"))
+    if set(document) != {"schema", "authtoken"} or document["schema"] != 1:
+        raise ValueError("Rapideo token cache is invalid")
+    token = document["authtoken"]
+    if not isinstance(token, str) or not token or len(token) > 2048:
+        raise ValueError("Rapideo token cache is invalid")
+    return token
 
 
 def validate_profile(profile):
@@ -96,12 +119,14 @@ def configure(
     references,
     device_script,
     timeout=90,
+    token_file=None,
 ):
     username, password = resolve_credentials(profile, references)
     payload = {
         "schema": 1,
         "username": username,
         "password": password,
+        "authtoken": load_authoritative_token(token_file),
     }
     try:
         with tempfile.NamedTemporaryFile(
@@ -208,6 +233,9 @@ def main():
     )
     parser.add_argument("--adb-server-port", type=int, default=5038)
     parser.add_argument("--timeout", type=float, default=90)
+    parser.add_argument(
+        "--token-file", default=".kodi-private/rapideo/token.json"
+    )
     args = parser.parse_args()
     references = Path(args.references)
     if not references.is_absolute():
@@ -224,6 +252,7 @@ def main():
         load_private_references(references),
         root / "tests/e2e/kodi_rapideo_configure.py",
         timeout=args.timeout,
+        token_file=(root / args.token_file),
     )
     print(json.dumps(result, indent=2, sort_keys=True))
 

@@ -1,6 +1,7 @@
 import json
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,6 +17,10 @@ from tools.kodi_portable_state import (
     profile_summary,
     recover,
     validate_bundle,
+)
+from tools.kodi_portable_state_rollout import (
+    _current_bundle,
+    _ensure_kodi_started,
 )
 
 
@@ -76,6 +81,14 @@ def test_bundle_is_deterministic_exact_and_idempotent(tmp_path):
     assert (target / STATE_NAME).is_file()
     assert not (target / JOURNAL_NAME).exists()
     assert not (target / BACKUP_NAME).exists()
+    parsed = (target / "favourites.xml").read_text(encoding="utf-8")
+    (target / "favourites.xml").write_text(
+        parsed.replace("<favourites>\n", "<favourites>").replace(
+            "\n</favourites>", "</favourites>"
+        ),
+        encoding="utf-8",
+    )
+    assert apply_bundle(target, first)["status"] == "NO_CHANGE"
 
 
 def test_bundle_rejects_missing_or_extra_artwork(tmp_path):
@@ -128,6 +141,11 @@ def test_bundle_preserves_refresh_manifest_and_enforces_exact_directory(
     assert {
         path.name for path in (target / "favourite-artwork").iterdir()
     } == {image_hash + ".jpg", "manifest.json"}
+    (target / "favourite-artwork/manifest.json").write_text(
+        json.dumps({"schema": 1, "entries": {}, "device_local": True}),
+        encoding="utf-8",
+    )
+    assert apply_bundle(target, bundle)["status"] == "NO_CHANGE"
 
 
 def test_apply_failure_recovers_previous_profile(tmp_path, monkeypatch):
@@ -164,3 +182,68 @@ def test_recover_rejects_untrusted_journal(tmp_path):
 
     with pytest.raises(ValueError, match="journal"):
         recover(tmp_path)
+
+
+def test_current_bundle_pointer_is_content_addressed_and_path_safe(tmp_path):
+    source = tmp_path / "source"
+    write_profile(source)
+    private = tmp_path / ".kodi-private/portable-state"
+    private.mkdir(parents=True)
+    bundle = private / "bundle.zip"
+    manifest = build_bundle(source, bundle)
+    pointer = private / "current.json"
+    pointer.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "bundle_id": manifest["bundle_id"],
+                "filename": bundle.name,
+            }
+        )
+    )
+
+    selected, observed = _current_bundle(tmp_path)
+
+    assert selected == bundle
+    assert observed == manifest
+    pointer.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "bundle_id": manifest["bundle_id"],
+                "filename": "../bundle.zip",
+            }
+        )
+    )
+    with pytest.raises(RuntimeError, match="filename"):
+        _current_bundle(tmp_path)
+
+
+@pytest.mark.parametrize("running", [True, False])
+def test_portable_publisher_starts_kodi_only_when_not_running(
+    monkeypatch, running
+):
+    commands = []
+    ready = []
+
+    def adb_command(_adb, _port, _serial, *argv, **_kwargs):
+        commands.append(argv)
+        if argv == ("shell", "pidof org.xbmc.kodi"):
+            return SimpleNamespace(
+                returncode=0 if running else 1,
+                stdout="1234\n" if running else "",
+            )
+        return SimpleNamespace(returncode=0, stdout="")
+
+    monkeypatch.setattr(
+        "tools.kodi_portable_state_rollout.adb_command", adb_command
+    )
+    monkeypatch.setattr(
+        "tools.kodi_portable_state_rollout._wait_for_kodi_ready",
+        lambda *_args: ready.append(True),
+    )
+
+    _ensure_kodi_started("adb", 5038, "device")
+
+    assert len(commands) == (1 if running else 2)
+    assert ready == ([] if running else [True])
