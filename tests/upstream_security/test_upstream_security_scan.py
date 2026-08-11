@@ -532,3 +532,13 @@ def test_testing_and_stable_publication_preserve_scanner_evidence():
     assert "--pattern security-report.json" in stable
     assert stable.count("upstream_security_scan.py verify") == 1
     assert "needs.materialize.outputs.deploy == 'true'" in stable
+
+
+def test_testing_publication_checks_out_submodules_before_full_e2e():
+    testing = Path(".github/workflows/publish-testing.yml").read_text(
+        encoding="utf-8"
+    )
+    checkout = testing.split("actions/checkout@", 1)[1].split(
+        "actions/setup-python@", 1
+    )[0]
+    assert "submodules: true" in checkout

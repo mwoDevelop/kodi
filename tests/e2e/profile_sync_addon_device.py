@@ -25,7 +25,15 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from tools.kodi_devices import load_registry, resolve_device
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from tools.kodi_devices import (
+    load_registry,
+    resolve_device,
+    resolve_private_endpoint,
+)
+from tools.kodi_inventory import load_private_references
 from tools.kodi_profile import (
     AdbEventClient,
     AdbJsonRpcClient,
@@ -38,6 +46,7 @@ from tools.kodi_reinstall import installed_addon_origins
 
 
 ADDON_ID = "service.mwodevelop.profilesync"
+ADDON_LABEL = "mwoDevelop Profile Sync"
 ORIGIN_VERSION = "1.0.0"
 REPOSITORY_CHANNELS = {
     "stable": {
@@ -508,8 +517,15 @@ def _install_from_testing(adb, port, serial, expected_version):
         time.sleep(1)
     else:
         raise TimeoutError("testing repository indexing timed out")
-    _execute_builtin(adb, port, serial, "InstallAddon(%s)" % ADDON_ID)
-    _accept_addon_install_prompt(adb, port, serial)
+    if _addon_version(adb, port, serial) is None:
+        _execute_builtin(adb, port, serial, "InstallAddon(%s)" % ADDON_ID)
+        _accept_addon_install_prompt(adb, port, serial)
+    else:
+        # Kodi intentionally does not switch an installed add-on between two
+        # private repositories through InstallAddon or automatic updates. The
+        # supported path is the add-on information dialog's Versions picker.
+        # It records both the selected version and its repository origin.
+        _select_repository_version(adb, port, serial, expected_version)
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         if _addon_version(adb, port, serial) == expected_version:
@@ -518,6 +534,41 @@ def _install_from_testing(adb, port, serial, expected_version):
             return
         time.sleep(2)
     raise TimeoutError("testing profile-sync add-on installation timed out")
+
+
+def _select_repository_version(adb, port, serial, expected_version):
+    _ensure_kodi_foreground(adb, port, serial)
+    with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
+        # A previous interrupted GUI operation must not mask ActivateWindow.
+        for _ in range(8):
+            window_id = (
+                _current_control(jsonrpc)
+                .get("currentwindow", {})
+                .get("id")
+            )
+            if window_id not in {10100, 10103, 10146, 12000}:
+                break
+            jsonrpc.call("Input.Back")
+            time.sleep(0.25)
+    _execute_event_builtin(
+        adb,
+        port,
+        serial,
+        "ActivateWindow(AddonBrowser,addons://user/xbmc.service,return)",
+    )
+    time.sleep(1)
+    with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
+        _select_control(jsonrpc, {ADDON_LABEL})
+        time.sleep(0.5)
+        _select_control(jsonrpc, {"Versions", "Wersje"})
+        time.sleep(0.5)
+        _select_control(
+            jsonrpc,
+            {
+                "Version %s" % expected_version,
+                "Wersja %s" % expected_version,
+            },
+        )
 
 
 def _set_addon_enabled(adb, port, serial, enabled):
@@ -941,6 +992,7 @@ def _prepare_server(repository, server_repository, root):
 
 def verify_device(
     registry,
+    references,
     logical_device_id,
     adb,
     adb_port,
@@ -952,7 +1004,11 @@ def verify_device(
     expected_version,
     temporary,
 ):
-    device = resolve_device(registry, logical_device_id)
+    device = resolve_private_endpoint(
+        resolve_device(registry, logical_device_id),
+        references,
+        required=True,
+    )
     serial = device["endpoints"]["adb"]
     model = adb_output(
         adb, adb_port, serial, "shell", "getprop ro.product.model"
@@ -1073,13 +1129,19 @@ def verify_device(
 
 
 def main():
-    repository = Path(__file__).resolve().parents[2]
+    repository = ROOT
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", action="append")
     parser.add_argument(
         "--devices",
         type=Path,
         default=repository / ".kodi-private/devices.json",
+    )
+    parser.add_argument(
+        "--references",
+        type=Path,
+        default=repository / ".env",
+        help="ignored private endpoint reference file",
     )
     parser.add_argument(
         "--adb", default="/home/mwo/android-sdk/platform-tools/adb"
@@ -1112,6 +1174,7 @@ def main():
     )
     expected_version = lock["components"][ADDON_ID]["version"]
     registry = load_registry(args.devices.resolve())
+    references = load_private_references(args.references.resolve())
     selected = args.device or sorted(registry["devices"])
     server_repository = args.server_repository.resolve()
     with tempfile.TemporaryDirectory(
@@ -1149,6 +1212,7 @@ def main():
             results = [
                 verify_device(
                     registry,
+                    references,
                     logical_device_id,
                     args.adb,
                     args.adb_server_port,

@@ -9,7 +9,7 @@ import re
 import stat
 from pathlib import Path
 
-try:
+if __package__ in {None, ""}:
     from kodi_devices import (
         load_registry,
         resolve_device,
@@ -17,14 +17,14 @@ try:
     )
     from kodi_lifecycle import lifecycle_for_device
     from kodi_transports import transport_for_device
-except ModuleNotFoundError:
-    from tools.kodi_devices import (
+else:
+    from .kodi_devices import (
         load_registry,
         resolve_device,
         resolve_private_endpoint,
     )
-    from tools.kodi_lifecycle import lifecycle_for_device
-    from tools.kodi_transports import transport_for_device
+    from .kodi_lifecycle import lifecycle_for_device
+    from .kodi_transports import transport_for_device
 
 
 ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")

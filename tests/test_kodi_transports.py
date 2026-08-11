@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from tools.kodi_devices import normalize_registry
+from tools import kodi_inventory, kodi_lifecycle, kodi_transports
 from tools.kodi_inventory import load_private_references
 from tools.kodi_lifecycle import lifecycle_for_device
 from tools.kodi_transports import (
@@ -310,3 +311,10 @@ def test_private_reference_loader_rejects_broad_permissions(tmp_path):
 
     with pytest.raises(ValueError, match="permissions are too broad"):
         load_private_references(path)
+
+
+def test_package_imports_share_transport_class_identity():
+    assert kodi_lifecycle.AdbTransport is kodi_transports.AdbTransport
+    assert kodi_inventory.transport_for_device.__module__ == (
+        "tools.kodi_transports"
+    )
