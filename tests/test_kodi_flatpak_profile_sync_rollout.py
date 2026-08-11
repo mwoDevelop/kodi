@@ -7,10 +7,12 @@ import subprocess
 import sys
 import types
 import zipfile
+from pathlib import PurePosixPath
 from xml.etree import ElementTree
 
 import pytest
 
+from tools import build_repo
 from tools.kodi_flatpak_profile_sync_rollout import (
     DEFAULT_REQUIRED_ADDONS,
     _cleanup_command,
@@ -129,6 +131,62 @@ def test_flatpak_required_artifacts_match_stable_lock():
         assert artifact["filename"] == addon_id + ".zip"
         assert artifact["path"].is_file()
         assert len(artifact["sha256"]) == 64
+
+
+def test_flatpak_builds_missing_stable_artifact_from_exact_lock(
+    tmp_path, monkeypatch
+):
+    files = [
+        (
+            b'<addon id="service.test" version="1.2.3" />',
+            PurePosixPath("addon.xml"),
+        ),
+        (b"payload\n", PurePosixPath("resources/value.txt")),
+    ]
+    expected = tmp_path / "expected.zip"
+    build_repo.write_deterministic_zip(expected, "service.test", files)
+    digest = hashlib.sha256(expected.read_bytes()).hexdigest()
+    expected.unlink()
+    manifests = tmp_path / "manifests/locks"
+    manifests.mkdir(parents=True)
+    (tmp_path / "manifests/components.json").write_text(
+        json.dumps(
+            {
+                "components": {
+                    "service.test": {
+                        "repository": "example/service.test",
+                        "source": "service.test",
+                        "include": ["*"],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (manifests / "stable.json").write_text(
+        json.dumps(
+            {
+                "components": {
+                    "service.test": {
+                        "commit": "a" * 40,
+                        "version": "1.2.3",
+                        "zip_sha256": digest,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(build_repo, "component_files", lambda *_args: files)
+
+    artifacts = required_addon_artifacts(
+        tmp_path, {"service.test": "1.2.3"}
+    )
+
+    archive = artifacts["service.test"]["path"]
+    assert archive.read_bytes()
+    assert artifacts["service.test"]["sha256"] == digest
+    assert stat.S_IMODE(archive.stat().st_mode) == 0o600
 
 
 def test_flatpak_official_dependencies_use_verified_private_cache(tmp_path):

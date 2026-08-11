@@ -32,6 +32,7 @@ from tools.kodi_devices import (
     resolve_device,
     resolve_private_endpoint,
 )
+from tools import build_repo
 from tools.kodi_inventory import load_private_references
 from tools.kodi_lifecycle import lifecycle_for_device
 from tools.kodi_transports import transport_for_device
@@ -251,9 +252,49 @@ def required_addon_artifacts(repository, addons):
         )
         archive = next((path for path in candidates if path.is_file()), None)
         if archive is None:
-            raise ValueError(
-                "required Flatpak stable artifact is missing: %s" % addon_id
+            components = json.loads(
+                (repository / "manifests/components.json").read_text(
+                    encoding="utf-8"
+                )
+            )["components"]
+            component = components.get(addon_id)
+            if not isinstance(component, dict):
+                raise ValueError(
+                    "required Flatpak component metadata is missing: %s"
+                    % addon_id
+                )
+            files = build_repo.component_files(
+                component, locked.get("commit", "")
             )
+            by_name = {
+                PurePosixPath(relative).as_posix(): payload
+                for payload, relative in files
+            }
+            _addon, parsed_id, parsed_version = build_repo.parse_addon_payload(
+                by_name.get("addon.xml", b"")
+            )
+            if parsed_id != addon_id or parsed_version != version:
+                raise ValueError(
+                    "required Flatpak locked component identity differs"
+                )
+            cache = candidates[0].parent
+            cache.mkdir(parents=True, exist_ok=True, mode=0o700)
+            with tempfile.TemporaryDirectory(
+                prefix=".flatpak-stable-", dir=cache
+            ) as temporary:
+                built = Path(temporary) / candidates[0].name
+                build_repo.write_deterministic_zip(
+                    built, addon_id, files
+                )
+                digest = hashlib.sha256(built.read_bytes()).hexdigest()
+                if digest != locked.get("zip_sha256"):
+                    raise ValueError(
+                        "required Flatpak built artifact digest differs: %s"
+                        % addon_id
+                    )
+                os.replace(built, candidates[0])
+                candidates[0].chmod(0o600)
+            archive = candidates[0]
         digest = hashlib.sha256(archive.read_bytes()).hexdigest()
         if digest != locked.get("zip_sha256"):
             raise ValueError(
