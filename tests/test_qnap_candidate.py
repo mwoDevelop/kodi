@@ -63,3 +63,49 @@ def test_prepare_reuses_unchanged_approved_image_without_build(monkeypatch, tmp_
     assert result["candidate_id"] == "e" * 64
     assert result["build_runs"] == {"example": "reused"}
     assert result["path"].is_file()
+
+
+def test_download_approval_ignores_unrelated_buildx_artifact(
+    monkeypatch, tmp_path
+):
+    service = qnap_images.Service(
+        "example",
+        "ghcr.io/mwodevelop/example",
+        tmp_path,
+        qnap_images.Path("Dockerfile"),
+        ("linux/amd64",),
+        github_repository="mwoDevelop/example",
+        input_paths=("Dockerfile",),
+    )
+    calls = []
+
+    def run(argv, repository=qnap_candidate.ROOT):
+        calls.append(tuple(argv))
+        if argv[1] == "api":
+            return json.dumps(
+                {
+                    "artifacts": [
+                        {"name": "example.dockerbuild", "expired": False},
+                        {
+                            "name": "qnap-image-approval-example-123-1",
+                            "expired": False,
+                        },
+                    ]
+                }
+            )
+        destination = argv[argv.index("--dir") + 1]
+        (destination / qnap_images.Path("qnap-image-approval.json")).write_text(
+            "{}", encoding="utf-8"
+        )
+        return ""
+
+    monkeypatch.setattr(qnap_candidate, "_run", run)
+
+    approval = qnap_candidate._download_approval(
+        service, "123", tmp_path / "download"
+    )
+
+    assert approval.name == "qnap-image-approval.json"
+    assert "--name" in calls[1]
+    assert "qnap-image-approval-example-123-1" in calls[1]
+    assert "example.dockerbuild" not in calls[1]
