@@ -195,6 +195,22 @@ def profile_sync_server_url(qnap_host, override=None):
     return "https://%s:%s" % (qnap_host, PRODUCTION_PORT)
 
 
+def stable_profile_sync_zip(repository):
+    """Return the private candidate path for the currently locked stable client."""
+
+    stable = json.loads(
+        (Path(repository) / "manifests/locks/stable.json").read_text(
+            encoding="utf-8"
+        )
+    )["components"]
+    version = stable.get(PROFILE_SYNC_ID, {}).get("version", "")
+    if not ADDON_VERSION.fullmatch(version):
+        raise ValueError("stable Profile Sync version is missing or invalid")
+    return Path(".kodi-private/candidates") / (
+        "%s-%s-stable.zip" % (PROFILE_SYNC_ID, version)
+    )
+
+
 def required_addons(repository, overrides=None):
     if overrides:
         items = []
@@ -587,6 +603,9 @@ def _pair_state(
 
 def rollout(args):
     repository = Path(__file__).resolve().parents[1]
+    profile_sync_zip = repository / (
+        args.profile_sync_zip or stable_profile_sync_zip(repository)
+    )
     references = load_private_references(repository / args.references)
     registry = load_registry(repository / args.devices)
     device = resolve_private_endpoint(
@@ -618,7 +637,7 @@ def rollout(args):
     with tempfile.TemporaryDirectory() as temporary:
         temporary = Path(temporary)
         _profile_root, profile_version = extract_addon(
-            repository / args.profile_sync_zip,
+            profile_sync_zip,
             PROFILE_SYNC_ID,
             args.profile_sync_sha256,
             temporary / "profile-sync",
@@ -818,7 +837,7 @@ def rollout(args):
             for path in profile_data.iterdir():
                 path.chmod(0o600)
             shutil.copy2(
-                repository / args.profile_sync_zip,
+                profile_sync_zip,
                 payload / "profile-sync.zip",
             )
             shutil.copy2(
@@ -1015,9 +1034,9 @@ def main():
     )
     parser.add_argument(
         "--profile-sync-zip",
-        default=(
-            ".kodi-private/candidates/"
-            "service.mwodevelop.profilesync-1.0.2-stable.zip"
+        help=(
+            "override the local Profile Sync ZIP; by default its name is "
+            "derived from manifests/locks/stable.json"
         ),
     )
     parser.add_argument("--profile-sync-sha256", required=True)

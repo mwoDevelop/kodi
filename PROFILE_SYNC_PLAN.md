@@ -6,7 +6,7 @@ klienta określa `manifests/locks/stable.json`, stan backendu polecenie
 `python tools/qnap_images.py status`, a stan urządzeń testy opisane w
 `docs/kodi-private-profile.md`.
 
-Data: 2026-08-10
+Data: 2026-08-11
 
 Repo nadrzędne: `mwoDevelop/kodi`
 
@@ -21,25 +21,21 @@ Raporty review:
 - `docs/PROFILE_SYNC_QNAP_PLAN_REVIEW.md`;
 - `docs/PROFILE_SYNC_NUC_PLAN_REVIEW.md`.
 
-Migawka statusu operacyjnego z 2026-08-10:
+Migawka statusu operacyjnego z 2026-08-11:
 
 - backend Profile Sync 0.3.0 i provider relay działają jako zdrowe kontenery
-  Container Station na właściwym daemonie; watchdog działa, ale po objęciu
-  monitoringiem audytu zaakceptowanych providerów poprawnie alarmuje o jego
-  ostatnim nieudanym przebiegu; RAID ma stan `[UU]`;
-- Sony TV ma Profile Sync 1.0.2, spójną tożsamość, przypisaną i zastosowaną tę
-  samą rewizję `home-stable`, wynik `NO_CHANGE`, osiem favourites, siedem
-  przenośnych akcji WatchNixtoons2 i komplet grafik;
-- X88 Pro 20 jest osiągalny, ale utracił Umbrellę, mwoScrapers,
-  WatchNixtoons2 mwoDevelop i sam dodatek Profile Sync; wymaga odbudowy ze
-  stable oraz nowej weryfikacji enrollmentu;
-- oba profile NUC są osiągalne przez SSH i mają Kodi Flatpak 21.3 oraz
-  zakwalifikowane ścieżki runtime; Kodi nie jest uruchomione, `nuc-mwo` ma
-  tylko Umbrellę, a `nuc-alek` nie ma jeszcze zestawu mwoDevelop;
-- BlueStacks i Bedroom TV były niedostępne podczas tej kontroli, dlatego ich
-  wcześniejsze certyfikacje nie są przedstawiane jako bieżący wynik;
-- publiczny stable nadal udostępnia Profile Sync 1.0.2; wersja 1.0.3 pozostaje
-  kandydatem Linux/Flatpak do ukończenia i certyfikacji.
+  Container Station na właściwym daemonie; watchdog jest zdrowy, raportuje pięć
+  monitorowanych workflow i nie ma aktywnych błędów; RAID ma stan `[UU]`;
+- BlueStacks, X88 Pro 20 i Sony TV mają Profile Sync 1.0.3 z pochodzeniem
+  `repository.mwodevelop`, spójną tożsamość oraz wynik synchronizacji
+  `NO_CHANGE`; pełne testy dodatku przeszły na całej dostępnej trójce;
+- oba profile NUC są osiągalne przez SSH, mają Kodi Flatpak 21.3,
+  zakwalifikowane ścieżki runtime, Profile Sync 1.0.3 i kompletny zestaw
+  wymaganych dodatków; powtórzona synchronizacja zwraca `NO_CHANGE`;
+- Bedroom TV było niedostępne podczas końcowej kontroli, dlatego jego
+  wcześniejsza certyfikacja pozostaje ostatnim znanym wynikiem;
+- publiczny kanał stable udostępnia certyfikowany bajtowo Profile Sync 1.0.3;
+  wersja `repository.mwodevelop` celowo pozostaje 1.0.0.
 
 Poniższy „Stan realizacji 2026-07-31” pozostaje historycznym zapisem
 osiągniętej bramy, a nie aktualnym inventory urządzeń.

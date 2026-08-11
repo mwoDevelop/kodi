@@ -26,6 +26,7 @@ from tools.kodi_flatpak_profile_sync_rollout import (
     profile_sync_server_url,
     required_addon_artifacts,
     required_addons,
+    stable_profile_sync_zip,
 )
 
 
@@ -352,6 +353,26 @@ def test_documented_direct_cli_entrypoint_loads_repository_modules():
 
     assert result.returncode == 0, result.stderr
     assert "--profile-sync-sha256" in result.stdout
+
+
+def test_profile_sync_default_artifact_follows_stable_lock(tmp_path):
+    lock = tmp_path / "manifests/locks/stable.json"
+    lock.parent.mkdir(parents=True)
+    lock.write_text(
+        json.dumps(
+            {
+                "components": {
+                    "service.mwodevelop.profilesync": {"version": "2.3.4"}
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert stable_profile_sync_zip(tmp_path) == PurePosixPath(
+        ".kodi-private/candidates/"
+        "service.mwodevelop.profilesync-2.3.4-stable.zip"
+    )
 
 
 def test_script_path_does_not_duplicate_ssh_transport_class_identity():
