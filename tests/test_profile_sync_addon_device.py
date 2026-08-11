@@ -131,7 +131,11 @@ def test_repository_version_picker_uses_supported_private_repo_switch(
     )
 
     profile_sync_addon_device._select_repository_version(
-        "adb", 5038, "device", "1.0.3"
+        "adb",
+        5038,
+        "device",
+        "1.0.3",
+        "repository.mwodevelop",
     )
 
     assert builtins == [
@@ -142,6 +146,85 @@ def test_repository_version_picker_uses_supported_private_repo_switch(
         ("Input.Select", None),
         ("Input.Select", None),
     ]
+
+
+def test_repository_update_button_is_used_for_matching_origin(monkeypatch):
+    jsonrpc = FakeJsonRpc(
+        [profile_sync_addon_device.ADDON_LABEL, "Update"],
+        window_id=10040,
+    )
+
+    class Client:
+        def __enter__(self):
+            return jsonrpc
+
+        def __exit__(self, *_):
+            return None
+
+    monkeypatch.setattr(profile_sync_addon_device.time, "sleep", lambda _: None)
+    monkeypatch.setattr(
+        profile_sync_addon_device, "AdbJsonRpcClient", lambda *_: Client()
+    )
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "_ensure_kodi_foreground",
+        lambda *_: None,
+    )
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "_execute_event_builtin",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "ORIGIN",
+        "repository.mwodevelop",
+    )
+
+    profile_sync_addon_device._select_repository_version(
+        "adb",
+        5038,
+        "device",
+        "1.0.3",
+        "repository.mwodevelop",
+    )
+
+    assert [call for call in jsonrpc.calls if call[0] == "Input.Select"] == [
+        ("Input.Select", None),
+        ("Input.Select", None),
+    ]
+
+
+def test_matching_version_origin_switch_is_validated_in_kodi(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "assign_addon_origins_in_kodi",
+        lambda *args: calls.append(args),
+    )
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "ORIGIN",
+        "repository.mwodevelop",
+    )
+
+    profile_sync_addon_device._switch_matching_version_origin(
+        "adb", 5038, "device", "repository.mwodevelop.testing"
+    )
+
+    assert calls[0][2] == {
+        "serial": "device",
+        "addon_origins": {
+            profile_sync_addon_device.ADDON_ID: "repository.mwodevelop"
+        },
+        "addon_previous_origins": {
+            profile_sync_addon_device.ADDON_ID: (
+                "repository.mwodevelop.testing"
+            )
+        },
+        "addon_repository_checksums": {},
+        "addon_version_transitions": {},
+    }
 
 
 def test_latest_addons_database_is_selected_without_android_sort_v():

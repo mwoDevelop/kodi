@@ -12,11 +12,75 @@ from tools.kodi_reinstall import (
     apply_addon_origins,
     apk_abis,
     deploy_target,
+    execute_kodi_builtin,
     file_digest,
     installed_addon_origins,
     installed_addon_origins_in_kodi,
     uninstall_and_clean,
 )
+
+
+def test_execute_kodi_builtin_prefers_jsonrpc(monkeypatch):
+    calls = []
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def call(self, method, params):
+            calls.append((method, params))
+
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.AdbJsonRpcClient", lambda *_args: Client()
+    )
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.AdbEventClient",
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("EventServer fallback was not expected")
+        ),
+    )
+
+    assert (
+        execute_kodi_builtin("adb", 5038, "serial", "UpdateAddonRepos")
+        == "jsonrpc"
+    )
+    assert calls == [
+        (
+            "XBMC.ExecuteBuiltin",
+            {"command": "UpdateAddonRepos", "wait": False},
+        )
+    ]
+
+
+def test_execute_kodi_builtin_falls_back_to_eventserver(monkeypatch):
+    calls = []
+
+    class Client:
+        def __enter__(self):
+            raise RuntimeError("JSON-RPC unavailable")
+
+        def __exit__(self, *_args):
+            return None
+
+    class Events:
+        def execute_builtin(self, command):
+            calls.append(command)
+
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.AdbJsonRpcClient", lambda *_args: Client()
+    )
+    monkeypatch.setattr(
+        "tools.kodi_reinstall.AdbEventClient", lambda *_args: Events()
+    )
+
+    assert (
+        execute_kodi_builtin("adb", 5038, "serial", "UpdateAddonRepos")
+        == "eventserver"
+    )
+    assert calls == ["UpdateAddonRepos"]
 
 
 def test_start_kodi_enables_package_before_launcher(monkeypatch):

@@ -42,7 +42,10 @@ from tools.kodi_profile import (
     adb_command,
     adb_output,
 )
-from tools.kodi_reinstall import installed_addon_origins
+from tools.kodi_reinstall import (
+    assign_addon_origins_in_kodi,
+    installed_addon_origins,
+)
 
 
 ADDON_ID = "service.mwodevelop.profilesync"
@@ -496,7 +499,16 @@ def _bootstrap_testing_repository(adb, port, serial):
 
 
 def _install_from_testing(adb, port, serial, expected_version):
-    if _addon_version(adb, port, serial) == expected_version:
+    current_version = _addon_version(adb, port, serial)
+    current_origin = None
+    if current_version is not None:
+        with tempfile.TemporaryDirectory(
+            prefix="mwo-profile-sync-origin-"
+        ) as temporary:
+            current_origin = _installed_origin(
+                adb, port, serial, Path(temporary)
+            )
+    if current_version == expected_version and current_origin == ORIGIN:
         _set_addon_enabled(adb, port, serial, False)
         _set_addon_enabled(adb, port, serial, True)
         return
@@ -517,7 +529,14 @@ def _install_from_testing(adb, port, serial, expected_version):
         time.sleep(1)
     else:
         raise TimeoutError("testing repository indexing timed out")
-    if _addon_version(adb, port, serial) is None:
+    if current_version == expected_version:
+        _switch_matching_version_origin(
+            adb, port, serial, current_origin
+        )
+        _set_addon_enabled(adb, port, serial, False)
+        _set_addon_enabled(adb, port, serial, True)
+        return
+    if current_version is None:
         _execute_builtin(adb, port, serial, "InstallAddon(%s)" % ADDON_ID)
         _accept_addon_install_prompt(adb, port, serial)
     else:
@@ -525,7 +544,13 @@ def _install_from_testing(adb, port, serial, expected_version):
         # private repositories through InstallAddon or automatic updates. The
         # supported path is the add-on information dialog's Versions picker.
         # It records both the selected version and its repository origin.
-        _select_repository_version(adb, port, serial, expected_version)
+        _select_repository_version(
+            adb,
+            port,
+            serial,
+            expected_version,
+            current_origin,
+        )
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         if _addon_version(adb, port, serial) == expected_version:
@@ -536,7 +561,26 @@ def _install_from_testing(adb, port, serial, expected_version):
     raise TimeoutError("testing profile-sync add-on installation timed out")
 
 
-def _select_repository_version(adb, port, serial, expected_version):
+def _switch_matching_version_origin(adb, port, serial, current_origin):
+    if not current_origin:
+        raise RuntimeError("installed profile-sync origin is unavailable")
+    assign_addon_origins_in_kodi(
+        adb,
+        port,
+        {
+            "serial": serial,
+            "addon_origins": {ADDON_ID: ORIGIN},
+            "addon_previous_origins": {ADDON_ID: current_origin},
+            "addon_repository_checksums": {},
+            "addon_version_transitions": {},
+        },
+        ROOT / "tools/kodi_profile_origin_device.py",
+    )
+
+
+def _select_repository_version(
+    adb, port, serial, expected_version, current_origin
+):
     _ensure_kodi_foreground(adb, port, serial)
     with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
         # A previous interrupted GUI operation must not mask ActivateWindow.
@@ -560,6 +604,9 @@ def _select_repository_version(adb, port, serial, expected_version):
     with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
         _select_control(jsonrpc, {ADDON_LABEL})
         time.sleep(0.5)
+        if current_origin == ORIGIN:
+            _select_control(jsonrpc, {"Update", "Aktualizuj"})
+            return
         _select_control(jsonrpc, {"Versions", "Wersje"})
         time.sleep(0.5)
         _select_control(
