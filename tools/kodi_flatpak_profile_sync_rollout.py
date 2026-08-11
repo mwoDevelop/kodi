@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree
@@ -223,6 +224,105 @@ def required_addons(repository, overrides=None):
     return dict(items)
 
 
+def required_addon_artifacts(repository, addons):
+    """Resolve immutable stable ZIPs used by the in-Kodi Flatpak installer."""
+
+    repository = Path(repository)
+    stable = json.loads(
+        (repository / "manifests/locks/stable.json").read_text(
+            encoding="utf-8"
+        )
+    )["components"]
+    result = {}
+    for addon_id, version in addons.items():
+        locked = stable.get(addon_id)
+        if not locked or locked.get("version") != version:
+            raise ValueError(
+                "required Flatpak add-on is not pinned by the stable lock"
+            )
+        candidates = (
+            repository
+            / ".kodi-private/candidates"
+            / ("%s-%s-stable.zip" % (addon_id, version)),
+            repository
+            / "dist/stable/omega"
+            / addon_id
+            / ("%s-%s.zip" % (addon_id, version)),
+        )
+        archive = next((path for path in candidates if path.is_file()), None)
+        if archive is None:
+            raise ValueError(
+                "required Flatpak stable artifact is missing: %s" % addon_id
+            )
+        digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+        if digest != locked.get("zip_sha256"):
+            raise ValueError(
+                "required Flatpak stable artifact digest differs: %s"
+                % addon_id
+            )
+        result[addon_id] = {
+            "filename": addon_id + ".zip",
+            "path": archive,
+            "sha256": digest,
+            "version": version,
+        }
+    return result
+
+
+def official_dependency_artifacts(repository):
+    """Cache and verify the pure-Python dependency closure from Kodi Omega."""
+
+    repository = Path(repository)
+    document = json.loads(
+        (repository / "manifests/kodi-official-dependencies.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    dependencies = document.get("dependencies")
+    if document.get("schema") != 1 or not isinstance(dependencies, dict):
+        raise ValueError("invalid Kodi official dependency manifest")
+    cache = repository / ".kodi-private/candidates/kodi-official"
+    cache.mkdir(parents=True, exist_ok=True, mode=0o700)
+    cache.chmod(0o700)
+    result = {}
+    for addon_id, metadata in sorted(dependencies.items()):
+        if (
+            not ADDON_ID.fullmatch(addon_id)
+            or not isinstance(metadata, dict)
+            or set(metadata) != {"sha256", "url", "version"}
+            or not ADDON_VERSION.fullmatch(metadata.get("version", ""))
+            or not SHA256.fullmatch(metadata.get("sha256", ""))
+            or not metadata.get("url", "").startswith(
+                "https://mirrors.kodi.tv/addons/omega/"
+            )
+        ):
+            raise ValueError("invalid Kodi official dependency metadata")
+        filename = "%s-%s.zip" % (addon_id, metadata["version"])
+        archive = cache / filename
+        if not archive.is_file():
+            temporary = cache / (".%s-%s.tmp" % (filename, secrets.token_hex(8)))
+            try:
+                with urllib.request.urlopen(metadata["url"], timeout=60) as response:
+                    payload = response.read(64 * 1024 * 1024 + 1)
+                if len(payload) > 64 * 1024 * 1024:
+                    raise ValueError("Kodi official dependency exceeds policy")
+                temporary.write_bytes(payload)
+                temporary.chmod(0o600)
+                if hashlib.sha256(payload).hexdigest() != metadata["sha256"]:
+                    raise ValueError("Kodi official dependency digest differs")
+                os.replace(temporary, archive)
+            finally:
+                temporary.unlink(missing_ok=True)
+        if hashlib.sha256(archive.read_bytes()).hexdigest() != metadata["sha256"]:
+            raise ValueError("cached Kodi official dependency digest differs")
+        result[addon_id] = {
+            "filename": addon_id + ".zip",
+            "path": archive,
+            **metadata,
+        }
+    return result
+
+
 def _mkdirs(sftp, path, mode=0o700):
     current = "/" if path.startswith("/") else ""
     for part in PurePosixPath(path).parts:
@@ -300,10 +400,13 @@ def _process_paths(operation):
 def _cleanup_command(operation):
     paths = _process_paths(operation)
     return (
-        "for p in {kpid} {xpid}; do "
-        "test ! -f \"$p\" || {{ pid=$(cat \"$p\"); "
+        "test ! -f {kpid} || {{ pid=$(cat {kpid}); "
         "case \"$pid\" in (*[!0-9]*|'') exit 1;; esac; "
-        "kill \"$pid\" 2>/dev/null || true; }}; done; "
+        "kill -TERM -- \"-$pid\" 2>/dev/null || kill \"$pid\" 2>/dev/null || true; "
+        "sleep 2; kill -KILL -- \"-$pid\" 2>/dev/null || true; }}; "
+        "test ! -f {xpid} || {{ pid=$(cat {xpid}); "
+        "case \"$pid\" in (*[!0-9]*|'') exit 1;; esac; "
+        "kill \"$pid\" 2>/dev/null || true; }}; "
         "rm -f {kpid} {xpid} {klog} {xlog}"
     ).format(**{name: shlex.quote(path) for name, path in paths.items()})
 
@@ -589,19 +692,77 @@ def rollout(args):
         finally:
             qnap.close()
         required = required_addons(repository, args.required_addons)
+        required_artifacts = required_addon_artifacts(repository, required)
+        dependency_artifacts = official_dependency_artifacts(repository)
+        for addon_id, artifact in required_artifacts.items():
+            _root, artifact_version = extract_addon(
+                artifact["path"],
+                addon_id,
+                artifact["sha256"],
+                temporary / "required-check" / addon_id,
+            )
+            if artifact_version != artifact["version"]:
+                raise ValueError(
+                    "required Flatpak stable artifact version differs"
+                )
+        for addon_id, artifact in dependency_artifacts.items():
+            _root, artifact_version = extract_addon(
+                artifact["path"],
+                addon_id,
+                artifact["sha256"],
+                temporary / "dependency-check" / addon_id,
+            )
+            if artifact_version != artifact["version"]:
+                raise ValueError("Kodi official dependency version differs")
         expected = {
             "logical_device_id": args.device,
             "profile_sync_version": profile_version,
             "repository_version": repository_version,
             "required_addons": required,
+            "required_artifacts": {
+                addon_id: {
+                    key: value
+                    for key, value in artifact.items()
+                    if key != "path"
+                }
+                for addon_id, artifact in required_artifacts.items()
+            },
+            "dependency_artifacts": {
+                addon_id: {
+                    key: value
+                    for key, value in artifact.items()
+                    if key not in {"path", "url"}
+                }
+                for addon_id, artifact in dependency_artifacts.items()
+            },
         }
         mode = "install"
         if receipt_path.exists():
-            if json.loads(receipt_path.read_text(encoding="utf-8")) != expected:
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            if receipt == expected:
+                mode = "sync"
+            elif receipt != {
+                key: value
+                for key, value in expected.items()
+                if key != "dependency_artifacts"
+            }:
                 raise ValueError("private Flatpak installation receipt differs")
-            mode = "sync"
         payload = temporary / "payload"
         payload.mkdir()
+        required_payload = payload / "required"
+        required_payload.mkdir()
+        for artifact in required_artifacts.values():
+            shutil.copy2(
+                artifact["path"],
+                required_payload / artifact["filename"],
+            )
+        dependency_payload = payload / "dependencies"
+        dependency_payload.mkdir()
+        for artifact in dependency_artifacts.values():
+            shutil.copy2(
+                artifact["path"],
+                dependency_payload / artifact["filename"],
+            )
         (payload / "expected.json").write_text(
             json.dumps(expected, sort_keys=True, separators=(",", ":"))
             + "\n",
@@ -632,13 +793,13 @@ def rollout(args):
         stage = posixpath.join(
             data_root, "temp", ".mwodevelop-flatpak-" + operation
         )
+        identity = transport.probe_identity()
         client, sftp = _connect_sftp(transport)
         result = None
         script_invoked = False
         try:
             _upload_tree(sftp, payload, stage)
             marker = posixpath.join(stage, MARKER_NAME)
-            identity = transport.probe_identity()
             display = 90 + identity.uid % 10
             display_name = ":%s" % display
             process_paths = _process_paths(operation)
@@ -651,7 +812,7 @@ def rollout(args):
                 "set -eu; test ! -e {lock}; "
                 "nohup Xvfb {display} -screen 0 1280x720x24 -nolisten tcp "
                 "</dev/null >{xlog} 2>&1 & echo $! >{xpid}; sleep 1; "
-                "nohup env HOME={home} XDG_RUNTIME_DIR={runtime} DISPLAY={display} "
+                "nohup setsid env HOME={home} XDG_RUNTIME_DIR={runtime} DISPLAY={display} "
                 "flatpak run {app} --standalone </dev/null >{klog} 2>&1 & "
                 "echo $! >{kpid}"
             ).format(
@@ -685,6 +846,10 @@ def rollout(args):
                         break
                     time.sleep(2)
                 result = None
+                install_request = posixpath.join(
+                    stage, "install-request.json"
+                )
+                last_confirmation = 0.0
                 while time.monotonic() < deadline:
                     if _exists(sftp, marker):
                         with sftp.open(marker, "r") as handle:
@@ -692,6 +857,28 @@ def rollout(args):
                                 handle.read().decode("utf-8")
                             )
                         break
+                    if (
+                        _exists(sftp, install_request)
+                        and time.monotonic() - last_confirmation >= 2
+                    ):
+                        with sftp.open(install_request, "r") as handle:
+                            request = json.loads(
+                                handle.read().decode("utf-8")
+                            )
+                        if (
+                            request.get("schema") != 1
+                            or request.get("addon_id") not in required
+                        ):
+                            raise RuntimeError(
+                                "invalid Flatpak install confirmation request"
+                            )
+                        confirm_packets = _stage_event_packets(
+                            sftp, stage, "Action(Select)"
+                        )
+                        _send_staged_event_builtin(
+                            transport, confirm_packets
+                        )
+                        last_confirmation = time.monotonic()
                     time.sleep(2)
             finally:
                 _remote_command(transport, _cleanup_command(operation))
@@ -706,8 +893,13 @@ def rollout(args):
                 or result.get("required_addons") != required
             ):
                 raise RuntimeError(
-                    "Flatpak in-Kodi Profile Sync verification failed: %s"
-                    % ((result or {}).get("error_type") or "timeout")
+                    "Flatpak in-Kodi Profile Sync verification failed: %s/%s at %s (%s)"
+                    % (
+                        (result or {}).get("error_type") or "timeout",
+                        (result or {}).get("error_code") or "unclassified",
+                        (result or {}).get("error_stage") or "unknown_stage",
+                        (result or {}).get("error_origin") or "unknown_origin",
+                    )
                 )
             remote_profile_data = posixpath.join(
                 data_root, "userdata/addon_data", PROFILE_SYNC_ID
@@ -717,12 +909,17 @@ def rollout(args):
                 str(state_path),
             )
             state_path.chmod(0o600)
-            post_probe = lifecycle.probe_kodi()
-            if (
-                post_probe["running"]
-                or not post_probe["runtime_paths_qualified"]
-            ):
-                raise RuntimeError("Flatpak Kodi did not stop cleanly")
+            stop_deadline = time.monotonic() + 30
+            while True:
+                post_probe = lifecycle.probe_kodi()
+                if (
+                    not post_probe["running"]
+                    and post_probe["runtime_paths_qualified"]
+                ):
+                    break
+                if time.monotonic() >= stop_deadline:
+                    raise RuntimeError("Flatpak Kodi did not stop cleanly")
+                time.sleep(2)
             receipt_path.write_text(
                 json.dumps(expected, sort_keys=True, separators=(",", ":"))
                 + "\n",

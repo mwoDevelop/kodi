@@ -20,7 +20,9 @@ from tools.kodi_flatpak_profile_sync_rollout import (
     _stage_event_packets,
     build_settings,
     extract_addon,
+    official_dependency_artifacts,
     profile_sync_server_url,
+    required_addon_artifacts,
     required_addons,
 )
 
@@ -116,12 +118,63 @@ def test_flatpak_required_addons_are_exactly_pinned_by_stable_lock():
     assert result["plugin.video.watchnixtoons2.mwodevelop"] == "0.27.1"
 
 
+def test_flatpak_required_artifacts_match_stable_lock():
+    required = required_addons(".")
+
+    artifacts = required_addon_artifacts(".", required)
+
+    assert set(artifacts) == set(required)
+    for addon_id, artifact in artifacts.items():
+        assert artifact["version"] == required[addon_id]
+        assert artifact["filename"] == addon_id + ".zip"
+        assert artifact["path"].is_file()
+        assert len(artifact["sha256"]) == 64
+
+
+def test_flatpak_official_dependencies_use_verified_private_cache(tmp_path):
+    manifest = tmp_path / "manifests"
+    manifest.mkdir()
+    cache = tmp_path / ".kodi-private/candidates/kodi-official"
+    cache.mkdir(parents=True)
+    archive = cache / "script.module.one-1.2.3.zip"
+    with zipfile.ZipFile(archive, "w") as payload:
+        payload.writestr(
+            "script.module.one/addon.xml",
+            '<addon id="script.module.one" version="1.2.3" />',
+        )
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    (manifest / "kodi-official-dependencies.json").write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "dependencies": {
+                    "script.module.one": {
+                        "sha256": digest,
+                        "url": (
+                            "https://mirrors.kodi.tv/addons/omega/"
+                            "script.module.one/script.module.one-1.2.3.zip"
+                        ),
+                        "version": "1.2.3",
+                    }
+                },
+            }
+        )
+    )
+
+    artifacts = official_dependency_artifacts(tmp_path)
+
+    assert artifacts["script.module.one"]["path"] == archive
+    assert artifacts["script.module.one"]["sha256"] == digest
+
+
 def test_cleanup_command_is_valid_shell_and_scopes_all_paths_to_operation():
     operation = "0123456789abcdef"
     command = _cleanup_command(operation)
 
     subprocess.run(["sh", "-n", "-c", command], check=True)
-    assert command.count(operation) == 6
+    assert command.count(operation) == 8
+    assert "kill -TERM" in command
+    assert "kill -KILL" in command
     assert "/tmp/mwo-kodi-" in command
     assert "/tmp/mwo-xvfb-" in command
 
@@ -309,6 +362,7 @@ def test_in_kodi_new_addon_is_enabled_before_settings_are_opened(
     xbmc = types.ModuleType("xbmc")
     xbmc.sleep = lambda _milliseconds: None
     xbmcaddon = types.ModuleType("xbmcaddon")
+    xbmcaddon.Addon = lambda addon_id: {"addon_id": addon_id}
     xbmcvfs = types.ModuleType("xbmcvfs")
     for name, module in (
         ("xbmc", xbmc),
@@ -345,6 +399,7 @@ def test_in_kodi_reconciles_required_addons_before_profile_apply(
     xbmc.executebuiltin = builtins.append
     xbmc.sleep = lambda _milliseconds: None
     xbmcaddon = types.ModuleType("xbmcaddon")
+    xbmcaddon.Addon = lambda addon_id: {"addon_id": addon_id}
     xbmcvfs = types.ModuleType("xbmcvfs")
     for name, module_object in (
         ("xbmc", xbmc),
@@ -389,3 +444,89 @@ def test_in_kodi_reconciles_required_addons_before_profile_apply(
         "plugin.video.one": "1.2.3",
         "script.module.two": "1.2.3",
     }
+
+
+def test_in_kodi_required_artifacts_are_digest_and_version_pinned(
+    tmp_path, monkeypatch
+):
+    xbmc = types.ModuleType("xbmc")
+    xbmcaddon = types.ModuleType("xbmcaddon")
+    xbmcvfs = types.ModuleType("xbmcvfs")
+    for name, module_object in (
+        ("xbmc", xbmc),
+        ("xbmcaddon", xbmcaddon),
+        ("xbmcvfs", xbmcvfs),
+    ):
+        monkeypatch.setitem(sys.modules, name, module_object)
+    source = "tools/kodi_flatpak_profile_sync_device.py"
+    spec = importlib.util.spec_from_file_location(
+        "flatpak_device_artifacts", source
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    stage = tmp_path / "stage"
+    required = stage / "required"
+    required.mkdir(parents=True)
+    archive = required / "plugin.video.one.zip"
+    with zipfile.ZipFile(archive, "w") as payload:
+        payload.writestr(
+            "plugin.video.one/addon.xml",
+            '<addon id="plugin.video.one" version="1.2.3" />',
+        )
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    expected = {
+        "required_addons": {"plugin.video.one": "1.2.3"},
+        "required_artifacts": {
+            "plugin.video.one": {
+                "filename": "plugin.video.one.zip",
+                "sha256": digest,
+                "version": "1.2.3",
+            }
+        },
+    }
+
+    candidates = module._extract_required_candidates(
+        stage, expected, tmp_path / "output"
+    )
+
+    assert candidates["plugin.video.one"].joinpath("addon.xml").is_file()
+    archive.write_bytes(archive.read_bytes() + b"tampered")
+    with pytest.raises(ValueError, match="digest differs"):
+        module._extract_required_candidates(
+            stage, expected, tmp_path / "output-two"
+        )
+
+
+def test_in_kodi_candidate_dependencies_exclude_managed_and_optional(
+    tmp_path, monkeypatch
+):
+    for name in ("xbmc", "xbmcaddon", "xbmcvfs"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    source = "tools/kodi_flatpak_profile_sync_device.py"
+    spec = importlib.util.spec_from_file_location(
+        "flatpak_device_dependencies", source
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    one = tmp_path / "plugin.video.one"
+    two = tmp_path / "script.module.two"
+    one.mkdir()
+    two.mkdir()
+    (one / "addon.xml").write_text(
+        """<addon id="plugin.video.one" version="1.0">
+        <requires>
+          <import addon="xbmc.python" version="3.0.0"/>
+          <import addon="script.module.two"/>
+          <import addon="script.module.requests"/>
+          <import addon="inputstream.adaptive" optional="true"/>
+        </requires></addon>"""
+    )
+    (two / "addon.xml").write_text(
+        '<addon id="script.module.two" version="1.0"/>'
+    )
+
+    dependencies = module._candidate_dependencies(
+        {"plugin.video.one": one, "script.module.two": two}
+    )
+
+    assert dependencies == ["script.module.requests"]

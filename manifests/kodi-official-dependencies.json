@@ -1,0 +1,36 @@
+{
+  "dependencies": {
+    "script.module.certifi": {
+      "sha256": "c16d4cd2efe6e57dbb5e8d71a9beb3af213b1e3d717e8b0b24f0cbdc4c645070",
+      "url": "https://mirrors.kodi.tv/addons/omega/script.module.certifi/script.module.certifi-2023.5.7.zip",
+      "version": "2023.5.7"
+    },
+    "script.module.chardet": {
+      "sha256": "d5010fc55a9523d86a306ae9e6a8dea0e3248fe079b9ed37280fe86110cd766a",
+      "url": "https://mirrors.kodi.tv/addons/omega/script.module.chardet/script.module.chardet-5.1.0.zip",
+      "version": "5.1.0"
+    },
+    "script.module.idna": {
+      "sha256": "c4ff34dbfab2736e9214a374d331bd6f558d8b3fea8eb7902e210749509242b3",
+      "url": "https://mirrors.kodi.tv/addons/omega/script.module.idna/script.module.idna-3.10.0.zip",
+      "version": "3.10.0"
+    },
+    "script.module.requests": {
+      "sha256": "a5704f0fd7afb4154e1beea9b5f05a002bcd75fa581a1e5fd15ece39bf2bd38a",
+      "url": "https://mirrors.kodi.tv/addons/omega/script.module.requests/script.module.requests-2.31.0.zip",
+      "version": "2.31.0"
+    },
+    "script.module.six": {
+      "sha256": "4197f7773f75ab9f16b3c920195acbb8b8b151b4b3c8c3e14fc4876e764e3860",
+      "url": "https://mirrors.kodi.tv/addons/omega/script.module.six/script.module.six-1.16.0+matrix.1.zip",
+      "version": "1.16.0+matrix.1"
+    },
+    "script.module.urllib3": {
+      "sha256": "740b2d63bb50eee9fb35f01c567ec8d3588c5bbd548e2b8d280932be30d82f53",
+      "url": "https://mirrors.kodi.tv/addons/omega/script.module.urllib3/script.module.urllib3-2.2.3.zip",
+      "version": "2.2.3"
+    }
+  },
+  "schema": 1,
+  "source": "Kodi official Omega repository"
+}
