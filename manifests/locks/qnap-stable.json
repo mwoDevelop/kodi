@@ -1,0 +1,44 @@
+{
+  "candidate_id": "d725f5b0b6beb5ef99309f69977331f3cf23318e1c005fc4a86a156f044bd00b",
+  "channel": "stable",
+  "schema": 1,
+  "services": {
+    "profile-sync": {
+      "image": "ghcr.io/mwodevelop/kodi-profile-sync-server@sha256:31a2e8d56445b6db10ed983c854521b01245ffb7f6e29aa8c0ea79c32d9f2818",
+      "input_sha256": "5175fc29293eaff55eab37d6f111eae4cab50aab75184ea614d3558f3aec3603",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm/v7"
+      ],
+      "security_report_sha256": "85b0a1335b2d911f173488d9b3cbffbafab313e7854fa30c0180dce4f8618692",
+      "source_commit": "3ab3b45a3cbb46295515c0c49b40810f0575e88e",
+      "source_repository": "mwoDevelop/kodi-profile-sync-server",
+      "workflow_run_id": "31533207078"
+    },
+    "provider-relay": {
+      "image": "ghcr.io/mwodevelop/mwoscrapers-relay@sha256:dd2b64cb02a3c85bfcf904ce0276d415912ea097cfb90c54285e4fbd296346b3",
+      "input_sha256": "6f2ef1dbaef028d5365e3d1cd90c3f99269bc821b9d997dfd5bd4782c56b13fb",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm/v7"
+      ],
+      "security_report_sha256": "7863ff5209fcd12b5c5097b2f78d1cbda3ba93fb246b97b9bef20974d72fb1ce",
+      "source_commit": "e8c55274143d07ea0ec1f83badda760209d6b04e",
+      "source_repository": "mwoDevelop/script.module.mwoscrapers",
+      "workflow_run_id": "31533532406"
+    },
+    "upstream-watchdog": {
+      "image": "ghcr.io/mwodevelop/kodi-upstream-watchdog@sha256:e32a86310f6903a3e3793ec514687e04e8d7b0b9fceea0160e444c1556015cee",
+      "input_sha256": "7d9fef709afde074202c9290de3e6310710bfd02f0a7243179b631e6e2962b59",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64",
+        "linux/arm/v7"
+      ],
+      "security_report_sha256": "88112dae3270a6aa40559161b2280dd5c6f90487c71be3dcf745d09f3c69cb3e",
+      "source_commit": "f3569edff0925f4f5e49ff426bb863f2988238a8",
+      "source_repository": "mwoDevelop/kodi",
+      "workflow_run_id": "31533831973"
+    }
+  }
+}
