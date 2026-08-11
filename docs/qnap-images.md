@@ -1,68 +1,69 @@
-# QNAP image build and deployment
+# Budowanie i wdrażanie obrazów QNAP
 
-`tools/qnap_images.py` is the single host entry point for the three Kodi
-Container Station applications:
+`tools/qnap_images.py` jest wspólnym punktem wejścia na hoście dla trzech aplikacji Kodi
+Container Station:
 
 - `profile-sync`;
 - `provider-relay`;
 - `upstream-watchdog`.
 
-It dispatches repository-owned GitHub Actions builds, pushes multi-architecture
-images to GHCR, verifies the required manifest platforms, records immutable
-digest references under the Git-ignored `.kodi-private/qnap-images.json`, and
-deploys only those digests. The build refuses a dirty or unpushed source
-repository, so an image always maps to an exact Git commit.
+Uruchamia należące do repozytorium buildy GitHub Actions, publikuje obrazy
+wieloarchitekturowe do GHCR, weryfikuje wymagane platformy manifestów, rejestruje
+niezmienne odniesienia do digestów w ignorowanym przez Git pliku
+`.kodi-private/qnap-images.json` i wdraża wyłącznie te digesty. Build odrzuca brudne
+lub niewypchnięte repozytorium źródłowe, dlatego obraz zawsze odpowiada dokładnemu
+commitowi Git.
 
-## Common commands
+## Typowe polecenia
 
-Inspect the running QNAP containers without changing them:
+Sprawdź działające kontenery QNAP bez ich zmiany:
 
 ```bash
 python tools/qnap_images.py status
 ```
 
-For the watchdog, `status` also reads its persisted functional result and
-reports the check time, workflow count and exact failing workflow names. This
-distinguishes a working fail-closed watchdog from a broken container.
+W przypadku watchdoga `status` odczytuje również utrwalony wynik działania i zgłasza
+czas kontroli, liczbę workflow i dokładne nazwy workflow zakończonych błędem. Pozwala to odróżnić
+działający watchdog fail-closed od uszkodzonego kontenera.
 
-Preview all builds without logging into GHCR or invoking Docker:
+Podejrzyj wszystkie buildy bez logowania do GHCR i bez uruchamiania Dockera:
 
 ```bash
 python tools/qnap_images.py build all --dry-run
 ```
 
-Build and push all images through GitHub Actions, then deploy their recorded
-immutable digests:
+Zbuduj i opublikuj wszystkie obrazy przez GitHub Actions, a następnie wdróż ich
+zapisane, niezmienne digesty:
 
 ```bash
 python tools/qnap_images.py build all
 python tools/qnap_images.py deploy all
 ```
 
-The combined form is:
+Połączona forma to:
 
 ```bash
 python tools/qnap_images.py update all
 ```
 
-The GitHub Actions publisher is the default. It avoids distributing a local
-long-lived `write:packages` token and waits for every workflow to finish before
-resolving and recording its GHCR digest. An explicitly authenticated local
-Buildx build remains available when needed:
+Domyślnym mechanizmem publikacji jest GitHub Actions. Pozwala to uniknąć lokalnego,
+długotrwałego tokena `write:packages`; skrypt czeka na zakończenie każdego workflow,
+a następnie ustala i zapisuje digest GHCR. W razie potrzeby dostępna jest jawnie uwierzytelniona
+lokalna kompilacja Buildx:
 
 ```bash
 python tools/qnap_images.py build all --publisher local
 ```
 
-Replace `all` with one or more names for a partial operation:
+W operacji częściowej zastąp `all` jedną lub kilkoma nazwami:
 
 ```bash
 python tools/qnap_images.py update upstream-watchdog
 python tools/qnap_images.py build profile-sync provider-relay
 ```
 
-The default Profile Sync server checkout is the sibling directory
-`../kodi-profile-sync-server`. Override it explicitly when necessary:
+Domyślnym checkoutem serwera Profile Sync jest katalog równorzędny
+`../kodi-profile-sync-server`. W razie potrzeby zastąp go jawnie:
 
 ```bash
 python tools/qnap_images.py \
@@ -70,27 +71,25 @@ python tools/qnap_images.py \
   build profile-sync
 ```
 
-## Safety boundary
+## Granica bezpieczeństwa
 
-- `build` requires clean source repositories whose exact commits are the heads
-  of pushed `origin` branches, plus an authenticated `gh` CLI;
-- the default publisher uses short-lived repository `GITHUB_TOKEN` credentials
-  inside Actions; the optional local publisher passes GHCR credentials to
-  `docker login` over stdin and never writes them to the image-state file;
-- Buildx publishes immutable multi-platform manifests and the script verifies
-  their required `linux/amd64`, `linux/arm/v7` and, for the watchdog,
-  `linux/arm64` entries;
-- Profile Sync deployment retains the existing RAID, TLS, key-registry,
-  backup and readiness gates;
-- provider relay deployment retains the stateless Compose policy and live
-  provider probe; the external provider probe is retried briefly after local
-  readiness to tolerate startup and upstream response races;
-- watchdog deployment validates its hardened Compose policy and rolls the
-  previous Compose files back if the new container cannot publish a complete
-  five-workflow status document;
-- the watchdog may be operational but intentionally `unhealthy` when one of
-  the monitored GitHub workflows has failed. Deployment does not hide that
-  upstream failure.
+- `build` wymaga czystych repozytoriów źródłowych, których dokładne commity są
+  headami wypchniętych gałęzi `origin`, oraz uwierzytelnionego CLI `gh`;
+- domyślny wydawca używa krótkotrwałych poświadczeń repozytorium `GITHUB_TOKEN` w ramach
+  GitHub Actions; opcjonalny wydawca lokalny przekazuje poświadczenia GHCR do
+  `docker login` przez standardowe wejście i nigdy nie zapisuje ich w pliku stanu obrazu;
+- Buildx publikuje niezmienne manifesty wieloplatformowe, a skrypt weryfikuje wymagane
+  wpisy `linux/amd64`, `linux/arm/v7` i, w przypadku watchdoga, `linux/arm64`;
+- wdrożenie Profile Sync zachowuje istniejącą macierz RAID, TLS, rejestr kluczy, kopie
+  zapasowe i bramki gotowości;
+- wdrożenie przekaźnika providerów zachowuje bezstanową politykę Compose i sondę
+  providera na żywo; sonda zewnętrznego providera jest krótko ponawiana po osiągnięciu
+  lokalnej gotowości, aby tolerować wyścigi podczas uruchamiania i odpowiedzi upstream;
+- wdrożenie watchdoga sprawdza wzmocnione zasady Compose i wycofuje poprzednie
+  pliki Compose, jeśli nowy kontener nie może opublikować pełnego dokumentu statusu
+  pięciu workflow;
+- watchdog może działać poprawnie, ale celowo zgłaszać `unhealthy`, gdy jeden z
+  monitorowanych workflow GitHub zakończył się błędem. Wdrożenie nie ukrywa tej awarii upstream.
 
-All three applications use `/var/run/docker.sock`, the engine managed by the
-Container Station GUI. The script never targets QNAP `system-docker`.
+Wszystkie trzy aplikacje wykorzystują `/var/run/docker.sock`, silnik zarządzany przez
+GUI Container Station. Skrypt nigdy nie kieruje operacji do QNAP `system-docker`.

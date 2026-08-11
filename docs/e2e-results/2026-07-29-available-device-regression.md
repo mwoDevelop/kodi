@@ -1,57 +1,57 @@
-# Available-device regression
+# Regresja dostępnego urządzenia
 
-Date: 2026-07-29
+Data: 29.07.2026
 
-## Scope
+## Zakres
 
-The live regression covered every currently reachable registered Kodi
-consumer:
+Regresja na żywo objęła każdego aktualnie osiągalnego zarejestrowanego konsumenta Kodi:
 
 - BlueStacks1 (`SM-S901E`);
 - Sony TV (`BRAVIA 4K GB ATV3`);
 - X88 Pro 20 (`X88Pro20`).
 
-Bedroom TV was unavailable over ADB. Both NUC Flatpak principals were
-unavailable over SSH and are not reported as tested.
+Bedroom TV był niedostępny przez ADB. Obydwa podmioty główne NUC Flatpak były
+niedostępne przez SSH i nie zostały zgłoszone jako przetestowane.
 
-All three reachable Android devices ran Kodi 21.3 without an active VPN
-transport during this pass.
+Wszystkie trzy osiągalne urządzenia Android korzystały z Kodi 21.3 bez aktywnego
+transportu VPN podczas tego przebiegu.
 
-## Results
+## Wyniki
 
-Each reachable device passed:
+Każde osiągalne urządzenie przeszło:
 
-- stable Profile Sync 0.1.6 origin, pairing, authenticated heartbeat, signed
-  candidate check and the read-only no-apply invariant;
-- Umbrella 6.7.81.18 search for `House of the Dragon`;
-- Umbrella playback through Real-Debrid for at least 15 seconds;
-- WatchNixtoons2 0.26.1 live catalogue and controlled playback for 15 seconds;
-- reversible Profile Sync successful apply, injected failure, rollback,
-  quarantine, exact settings restoration and journal cleanup.
+- stable Profile Sync 0.1.6 pochodzenie, parowanie, uwierzytelniony puls, podpisana
+  kontrola kandydata i niezmiennik bez zastosowania tylko do odczytu;
+- Umbrella 6.7.81.18 wyszukaj `House of the Dragon`;
+- Odtwarzanie Umbrella przez Real-Debrid przez co najmniej 15 sekund;
+- WatchNixtoons2 0.26.1 katalog na żywo i kontrolowane odtwarzanie przez 15 sekund;
+- odwracalne pomyślne zastosowanie Profile Sync, wstrzyknięta awaria, rollback,
+  kwarantanna, przywrócenie dokładnych ustawień i oczyszczenie dziennika.
 
-Private redacted JSON reports remain below `.kodi-private/e2e` and are not
-committed.
+Prywatne, zredagowane raporty JSON pozostają poniżej poziomu `.kodi-private/e2e` i nie
+są zatwierdzane.
 
-## Runner fixes discovered by live E2E
+## Poprawki Runnera odkryte przez E2E na żywo
 
-- Dismiss only the exact harmless Kodi PVR information dialog and a stale
-  shutdown menu; unexpected dialogs still fail the search test.
-- Use an Android key-event fallback when Kodi JSON-RPC acknowledges a modal
-  action but the Android TV dialog remains open.
-- Read add-on versions through Kodi when Android scoped storage hides
+- Odrzuć tylko dokładnie nieszkodliwe okno dialogowe informacyjne PVR Kodi i nieaktualne
+  menu zamykania; nieoczekiwane okna dialogowe nadal nie przechodzą testu wyszukiwania.
+- Użyj zastępczego zdarzenia klucza Android, gdy Kodi JSON-RPC potwierdza akcję modalną,
+  ale okno dialogowe Android TV pozostaje otwarte.
+- Przeczytaj wersje dodatków poprzez Kodi, gdy pamięć o zasięgu Android ukrywa
   `addon.xml`.
-- Accept Kodi foreground focus on any Android display, which is required by
-  the multi-display BlueStacks runtime.
-- Include representative `premiered` metadata in direct Umbrella fixtures,
-  matching normal enriched navigation.
-- Send Kodi EventServer packets directly from the host for LAN ADB targets
-  whose Android firmware has no `nc`; loopback/emulator targets remain
-  default-deny.
+- Zaakceptuj skupienie pierwszego planu Kodi na dowolnym wyświetlaczu Android, co jest
+  wymagane przez środowisko wykonawcze BlueStacks obsługujące wiele wyświetlaczy.
+- Dołącz reprezentatywne metadane `premiered` do bezpośrednich urządzeń Umbrella,
+  dopasowując normalną wzbogaconą nawigację.
+- Wysyłaj pakiety serwera zdarzeń Kodi bezpośrednio z hosta dla celów LAN ADB, których
+  oprogramowanie sprzętowe Android nie ma `nc`; Cele pętli zwrotnej/emulatora pozostają
+  domyślnie odrzucane.
 
-The fixes affect only host-side E2E and restore tooling. No Kodi add-on payload
-or stable repository artifact changed, so no add-on release was required.
+Poprawki dotyczą tylko narzędzia E2E i przywracania po stronie hosta. Nie zmieniono
+żadnego ładunku dodatku Kodi ani artefaktu repozytorium stable, więc nie była wymagana
+żadna wersja dodatku.
 
-## Reproducible repository verification
+## Powtarzalna weryfikacja repozytorium
 
 ```text
 .venv/bin/pytest -q: 166 passed

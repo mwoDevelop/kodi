@@ -1,55 +1,56 @@
-# Private Kodi profile snapshots
+# Prywatne migawki profilu Kodi
 
-This workflow restores a new Android Kodi installation without committing
-credentials or tokens. Private snapshots live under `.kodi-private/`, which is
-excluded from Git, Docker build contexts, and normal repository artifacts.
+Ten workflow odtwarza nową instalację Kodi na Androidzie bez zapisywania poświadczeń
+lub tokenów w commitach. Prywatne migawki znajdują się w `.kodi-private/`, który jest
+wyłączony ze śledzenia Git, kontekstów budowania Dockera i zwykłych artefaktów
+repozytorium.
 
-The snapshot is intentionally unencrypted in schema 1. Treat the directory as
-secret material: keep it mode `0700`, do not attach it to issues or releases,
-and do not copy it to an untrusted backup target. The next storage phase should
-encrypt the snapshot before it is allowed into Git, for example with `age` or
-SOPS and keys held outside this repository.
+Migawka jest celowo niezaszyfrowana w schemacie 1. Traktuj katalog jako tajny materiał:
+utrzymuj go w trybie `0700`, nie dołączaj go do zgłoszeń ani wydań i nie kopiuj go do
+niezaufanego miejsca docelowego kopii zapasowej. Następna faza przechowywania powinna
+zaszyfrować migawkę, zanim zostanie ona dopuszczona do Git, na przykład za pomocą `age`
+lub SOPS i kluczy przechowywanych poza tym repozytorium.
 
-## Contents
+## Zawartość
 
-The policy is defined in
-`manifests/kodi-profile-policy.json`. It retains:
+Polityka jest zdefiniowana w `manifests/kodi-profile-policy.json`. Zachowuje:
 
-- installed add-on code and manifests, including the selected skin;
-- top-level Kodi XML/JSON settings, sources, keymaps, playlists, and profiles;
-- each add-on's persistent `addon_data`, including Umbrella and Real-Debrid
-  credentials;
-- content-addressed local artwork for WatchNixtoons2 favourites;
-- the selected skin's settings;
-- the exact Android Kodi APK needed to reproduce the installation.
+- kod i manifesty zainstalowanych dodatków, w tym wybraną skórkę;
+- główne ustawienia Kodi XML/JSON, źródła, mapy klawiszy, listy odtwarzania i
+  profile;
+- trwałe dane `addon_data` każdego dodatku, w tym dane uwierzytelniające Umbrella i
+  Real-Debrid;
+- lokalne grafiki adresowane zawartością dla ulubionych WatchNixtoons2;
+- ustawienia wybranej skórki;
+- dokładny plik APK Android Kodi potrzebny do odtworzenia instalacji.
 
-It excludes:
+Nie obejmuje:
 
-- Kodi databases, thumbnails, peripheral data, logs, temporary files, and
-downloaded add-on packages;
-- Umbrella artwork, provider, search, metadata, Trakt synchronization, and
-  other rebuildable caches;
-- every add-on `cache/` and `temp/` directory.
+- bazy danych Kodi, miniatury, dane urządzeń peryferyjnych, logi, pliki tymczasowe i pobrane
+  pakiety dodatków;
+- cache grafik, providerów, wyszukiwania, metadanych, synchronizacji Trakt i pozostałe
+  cache Umbrella;
+- każdy katalog dodatków `cache/` i `temp/`.
 
-WatchNixtoons2 favourites are a deliberate exception to the generic thumbnail
-cache exclusion. During export, known legacy CDN URLs are normalized to the
-current image host, downloaded with bounded size and image validation, and
-stored under `userdata/favourite-artwork/`. `favourites.xml` then references a
-content-addressed `special://profile/` path. A small source manifest permits a
-later export to refresh the image; if the CDN is temporarily unavailable, the
-last verified local image is retained. Cookies and URL header suffixes are
-neither used nor persisted.
+Ulubione WatchNixtoons2 stanowią celowy wyjątek od ogólnego wykluczenia pamięci
+podręcznej miniatur. Podczas eksportu znane starsze adresy URL CDN są normalizowane do
+bieżącego hosta obrazu, pobierane z ograniczonym rozmiarem i sprawdzaniem poprawności
+obrazu oraz przechowywane w pliku `userdata/favourite-artwork/`. `favourites.xml`
+następnie odwołuje się do ścieżki `special://profile/` zaadresowanej treścią. Mały
+manifest źródłowy umożliwia późniejszy eksport w celu odświeżenia obrazu; jeśli sieć CDN
+jest chwilowo niedostępna, zachowywany jest ostatni zweryfikowany obraz lokalny. Pliki
+cookie i sufiksy nagłówków adresów URL nie są używane ani utrwalane.
 
-The routine profile service deliberately manages a small semantic settings
-allowlist plus the canonical favourites document and its content-addressed
-artwork set. It does not distribute credentials, tokens, arbitrary add-on
-settings or rebuildable caches. Those private values remain in ignored host
-snapshots and are applied only by an explicit, per-device rollout. This split
-keeps the cyclic QNAP channel deterministic and safe to sign while still
-allowing a clean Kodi installation to be reconstructed from this host.
+Rutynowa usługa profili celowo zarządza małą listą dozwolonych ustawień semantycznych,
+kanonicznym dokumentem ulubionych i zestawem grafik adresowanych zawartością. Nie
+rozpowszechnia poświadczeń, tokenów, dowolnych ustawień dodatków ani pamięci
+podręcznych, które można odbudować. Te prywatne wartości pozostają w ignorowanych
+migawkach hostów i są stosowane tylko w drodze jawnego wdrożenia na każdym urządzeniu.
+Dzięki temu podziałowi cykliczny kanał QNAP jest deterministyczny i bezpieczny do
+podpisania, a jednocześnie umożliwia odtworzenie czystej instalacji Kodi z tego hosta.
 
-The authoritative private rollout membership, publisher and current network
-addresses live in the mode-`0600` `.env`:
+Autorytatywna lista urządzeń prywatnego wdrożenia, wydawca i aktualne adresy sieciowe
+znajdują się w pliku `.env` o trybie `0600`:
 
 ```bash
 KODI_SYNC_PUBLISHER=sony-tv
@@ -62,54 +63,53 @@ KODI_PROFILE_SYNC_INTERVAL_HOURS=6
 KODI_PROFILE_SYNC_READ_ONLY=true
 ```
 
-Logical identity, platform, expected model and credentials references remain
-in `.kodi-private/devices.json`; `.env` is authoritative for membership and
-network endpoints. The selected publisher must also have the `publisher` role
-in that registry.
+Odniesienia do tożsamości logicznej, platformy, oczekiwanego modelu i poświadczeń
+pozostają w `.kodi-private/devices.json`; `.env` jest autorytatywny dla członkostwa i
+punktów końcowych sieci. Wybrany wydawca musi także mieć rolę `publisher` w tym
+rejestrze.
 
-Audit without changing favourites:
+Audyt bez zmiany ulubionych:
 
 ```bash
 .venv/bin/python tools/kodi_portable_state_rollout.py audit \
   --result .kodi-private/e2e/portable-state-audit.json
 ```
 
-Converge every currently reachable target:
+Zsynchronizuj wszystkie aktualnie osiągalne cele:
 
 ```bash
 .venv/bin/python tools/kodi_portable_state_rollout.py sync \
   --result .kodi-private/e2e/portable-state-sync.json
 ```
 
-Before export, legacy WatchNixtoons2 actions are migrated to
-`plugin.video.watchnixtoons2.mwodevelop` and verified remote artwork is
-materialized. The publisher then creates a deterministic ZIP below
-`.kodi-private/portable-state/`. Every target validates the exact archive
-inventory, SHA-256 and referenced artwork set, applies it with a private
-journal and rollback, restarts Kodi only after a change, and verifies the
-result from inside Kodi. The same rollout configures the non-secret
-`mwoDevelop Profile Sync` identity and schedule per logical device. Enrollment
-tokens and signing seeds are never copied between devices. A repeated
-application returns `NO_CHANGE`.
+Przed eksportem starsze działania WatchNixtoons2 są migrowane do
+`plugin.video.watchnixtoons2.mwodevelop` i materializują się zweryfikowane zdalne
+grafiki. Następnie wydawca tworzy deterministyczny plik ZIP poniżej
+`.kodi-private/portable-state/`. Każdy cel sprawdza dokładny inwentarz archiwalny,
+SHA-256 i przywoływany zestaw grafik, stosuje go z prywatnym dziennikiem i rollback,
+restartuje Kodi dopiero po zmianie i weryfikuje wynik z wnętrza Kodi. To samo wdrożenie
+konfiguruje nietajną tożsamość i harmonogram `mwoDevelop Profile Sync` dla każdego
+urządzenia logicznego. Tokeny rejestracji i nasiona podpisu nigdy nie są kopiowane
+między urządzeniami. Powtórzona aplikacja zwraca `NO_CHANGE`.
 
-Until a persistent authenticated HTTPS backend is available, the identity
-profile remains deliberately `UNPAIRED` with an empty server URL. The device
-E2E uses a temporary verified backend and a distinct one-time enrollment for
-every device, then restores the previous identity settings and state. It must
-not leave a token tied to a temporary endpoint.
+Produkcyjny profil tożsamości korzysta z trwałego uwierzytelnionego zaplecza HTTPS oraz
+odrębnego klucza rejestracji, tokenu i podpisu dla każdego urządzenia. Testy na
+tymczasowym backendie muszą zachować i przywrócić tę tożsamość produkcyjną w sposób
+atomowy; nigdy nie mogą pozostawiać rejestracji ani tokenu powiązanego z tymczasowym
+punktem końcowym.
 
-Unavailable devices are reported and left unchanged. Linux/Flatpak mutation
-is allowed only after the lifecycle probe has qualified the current
-`special://home` and `special://profile` mappings from Kodi's runtime log,
-proved the account UID/home and confirmed that Kodi is stopped. The dedicated
-rollout then uploads immutable ZIPs to a temporary Flatpak staging directory;
-ZIP extraction, add-on replacement, rollback, `UpdateLocalAddons`, enablement
-and Profile Sync all execute inside Kodi. Stable-lock versions of Umbrella,
-mwoScrapers, the wrapper and WatchNixtoons2 are reconciled through Kodi before
-the managed profile is applied. It never edits `Addons*.db`.
+Niedostępne urządzenia są zgłaszane i pozostawiane bez zmian. Mutacja Linux/Flatpak jest
+dozwolona dopiero po tym, jak sonda cyklu życia zakwalifikowała bieżące mapowania
+`special://home` i `special://profile` z dziennika wykonawczego Kodi, udowodniła
+UID/home konta i potwierdziła, że ​​Kodi jest zatrzymany. Dedykowane wdrożenie przesyła
+następnie niezmienne pliki ZIP do tymczasowego katalogu pomostowego Flatpak; Ekstrakcja
+ZIP, wymiana dodatków, rollback, `UpdateLocalAddons`, włączenie i Profile Sync są
+wykonywane w Kodi. Wersje Umbrella, mwoScrapers, opakowania i WatchNixtoons2 z blokadą
+stable są uzgadniane za pomocą Kodi przed zastosowaniem profilu zarządzanego. Nigdy nie
+edytuje `Addons*.db`.
 
-Enroll and verify one qualified Flatpak principal against the current active
-production revision:
+Zarejestruj i zweryfikuj jednego kwalifikowanego głównego Flatpak pod kątem bieżącej
+aktywnej wersji produkcyjnej:
 
 ```bash
 .venv/bin/python tools/kodi_flatpak_profile_sync_rollout.py \
@@ -120,22 +120,24 @@ production revision:
   --result .kodi-private/e2e/nuc-alek-profile-sync.json
 ```
 
-The first successful invocation writes a private, non-secret installation
-receipt. A repeated invocation uses the already installed add-ons and performs
-an in-Kodi sync-only check; this is the reproducible no-change test. Each Unix
-principal keeps an independent enrollment state below the ignored
-`.kodi-private/flatpak-profile-sync/` directory. Access tokens, device signing
-seeds and the offline promoter/publisher seeds never enter Git or CI output.
+Pierwsze pomyślne wywołanie powoduje zapisanie prywatnego, jawnego potwierdzenia
+instalacji. Powtarzające się wywołanie wykorzystuje już zainstalowane dodatki i
+przeprowadza kontrolę tylko synchronizacji w Kodi; jest to powtarzalny test bez zmian.
+Każdy podmiot główny systemu Unix utrzymuje niezależny stan rejestracji poniżej
+ignorowanego katalogu `.kodi-private/flatpak-profile-sync/`. Tokeny dostępu, nasiona
+podpisywania urządzeń i nasiona promotorów/wydawców offline nigdy nie trafiają do danych
+wyjściowych Git ani CI.
 
-Kodi rebuilds its add-on database after restore. Media-library databases are
-deferred from schema 1 because replacing a live Kodi database is not an atomic
-or portable operation. This follows Kodi's distinction between persistent
-[userdata](https://kodi.wiki/view/Userdata) and a broader full-profile
-[backup](https://kodi.wiki/view/Backup).
+Kodi odbudowuje swoją dodatkową bazę danych po przywróceniu. Bazy danych bibliotek
+multimediów zostały odroczone od schematu 1, ponieważ zastąpienie działającej bazy
+danych Kodi nie jest operacją niepodzielną ani przenośną. Wynika to z rozróżnienia
+zastosowanego w Kodi pomiędzy trwałymi [danymi
+użytkownika](https://kodi.wiki/view/Userdata) i szerszą, pełnoprofilową [kopią
+zapasową](https://kodi.wiki/view/Backup).
 
-## Export
+## Eksport
 
-From the repository root:
+Z katalogu głównego repozytorium:
 
 ```bash
 mkdir -p .kodi-private/snapshots
@@ -147,22 +149,21 @@ chmod 700 .kodi-private .kodi-private/snapshots
   --output .kodi-private/snapshots/bluestacks1-$(date -u +%Y%m%dT%H%M%SZ)
 ```
 
-The exporter briefly stops Kodi to obtain a coherent settings snapshot and
-starts it again afterward. It validates that the destination is below the
-Git-ignored private directory, records SHA-256 for every file, and writes the
-snapshot only after the complete export succeeds.
+Eksporter na krótko zatrzymuje Kodi, aby uzyskać spójną migawkę ustawień, a następnie
+uruchamia go ponownie. Sprawdza, czy miejsce docelowe znajduje się poniżej prywatnego
+katalogu ignorowanego przez Git, rejestruje SHA-256 dla każdego pliku i zapisuje migawkę
+dopiero po pomyślnym zakończeniu eksportu.
 
-Verify a snapshot before using or copying it:
+Sprawdź migawkę przed jej użyciem lub skopiowaniem:
 
 ```bash
 .venv/bin/python tools/kodi_profile.py verify \
   .kodi-private/snapshots/SNAPSHOT_NAME
 ```
 
-## Restore on a clean Android device
+## Przywracanie na czystym urządzeniu Android
 
-The target must be reachable through ADB and compatible with the recorded Kodi
-version and CPU ABI:
+Cel musi być osiągalny poprzez ADB i zgodny z nagraną wersją Kodi i ABI procesora:
 
 ```bash
 .venv/bin/python tools/kodi_profile.py \
@@ -176,42 +177,42 @@ version and CPU ABI:
   .kodi-private/snapshots/SNAPSHOT_NAME
 ```
 
-The installer grants Kodi's required Android media permissions. Restore runs
-inside Kodi's own process, verifies every archived file before replacing it,
-rebuilds the add-on inventory, enables the recorded add-ons, activates the
-recorded skin, and removes its temporary transfer files.
+Instalator przyznaje Kodi wymagane uprawnienia do multimediów Android. Przywracanie
+odbywa się w ramach własnego procesu Kodi, weryfikuje każdy zarchiwizowany plik przed
+jego zastąpieniem, odbudowuje inwentarz dodatków, włącza nagrane dodatki, aktywuje
+nagraną skórkę i usuwa tymczasowe pliki transferu.
 
-For Android TV devices without the shell utilities needed by the in-Kodi
-transport, `tools/kodi_reinstall.py` also supports an explicit `adb-push`
-restore mode. It stops Kodi, copies the already verified payload, lets Kodi
-rebuild its databases, enables the recorded add-ons, persists the selected
-skin, restarts Kodi, and validates the result over JSON-RPC.
+W przypadku urządzeń Android TV bez narzędzi powłoki wymaganych przez transport w Kodi,
+`tools/kodi_reinstall.py` obsługuje również jawny tryb przywracania `adb-push`.
+Zatrzymuje Kodi, kopiuje już zweryfikowany ładunek, pozwala Kodi odbudować swoje bazy
+danych, włącza nagrane dodatki, utrwala wybraną skórkę, restartuje Kodi i sprawdza wynik
+przez JSON-RPC.
 
-The tools print counts and snapshot or bundle identifiers only. They never
-print add-on settings, credentials, tokens, magnets, or resolved streaming
-URLs.
+Narzędzia drukują tylko liczniki i migawki lub identyfikatory pakietów. Nigdy nie
+drukują ustawień dodatków, danych uwierzytelniających, tokenów, magnesów ani ustalonych
+adresów URL przesyłania strumieniowego.
 
-## Clean reinstall from this host
+## Czysta reinstalacja z tego hosta
 
-Keep the target inventory in the ignored private file
-`.kodi-private/kodi-reinstall.json`. Each entry pins the ADB serial and expected
-model, snapshot, Kodi version, APK SHA-256, restore mode, and required add-ons.
-It also maps restored custom add-ons to the repository that actually indexes
-them, so Kodi retains automatic update ownership after rebuilding its add-on
-database. The APK must also remain under `.kodi-private/`.
+Zachowaj docelowy ekwipunek w ignorowanym pliku prywatnym
+`.kodi-private/kodi-reinstall.json`. Każdy wpis przypina numer seryjny ADB i oczekiwany
+model, migawkę, wersję Kodi, APK SHA-256, tryb przywracania i wymagane dodatki. Mapuje
+także przywrócone niestandardowe dodatki do repozytorium, które faktycznie je indeksuje,
+więc Kodi zachowuje automatyczne prawo własności do aktualizacji po odbudowaniu bazy
+danych dodatków. Plik APK musi również pozostać pod `.kodi-private/`.
 
-The optional top-level `default_addons_manifest` points at a versioned public
-policy such as `manifests/kodi-default-addons.json`. After restoring the private
-snapshot and before validating it, the reinstall workflow reconciles every
-listed external add-on from its official HTTPS publisher. It verifies the
-download SHA-256, safe ZIP layout, add-on identity and version, dependencies,
-enabled state, and repository origin. Add-on credentials remain exclusively in
-the private profile; the public manifest contains provenance and immutable
-artifact identities only.
+Opcjonalny `default_addons_manifest` najwyższego poziomu wskazuje na wersjonowaną
+politykę publiczną, taką jak `manifests/kodi-default-addons.json`. Po przywróceniu
+prywatnej migawki i przed jej sprawdzeniem, ponowna instalacja workflow uzgadnia
+wszystkie wymienione zewnętrzne dodatki od oficjalnego wydawcy HTTPS. Weryfikuje pobrany
+plik SHA-256, bezpieczny układ ZIP, tożsamość i wersję dodatku, zależności, stan
+włączenia i pochodzenie repozytorium. Poświadczenia dodatku pozostają wyłącznie w
+profilu prywatnym; manifest publiczny zawiera wyłącznie pochodzenie i niezmienne
+tożsamości artefaktów.
 
-Private add-on configuration is a separate post-install phase. The ignored
-reinstall config may declare an allow-listed adapter and references to values
-in the ignored, mode-`0600` `.env` file:
+Konfiguracja dodatku prywatnego to osobna faza poinstalacyjna. Zignorowana konfiguracja
+ponownej instalacji może deklarować adapter znajdujący się na liście dozwolonych i
+odniesienia do wartości w ignorowanym pliku mode-`0600` `.env`:
 
 ```json
 {
@@ -226,12 +227,12 @@ in the ignored, mode-`0600` `.env` file:
 }
 ```
 
-The Rapideo adapter runs after the official add-on reconciliation and before
-final restore validation. It writes settings through Kodi, discards any old
-token, performs a fresh login and verifies the account endpoint. The temporary
-credential file and sanitized result are always removed from Android shared
-storage. Neither the restore report nor process arguments contain credentials
-or tokens. A standalone, idempotent retry is also available:
+Adapter Rapideo działa po oficjalnym uzgodnieniu dodatku i przed ostatecznym
+sprawdzeniem przywracania. Zapisuje ustawienia poprzez Kodi, odrzuca stary token,
+wykonuje nowe logowanie i weryfikuje punkt końcowy konta. Tymczasowy plik danych
+uwierzytelniających i oczyszczony wynik są zawsze usuwane z pamięci współdzielonej
+Android. Ani raport przywracania, ani argumenty procesu nie zawierają poświadczeń ani
+tokenów. Dostępna jest również samodzielna idempotentna ponowna próba:
 
 ```bash
 .venv/bin/python tools/kodi_rapideo_configure.py \
@@ -240,7 +241,7 @@ or tokens. A standalone, idempotent retry is also available:
   --adb-server-port 5038
 ```
 
-The same reconciliation can be rerun without reinstalling Kodi:
+To samo uzgodnienie można przeprowadzić ponownie bez ponownej instalacji Kodi:
 
 ```bash
 .venv/bin/python tools/kodi_default_addons.py \
@@ -249,35 +250,34 @@ The same reconciliation can be rerun without reinstalling Kodi:
   --adb-server-port 5038
 ```
 
-An exact compliant installation is reported as `unchanged`. A failed legacy
-ADB copy may leave an Android scoped-storage directory that Kodi cannot rename.
-The reconciler retries an orphan repair only after JSON-RPC proves the add-on is
-absent from Kodi's database; active add-ons always retain the atomic backup and
-rollback path.
+Dokładna zgodna instalacja jest zgłaszana jako `unchanged`. Nieudana kopia starszego ADB
+może pozostawić katalog pamięci masowej Android, którego nazwy Kodi nie może zmienić.
+Moduł uzgadniający ponawia próbę naprawy osieroconej dopiero wtedy, gdy JSON-RPC
+udowodni, że dodatek nie istnieje w bazie danych Kodi; aktywne dodatki zawsze zachowują
+niepodzielną kopię zapasową i ścieżkę rollback.
 
-Preview and validate every target without changing either device:
+Przeglądaj i sprawdzaj każdy cel bez zmiany któregokolwiek urządzenia:
 
 ```bash
 ./tools/kodi_reinstall.py
 ```
 
-After reviewing the resolved model, version, ABI, and snapshot identifiers,
-perform the authorized uninstall, cleanup, installation, restore, and
-validation:
+Po przejrzeniu rozpoznanych identyfikatorów modelu, wersji, ABI i migawek wykonaj
+autoryzowaną dezinstalację, oczyszczenie, instalację, przywrócenie i weryfikację:
 
 ```bash
 ./tools/kodi_reinstall.py --yes
 ```
 
-Limit the operation to one configured target, or repeat only the restore:
+Ogranicz operację do jednego skonfigurowanego celu lub powtórz tylko przywracanie:
 
 ```bash
 ./tools/kodi_reinstall.py --target sony-tv --yes
 ./tools/kodi_reinstall.py --target sony-tv --restore-only --yes
 ```
 
-If one add-on loses only a managed settings file, restore that exact file from
-the already verified snapshot instead of replacing the whole profile:
+Jeśli jeden dodatek utraci tylko plik ustawień zarządzanych, przywróć dokładnie ten plik
+z już zweryfikowanej migawki, zamiast zastępować cały profil:
 
 ```bash
 .venv/bin/python tools/kodi_profile.py \
@@ -288,10 +288,10 @@ the already verified snapshot instead of replacing the whole profile:
   --path userdata/addon_data/plugin.video.umbrella/settings.xml
 ```
 
-When a full source snapshot cannot be exported (for example because Android
-correctly denies ADB access to Profile Sync's mode-`0700` private directory),
-do not weaken the device permissions. Export only the required add-on
-`settings.xml` files into `.kodi-private/` and transactionally apply them:
+Jeśli nie można wyeksportować pełnej migawki źródłowej (na przykład dlatego, że Android
+poprawnie odmawia ADB dostępu do prywatnego katalogu mode-`0700` Profile Sync), nie
+osłabiaj uprawnień urządzenia. Eksportuj tylko wymagane pliki dodatku `settings.xml` do
+`.kodi-private/` i stosuj je transakcyjnie:
 
 ```bash
 PYTHONPATH=. .venv/bin/python tools/kodi_addon_settings_rollout.py \
@@ -301,36 +301,38 @@ PYTHONPATH=. .venv/bin/python tools/kodi_addon_settings_rollout.py \
   --result .kodi-private/e2e/private-addon-settings-rollout.json
 ```
 
-The tool accepts only regular files and safe add-on IDs, verifies that each
-target add-on is installed and enabled, and reuses the in-Kodi restore lock,
-journal, rollback and digest verification. It wakes Android TV, restarts Kodi,
-checks that add-on versions did not change, and performs a second semantic
-verification from inside Kodi. Its report contains IDs and digests but never
-setting values. The source XML files and generated report remain ignored and
-must not be committed.
+Narzędzie akceptuje tylko zwykłe pliki i identyfikatory bezpiecznych dodatków, sprawdza,
+czy każdy docelowy dodatek jest zainstalowany i włączony, a także ponownie wykorzystuje
+blokadę przywracania, dziennik, rollback i weryfikację skrótu w Kodi. Budzi Android TV,
+restartuje Kodi, sprawdza, czy wersje dodatków się nie zmieniły i przeprowadza drugą
+weryfikację semantyczną z poziomu Kodi. Jego raport zawiera identyfikatory i
+podsumowania, ale nigdy nie ustawia wartości. Źródłowe pliki XML i wygenerowany raport
+pozostają ignorowane i nie można ich zatwierdzać.
 
-`restore-path` accepts only exact paths present in the verified snapshot
-manifest and limits selective recovery to `userdata/`. For `addon_data`, it
-also requires the snapshotted add-on to be installed at the same version;
-`--allow-addon-upgrade` permits only an explicit forward move within the same
-major line. The command creates a minimal archive containing those paths,
-binds the result to a random operation ID and selection digest, serializes
-restore operations with a device lock, and retries EventServer delivery only
-until Kodi atomically acknowledges a single writer. After restarting Kodi and
-allowing add-on services to load, it verifies every ordinary file by size and
-SHA-256 inside Kodi before reporting success. An add-on `settings.xml` is
-applied through Kodi's settings API so an active service cannot overwrite it
-from stale memory, then verified by a canonical digest of the selected setting
-IDs and values. If an add-on rotates or rejects an OAuth token during startup,
-the strict post-restart check reports failure; refresh the source snapshot or
-re-authorize that account instead of treating the stale credential as a
-successful restore. A partial settings API failure is rolled back to its
-pre-image. All device-side staging files are then removed; if cleanup cannot be
-confirmed, the lock is retained for explicit recovery. The tool never prints
-settings or credentials.
+`restore-path` akceptuje tylko dokładne ścieżki obecne w zweryfikowanym manifeście
+migawki i ogranicza selektywne odzyskiwanie do `userdata/`. W przypadku `addon_data`
+wymagana jest również instalacja dodatku z migawką w tej samej wersji;
+`--allow-addon-upgrade` pozwala jedynie na wyraźny ruch do przodu w obrębie tej samej
+linii głównej. Polecenie tworzy minimalne archiwum zawierające te ścieżki, wiąże wynik z
+losowym identyfikatorem operacji i skrótem wyboru, serializuje operacje przywracania z
+blokadą urządzenia i ponawia próbę dostarczenia EventServer tylko do momentu, gdy Kodi
+atomowo potwierdzi pojedynczy zapis. Po ponownym uruchomieniu Kodi i umożliwieniu
+załadowania usług dodatkowych, przed raportowaniem powodzenia sprawdza każdy zwykły plik
+pod względem rozmiaru i SHA-256 w Kodi. Dodatek `settings.xml` jest stosowany poprzez
+interfejs API ustawień Kodi, więc aktywna usługa nie może go nadpisać z przestarzałej
+pamięci, a następnie zweryfikować poprzez kanoniczne podsumowanie wybranych
+identyfikatorów i wartości ustawień. Jeśli dodatek zmieni lub odrzuci token OAuth
+podczas uruchamiania, dokładna kontrola po ponownym uruchomieniu zgłasza niepowodzenie;
+odśwież migawkę źródłową lub ponownie autoryzuj to konto, zamiast traktować nieaktualne
+dane uwierzytelniające jako pomyślne przywrócenie. Częściowa awaria interfejsu API
+ustawień jest przywracana do obrazu wstępnego. Następnie usuwane są wszystkie pliki
+tymczasowe po stronie urządzenia; jeśli nie można potwierdzić czyszczenia, blokada
+zostaje zachowana do jawnego odzyskania. Narzędzie nigdy nie drukuje ustawień ani
+poświadczeń.
 
-If the host process is interrupted and leaves the device lock behind, abort
-and recover it explicitly (this stops Kodi before removing any staging data):
+Jeśli proces hosta zostanie przerwany i pozostawi blokadę urządzenia, przerwij go i
+odzyskaj jawnie (spowoduje to zatrzymanie Kodi przed usunięciem jakichkolwiek danych
+przejściowych):
 
 ```bash
 .venv/bin/python tools/kodi_profile.py \
@@ -338,49 +340,49 @@ and recover it explicitly (this stops Kodi before removing any staging data):
   recover-lock
 ```
 
-Do not run `recover-lock` while a restore that you want to finish is active.
+Nie uruchamiaj `recover-lock`, gdy aktywne jest przywracanie, które chcesz zakończyć.
 
-The cleanup scope is deliberately fixed to the Kodi package and these paths:
+Zakres czyszczenia jest celowo przypisany do pakietu Kodi i tych ścieżek:
 
 - `/sdcard/Android/data/org.xbmc.kodi`;
 - `/sdcard/Android/obb/org.xbmc.kodi`;
 - `/sdcard/.kodi`.
 
-Kodi 21.2 and 21.3 on Android TV use the same relevant profile layout:
-`files/.kodi/addons/` and `files/.kodi/userdata/`. Directories such as
-`media/`, `system/`, `temp/`, and versioned databases are generated by the
-newly installed Kodi and are not evidence of a different Android TV profile
-format.
+Kodi 21.2 i 21.3 na Android TV wykorzystują ten sam odpowiedni układ profili:
+`files/.kodi/addons/` i `files/.kodi/userdata/`. Katalogi takie jak `media/`, `system/`,
+`temp/` i wersjonowane bazy danych są generowane przez nowo zainstalowany Kodi i nie
+stanowią dowodu na inny format profilu Android TV.
 
-Do not uninstall a superseded repository until its add-ons and their
-`addon_data` have been backed up and a real-device migration test has passed.
-Kodi may remove dependent add-ons and their user settings as part of repository
-uninstallation even after their update origin has been reassigned. Prefer
-leaving the old repository disabled until a verified cleanup workflow can
-prove that the managed add-ons and settings survive.
+Nie odinstalowuj zastąpionego repozytorium, dopóki nie zostaną utworzone kopie zapasowe
+jego dodatków i `addon_data` oraz nie przejdzie pomyślnie testu migracji na rzeczywistym
+urządzeniu. Kodi może usunąć zależne dodatki i ich ustawienia użytkownika w ramach
+dezinstalacji repozytorium, nawet po ponownym przypisaniu źródła aktualizacji. Wolę
+pozostawić stare repozytorium wyłączone do czasu, aż zweryfikowane czyszczenie workflow
+wykaże, że zarządzane dodatki i ustawienia przetrwały.
 
-## Validation checklist
+## Lista kontrolna walidacji
 
-After restore:
+Po przywróceniu:
 
-1. `verify` the local snapshot again.
-2. Confirm `JSONRPC.Ping`, the active skin, and the enabled state of required
-   add-ons.
-3. Run `tests/e2e/umbrella_search_e2e.py` for a real Umbrella search.
-4. Run `tests/e2e/sony_kodi_matrix.py --direct-play` for at least one film and
-   one episode.
-5. Run `tests/e2e/sony_watchnixtoons2.py` for catalogue and playback coverage.
+1. `verify` ponownie lokalna migawka.
+2. Potwierdź `JSONRPC.Ping`, aktywną skórkę i włączony stan wymaganych dodatków.
+3. Uruchom `tests/e2e/umbrella_search_e2e.py`, aby uzyskać prawdziwe wyszukiwanie
+   Umbrella.
+4. Uruchom `tests/e2e/sony_kodi_matrix.py --direct-play` dla co najmniej jednego filmu i
+   jednego odcinka.
+5. Uruchom `tests/e2e/sony_watchnixtoons2.py`, aby uzyskać dostęp do katalogu i
+   odtwarzania.
 
-The E2E runners redact credentials, magnets, plug-in URLs, and resolved media
-URLs from their reports.
+Biegacze E2E usuwają ze swoich raportów dane uwierzytelniające, magnesy, adresy URL
+wtyczek i rozwiązane adresy URL multimediów.
 
-## Android device policy
+## Zasady dotyczące urządzeń Android
 
-System settings that live outside Kodi are versioned separately under
-`manifests/device-profiles/`. Profiles contain package names, desired policy,
-and references to private `.env` values, but never credentials themselves.
+Ustawienia systemowe znajdujące się poza Kodi są wersjonowane oddzielnie w ramach
+`manifests/device-profiles/`. Profile zawierają nazwy pakietów, żądane zasady i
+odniesienia do prywatnych wartości `.env`, ale nigdy same dane uwierzytelniające.
 
-Apply and verify the X88 Pro 20 policy with:
+Zastosuj i zweryfikuj politykę X88 Pro 20 za pomocą:
 
 ```bash
 .venv/bin/python tools/android_device_profile.py \
@@ -392,26 +394,28 @@ Apply and verify the X88 Pro 20 policy with:
   apply --yes
 ```
 
-The current X88 policy combines Android `Always-on VPN` with OpenVPN Connect's
-native `Connect latest` reboot action and deliberately leaves lockdown off. A
-plain username/password profile cannot be used for this: OpenVPN Connect starts
-before its interactive credential store is available and reports
-`AON_REQUEST_CREDS`. The X88 rollout therefore renders a private autologin
-profile from `.env`; the imported profile can authenticate without displaying
-an `Enter credentials` prompt. A temporarily unavailable VPN still must not cut
-the device off from ADB, Kodi, or the local network.
+Obecna polityka X88 łączy Android `Always-on VPN` z natywną akcją ponownego uruchomienia
+`Connect latest` OpenVPN Connect i celowo pozostawia blokadę. Nie można w tym celu użyć
+zwykłego profilu nazwy użytkownika/hasła: OpenVPN Connect uruchamia się, zanim dostępny
+jest jego interaktywny magazyn danych uwierzytelniających i raportuje
+`AON_REQUEST_CREDS`. Dlatego też wdrożenie X88 renderuje prywatny profil automatycznego
+logowania z `.env`; zaimportowany profil może zostać uwierzytelniony bez wyświetlania
+monitu `Enter credentials`. Tymczasowo niedostępna sieć VPN nadal nie może odcinać
+urządzenia od ADB, Kodi ani sieci lokalnej.
 
-The versioned X88 profile declares `inline_auth_user_pass`, the private profile
-path environment variable, the imported connection name, and both reboot
-policies. The audit additionally requires the private file to be mode `0600`
-and verifies that its inline credentials match `.env`, but never includes those
-values in output. A compliant runtime also needs a connected, Android-validated
-`tun0` interface; saved settings alone are not accepted as proof of autostart.
-The X88 policy also requires `192.168.1.0/24` to use `net_gateway`, matching
-NordVPN's LAN exclusion so QNAP Profile Sync remains reachable outside the VPN.
+Wersjonowany profil X88 deklaruje `inline_auth_user_pass`, zmienną środowiskową ścieżki
+profilu prywatnego, nazwę zaimportowanego połączenia i obie zasady ponownego
+uruchamiania. Audyt dodatkowo wymaga, aby plik prywatny był w trybie `0600` i sprawdza,
+czy jego wbudowane poświadczenia odpowiadają `.env`, ale nigdy nie uwzględnia tych
+wartości w wynikach. Zgodne środowisko wykonawcze wymaga również podłączonego,
+zatwierdzonego przez Android interfejsu `tun0`; Same zapisane ustawienia nie są
+akceptowane jako dowód autostartu. Polityka X88 wymaga również, aby `192.168.1.0/24`
+korzystał z `net_gateway`, co odpowiada wykluczeniu sieci LAN NordVPN, więc QNAP Profile
+Sync pozostaje osiągalny poza VPN.
 
-OpenVPN connection profiles and NordVPN service credentials remain in
-`.kodi-private/` and `.env`; only their names and references are versioned. The
-apply command uses OpenVPN Connect's accessibility-labelled settings UI
-because the application exposes no managed-configuration API for this option;
-the follow-up audit verifies that the selected radio option actually persisted.
+Profile połączeń OpenVPN i dane uwierzytelniające usługi NordVPN pozostają w
+`.kodi-private/` i `.env`; wersjonowane są tylko ich nazwy i odniesienia. Polecenie
+Apply korzysta z interfejsu użytkownika ustawień OpenVPN Connect oznaczonego etykietą
+dostępności, ponieważ aplikacja nie udostępnia interfejsu API konfiguracji zarządzanej
+dla tej opcji; audyt uzupełniający sprawdza, czy wybrana opcja radiowa rzeczywiście
+pozostała.

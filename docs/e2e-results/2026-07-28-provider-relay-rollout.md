@@ -1,133 +1,134 @@
-# Umbrella 6.7.81.16 and MwoScrapers 0.1.5 relay rollout
+# Wdrożenie przekaźnika Umbrella 6.7.81.16 i MwoScrapers 0.1.5
 
-Date: 2026-07-28
+Data: 28.07.2026
 
-## Outcome
+## Wynik
 
-The testing candidate passed on BlueStacks, Sony TV and Bedroom TV. Umbrella
-no longer offers itself as an external provider, while MwoScrapers remains a
-valid choice. Both Android TV devices kept NordVPN connected during the final
-tests.
+Kandydat testing przeszedł dalej BlueStacks, Sony TV i Bedroom TV. Umbrella nie oferuje
+się już jako zewnętrzny dostawca, natomiast MwoScrapers pozostaje ważnym wyborem. Obydwa
+urządzenia Android TV utrzymywały połączenie NordVPN podczas testów końcowych.
 
-Bedroom TV established the network cause before rollout:
+Bedroom TV ustalił przyczynę sieci przed wdrożeniem:
 
-- direct Torrentio calls through its VPN exit returned HTTP 403;
-- the same Kodi runtime through the QNAP metadata relay returned 5 movie
-  candidates and 49 episode candidates;
-- BlueStacks direct, Sony relay and Bedroom relay returned the same 5/49
-  counts.
+- bezpośrednie wywołania Torrentio przez wyjście VPN zwróciły HTTP 403;
+- to samo środowisko wykonawcze Kodi za pośrednictwem przekaźnika metadanych QNAP
+  zwróciło 5 kandydatów na filmy i 49 kandydatów na odcinki;
+- BlueStacks direct, przekaźnik Sony i przekaźnik sypialni zwróciły te same wartości
+  5/49.
 
-No NordVPN split-tunnel change was required. The final Android connectivity
-state exposed Kodi's UID in the connected NordVPN network's assigned UID
-ranges on both Sony and Bedroom TV.
+Nie była wymagana zmiana dzielonego tunelu w NordVPN. Ostateczny stan łączności Android
+ujawnił UID Kodi w zakresach UID przypisanych do podłączonej sieci NordVPN zarówno w
+Sony, jak i Bedroom TV.
 
-## Published components
+## Opublikowane komponenty
 
-| Component | Version | Commit / immutable identity |
+| Składnik | Wersja | Zatwierdzenie / niezmienna tożsamość |
 | --- | --- | --- |
 | Umbrella | 6.7.81.16 | `9ccb063e65463b4116d5c9ad2f09be189b051f29` |
-| MwoScrapers | 0.1.5 | `6c4b7956734f902c94b51f593a989ef0b3a29510` |
-| MwoScrapers relay | 0.1.0 | `ghcr.io/mwodevelop/mwoscrapers-relay@sha256:837e070ef5106fcd294b56f1cdd74a5d0376839d173e4388a6b5361916803198` |
+| MwoScrapers | 0,1,5 | `6c4b7956734f902c94b51f593a989ef0b3a29510` |
+| Przekaźnik MwoScrapers | 0.1.0 | `ghcr.io/mwodevelop/mwoscrapers-relay@sha256:837e070ef5106fcd294b56f1cdd74a5d0376839d173e4388a6b5361916803198` |
 
-The public testing ZIP digests matched the repository lock:
+Publiczne podsumowania testing ZIP odpowiadają blokadzie repozytorium:
 
 - Umbrella: `e97d3cb06792663b58b30097072e36f5de04122045a2f47d44ded95d9fd22855`;
 - MwoScrapers: `ec9425baa334fbda2b9b106ec0aa558e5a8d37e03d5315e865fbcfb15762c58a`.
 
-## QNAP relay
+## Przekaźnik QNAP
 
-The multi-architecture manifest passed CI for `linux/amd64` and
-`linux/arm/v7`. A disposable ARMv7 QNAP smoke passed health, returned
-non-empty Torrentio metadata and created no volumes. Cleanup left zero smoke
-containers, networks and volumes.
+Manifest wielu architektur przekazał CI dla `linux/amd64` i `linux/arm/v7`. Jednorazowy
+dym ARMv7 QNAP przeszedł stan zdrowia, zwrócił niepuste metadane Torrentio i nie
+utworzył żadnych woluminów. Posprzątanie pozostawiło zero pojemników na dym, sieci i
+woluminów.
 
-The production stateless project is bound to the QNAP private LAN address:
+Produkcyjny projekt bezstanowy jest powiązany z prywatnym adresem LAN QNAP:
 
-- one healthy container and one Compose network;
-- zero volumes and zero secrets;
-- fixed provider/path allowlist;
-- QNAP RAID state `UU`;
-- public health response `ok`.
+- jeden zdrowy kontener i jedna sieć Compose;
+- zero woluminów i zero tajemnic;
+- stała lista dozwolonych dostawców/ścieżek;
+- QNAP Stan RAID `UU`;
+- reakcja dotycząca zdrowia publicznego `ok`.
 
-Real-Debrid authorization, magnet submission, resolving and playback do not
-pass through this relay.
+Autoryzacja Real-Debrid, przesłanie magnesu, rozdzielczość i odtwarzanie nie przechodzą
+przez ten przekaźnik.
 
-## Device results
+## Wyniki urządzenia
 
-| Device | Kodi | Umbrella | MwoScrapers | Sintel | Breaking Bad S01E01 |
+| Urządzenie | Kodi | Umbrella | MwoScrapers | Sintel | Breaking Bad S01E01 |
 | --- | --- | --- | --- | --- | --- |
-| BlueStacks | 21.3 | 6.7.81.16 | 0.1.5 | played, 20.254 s | played, 12.144 s |
-| Sony TV | 21.3 | 6.7.81.16 | 0.1.5 | played, 46.481 s | played, 27.000 s |
-| Bedroom TV | 21.3 | 6.7.81.16 | 0.1.5 | played, 18.124 s | played, 14.253 s |
+| BlueStacks | 21,3 | 6.7.81.16 | 0,1,5 | zagrał, 20,254 s | rozegrany, 12,144 s |
+| Sony TV | 21,3 | 6.7.81.16 | 0,1,5 | zagrał, 46,481 s | zagrał, 27.000 s |
+| Bedroom TV | 21,3 | 6.7.81.16 | 0,1,5 | rozegrany, 18,124 s | zagrał, 14,253 s |
 
-Every device selected the same sanitized source fingerprint per case:
+Każde urządzenie wybierało ten sam oczyszczony odcisk palca źródłowego w każdym
+przypadku:
 
 - Sintel: `5a6b52180d6a015e`;
 - Breaking Bad S01E01: `6f39c1e78d9c75c4`.
 
-Each playback created the input stream and demuxer and advanced for at least
-12 seconds. The reports contain no credentials, magnets or resolved URLs:
+Każde odtwarzanie tworzyło strumień wejściowy i demuxer i trwało co najmniej 12 sekund.
+Raporty nie zawierają żadnych danych uwierzytelniających, magnesów ani ustalonych
+adresów URL:
 
 - [BlueStacks](2026-07-28-bluestacks-provider-relay-rollout.json)
 - [Sony TV](2026-07-28-sony-provider-relay-rollout.json)
 - [Bedroom TV](2026-07-28-bedroom-provider-relay-rollout.json)
 
-## Stable promotion
+## Promocja stable
 
-The exact public testing candidate was promoted byte-for-byte after the device
-rollout:
+Dokładny publiczny kandydat testing był promowany bajt po bajcie po wdrożeniu
+urządzenia:
 
-- promotion gate `30383783693` fetched and checked testing index
+- bramka promocyjna `30383783693` pobrana i sprawdzona testing indeks
   `9bca766697af33afe56e1e1c83a3bdb48b4cfe6111a13542dfa9566ba378a01c`;
-- promotion PR #55 changed only `manifests/locks/stable.json` and passed
-  repository E2E in run `30383969637`;
-- stable deployment `30384195482` passed repository E2E, built only
-  lock-addressed bytes and deployed GitHub Pages;
-- the public stable ZIP digests for all five components match the promoted
-  lock, and the public `addons.xml` matches its declared checksum;
-- `repository.mwodevelop` remains version `1.0.0`.
+- promocja PR #55 zmieniła tylko `manifests/locks/stable.json` i przekazała repozytorium
+  E2E w przebiegu `30383969637`;
+- Wdrożenie stable `30384195482` przeszło repozytorium E2E, zbudowano tylko bajty z
+  adresem blokady i wdrożono GitHub Pages;
+- publiczne skróty ZIP stable dla wszystkich pięciu komponentów odpowiadają promowanej
+  blokadzie, a publiczne `addons.xml` odpowiadają zadeklarowanej sumie kontrolnej;
+- `repository.mwodevelop` pozostaje wersją `1.0.0`.
 
-The post-promotion ownership cleanup also passed:
+Porządkowanie własności po promocji również przeszło:
 
-- Kodi refreshed the stable repository to index checksum
+- Kodi odświeżył repozytorium stable do indeksowania sumy kontrolnej
   `01dac2b62f0138a99832607e42c442c0365597c4d9b9190ff75ebc14ff02f168`;
-- the origin migration required the exact stable and testing index checksums
-  and matching candidate versions before changing Kodi's add-on database;
-- every installed mwoDevelop add-on on BlueStacks, Sony TV and Bedroom TV is
-  enabled and owned by `repository.mwodevelop`;
-- `repository.mwodevelop.testing` was removed from Sony TV and Bedroom TV
-  after migration and is absent on all three devices;
-- the post-cleanup Sintel playback passed again on all three devices for more
-  than 12 seconds with source fingerprint `5a6b52180d6a015e`;
-- no temporary ADB forwards or device-side migration files remain.
+- migracja pochodzenia wymagała dokładnych sum kontrolnych indeksu stable i testing oraz
+  pasujących wersji kandydujących przed zmianą bazy danych dodatku Kodi;
+- każdy zainstalowany dodatek mwoDevelop na BlueStacks, Sony TV i Bedroom TV jest
+  włączony i stanowi własność `repository.mwodevelop`;
+- `repository.mwodevelop.testing` został usunięty z Sony TV i Bedroom TV po migracji i
+  jest nieobecny na wszystkich trzech urządzeniach;
+- odtwarzanie Sintel po oczyszczeniu odbyło się ponownie na wszystkich trzech
+  urządzeniach przez ponad 12 sekund ze źródłowym odciskiem palca `5a6b52180d6a015e`;
+- nie pozostają żadne tymczasowe pliki migracji ADB ani pliki migracji po stronie
+  urządzenia.
 
-Sanitized post-cleanup reports:
+Oczyszczone raporty po czyszczeniu:
 
 - [BlueStacks](2026-07-28-bluestacks-stable-origin-cleanup.json)
 - [Sony TV](2026-07-28-sony-stable-origin-cleanup.json)
 - [Bedroom TV](2026-07-28-bedroom-stable-origin-cleanup.json)
 
-## Defect found and fixed during rollout
+## Znaleziono i naprawiono błąd podczas wdrażania
 
-MwoScrapers 0.1.4 used empty XML defaults for the two endpoint settings.
-Kodi accepted the values but logged `CSettingString` default-value errors.
-Version 0.1.5 uses the providers' public endpoints as valid defaults.
+MwoScrapers 0.1.4 używał pustych domyślnych ustawień XML dla dwóch ustawień punktów
+końcowych. Kodi zaakceptował wartości, ale zarejestrował błędy wartości domyślnych
+`CSettingString`. Wersja 0.1.5 używa publicznych punktów końcowych dostawców jako
+prawidłowych ustawień domyślnych.
 
-After installing the exact public 0.1.5 ZIP on all devices:
+Po zainstalowaniu dokładnego publicznego ZIP 0.1.5 na wszystkich urządzeniach:
 
-- the same movie/episode provider probe returned 5/49 on all three;
-- zero endpoint-setting schema errors appeared in each new log window;
-- all six final playback cases passed.
+- ta sama sonda dotycząca dostawców filmów/odcinków zwróciła 5/49 dla wszystkich trzech;
+- w każdym nowym oknie dziennika pojawiały się zerowe błędy schematu ustawień punktu
+  końcowego;
+- wszystkie sześć końcowych przypadków odtwarzania zostało pomyślnie zrealizowanych.
 
-## Reproducible gates
+## Powtarzalne bramki
 
-- Umbrella fork: 41 tests;
-- MwoScrapers: Ruff, add-on validation and 36 tests;
-- parent repository: two byte-identical builds and 141 tests;
-- publication workflow: `30382850144`;
-- QNAP smoke and production lifecycle:
-  `tools/qnap_provider_relay.py`;
-- Kodi provider/filter probe:
-  `tests/e2e/kodi_provider_rollout_probe.py`;
-- playback:
-  `tests/e2e/sony_kodi_matrix.py`.
+- Widelec Umbrella: 41 testów;
+- MwoScrapers: kryza, weryfikacja dodatkowa i 36 testów;
+- repozytorium nadrzędne: dwie kompilacje o identycznych bajtach i 141 testów;
+- publikacja workflow: `30382850144`;
+- Cykl życia dymu i produkcji QNAP: `tools/qnap_provider_relay.py`;
+- Kodi sonda dostawcy/filtrująca: `tests/e2e/kodi_provider_rollout_probe.py`;
+- odtwarzanie: `tests/e2e/sony_kodi_matrix.py`.

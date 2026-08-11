@@ -126,4 +126,7 @@ def test_scheduled_process_catalog_matches_workflows():
         )
         minute, hour, _day, _month, _weekday = cron.split()
         assert workflow in catalogue
-        assert "%s:%s daily" % (hour.zfill(2), minute.zfill(2)) in catalogue
+        assert "%s:%s codziennie" % (
+            hour.zfill(2),
+            minute.zfill(2),
+        ) in catalogue

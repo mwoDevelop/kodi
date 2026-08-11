@@ -1,64 +1,65 @@
-# Sony Android TV stable verification — 2026-07-26
+# Weryfikacja Sony Android TV stable — 26.07.2026
 
-Target: Sony BRAVIA 4K GB ATV3, Android 9, Kodi 21.2, ADB
-`192.168.1.12:5555`.
+Cel: Sony BRAVIA 4K GB ATV3, Android 9, Kodi 21.2, ADB `192.168.1.12:5555`.
 
-## Installed from repository.mwodevelop
+## Zainstalowano z repository.mwodevelop
 
-| Add-on | Version | Kodi origin |
+| Dodatek | Wersja | Pochodzenie Kodi |
 | --- | --- | --- |
-| repository.mwodevelop | 1.0.0 | repository.mwodevelop |
-| plugin.video.umbrella | 6.7.81.10 | repository.mwodevelop |
-| script.module.mwoscrapers | 0.1.3 | repository.mwodevelop |
-| script.mwoscrapers | 0.1.1 | repository.mwodevelop |
-| plugin.video.watchnixtoons2.mwodevelop | 0.25.2 | repository.mwodevelop |
+| repozytorium.mwodevelop | 1.0.0 | repozytorium.mwodevelop |
+| wtyczka.wideo.umbrella | 6.7.81.10 | repozytorium.mwodevelop |
+| moduł.skrypt.mwoscrapers | 0.1.3 | repozytorium.mwodevelop |
+| skrypt.mwoscrapers | 0.1.1 | repozytorium.mwodevelop |
+| wtyczka.video.watchnixtoons2.mwodevelop | 0,25,2 | repozytorium.mwodevelop |
 
-The public stable Umbrella ZIP and the promoted testing ZIP were byte-identical:
+Publiczny stable Umbrella ZIP i promowany testing ZIP były identyczne pod względem
+bajtów:
 
 `c2802365ec91be704c3ec92f16a647142e7736a7f37844d51b1503af121acca6`
 
-Selected downstream policy and integration files on the TV matched the public
-stable ZIP by SHA-256 after installation through Kodi's add-on manager.
+Wybrane pliki zasad i integracji downstream w telewizorze były zgodne z publicznym
+stable ZIP przy użyciu SHA-256 po instalacji za pośrednictwem menedżera dodatków Kodi.
 
-## Playback results
+## Wyniki odtwarzania
 
-| Test | Result | Resolve | Observation |
+| Testuj | Wynik | Rozwiąż | Obserwacja |
 | --- | --- | ---: | ---: |
-| Umbrella / Sintel (2010) | played | 19.389 s | 16.581 s |
-| Umbrella / House of the Dragon S01E01 | played | 33.188 s | 16.165 s |
-| Umbrella / The Matrix (1999) | unplayable | no stream | n/a |
-| WatchNixtoons2 / latest releases | 15 catalogue entries | n/a | n/a |
-| WatchNixtoons2 / Mao episode 17 | played | 16.142 s | 12 s |
+| Umbrella / Sintel (2010) | grał | 19,389 s | 16,581 s |
+| Umbrella / Dom Smoka S01E01 | grał | 33,188 s | 16,165 s |
+| Umbrella / Matrix (1999) | niegrywalny | brak strumienia | nie dotyczy |
+| WatchNixtoons2 / najnowsze wydania | 15 wpisów do katalogu | nie dotyczy | nie dotyczy |
+| WatchNixtoons2 / Mao odcinek 17 | grał | 16,142 s | 12 s |
 
-`The Matrix` loaded Umbrella's source progress and Kodi rejected the result as
-unplayable. The controlled Real-Debrid diagnostic performed before the stable
-promotion returned HTTP 451 / Real-Debrid code 35 (`infringing_file`) for all
-eight sampled unique candidates. This is a provider-side rejection, not an
-authentication, repository, scraper, or resolver crash.
+`The Matrix` załadował postęp źródłowy Umbrella, a Kodi odrzucił wynik jako niemożliwy
+do odtworzenia. Kontrolowana diagnostyka Real-Debrid przeprowadzona przed promocją
+stable zwróciła kod HTTP 451 / Real-Debrid 35 (`infringing_file`) dla wszystkich ośmiu
+unikalnych kandydatów objętych próbą. Jest to odrzucenie po stronie dostawcy, a nie
+awaria uwierzytelniania, repozytorium, skrobaka lub programu rozpoznawania nazw.
 
-The final successful Umbrella runs exercised the chain
-Umbrella -> MwoScrapers -> Real-Debrid -> Kodi VideoPlayer. Kodi created the
-input stream and demuxer and advanced playback during the observation window.
-WatchNixtoons2 independently loaded its live catalogue, resolved a known path,
-created the demuxer, and advanced playback.
+Ostatnie udane uruchomienia Umbrella przeprowadzono w oparciu o łańcuch Umbrella ->
+MwoScrapers -> Real-Debrid -> Kodi VideoPlayer. Kodi utworzył strumień wejściowy i
+demuxer oraz zaawansowane odtwarzanie w oknie obserwacyjnym. WatchNixtoons2 niezależnie
+załadował swój katalog na żywo, ustalił znaną ścieżkę, utworzył demuxer i zaawansowane
+odtwarzanie.
 
-## Fixed issues covered by the release
+## Naprawiono problemy objęte wersją
 
-- Real-Debrid collection responses that are lists no longer raise
-  `AttributeError` in transport classification.
-- The downstream add-on discovers `repository.mwodevelop` without hard-coding
-  the upstream repository ID.
-- Autoplay uses a bounded, diversified queue and honors `Only try one source`.
-- Real-Debrid code 35 failures are logged without exposing magnets and are
-  cached negatively for the session.
-- Invalid OpenSubtitles `(None, filename)` responses are ignored instead of
-  raising URL and empty-subtitle exceptions.
-- The Sony test harness detects Kodi's terminal unplayable result instead of
-  waiting for the full resolver timeout.
+- Odpowiedzi kolekcji Real-Debrid, które są listami, nie powodują już zgłaszania
+  `AttributeError` w klasyfikacji transportu.
+- Dodatek downstream wykrywa `repository.mwodevelop` bez zakodowania na stałe
+  identyfikatora repozytorium upstream.
+- Gra automatyczna korzysta z ograniczonej, zróżnicowanej kolejki i honoruje `Only try
+  one source`.
+- Błędy kodu 35 Real-Debrid są rejestrowane bez ujawniania magnesów i buforowane
+  negatywnie dla sesji.
+- Nieprawidłowe odpowiedzi OpenSubtitles `(None, filename)` są ignorowane zamiast
+  zgłaszać wyjątki dotyczące adresu URL i pustych napisów.
+- Wiązka testowa Sony wykrywa, że ​​terminal Kodi jest niemożliwy do odtworzenia,
+  zamiast czekać na pełny limit czasu mechanizmu rozpoznawania nazw.
 
-## Reproduction
+## Powielanie
 
-With Kodi JSON-RPC/EventServer enabled and an isolated ADB server:
+Z włączonym Kodi JSON-RPC/EventServer i izolowanym serwerem ADB:
 
 ```bash
 export ADB_SERVER_SOCKET=tcp:localhost:5038
@@ -75,10 +76,10 @@ tests/e2e/sony_watchnixtoons2.py \
   --host 192.168.1.12
 ```
 
-The WatchNixtoons2 harness requires its playback method to be temporarily set
-to `1` (Auto Play Highest Quality), so no modal quality dialog remains for
-remote automation.
+Wiązka przewodów WatchNixtoons2 wymaga tymczasowego ustawienia metody odtwarzania na `1`
+(automatyczne odtwarzanie najwyższej jakości), więc nie pozostaje żadne okno dialogowe
+dotyczące jakości modalnej dla zdalnej automatyzacji.
 
-The temporary debugging/autoplay settings were not retained. The original
-Umbrella settings were restored exactly, and the temporary WatchNixtoons2
-settings file was removed after the test.
+Tymczasowe ustawienia debugowania/automatycznego odtwarzania nie zostały zachowane.
+Oryginalne ustawienia Umbrella zostały dokładnie przywrócone, a tymczasowy plik ustawień
+WatchNixtoons2 został usunięty po teście.

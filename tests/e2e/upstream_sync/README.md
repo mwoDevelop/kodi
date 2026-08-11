@@ -1,17 +1,17 @@
-# Upstream synchronization E2E
+# Synchronizacja upstream E2E
 
-Run from any directory:
+Uruchom z dowolnego katalogu:
 
 ```bash
 /home/mwo/projects/kodi/tests/e2e/upstream_sync/run.sh
 ```
 
-The test performs two independent live discovery passes and requires the
-second pass to be byte-identical and `noop`. It then reconstructs Umbrella and
-WatchNixtoons2 from their accepted upstream identities, audits every provider
-observation, runs all component tests, materializes the exact stable/testing
-locks into a fresh checkout, builds the Kodi repository twice and confirms
-that the stable lock was not modified.
+Test przeprowadza dwa niezależne przebiegi wykrywania na żywo i wymaga, aby drugi
+przebieg był identyczny pod względem bajtów i zawierał `noop`. Następnie rekonstruuje
+Umbrella i WatchNixtoons2 na podstawie ich zaakceptowanych tożsamości upstream, sprawdza
+każdą obserwację dostawcy, uruchamia wszystkie testy komponentów, materializuje dokładne
+blokady stable/testing w nowej kasie, dwukrotnie buduje repozytorium Kodi i potwierdza,
+że ​​zamek stable nie został zmodyfikowany.
 
-Reports are written to `.e2e/upstream-sync/`. The script has no write token and
-does not create branches, pull requests or releases.
+Raporty zapisywane są do `.e2e/upstream-sync/`. Skrypt nie posiada tokena zapisu i nie
+tworzy rozgałęzień, pull requesty ani wydań.

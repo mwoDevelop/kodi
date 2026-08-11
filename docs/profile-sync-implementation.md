@@ -1,89 +1,98 @@
-# Profile sync implementation status
+# Stan wdrożenia Profile Sync
 
-Date: 2026-07-31
+Data: 2026-07-31
 
-## Implemented
+To jest chronologiczny zapis wdrożenia, a nie strona statusu na żywo. Poniższe
+stwierdzenia dotyczące wersji opisują bramę osiągniętą w zarejestrowanym dniu. Bieżący
+wydany klient jest zdefiniowany przez `manifests/locks/stable.json`; użyj `python
+tools/qnap_images.py status` i kontroli urządzenia udokumentowanych w
+`docs/kodi-private-profile.md` pod kątem stanu działania. Mapa dokumentacji znajduje się
+w `docs/README.md`.
 
-- `manifests/devices.schema.json` with compatible schema 1/2 validation and a
-  redacted Android/Flatpak schema 2 example;
-- private device inventory loader normalizing schema 1/2 to the internal v2
-  model;
-- idempotent, atomic registry 1 -> 2 migration with a private backup and
-  byte-equivalent endpoint assertion;
-- opaque per-account principal IDs, explicit platform, physical host grouping
-  and exactly one neutral ADB/SSH transport;
-- separate `AdbTransport`/`SshTransport` and
-  `AndroidKodiLifecycle`/`FlatpakKodiLifecycle` contracts;
-- read-only `tools/kodi_inventory.py` with redacted output;
-- pinned SSH host keys, private-key mode checks, disabled agent forwarding,
-  UID/home/owner validation and symlink-escape rejection;
-- Android lifecycle inventory qualified live on BlueStacks, Sony TV,
-  Bedroom TV and X88 Pro 20;
-- schema 1 -> 2 reinstall migration with a private backup;
-- reinstall config resolution through `logical_device_id`;
-- schema 2 profile policy with separate `disaster_recovery` and `routine`;
-- semantic, default-deny routine export for Kodi core and selected Umbrella
-  settings;
-- typed values, deterministic revision ID and secret exclusion;
-- local transactional SQLite server in the separate
-  `kodi-profile-sync-server` checkout;
-- candidate CAS, idempotency, canary assignments and report-gated promotion;
-- loopback-only development HTTP API;
-- host-side `tools/profile_sync_admin.py`;
-- native Ed25519 qualified inside Kodi on BlueStacks x86 and Sony ARMv7;
-- one-time pairing, per-installation enrollment/token/key and heartbeat;
-- separate `service.mwodevelop.profilesync` repository with read-only checks;
-- deterministic publication of the service add-on in the testing lock;
-- device E2E for add-on 0.1.4 on BlueStacks x86 and Sony ARMv7, including
-  testing-repository origin, pairing, authenticated heartbeat, signed
-  candidate check and the read-only no-apply invariant;
-- authenticated immutable revision download in the server;
-- add-on 0.1.5 testing candidate with a default-deny Umbrella adapter,
-  private pre-write journal, startup recovery, health check, rollback and
-  revision quarantine; device apply E2E is still pending;
-- add-on 0.1.5 read-only regression passed on BlueStacks and Sony after
-  verifying the real service disable/enable lifecycle;
-- add-on 0.1.6 testing candidate reads schema 2 and applies signed schema 3
-  layers selected from server-bound target tags; Bedroom TV passed
-  testing-repository install, pairing, authenticated heartbeat, signed
-  candidate verification and the read-only no-apply invariant;
-- X88 Pro 20 passed clean Kodi 21.3 restore and stable-origin verification.
-  BlueStacks, Sony TV and X88 Pro 20 all passed Profile Sync 0.1.6
-  pairing/read-only E2E and a reversible in-process apply canary covering
-  successful apply, injected failure, rollback, quarantine, journal cleanup
-  and byte-exact restoration of managed settings;
-- QNAP Container Station Compose contract with an ARMv7 image gate;
-- live QNAP preflight confirming Container Station 3, Docker 26, Compose 2,
-  `overlay2`, sufficient capacity and an available Python 3.11 ARMv7 base
-  image;
-- immutable server 0.1.0 GHCR manifest qualified for `linux/amd64` and
+## Zaimplementowano
+
+- `manifests/devices.schema.json` z walidacją kompatybilnego schematu 1/2 i zredagowanym
+  przykładem schematu 2 Android/Flatpak;
+- moduł ładujący inwentarz urządzeń prywatnych normalizujący schemat 1/2 do wewnętrznego
+  modelu v2;
+- idempotentna, atomowa migracja rejestru 1 -> 2 z prywatną kopią zapasową i
+  potwierdzeniem punktu końcowego odpowiadającego bajtom;
+- nieprzejrzyste identyfikatory głównych kont, jawna platforma, fizyczne grupowanie
+  hostów i dokładnie jeden neutralny transport ADB/SSH;
+- oddzielne kontrakty `AdbTransport`/`SshTransport` i
+  `AndroidKodiLifecycle`/`FlatpakKodiLifecycle`;
+- `tools/kodi_inventory.py` tylko do odczytu ze zredagowanymi danymi wyjściowymi;
+- przypięte klucze hosta SSH, sprawdzanie trybu klucza prywatnego, wyłączone
+  przekazywanie agentów, sprawdzanie poprawności UID/domu/właściciela i odrzucanie
+  ucieczki dowiązania symbolicznego;
+- Zapasy cyklu życia Android zostały zakwalifikowane na żywo w BlueStacks, Sony TV,
+  Bedroom TV i X88 Pro 20;
+- schemat 1 -> 2 zainstaluj ponownie migrację z prywatną kopią zapasową;
+- zainstaluj ponownie rozwiązanie konfiguracji poprzez `logical_device_id`;
+- polityka profilu schematu 2 z oddzielnymi `disaster_recovery` i `routine`;
+- semantyczny eksport procedury z domyślną odmową dla rdzenia Kodi i wybranych ustawień
+  Umbrella;
+- wpisane wartości, deterministyczny identyfikator wersji i wykluczenie sekretu;
+- lokalny serwer transakcyjny SQLite w osobnej kasie `kodi-profile-sync-server`;
+- kandydat na CAS, idempotencja, przydziały kanaryjskie i awans oparty na raportach;
+- Programowanie HTTP oparte wyłącznie na pętli zwrotnej;
+- po stronie hosta `tools/profile_sync_admin.py`;
+- natywny Ed25519 zakwalifikowany w Kodi na BlueStacks x86 i Sony ARMv7;
+- jednorazowe parowanie, rejestracja/token/klucz i puls dla każdej instalacji;
+- oddzielne repozytorium `service.mwodevelop.profilesync` ze sprawdzaniem tylko do
+  odczytu;
+- deterministyczna publikacja dodatku serwisowego w zamku testing;
+- urządzenie E2E dla dodatku 0.1.4 na BlueStacks x86 i Sony ARMv7, w tym pochodzenie
+  repozytorium testing, parowanie, uwierzytelniony puls, podpisana kontrola kandydata i
+  niezmiennik bez zastosowania w trybie tylko do odczytu;
+- pobieranie uwierzytelnionej, niezmiennej wersji na serwer;
+- dodatek 0.1.5 testing Candidate z adapterem Umbrella z domyślną odmową, prywatnym
+  dziennikiem przed zapisem, odzyskiwaniem przy uruchamianiu, sprawdzaniem stanu,
+  rollback i kwarantanną wersji; urządzenie zastosuj E2E jest nadal w toku;
+- dodatek 0.1.5 regresja tylko do odczytu przekazywana na BlueStacks i Sony po
+  sprawdzeniu rzeczywistego cyklu życia wyłączania/włączania usług;
+- dodatek 0.1.6 testing Candidate odczytuje schemat 2 i stosuje podpisany schemat 3
+  warstwy wybrane ze znaczników docelowych powiązanych z serwerem; Bedroom TV przeszedł
+  pomyślnie instalację repozytorium testing, parowanie, uwierzytelniony puls,
+  weryfikację podpisanego kandydata i niezmiennik bez zastosowania w trybie tylko do
+  odczytu;
+- X88 Pro 20 przeszedł pomyślnie czyste przywracanie Kodi 21.3 i weryfikację pochodzenia
+  stable. Wszystkie modele BlueStacks, Sony TV i X88 Pro 20 przeszły pomyślnie parowanie
+  Profile Sync 0.1.6/tylko do odczytu E2E i odwracalne zastosowanie w procesie,
+  obejmujące pomyślne zastosowanie, wstrzyknięty błąd, rollback, kwarantannę,
+  czyszczenie dziennika i przywracanie zarządzanych ustawień z dokładnością do bajtów;
+- QNAP Container Station Utwórz kontrakt z bramką obrazu ARMv7;
+- Preflight na żywo QNAP potwierdzający Container Station 3, Docker 26, Compose 2,
+  `overlay2`, wystarczającą pojemność i dostępny obraz podstawowy Python 3.11 ARMv7;
+- niezmienny manifest serwera 0.1.0 GHCR kwalifikowany dla `linux/amd64` i
   `linux/arm/v7`;
-- isolated QNAP 6A smoke with `/ready`, database schema 2, process restart,
-  controlled unavailability/recovery and zero remaining Compose resources;
-- production QNAP lifecycle with a fixed managed root, healthy-RAID gate,
-  immutable-image enforcement, pinned SSH host key, verified TLS 1.2+ and
-  confined read-only security mounts;
-- online SQLite backup, atomic off-NAS download, AES-256-GCM encryption and a
-  successful decrypt plus SQLite integrity restore drill;
-- separate `kodi.favourites` portable-state adapter for user content that must
-  not be embedded in semantic routine settings revisions;
-- deterministic exact-inventory bundle generation, bounded file/XML
-  validation, content-addressed artwork verification and transactional
-  apply/recovery;
-- legacy WatchNixtoons2 favourite-action migration to the mwoDevelop add-on ID;
-- `.env`-driven authoritative sync membership, publisher and network
-  endpoints, with logical identity and expected hardware retained in the
-  private registry;
-- repeatable Android rollout with in-Kodi audit, JSON-RPC/EventServer
-  fallbacks, post-apply convergence proof and `NO_CHANGE` idempotence;
-- per-device Profile Sync identity profiles sourced from `.env` and the
-  logical registry, without cloning enrollment tokens or signing seeds;
-- identity-preserving device E2E cleanup: temporary verified-backend pairing
-  restores the previous settings and state instead of blanking the profile.
+- izolowany dym QNAP 6A z `/ready`, schemat bazy danych 2, ponowne uruchomienie procesu,
+  kontrolowana niedostępność/odzyskiwanie i zerowe pozostałe zasoby Compose;
+- produkcyjny cykl życia QNAP ze stałym zarządzanym katalogiem głównym, zdrową bramą
+  RAID, wymuszaniem niezmiennego obrazu, przypiętym kluczem hosta SSH, zweryfikowanym
+  protokołem TLS 1.2+ i ograniczonymi mocowaniami zabezpieczeń tylko do odczytu;
+- kopia zapasowa SQLite online, pobieranie atomowe poza NAS, szyfrowanie AES-256-GCM i
+  pomyślne odszyfrowanie oraz przywracanie integralności SQLite;
+- oddzielny adapter stanu przenośnego `kodi.favourites` dla treści użytkownika, których
+  nie wolno osadzać w wersjach ustawień procedur semantycznych;
+- deterministyczne generowanie pakietów z dokładną inwentaryzacją, walidacja plików
+  ograniczonych/XML, weryfikacja grafiki adresowanej do treści oraz
+  zastosowanie/odzyskiwanie transakcyjne;
+- migracja ulubionych akcji ze starszego WatchNixtoons2 do identyfikatora dodatku
+  mwoDevelop;
+- Autorytatywne członkostwo w synchronizacji oparte na `.env`, wydawcy i punkty końcowe
+  sieci, z tożsamością logiczną i oczekiwanym sprzętem przechowywanym w rejestrze
+  prywatnym;
+- powtarzalne wdrożenie Android z audytem w Kodi, rezerwami JSON-RPC/EventServer,
+  dowodem konwergencji po zastosowaniu i idempotencją `NO_CHANGE`;
+- profile tożsamości Profile Sync dla poszczególnych urządzeń pochodzące z `.env` i
+  rejestru logicznego, bez klonowania tokenów rejestracji lub podpisywania nasion;
+- urządzenie zachowujące tożsamość Oczyszczanie E2E: tymczasowe parowanie
+  zweryfikowane-backend przywraca poprzednie ustawienia i stan zamiast wygaszać profil.
 
-## Private state
+## Stan prywatny
 
-The migration created:
+Utworzono migrację:
 
 ```text
 .kodi-private/devices.json
@@ -94,15 +103,15 @@ The migration created:
 .kodi-private/portable-state/<bundle-sha256>.zip
 ```
 
-All files remain ignored by Git. The mode-`0600` `.env` additionally contains
-`KODI_SYNC_PUBLISHER`, `KODI_SYNC_DEVICES` and per-logical-device ADB/SSH host
-keys. It also stores the Profile Sync channel, startup delay, interval and
-read-only policy. These values are not written to public fixtures or test
-output.
+Wszystkie pliki pozostają ignorowane przez Git. Tryb `0600` `.env` zawiera dodatkowo
+klucze hosta ADB/SSH `KODI_SYNC_PUBLISHER`, `KODI_SYNC_DEVICES` i per-urządzenie
+logiczne. Przechowuje także kanał Profile Sync, opóźnienie uruchamiania, interwał i
+politykę tylko do odczytu. Wartości te nie są zapisywane w publicznych urządzeniach ani
+na wyjściu testowym.
 
-## Reproducible checks
+## Powtarzalne kontrole
 
-Main repository:
+Główne repozytorium:
 
 ```bash
 .venv/bin/pytest -q
@@ -122,7 +131,7 @@ PYTHONPATH=. .venv/bin/python \
   --result .kodi-private/e2e/portable-state-sync.json
 ```
 
-Server repository:
+Repozytorium serwera:
 
 ```bash
 PYTHONPATH=src ../kodi/.venv/bin/pytest -q
@@ -135,14 +144,14 @@ PYTHONPATH=src ../kodi/.venv/bin/python -m profile_sync_server.http \
 curl --fail http://127.0.0.1:18765/health
 ```
 
-Kodi crypto capability:
+Możliwości kryptograficzne Kodi:
 
 ```bash
 PYTHONPATH=. .venv/bin/python \
   tests/e2e/profile_sync_crypto_spike.py
 ```
 
-Kodi add-on on both registered devices:
+Dodatek Kodi na obu zarejestrowanych urządzeniach:
 
 ```bash
 PYTHONPATH=. .venv/bin/python \
@@ -152,88 +161,91 @@ PYTHONPATH=. .venv/bin/python \
   --result docs/e2e-results/2026-07-27-profile-sync-addon-devices.json
 ```
 
-The test wakes Kodi before GUI installation, bootstraps the testing
-repository when needed, and runs a single in-Kodi probe. The probe exposes
-only status, enrollment ID and secret-presence booleans; token and signing
-seed values never leave Kodi.
+Test budzi Kodi przed instalacją GUI, w razie potrzeby ładuje repozytorium testing i
+uruchamia pojedynczą sondę in-Kodi. Sonda ujawnia tylko status, identyfikator
+rejestracji i wartości logiczne dotyczące tajnej obecności; wartości początkowe tokenu i
+podpisu nigdy nie opuszczają Kodi.
 
-## Release status and deliberate blockers
+## Status wydania i świadomie pozostawione blokery
 
-The production backend is active on QNAP using the immutable server 0.2.2
-multi-architecture image, a dedicated private CA and verified TLS. Live
-preflight reports RAID `[UU]` with no recovery in progress. The final
-post-rollout off-NAS backup passed authenticated decryption in memory and
-`PRAGMA integrity_check=ok` on schema 2 with three active device enrollments.
+Backend produkcyjny jest aktywny na QNAP przy użyciu niezmiennego obrazu
+wieloarchitekturowego serwera 0.2.2, dedykowanego prywatnego urzędu certyfikacji i
+zweryfikowanego protokołu TLS. Raporty wstępnej inspekcji na żywo RAID `[UU]` bez
+trwającego odzyskiwania. Ostateczna kopia zapasowa po wdrożeniu poza serwerem NAS
+przeszła uwierzytelnione odszyfrowanie w pamięci i `PRAGMA integrity_check=ok` na
+schemacie 2 z trzema aktywnymi rejestracjami urządzeń.
 
-Profile Sync 0.1.8 passed exact-snapshot certification on BlueStacks and X88,
-including production signed assignment, transactional apply, signed report
-and rollback. The same certified ZIP was promoted without rebuilding and its
-public stable digest is recorded in the release report. Sony then passed the
-stable-origin, isolated assignment and rollback checks and received its own
-production enrollment. Client tokens and signing seeds remained device-local.
+Profile Sync 0.1.8 przeszedł certyfikację dokładnej migawki na BlueStacks i X88, w tym
+przypisanie z podpisem produkcyjnym, zastosowanie transakcyjne, podpisany raport i
+rollback. Ten sam certyfikowany ZIP był promowany bez przebudowy, a jego publiczne
+podsumowanie stable jest zapisane w raporcie wydania. Następnie firma Sony przeszła
+kontrolę pochodzenia stable, izolowanego przypisania i kontroli rollback i otrzymała
+własną rejestrację produkcyjną. Tokeny klienta i nasiona podpisywania pozostały lokalne
+na urządzeniu.
 
-An already-active revision is intentionally returned as `ACTIVE_UNVERIFIED`
-to a newly enrolled client because the backend does not hold the offline
-promoter key and therefore cannot mint a new signed per-device assignment.
-Server 0.2.2 and `tools/profile_sync_admin.py bootstrap-active` now provide a
-reviewed bootstrap path: the host signs offline, while the server constrains
-the exact enrollment, channel, administrative target tags and revision to the
-current active state. The stored document remains a signed, client-compatible
-candidate assignment. Trusting the TLS response as an unsigned assignment
-remains forbidden.
+Już aktywna wersja jest celowo zwracana jako `ACTIVE_UNVERIFIED` do nowo
+zarejestrowanego klienta, ponieważ backend nie przechowuje klucza promotora offline i
+dlatego nie może wygenerować nowego podpisanego przypisania dla każdego urządzenia.
+Serwery 0.2.2 i `tools/profile_sync_admin.py bootstrap-active` udostępniają teraz
+sprawdzoną ścieżkę ładowania początkowego: host podpisuje się w trybie offline, podczas
+gdy serwer ogranicza dokładną rejestrację, kanał, administracyjne znaczniki docelowe i
+wersję do bieżącego aktywnego stanu. Przechowywany dokument pozostaje podpisanym,
+kompatybilnym z klientem zadaniem kandydata. Ufanie odpowiedzi TLS jako niepodpisanemu
+przypisaniu pozostaje zabronione.
 
-Linux/Flatpak host support uses the same fail-closed gates. Separate pinned SSH
-identities select each Unix principal; the lifecycle probe verifies UID/home,
-Kodi version and ABI, and qualifies `special://home` plus
-`special://profile` from the current Kodi runtime log. Kodi must then be
-stopped before staging starts. `tools/kodi_flatpak_profile_sync_rollout.py`
-does not unpack add-ons or edit the add-on database over SSH. After the current
-Kodi log proves that EventServer is ready, a bounded `RunScript(...)` invokes
-the transactional installer inside Kodi, which performs rollback,
-`UpdateLocalAddons`, enablement and a sanitized result marker. Before applying
-the profile, it reconciles the exact stable-lock versions of Umbrella,
-mwoScrapers, its wrapper and WatchNixtoons2 through Kodi's repository APIs.
-Profile Sync 1.0.3 selects Android BoringSSL or Linux OpenSSL EVP without
-changing the Ed25519 wire/key format. A successful repeat rechecks those pins,
-uses sync-only mode and must retain the same applied revision with no pending
-report.
+Obsługa hosta Linux/Flatpak wykorzystuje te same bramki fail-closed. Oddzielne przypięte
+tożsamości SSH wybierają każdego użytkownika systemu Unix; sonda cyklu życia weryfikuje
+UID/home, wersję Kodi i ABI oraz kwalifikuje `special://home` plus `special://profile`
+na podstawie bieżącego dziennika wykonawczego Kodi. Następnie należy zatrzymać Kodi
+przed rozpoczęciem dostawienia. `tools/kodi_flatpak_profile_sync_rollout.py` nie
+rozpakowuje dodatków ani nie edytuje bazy danych dodatków przez SSH. Po tym, jak bieżący
+dziennik Kodi wykaże, że EventServer jest gotowy, ograniczony `RunScript(...)` wywołuje
+instalator transakcyjny wewnątrz Kodi, który wykonuje rollback, `UpdateLocalAddons`,
+włączenie i oczyszczony znacznik wyniku. Przed zastosowaniem profilu uzgadnia dokładne
+wersje blokad stable Umbrella, mwoScrapers, jego opakowania i interfejsy API
+repozytorium WatchNixtoons2 do Kodi. Profile Sync 1.0.3 wybiera Android BoringSSL lub
+Linux OpenSSL EVP bez zmiany formatu przewodu/klucza Ed25519. Pomyślne powtórzenie
+powoduje ponowne sprawdzenie tych pinów, użycie trybu tylko synchronizacji i musi
+zachować tę samą zastosowaną wersję bez oczekującego raportu.
 
-An unreachable NUC is still reported as `UNAVAILABLE` and left unchanged.
-The two account enrollments, tokens, signing keys, installation receipts and
-evidence remain independent under the ignored private directory. Android
-devices do not need the SSH lifecycle gate because their adapter already runs
-inside Kodi and resolves `special://profile` there.
+Nieosiągalny NUC jest nadal zgłaszany jako `UNAVAILABLE` i pozostaje niezmieniony. Dwie
+rejestracje kont, tokeny, klucze do podpisu, rachunki za instalację i dowody pozostają
+niezależne w ramach ignorowanego prywatnego katalogu. Urządzenia Android nie potrzebują
+bramy cyklu życia SSH, ponieważ ich adapter działa już w Kodi i tam rozwiązuje
+`special://profile`.
 
-Android identity profiles use a unique `logical_device_id`, enrollment,
-channel and schedule. Live 2026-07-31 E2E on BlueStacks, Sony TV and X88 Pro
-20 passed unique production pairing, authenticated heartbeat, signed
-assignment discovery, successful settings apply, injected-failure rollback,
-journal cleanup and byte-exact settings restoration through the authenticated
-HTTPS production endpoint.
+Profile tożsamości Android korzystają z unikalnego `logical_device_id`, rejestracji,
+kanału i harmonogramu. Na żywo 31.07.2026 E2E na BlueStacks, Sony TV i X88 Pro 20
+przeszło unikalne parowanie produkcyjne, uwierzytelniony puls, odkrycie podpisanego
+przypisania, zastosowane zostały pomyślne ustawienia, wstrzyknięty błąd rollback,
+oczyszczenie dziennika i przywrócenie ustawień z dokładnością do bajtów za pośrednictwem
+uwierzytelnionego produkcyjnego punktu końcowego HTTPS.
 
-Bedroom TV passed this workflow against production 0.2.2: stable Profile Sync
-0.1.8 paired with a unique enrollment, accepted the offline-signed bootstrap,
-applied and reported the exact active revision, and retained a complete
-portable profile with WatchNixtoons2 artwork. Both NUC principals have
-independently qualified Kodi Flatpak 21.3 runtime mappings. Their production
-installation and pairing remain a live E2E gate whenever the physical host is
-unreachable; source-level support is not reported as device certification.
+Bedroom TV przeszedł workflow w stosunku do wersji produkcyjnej 0.2.2: stable Profile
+Sync 0.1.8 w połączeniu z unikalną rejestracją, zaakceptował bootstrap podpisany
+offline, zastosował i zgłosił dokładną aktywną wersję oraz zachował kompletny profil
+przenośny z grafiką WatchNixtoons2. Obydwa podmioty główne NUC mają niezależnie
+kwalifikowane mapowania środowiska wykonawczego Kodi Flatpak 21.3. Ich instalacja
+produkcyjna i parowanie pozostają aktywną bramą E2E, gdy host fizyczny jest
+nieosiągalny; wsparcie na poziomie źródła nie jest zgłaszane jako certyfikacja
+urządzenia.
 
-Revision schema 3 and administratively bound compatibility tags are now
-implemented in the generator, server and add-on. Linux/Flatpak certification
-still requires a recorded successful install plus repeat sync for both NUC
-principals; neither is reported as passed while the endpoint is unreachable.
+Schemat wersji 3 i administracyjnie powiązane znaczniki zgodności są teraz
+zaimplementowane w generatorze, serwerze i dodatku. Certyfikacja Linux/Flatpak nadal
+wymaga zarejestrowanej pomyślnej instalacji i ponownej synchronizacji dla obu podmiotów
+głównych NUC; żadne z nich nie jest zgłaszane jako zaliczone, gdy punkt końcowy jest
+nieosiągalny.
 
-## Layered routine revisions
+## Warstwowe rewizje rutynowe
 
-Schema 2 remains readable and exports only the portable common subset.
-Schema 3 contains `base.adapters` and a canonically ordered `layers` array.
-Class layers selected by `all_target_tags` precede layers selected by
-`logical_device_id`. Target tags are assigned during server-side enrollment
-and must match the signed candidate assignment; heartbeat observations never
-select a layer.
+Schemat 2 pozostaje czytelny i eksportuje tylko przenośny wspólny podzbiór. Schemat 3
+zawiera tablicę `base.adapters` i tablicę `layers` uporządkowaną kanonicznie. Warstwy
+klas wybrane przez `all_target_tags` poprzedzają warstwy wybrane przez
+`logical_device_id`. Tagi docelowe są przypisywane podczas rejestracji po stronie
+serwera i muszą być zgodne z podpisanym przypisaniem kandydata; obserwacje pulsu nigdy
+nie wybierają warstwy.
 
-Generate schema 3 explicitly:
+Wygeneruj schemat 3 jawnie:
 
 ```bash
 python tools/kodi_routine_profile.py \

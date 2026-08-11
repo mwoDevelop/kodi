@@ -1,138 +1,139 @@
-# MwoScrapers 0.1.8 public Comet fallback and stable rollout
+# MwoScrapers 0.1.8 publiczna wersja rezerwowa Comet i wdrożenie stable
 
-Date: 2026-07-31
+Data: 2026-07-31
 
-## Outcome
+## Wynik
 
-MwoScrapers 0.1.8 is published in the stable mwoDevelop Kodi repository.
-Torrentio remains enabled, while Comet is now an independent, enabled public
-fallback. Source resolution and Real-Debrid playback do not depend on QNAP.
+MwoScrapers 0.1.8 został opublikowany w repozytorium stable mwoDevelop Kodi. Torrentio
+pozostaje włączony, podczas gdy Comet jest teraz niezależnym, włączonym publicznym
+rozwiązaniem awaryjnym. Rozdzielczość źródła i odtwarzanie Real-Debrid nie zależą od
+QNAP.
 
-The implementation follows the public Stremio endpoint exposed by the
-[Comet project](https://github.com/g0ldyy/comet). Its default public endpoint
-is configuration-driven in the
-[Comet sample environment](https://github.com/g0ldyy/comet/blob/main/.env-sample).
-MwoScrapers uses the public metadata endpoint only; Real-Debrid credentials,
-magnet submission and playable URL resolution remain inside Umbrella.
+Implementacja jest zgodna z publicznym punktem końcowym Stremio udostępnionym przez
+[projekt Comet](https://github.com/g0ldyy/comet). Jego domyślny publiczny punkt końcowy
+jest oparty na konfiguracji w [przykładowym środowisku
+Comet](https://github.com/g0ldyy/comet/blob/main/.env-sample). MwoScrapers korzysta
+wyłącznie z publicznego punktu końcowego metadanych; Dane uwierzytelniające Real-Debrid,
+przesyłanie magnesów i rozdzielczość odtwarzalnych adresów URL pozostają w Umbrella.
 
-## Immutable release
+## Niezmienne wydanie
 
-- MwoScrapers source PR:
+- MwoScrapers źródłowy PR:
   [mwoDevelop/script.module.mwoscrapers#12](https://github.com/mwoDevelop/script.module.mwoscrapers/pull/12);
-- source merge commit: `e50595c6ba0971499d663079c8acc63b1efb117f`;
-- add-on version: `0.1.8`;
-- add-on ZIP SHA-256:
+- zatwierdzenie scalania źródła: `e50595c6ba0971499d663079c8acc63b1efb117f`;
+- wersja dodatkowa: `0.1.8`;
+- dodatek ZIP SHA-256:
   `18d09f6cfc73d46669688a2e8cfd0c2233f54ec1418fd84109ebbf3532f3613f`;
-- certified snapshot:
+- certyfikowana migawka:
   `c2db18b284b1dea363d8564d677c8a42a3c6fff2f0ad27f09d45620dee659faa`;
-- device certification:
-  [run 30628413038](https://github.com/mwoDevelop/kodi/actions/runs/30628413038);
-- exact-snapshot promotion:
-  [run 30628911260](https://github.com/mwoDevelop/kodi/actions/runs/30628911260);
-- stable deployment:
-  [run 30629172028](https://github.com/mwoDevelop/kodi/actions/runs/30629172028).
+- certyfikacja urządzenia: [run
+  30628413038](https://github.com/mwoDevelop/kodi/actions/runs/30628413038);
+- promocja dokładnej migawki: [uruchom
+  30628911260](https://github.com/mwoDevelop/kodi/actions/runs/30628911260);
+- Wdrożenie stable: [uruchom
+  30629172028](https://github.com/mwoDevelop/kodi/actions/runs/30629172028).
 
-The public stable index checksum is
-`5d8d10890c0f59fd7762a5afd8f8834f8c4ab7ea5fb24b4fec279c3485d33528`.
-The public stable ZIP has the exact certified digest above.
-`repository.mwodevelop` remains version `1.0.0`.
+Publiczna suma kontrolna indeksu stable to
+`5d8d10890c0f59fd7762a5afd8f8834f8c4ab7ea5fb24b4fec279c3485d33528`. Publiczny stable ZIP
+zawiera dokładny, certyfikowany skrót powyżej. `repository.mwodevelop` pozostaje wersją
+`1.0.0`.
 
-## Device rollout
+## Wdrożenie urządzenia
 
-The release order was BlueStacks, X88 Pro 20, then Sony TV.
+Kolejność wydania była następująca: BlueStacks, X88 Pro 20, a następnie Sony TV.
 
-| Device | Kodi | Umbrella | MwoScrapers | Search | RD playback | WatchNixtoons2 |
+| Urządzenie | Kodi | Umbrella | MwoScrapers | Szukaj | Odtwarzanie RD | WatchNixtoons2 |
 | --- | --- | --- | --- | --- | --- | --- |
-| BlueStacks | 21.3 | 6.7.81.18 | 0.1.8 | passed | passed | passed |
-| X88 Pro 20 | 21.3 | 6.7.81.18 | 0.1.8 | passed | passed | passed |
-| Sony TV with NordVPN | 21.3 | 6.7.81.18 | 0.1.8 | passed | passed | passed |
+| BlueStacks | 21,3 | 6.7.81.18 | 0.1.8 | minęło | minęło | minęło |
+| X88 Pro 20 | 21,3 | 6.7.81.18 | 0.1.8 | minęło | minęło | minęło |
+| Sony TV z NordVPN | 21,3 | 6.7.81.18 | 0.1.8 | minęło | minęło | minęło |
 
-Every functional check used an isolated Kodi process. The post-cleanup
-matrices verified inventory, exact versions, repository origins, Umbrella
-search, Sintel resolver/playback and WatchNixtoons2 playback.
+Każda kontrola funkcjonalna wykorzystywała izolowany proces Kodi. Matryce po czyszczeniu
+zweryfikowały inwentarz, dokładne wersje, pochodzenie repozytoriów, wyszukiwanie
+Umbrella, funkcję rozpoznawania/odtwarzania Sintel i odtwarzanie WatchNixtoons2.
 
-On all three devices:
+Na wszystkich trzech urządzeniach:
 
-- every managed mwoDevelop add-on is owned by
-  `repository.mwodevelop`;
-- `repository.mwodevelop.testing` is absent;
-- the `CARTOONS` favourites artwork rollout matched and materialized all
-  seven WatchNixtoons2 shortcuts with zero failures.
+- każdy zarządzany dodatek mwoDevelop jest własnością `repository.mwodevelop`;
+- Brak `repository.mwodevelop.testing`;
+- Wdrożenie grafiki ulubionych `CARTOONS` dopasowało i zmaterializowało wszystkie siedem
+  skrótów WatchNixtoons2 bez żadnych błędów.
 
-Bedroom TV was unreachable at `192.168.1.18:5555` and NUC SSH was unreachable
-at `192.168.1.25:22`; both were skipped after TCP and neighbor checks failed.
+Bedroom TV był nieosiągalny w `192.168.1.18:5555`, a NUC SSH był nieosiągalny w
+`192.168.1.25:22`; oba zostały pominięte po niepowodzeniu kontroli protokołu TCP i
+sąsiadów.
 
-## X88 NordVPN limitation
+## Ograniczenie X88 NordVPN
 
-X88 has no active VPN tunnel. The previously installed `9.9.2` build was the
-mobile variant and refused to run on a TV. Google Play resolved the same
-mobile package because this X88 firmware does not identify as a supported
-Android TV target.
+X88 nie ma aktywnego tunelu VPN. Poprzednio zainstalowana wersja `9.9.2` była wersją
+mobilną i nie działała na telewizorze. Google Play rozwiązał problem z tym samym
+pakietem mobilnym, ponieważ oprogramowanie sprzętowe X88 nie identyfikuje się jako
+obsługiwany element docelowy Android TV.
 
-The official NordVPN TV APK was downloaded from the
-[NordVPN Android TV page](https://nordvpn.com/download/android-tv/). Before
-installation, its signing-certificate SHA-256 was compared with the installed
-Google Play package and matched:
-`bc64ae0725af656b3b10b684cd1df4c9d6b7f81bc5dc32df3a3b2ce94ce61466`.
-The installed TV build is `9.9.2+sideload-tv`; its APK SHA-256 is
+Oficjalny pakiet APK TV NordVPN został pobrany ze strony [NordVPN Android
+TV](https://nordvpn.com/download/android-tv/). Przed instalacją porównano jego
+certyfikat podpisu SHA-256 z zainstalowanym pakietem Google Play i dopasowano:
+`bc64ae0725af656b3b10b684cd1df4c9d6b7f81bc5dc32df3a3b2ce94ce61466`. Zainstalowana wersja
+telewizora to `9.9.2+sideload-tv`; jego APK SHA-256 to
 `82e4b6828c7aeb973565f6f213016ce8beba52583a111d7e6f84655a4f94a3ce`.
 
-The TV build then displayed NordVPN's explicit "device not compatible"
-screen. NordVPN documents this condition as a hardware-backed KeyStore or
-device-certification limitation and recommends another certified device or a
-VPN router. No security or compatibility check was bypassed. The X88 Kodi
-results in this report therefore prove the stable release without VPN; Sony
-proves the same release with an active NordVPN `tun0` route.
+Wersja telewizora wyświetliła następnie wyraźny ekran „urządzenie niekompatybilne”
+NordVPN. NordVPN dokumentuje ten stan jako sprzętowy magazyn kluczy lub ograniczenie
+certyfikacji urządzenia i zaleca inne certyfikowane urządzenie lub router VPN. Nie
+pominięto żadnej kontroli bezpieczeństwa ani zgodności. Wyniki X88 Kodi w tym raporcie
+potwierdzają zatem wydanie stable bez VPN; Sony udowadnia to samo wydanie z aktywną
+trasą NordVPN `tun0`.
 
-## Provider independence
+## Niezależność dostawcy
 
-The sanitized endpoint probe produced these live results:
+Odkażona sonda punktu końcowego dała następujące wyniki na żywo:
 
-| Device | Comet public movie | Torrentio observation |
+| Urządzenie | Comet film publiczny | Obserwacja Torrentio |
 | --- | ---: | --- |
-| BlueStacks | 132 | public timeout |
-| X88 Pro 20 | 132 | LAN relay and public timeout |
-| Sony TV with NordVPN | 132 | LAN relay timeout, public HTTP 403 |
+| BlueStacks | 132 | publiczny limit czasu |
+| X88 Pro 20 | 132 | Przekaźnik LAN i publiczny limit czasu |
+| Sony TV z NordVPN | 132 | Przekroczono limit czasu przekaźnika sieci LAN, publiczny HTTP 403 |
 
-Umbrella search and Real-Debrid playback still passed on every reachable
-device. This demonstrates that a QNAP outage or Torrentio/VPN failure no
-longer removes every provider path.
+Wyszukiwanie Umbrella i odtwarzanie Real-Debrid są nadal przekazywane na każdym
+dostępnym urządzeniu. To pokazuje, że awaria QNAP lub awaria Torrentio/VPN nie powoduje
+już usunięcia ścieżki każdego dostawcy.
 
-The QNAP relay remained an optional, stateless Torrentio optimization. It
-does not receive Real-Debrid credentials, magnets or resolved playback URLs.
+Przekaźnik QNAP pozostał opcjonalną, bezstanową optymalizacją Torrentio. Nie otrzymuje
+danych uwierzytelniających Real-Debrid, magnesów ani ustalonych adresów URL odtwarzania.
 
-## Defects fixed during certification
+## Wady naprawione podczas certyfikacji
 
-- Android TV canaries now use X88 after BlueStacks by default.
-- Each functional canary force-stops Kodi first, preventing codec or resolver
-  state from contaminating the next test.
-- Device certification reads add-on versions and origins from inside Kodi,
-  which supports Android scoped storage.
-- Scoped origin reads resend a dropped EventServer command.
-- The endpoint diagnostic probe now also retries a dropped `RunScript`
-  command within its original bounded timeout.
-- A guarded add-on cleanup tool removes a repository only after proving that
-  no installed add-on still uses it as origin. The directory is restored
-  atomically if database cleanup fails.
+- Kanarki Android TV używają teraz domyślnie X88 po BlueStacks.
+- Każda funkcjonalna siła kanarkowa zatrzymuje najpierw Kodi, zapobiegając
+  zanieczyszczeniu stanu kodeka lub programu tłumaczącego w następnym teście.
+- Certyfikacja urządzenia odczytuje wersje dodatków i pochodzenie z poziomu Kodi, który
+  obsługuje pamięć masową o zakresie Android.
+- Odczyty pochodzenia o określonym zakresie wysyłają ponownie porzucone polecenie
+  EventServer.
+- Sonda diagnostyczna punktu końcowego ponawia teraz także porzuconą komendę `RunScript`
+  w ramach pierwotnego limitu czasu.
+- Chronione narzędzie do czyszczenia dodatków usuwa repozytorium dopiero po
+  udowodnieniu, że żaden zainstalowany dodatek nadal nie używa go jako źródła. Katalog
+  jest przywracany niepodzielnie, jeśli czyszczenie bazy danych nie powiedzie się.
 
-Relevant merged PRs:
+Odpowiednie połączone żądania ściągnięcia:
 
 - [#81](https://github.com/mwoDevelop/kodi/pull/81),
   [#82](https://github.com/mwoDevelop/kodi/pull/82),
   [#83](https://github.com/mwoDevelop/kodi/pull/83),
   [#84](https://github.com/mwoDevelop/kodi/pull/84),
-  [#85](https://github.com/mwoDevelop/kodi/pull/85) and
+  [#85](https://github.com/mwoDevelop/kodi/pull/85) i
   [#86](https://github.com/mwoDevelop/kodi/pull/86).
 
-## Reproducible verification
+## Powtarzalna weryfikacja
 
-Run the repository tests:
+Uruchom testy repozytorium:
 
 ```bash
 .venv/bin/pytest -q tests
 ```
 
-Run the exact stable device matrix:
+Uruchom dokładną matrycę urządzenia stable:
 
 ```bash
 python tools/certify_device_matrix.py \
@@ -144,7 +145,7 @@ python tools/certify_device_matrix.py \
   --output post-cleanup-device-matrix.json
 ```
 
-Run the sanitized provider probe:
+Uruchom oczyszczoną sondę dostawcy:
 
 ```bash
 python tools/kodi_mwoscrapers_endpoint_probe.py \
@@ -152,12 +153,11 @@ python tools/kodi_mwoscrapers_endpoint_probe.py \
   --timeout 120
 ```
 
-The final local suite passed `216` tests. PR checks for the cleanup and probe
-retry passed in runs
-[30630458321](https://github.com/mwoDevelop/kodi/actions/runs/30630458321)
-and
-[30632130038](https://github.com/mwoDevelop/kodi/actions/runs/30632130038).
-The final automatic testing publication
-[30632298105](https://github.com/mwoDevelop/kodi/actions/runs/30632298105)
-passed the malware gate, detected byte-identical public output and correctly
-created neither a new snapshot nor a deployment.
+Ostateczny pakiet lokalny przeszedł testy `216`. Kontrole PR dotyczące czyszczenia i
+ponownej próby sondy zostały przekazane w seriach
+[30630458321](https://github.com/mwoDevelop/kodi/actions/runs/30630458321) i
+[30632130038](https://github.com/mwoDevelop/kodi/actions/runs/30632130038). Ostatnia
+automatyczna publikacja testing
+[30632298105](https://github.com/mwoDevelop/kodi/actions/runs/30632298105) przeszła
+przez bramę złośliwego oprogramowania, wykryła publiczne dane wyjściowe o identycznych
+bajtach i poprawnie nie utworzyła ani nowej migawki, ani wdrożenia.

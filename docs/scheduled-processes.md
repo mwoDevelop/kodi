@@ -1,80 +1,78 @@
-# Scheduled processes
+# Procesy cykliczne
 
-This is the operational catalogue of recurring automation for the mwoDevelop
-Kodi project. Workflow files and Compose manifests remain executable sources
-of truth; this document explains their ownership, effects, failure boundary
-and monitoring in one place.
+To jest katalog operacyjny automatyzacji cyklicznej projektu mwoDevelop Kodi. Pliki
+workflow i manifesty Compose pozostają wykonywalnymi źródłami prawdy; ten dokument
+opisuje w jednym miejscu ich właścicieli, skutki, granice awarii i monitoring.
 
-All GitHub cron expressions use UTC. GitHub may start scheduled workflows
-later than the nominal minute, so the schedule is not an SLA. Every workflow
-also supports `workflow_dispatch` for a controlled retry.
+Wszystkie wyrażenia cron GitHub używają czasu UTC. GitHub może rozpocząć zaplanowane
+workflow później niż wskazana minuta, dlatego harmonogram nie stanowi SLA. Każdy
+workflow obsługuje również `workflow_dispatch`, umożliwiający kontrolowane ponowienie.
 
 ## GitHub Actions
 
-| UTC | Repository | Workflow | Purpose | Write boundary |
+| UTC | Repozytorium | Workflow | Cel | Granica zapisu |
 | --- | --- | --- | --- | --- |
-| 04:20 daily | `mwoDevelop/kodi` | `reconcile-upstreams.yml` | Discover all managed component states and prepare an exact testing-lock candidate. | Discovery is read-only. A changed lock is proposed on `automation/testing-lock`; it is never merged or promoted automatically. |
-| 04:23 daily | `mwoDevelop/script.module.mwoscrapers` | `check-provider-upstreams.yml` | Download the accepted immutable Coco, Magneto and Viper artifacts, verify their pinned digests and scan them with the shared malware control. | Read-only. It uploads a 14-day audit artifact and never changes a branch. Any unavailable artifact, digest mismatch or failed scan fails the workflow. |
-| 04:35 daily | `mwoDevelop/ch.repo` | `mwodevelop-watchnixtoons2-update.yml` | Discover WatchNixtoons2 upstream, materialize and scan an isolated candidate, and test it. | A verified change may update `automation/watchnixtoons2-upstream` and open a review-gated PR. It does not publish the Kodi repository. |
-| 04:41 daily | `mwoDevelop/script.module.mwoscrapers` | `discover-provider-upstreams.yml` | Observe the latest provider feeds and maintain provenance-only review state. | A changed observation may update `automation/provider-provenance` and open a review-gated PR. It does not import or execute provider code. |
-| 04:50 daily | `mwoDevelop/umbrellaplug.github.io` | `propose-upstream-update.yml` | Replay the downstream Umbrella patch stack on the exact upstream commit, scan the candidate and test it. | A verified change may update `automation/umbrella-upstream` and open a review-gated PR. Protected paths must remain unchanged. |
+| 04:20 codziennie | `mwoDevelop/kodi` | `reconcile-upstreams.yml` | Wykrywa stan wszystkich zarządzanych komponentów i przygotowuje dokładnego kandydata na lock kanału testing. | Discovery jest tylko do odczytu. Zmieniony lock jest proponowany na `automation/testing-lock`; nigdy nie jest automatycznie scalany ani promowany. |
+| 04:23 codziennie | `mwoDevelop/script.module.mwoscrapers` | `check-provider-upstreams.yml` | Pobiera zaakceptowane niezmienne artefakty Coco, Magneto i Viper, weryfikuje przypięte digesty i skanuje wspólną bramą antymalware. | Tylko do odczytu. Przesyła artefakt audytu przechowywany przez 14 dni i nigdy nie zmienia gałęzi. Niedostępny artefakt, niezgodność digestu lub błąd skanowania powodują błąd workflow. |
+| 04:35 codziennie | `mwoDevelop/ch.repo` | `mwodevelop-watchnixtoons2-update.yml` | Wykrywa upstream WatchNixtoons2, materializuje i skanuje izolowanego kandydata, a następnie go testuje. | Zweryfikowana zmiana może zaktualizować `automation/watchnixtoons2-upstream` i otworzyć PR wymagający review. Nie publikuje repozytorium Kodi. |
+| 04:41 codziennie | `mwoDevelop/script.module.mwoscrapers` | `discover-provider-upstreams.yml` | Obserwuje najnowsze źródła providerów i utrzymuje stan review dotyczący wyłącznie pochodzenia. | Zmieniona obserwacja może zaktualizować `automation/provider-provenance` i otworzyć PR wymagający review. Nie importuje ani nie wykonuje kodu providera. |
+| 04:50 codziennie | `mwoDevelop/umbrellaplug.github.io` | `propose-upstream-update.yml` | Odtwarza stos poprawek downstream Umbrella na dokładnym commitcie upstream, skanuje kandydata i go testuje. | Zweryfikowana zmiana może zaktualizować `automation/umbrella-upstream` i otworzyć PR wymagający review. Chronione ścieżki muszą pozostać niezmienione. |
 
-The provider audit and provider discovery are intentionally separate:
+Audyt providerów i ich discovery są celowo rozdzielone:
 
-- the 04:23 audit proves that every already accepted artifact is still
-  downloadable, byte-identical and scan-clean;
-- the 04:41 discovery observes new upstream state and can report or propose a
-  provenance update without accepting new executable bytes.
+- audyt 04:23 dowodzi, że każdy już zaakceptowany artefakt jest nadal możliwy do
+  pobrania, identyczny bajtowo i czysty w skanowaniu;
+- discovery 04:41 obserwuje nowy stan upstream i może zgłosić lub zaproponować
+  aktualizację pochodzenia bez akceptowania nowych bajtów wykonywalnych.
 
-No scheduled workflow merges a PR, promotes `testing` to `stable`, changes
-Real-Debrid credentials, or writes Kodi user configuration.
+Żaden cykliczny workflow nie scala PR, nie promuje `testing` do `stable`, nie zmienia
+poświadczeń Real-Debrid ani nie zapisuje konfiguracji użytkownika Kodi.
 
-## Monitoring on QNAP
+## Monitorowanie na QNAP
 
-`qnap-upstream-watchdog` runs in Container Station and polls GitHub every six
-hours. The monitored workflow list is versioned in
-`manifests/upstream-watchdog.json`. A workflow is unhealthy when its latest run
-is missing, failed, or older than 36 hours. The container healthcheck reads the
-result every five minutes and QTS/Container Station is responsible for the
-external notification.
+`qnap-upstream-watchdog` działa w Container Station i odpytuje GitHub co sześć godzin.
+Monitorowana lista workflow jest wersjonowana w `manifests/upstream-watchdog.json`.
+Workflow jest niezdrowy, gdy brakuje ostatniego uruchomienia, zakończyło się ono błędem
+lub jest starsze niż 36 godzin. Healthcheck kontenera odczytuje wynik co pięć minut, a
+QTS/Container Station odpowiada za powiadomienie zewnętrzne.
 
-The watchdog has public GitHub read access only. It cannot retry a workflow,
-change a branch or repair an upstream artifact. A successful discovery does
-not mask a failed accepted-artifact audit; both mwoScrapers workflows are
-monitored independently.
+Watchdog ma wyłącznie publiczny dostęp GitHub do odczytu. Nie może ponowić workflow,
+zmienić gałęzi ani naprawić artefaktu upstream. Pomyślne odkrycie nie maskuje
+błędu audytu zaakceptowanych artefaktów; oba workflow mwoScrapers są
+monitorowane niezależnie.
 
-The other QNAP container healthchecks are service-liveness probes, not update
-schedules:
+Pozostałe healthchecki kontenerów QNAP sprawdzają dostępność usług, a nie
+harmonogramów aktualizacji:
 
-| Service | Interval | Probe |
+| Usługa | Interwał | Sonda |
 | --- | --- | --- |
-| Profile Sync backend | 30 seconds | local HTTPS readiness endpoint inside the container |
-| mwoScrapers provider relay | 30 seconds | local `/health` endpoint inside the container |
-| upstream watchdog | 5 minutes | last persisted GitHub workflow evaluation |
+| Backend Profile Sync | 30 sekund | lokalny endpoint gotowości HTTPS wewnątrz kontenera |
+| Przekaźnik providerów mwoScrapers | 30 sekund | lokalny endpoint `/health` wewnątrz kontenera |
+| Watchdog upstream | 5 minut | ostatnia utrwalona ocena workflow GitHub |
 
-## Kodi Profile Sync clients
+## Klienci Kodi Profile Sync
 
-`service.mwodevelop.profilesync` is a separate device-local periodic process.
-The standard home profile waits 15 seconds after Kodi starts and checks its
-signed `home-stable` assignment every six hours. Device-specific enrollment,
-tokens, signing material and last-applied revision stay local and are excluded
-from the synchronized profile payload.
+`service.mwodevelop.profilesync` jest oddzielnym procesem cyklicznym na urządzeniu.
+Standardowy profil domowy czeka 15 sekund po uruchomieniu Kodi i sprawdza podpisane
+przypisanie `home-stable` co sześć godzin. Rejestracja dla konkretnego urządzenia,
+tokeny, materiał podpisujący i ostatnio zastosowana rewizja pozostają lokalne i
+są wyłączone z payloadu synchronizowanego profilu.
 
-Profile Sync does not install add-on code, run GitHub workflows, promote a
-repository channel, or use the provider relay. Its backend and schedule are
-therefore monitored separately from upstream synchronization.
+Profile Sync nie instaluje kodu dodatku, nie uruchamia GitHub workflow, nie promuje
+kanału repozytorium ani nie używa przekaźnika providerów. Dlatego jego backend i
+harmonogram są monitorowane niezależnie od synchronizacji upstream.
 
-## Manual and event-driven processes
+## Procesy ręczne i sterowane zdarzeniami
 
-Build, CI, malware drills, testing publication, certification, stable
-promotion and deployment workflows are intentionally not scheduled. They run
-from a push, pull request or explicit `workflow_dispatch` and retain their own
-review and exact-head checks.
+Buildy, CI, testy antymalware, publikacja testing, certyfikacja, promocja stable i
+workflow wdrożeniowe celowo nie są cykliczne. Uruchamiają się po pushu, przez pull
+request lub jawne `workflow_dispatch` i zachowują własne bramy review oraz kontrolę
+dokładnego head SHA.
 
-## Operational verification
+## Weryfikacja operacyjna
 
-Check the latest scheduled runs without relying on a historical release
-report:
+Sprawdź najnowsze zaplanowane uruchomienia bez polegania na historycznym raporcie
+wydania:
 
 ```bash
 gh run list --repo mwoDevelop/kodi \
@@ -89,17 +87,17 @@ gh run list --repo mwoDevelop/umbrellaplug.github.io \
   --workflow propose-upstream-update.yml --event schedule --limit 1
 ```
 
-For the deployed watchdog, inspect `/run/watchdog/status.json` inside the
-`qnap-upstream-watchdog-upstream-watchdog-1` container. A healthy container is
-evidence only for the workflows present in the versioned watchdog manifest.
+W przypadku wdrożonego watchdoga sprawdź `/run/watchdog/status.json` wewnątrz kontenera
+`qnap-upstream-watchdog-upstream-watchdog-1`. Zdrowy kontener stanowi dowód wyłącznie
+dla workflow obecnych w wersjonowanym manifeście watchdoga.
 
-When adding or removing a scheduled upstream workflow, update together:
+Dodając lub usuwając zaplanowane upstream workflow, zaktualizuj razem:
 
-1. its workflow file and cron;
-2. this catalogue;
+1. jego plik workflow i cron;
+2. ten dokument katalogowy;
 3. `manifests/upstream-watchdog.json`;
-4. watchdog tests and the immutable QNAP watchdog image;
-5. the live QNAP deployment, followed by a functional status check.
+4. testy watchdoga i niezmienny obraz watchdoga QNAP;
+5. aktywne wdrożenie QNAP, a następnie funkcjonalną kontrolę stanu.
 
-Historical reports below `docs/e2e-results/` describe their stated
-certification date and must not be treated as current operational status.
+Raporty historyczne poniżej `docs/e2e-results/` opisują podaną datę certyfikacji i nie
+mogą być traktowane jako bieżący stan operacyjny.

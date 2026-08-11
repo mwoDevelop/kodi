@@ -1,46 +1,46 @@
-# Umbrella search regression on Sony and BlueStacks — 2026-07-26
+# Regresja wyszukiwania Umbrella na Sony i BlueStacks — 26.07.2026
 
-## Outcome
+## Wynik
 
-Umbrella search works on both running Kodi installations with the stable
-`plugin.video.umbrella` 6.7.81.13 from `repository.mwodevelop` 1.0.0.
+Wyszukiwanie Umbrella działa zarówno na uruchomionych instalacjach Kodi z stable
+`plugin.video.umbrella` 6.7.81.13 z `repository.mwodevelop` 1.0.0.
 
-The Sony failure was reproduced as a stale Umbrella `source_progress` modal.
-The modal could remain alive after a terminal resolver path and prevent the
-virtual keyboard from opening. The downstream lifecycle policy now arms the
-keep-alive property synchronously before starting the modal thread; the monitor
-only waits for release and never re-arms an already released window.
+Awaria Sony została odtworzona jako nieaktualny modal Umbrella `source_progress`. Modal
+może pozostać aktywny po ścieżce programu rozpoznawania terminala i uniemożliwiać
+otwarcie klawiatury wirtualnej. Polityka cyklu życia downstream teraz uzbraja właściwość
+keep-alive synchronicznie przed uruchomieniem wątku modalnego; monitor tylko czeka na
+zwolnienie i nigdy nie uzbraja ponownie już zwolnionego okna.
 
-Autoplay resolution also runs each selected-source resolver call through a
-bounded worker. A late result cannot be accepted after the 8-second attempt
-deadline. Both changes live in downstream policy modules and patch
-registration, keeping the fork reconstructable and isolated from upstream
-code under the project's OCP policy.
+Rozwiązywanie autoodtwarzania uruchamia także każde wywołanie mechanizmu rozpoznawania
+wybranego źródła za pośrednictwem ograniczonego procesu roboczego. Wynik spóźniony nie
+może zostać zaakceptowany po upływie 8 sekund na podejście. Obie zmiany są obecne w
+modułach zasad downstream i rejestracji poprawek, zapewniając możliwość rekonstrukcji
+forka i odizolowanie go od kodu upstream zgodnie z polityką OCP projektu.
 
-## Released artifacts
+## Zwolnione artefakty
 
-- Umbrella tag: `mwo-6.7.81.13`
-- Umbrella release commit: `fb689588a9b4e3502886e1ca63a48ccaa9f399c2`
-- Public stable ZIP SHA-256:
+- Znacznik Umbrella: `mwo-6.7.81.13`
+- Zatwierdzenie wydania Umbrella: `fb689588a9b4e3502886e1ca63a48ccaa9f399c2`
+- Publiczny stable ZIP SHA-256:
   `5ddb813669fde54096caf5c3f9b86ac7a0e26bf9ae132197d996f1b18b378d58`
-- Public stable `addons.xml` SHA-256:
+- Publiczne stable `addons.xml` SHA-256:
   `a8de1caf21b8bce85413a0af2476cfb515282c71298c16b62b0fec5fb63a9213`
-- `repository.mwodevelop` remains at version `1.0.0`.
+- `repository.mwodevelop` pozostaje w wersji `1.0.0`.
 
-The public stable ZIP was downloaded again after deployment and matched the
-stable lock byte-for-byte.
+Publiczny ZIP stable został pobrany ponownie po wdrożeniu i bajt po bajcie pasował do
+blokady stable.
 
-## Device regression
+## Regresja urządzenia
 
-| Device | Kodi | Test | Result |
+| Urządzenie | Kodi | Testuj | Wynik |
 | --- | ---: | --- | --- |
-| Sony BRAVIA | 21.2 | Search `Big Buck Bunny` after a resolver attempt, without restarting Kodi | 2 matching results |
-| Sony BRAVIA | 21.2 | Search `Sintel` immediately after a deterministic 180-second resolver timeout, without restarting Kodi | `Sintel (2010)` |
-| BlueStacks1 / Rvc64 | 21.3 | Search `Big Buck Bunny` | 2 matching results |
+| Sony BRAVIA | 21,2 | Wyszukaj `Big Buck Bunny` po próbie rozpoznawania nazw, bez ponownego uruchamiania Kodi | 2 pasujące wyniki |
+| Sony BRAVIA | 21,2 | Wyszukaj `Sintel` natychmiast po deterministycznym 180-sekundowym przekroczeniu limitu czasu mechanizmu rozpoznawania nazw, bez ponownego uruchamiania Kodi | `Sintel (2010)` |
+| BlueStacks1 / Rvc64 | 21,3 | Wyszukaj `Big Buck Bunny` | 2 pasujące wyniki |
 
-The final Kodi add-on manifests report Umbrella 6.7.81.13 on both devices.
-Their add-on databases report all five mwoDevelop add-ons enabled and
-originating from `repository.mwodevelop`:
+Ostateczna wersja dodatku Kodi wyświetla raport Umbrella 6.7.81.13 na obu urządzeniach.
+Ich bazy danych dodatków zgłaszają wszystkie pięć dodatków mwoDevelop włączonych i
+pochodzących z `repository.mwodevelop`:
 
 - `plugin.video.umbrella`;
 - `plugin.video.watchnixtoons2.mwodevelop`;
@@ -48,30 +48,33 @@ originating from `repository.mwodevelop`:
 - `script.mwoscrapers`;
 - `repository.mwodevelop`.
 
-Machine-readable reports:
+Raporty do odczytu maszynowego:
 
-- [Sony search after resolver timeout](2026-07-26-sony-search-after-jsonrpc-timeout-6.7.81.13.json)
-- [Sony deterministic resolver attempt](2026-07-26-sony-sintel-jsonrpc-6.7.81.13.json)
-- [BlueStacks1 search](2026-07-26-bluestacks1-big-buck-bunny-search-6.7.81.13.json)
+- [Wyszukiwanie Sony po przekroczeniu limitu czasu modułu rozpoznawania
+  nazw](2026-07-26-sony-search-after-jsonrpc-timeout-6.7.81.13.json)
+- [Próba deterministycznego rozpoznawania nazw firmy
+  Sony](2026-07-26-sony-sintel-jsonrpc-6.7.81.13.json)
+- [Wyszukiwanie
+  BlueStacks1](2026-07-26-bluestacks1-big-buck-bunny-search-6.7.81.13.json)
 
-## Separate resolver observation
+## Oddzielna obserwacja resolwera
 
-The deterministic Sony `Sintel` run invoked the plug-in URL through
-acknowledged Kodi JSON-RPC and loaded Umbrella's source-progress UI, but the
-complete provider scrape did not produce a player within 180 seconds. This is
-separate from the fixed search-window lifecycle: search succeeded immediately
-after that timeout in the same Kodi process.
+Deterministyczne uruchomienie Sony `Sintel` wywołało adres URL wtyczki poprzez
+zatwierdzony Kodi JSON-RPC i załadowało interfejs użytkownika postępu źródła Umbrella,
+ale pełne zeskrobanie dostawcy nie wygenerowało odtwarzacza w ciągu 180 sekund. Różni
+się to od stałego cyklu życia okna wyszukiwania: wyszukiwanie zakończyło się sukcesem
+natychmiast po przekroczeniu limitu czasu w tym samym procesie Kodi.
 
-The 8-second bound added in 6.7.81.13 applies to an individual selected-source
-resolution attempt. It intentionally does not abort provider discovery, which
-can precede resolution and is governed by its own provider timeouts.
+Ograniczenie 8 sekund dodane w wersji 6.7.81.13 dotyczy indywidualnej próby rozwiązania
+wybranego źródła. Celowo nie przerywa wykrywania dostawcy, które może poprzedzać
+rozwiązanie i jest regulowane przez limity czasu dla własnego dostawcy.
 
-The E2E matrix now uses JSON-RPC `Player.Open` for direct playback instead of
-the unacknowledged and device-dependent EventServer transport. Every direct
-invocation carries a unique E2E nonce so Kodi cannot reuse a previous plug-in
-path.
+Macierz E2E wykorzystuje teraz JSON-RPC `Player.Open` do bezpośredniego odtwarzania
+zamiast niepotwierdzonego i zależnego od urządzenia transportu EventServer. Każde
+bezpośrednie wywołanie niesie ze sobą unikalny identyfikator jednorazowy E2E, więc Kodi
+nie może ponownie wykorzystać poprzedniej ścieżki wtyczki.
 
-## Reproduction
+## Powielanie
 
 ```bash
 export ADB_SERVER_SOCKET=tcp:localhost:5038
@@ -93,17 +96,15 @@ PYTHONPATH=tests/e2e .venv/bin/python tests/e2e/umbrella_search_e2e.py \
   --result docs/e2e-results/bluestacks1-umbrella-search.json
 ```
 
-The complete local suite passed: `58 passed`.
+Przeszedł kompletny pakiet lokalny: `58 passed`.
 
-## Restored device state
+## Przywrócono stan urządzenia
 
-The original Umbrella search databases were restored after testing. Their
-post-restart SHA-256 values match the pre-test backups:
+Oryginalne bazy danych wyszukiwania Umbrella zostały przywrócone po testing. Ich
+wartości SHA-256 po ponownym uruchomieniu są zgodne z kopiami zapasowymi sprzed testu:
 
-- Sony:
-  `a708a44cb2254b4e60ae4e95a0ebe58c967e8813c3f25597d67cb60b03d0c85b`;
-- BlueStacks1:
-  `536ee51ff0a2c0f1d1e397a7cd1f333bedff5463f4c7c5a2f0e7f7c8b83ffd81`.
+- Sony: `a708a44cb2254b4e60ae4e95a0ebe58c967e8813c3f25597d67cb60b03d0c85b`;
+- BlueStacks1: `536ee51ff0a2c0f1d1e397a7cd1f333bedff5463f4c7c5a2f0e7f7c8b83ffd81`.
 
-No Real-Debrid credentials, magnets, or resolved media URLs are stored in the
-reports.
+W raportach nie są przechowywane żadne dane uwierzytelniające, magnesy ani rozpoznane
+adresy URL multimediów Real-Debrid.

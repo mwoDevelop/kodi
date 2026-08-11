@@ -1,12 +1,12 @@
-# Device registry v2 and lifecycle inventory
+# Rejestr urządzeń v2 i inwentaryzacja cyklu życia
 
-Date: 2026-07-27
+Data: 27.07.2026
 
-Scope: read-only qualification of registry schema v2, neutral ADB transport and
-Android lifecycle. No Kodi setting, add-on, enrollment or profile file was
-mutated.
+Zakres: kwalifikacja tylko do odczytu schematu rejestru v2, neutralny transport ADB i
+cykl życia Android. Żadne ustawienie, dodatek, rejestracja ani plik profilu Kodi nie
+zostały zmutowane.
 
-## Reproducible commands
+## Powtarzalne polecenia
 
 ```bash
 python3 tools/kodi_devices.py validate
@@ -24,26 +24,27 @@ python3 tools/kodi_inventory.py bedroom-tv \
   --adb-server-port 5037
 ```
 
-## Results
+## Wyniki
 
-| logical device | platform | Kodi | observed ABI | running | runtime paths |
+| urządzenie logiczne | platforma | Kodi | zauważył ABI | bieganie | ścieżki wykonawcze |
 |---|---|---:|---|---:|---|
-| `bluestacks1` | Android emulator | 21.3 | x86_64, x86, arm64-v8a, armeabi-v7a, armeabi | yes | qualified |
-| `sony-tv` | Android TV | 21.3 | armeabi-v7a, armeabi | yes | qualified |
-| `bedroom-tv` | Android TV | 21.2 | armeabi-v7a, armeabi | yes | qualified |
+| `bluestacks1` | Emulator Android | 21,3 | x86_64, x86, arm64-v8a, armeabi-v7a, armeabi | tak | wykwalifikowany |
+| `sony-tv` | Android TV | 21,3 | armeabi-v7a, armeabi | tak | wykwalifikowany |
+| `bedroom-tv` | Android TV | 21,2 | armeabi-v7a, armeabi | tak | wykwalifikowany |
 
-The inventory output contains no endpoint, username, home path, host
-fingerprint or private reference value.
+Dane wyjściowe inwentaryzacji nie zawierają punktu końcowego, nazwy użytkownika, ścieżki
+domowej, odcisku palca hosta ani prywatnej wartości referencyjnej.
 
-## Linux/Flatpak gate
+## Brama Linux/Flatpak
 
-The NUC endpoint returned `No route to host` during this run. Local fake-SSH
-tests cover pinned `known_hosts`, private key permissions, account UID/home,
-machine fingerprint, Flatpak version/architecture, owner checks, symlink
-escape and the `REQUIRES_IN_PROCESS_KODI_PROBE` state. A real NUC result is not
-claimed and remains a release gate for the Flatpak lifecycle.
+Podczas tego przebiegu punkt końcowy NUC zwrócił `No route to host`. Lokalne testy
+fałszywego SSH obejmują przypięte `known_hosts`, uprawnienia klucza prywatnego, UID
+konta/stronę główną, odcisk palca maszyny, wersję/architekturę Flatpak, kontrole
+właściciela, ucieczkę dowiązania symbolicznego i stan `REQUIRES_IN_PROCESS_KODI_PROBE`.
+Prawdziwy wynik NUC nie jest deklarowany i pozostaje bramą do wydania dla cyklu życia
+Flatpak.
 
-## Automated tests
+## Testy automatyczne
 
 ```text
 27 focused registry/transport/lifecycle/reinstall tests passed

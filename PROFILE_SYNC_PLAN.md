@@ -1,7 +1,10 @@
 # Plan synchronizacji profili, urządzeń i aktualizacji Kodi
 
-Status: backend i Android częściowo wdrożone; wymagane ponowne wyrównanie X88
-oraz dokończenie rollout Linux/Flatpak
+Status: plan architektoniczny wdrożony; datowane sekcje poniżej są zapisem
+kolejnych bram wdrożenia, a nie bieżącym inventory urządzeń. Aktualną wersję
+klienta określa `manifests/locks/stable.json`, stan backendu polecenie
+`python tools/qnap_images.py status`, a stan urządzeń testy opisane w
+`docs/kodi-private-profile.md`.
 
 Data: 2026-08-10
 
@@ -10,7 +13,7 @@ Repo nadrzędne: `mwoDevelop/kodi`
 Lokalizacja robocza: `/home/mwo/projects/kodi`
 
 Dokumenty powiązane: `UPSTREAM_SYNC_PLAN.md` oraz
-`docs/scheduled-processes.md`
+`docs/scheduled-processes.md`. Pełny indeks: `docs/README.md`.
 
 Raporty review:
 
@@ -18,7 +21,7 @@ Raporty review:
 - `docs/PROFILE_SYNC_QNAP_PLAN_REVIEW.md`;
 - `docs/PROFILE_SYNC_NUC_PLAN_REVIEW.md`.
 
-Bieżący status operacyjny 2026-08-10:
+Migawka statusu operacyjnego z 2026-08-10:
 
 - backend Profile Sync 0.3.0 i provider relay działają jako zdrowe kontenery
   Container Station na właściwym daemonie; watchdog działa, ale po objęciu
@@ -1784,7 +1787,7 @@ Brama wyjścia:
 - TLS sprawdzony przez Python/OpenSSL wewnątrz Android Kodi oraz Flatpak Kodi;
 - brak zależności runtime sync od dostępności SSH;
 
-### 17.3 Device E2E
+### 17.3 Testy E2E urządzeń
 
 - BlueStacks publisher -> BlueStacks consumer;
 - BlueStacks publisher -> Sony consumer;
