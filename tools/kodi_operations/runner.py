@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import uuid
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -271,7 +272,14 @@ class ProductionExecutor:
             timeout=600,
             adapter="umbrella-private",
         )
-        portable = self._portable("apply", device_id)
+        try:
+            portable = self._portable("apply", device_id)
+        except OperationAdapterError:
+            # Kodi can still be completing UpdateLocalAddons or a settings
+            # flush after the preceding adapters. One bounded retry preserves
+            # fail-closed behavior while avoiding a false device regression.
+            time.sleep(3)
+            portable = self._portable("apply", device_id)
         if portable["status"] != "CONVERGED":
             raise RuntimeError("portable state did not converge")
         changed = any(
@@ -299,8 +307,6 @@ class ProductionExecutor:
             if diagnostics["provider"] and diagnostics["real_debrid"]:
                 break
             if attempt < attempts:
-                import time
-
                 time.sleep(retry_seconds)
         diagnostic_failed = not (
             diagnostics["provider"] and diagnostics["real_debrid"]
