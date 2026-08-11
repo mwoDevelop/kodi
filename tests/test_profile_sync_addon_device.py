@@ -95,6 +95,55 @@ def test_accept_addon_install_prompt_moves_from_no_to_yes(monkeypatch):
     assert jsonrpc.calls[-1] == ("Input.Select", None)
 
 
+def test_repository_version_picker_uses_supported_private_repo_switch(
+    monkeypatch,
+):
+    jsonrpc = FakeJsonRpc(
+        [
+            profile_sync_addon_device.ADDON_LABEL,
+            "Versions",
+            "Version 1.0.3",
+        ],
+        window_id=10040,
+    )
+
+    class Client:
+        def __enter__(self):
+            return jsonrpc
+
+        def __exit__(self, *_):
+            return None
+
+    builtins = []
+    monkeypatch.setattr(profile_sync_addon_device.time, "sleep", lambda _: None)
+    monkeypatch.setattr(
+        profile_sync_addon_device, "AdbJsonRpcClient", lambda *_: Client()
+    )
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "_ensure_kodi_foreground",
+        lambda *_: None,
+    )
+    monkeypatch.setattr(
+        profile_sync_addon_device,
+        "_execute_event_builtin",
+        lambda *_args: builtins.append(_args[-1]),
+    )
+
+    profile_sync_addon_device._select_repository_version(
+        "adb", 5038, "device", "1.0.3"
+    )
+
+    assert builtins == [
+        "ActivateWindow(AddonBrowser,addons://user/xbmc.service,return)"
+    ]
+    assert [call for call in jsonrpc.calls if call[0] == "Input.Select"] == [
+        ("Input.Select", None),
+        ("Input.Select", None),
+        ("Input.Select", None),
+    ]
+
+
 def test_latest_addons_database_is_selected_without_android_sort_v():
     listing = "\n".join(
         [
