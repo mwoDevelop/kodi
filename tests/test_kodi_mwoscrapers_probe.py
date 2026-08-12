@@ -107,3 +107,15 @@ def test_provider_probe_dispatches_once_then_waits_for_final_report(monkeypatch)
             {"command": "RunScript(probe.py)", "wait": False},
         )
     ]
+
+
+def test_provider_probe_ignores_partially_written_report(monkeypatch):
+    monkeypatch.setattr(
+        kodi_mwoscrapers_probe,
+        "adb_command",
+        lambda *_args, **_kwargs: type(
+            "Result", (), {"stdout": '{"schema": 1, "probe": ['}
+        )(),
+    )
+
+    assert kodi_mwoscrapers_probe._report("adb", 5038, "serial") is None

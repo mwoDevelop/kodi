@@ -57,13 +57,13 @@ tym konkretnym wyjściu VPN, ale nie zatrzymuje wyszukiwania MwoScrapers jako ca
 ## Regresja i automatyzacja
 
 - MwoScrapers: `68 passed`, Ruff bez błędów, walidator dodatku widzi 6 providerów;
-- repo główne: `460 passed`;
-- odtwarzalny `tests/e2e/run.sh`: dwa identyczne buildy repo i `460 passed`;
+- repo główne: `462 passed`;
+- odtwarzalny `tests/e2e/run.sh`: dwa identyczne buildy repo i `462 passed`;
 - sanitizowany live probe wszystkich providerów: healthy;
 - dzienny workflow `probe-provider-health.yml` zapisuje tylko status, czas i liczbę
   wyników oraz jest objęty watchdogiem QNAP.
 
-Niezależny review PR wykrył i zamknięto jedenaście luk przed wydaniem:
+Niezależny review PR wykrył i zamknięto trzynaście luk przed wydaniem:
 
 - znaki diakrytyczne są rozkładane bez pozostawiania łączących znaków Unicode,
   dzięki czemu np. `Pokémon` pasuje do nazwy wydania `Pokemon`;
@@ -87,6 +87,10 @@ Niezależny review PR wykrył i zamknięto jedenaście luk przed wydaniem:
   niezaufanego `torrents_count`, więc zawyżona wartość nie zużywa pamięci Kodi;
 - porównanie same-origin normalizuje domyślne porty HTTP/HTTPS, zachowując
   odrzucanie rzeczywistych przekierowań między originami.
+- raport urządzenia jest publikowany atomowym `os.replace`, a polling traktuje
+  niepełny JSON jako stan `not ready` zamiast przerywać kwalifikację;
+- builder odrzuca output ZIP wewnątrz źródeł komponentu, zapobiegając włączeniu
+  poprzedniego kandydata do kolejnego artefaktu przy szerokich wzorcach plików.
 
 ## Decyzja wydaniowa
 

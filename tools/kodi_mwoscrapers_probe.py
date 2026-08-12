@@ -98,7 +98,12 @@ def _report(adb, port, serial):
         timeout=10,
     )
     payload = (result.stdout or "").strip()
-    return json.loads(payload) if payload.startswith("{") else None
+    if not payload.startswith("{"):
+        return None
+    try:
+        return json.loads(payload)
+    except json.JSONDecodeError:
+        return None
 
 
 def _wait_report(adb, port, serial, deadline):
@@ -159,7 +164,7 @@ def probe(adb, port, serial, timeout):
                 port,
                 serial,
                 "shell",
-                f"rm -f '{REMOTE_SCRIPT}' '{REMOTE_REPORT}'",
+                f"rm -f '{REMOTE_SCRIPT}' '{REMOTE_REPORT}' '{REMOTE_REPORT}.tmp'",
                 check=False,
                 timeout=10,
             )

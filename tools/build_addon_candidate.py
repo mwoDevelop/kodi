@@ -40,6 +40,8 @@ def build(addon_id, output, root=ROOT):
     output = Path(output).resolve()
     if output == root or output in root.parents:
         raise ValueError("unsafe candidate output")
+    if output == source or source in output.parents:
+        raise ValueError("candidate output must be outside component source")
     build_repo.write_deterministic_zip(output, addon_id, files)
     checkout = root / source_path.parts[0]
     commit = subprocess.check_output(

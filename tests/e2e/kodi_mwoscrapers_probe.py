@@ -234,9 +234,11 @@ def main():
     except Exception as error:  # noqa: BLE001 - sanitized Kodi boundary
         report["registry_error"] = type(error).__name__
     os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
-    with open(OUTPUT, "w", encoding="utf-8") as destination:
+    temporary = OUTPUT + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as destination:
         json.dump(report, destination, indent=2, sort_keys=True)
         destination.write("\n")
+    os.replace(temporary, OUTPUT)
 
 
 if __name__ == "__main__":
