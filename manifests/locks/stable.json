@@ -1,6 +1,6 @@
 {
-  "attestation_id": "987f31d94fb512f40173ed55dda7d1cfd7770e50ed0dc9aa6f284aef63a5eb3c",
-  "attestation_sha256": "935168978eb1d6058681c3c699f292b38be93fbb70425d3c5783bf26aaa774ad",
+  "attestation_id": "912e8164d34f9eaea638179eb5232dd90e6749a9917477a20290e87a63c7e160",
+  "attestation_sha256": "f3c86da29d677e6f2936ec19d320766792c3c074cdd4cd53011233c14e3912c7",
   "channel": "stable",
   "components": {
     "plugin.video.umbrella": {
@@ -14,13 +14,13 @@
       "zip_sha256": "b0e95a6d559556ea735b72b06aed935ad64870bddc955005090f42cb76d64909"
     },
     "script.module.mwoscrapers": {
-      "commit": "bfb7ffdb2fde3b23776cc1e6c25c5c81a07cc938",
+      "commit": "eeef07bcf7152d205410cf2b700fda5688ba082d",
       "provider_api": 1,
-      "version": "0.1.10",
-      "zip_sha256": "25e2d3d5e5703d9611c78d2309caf3f0fa589f6e7b3e63ae329ceb7cd359a6c0"
+      "version": "0.2.0",
+      "zip_sha256": "23238732672279d5d4c0fda3869cf89a0e5be8133eed09478781f6aa18d9e73d"
     },
     "script.mwoscrapers": {
-      "commit": "bfb7ffdb2fde3b23776cc1e6c25c5c81a07cc938",
+      "commit": "eeef07bcf7152d205410cf2b700fda5688ba082d",
       "version": "0.1.1",
       "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
     },
@@ -31,7 +31,7 @@
     }
   },
   "schema": 2,
-  "source_artifact_manifest_sha256": "1b904384309cab42be8e63fe99d66248c6d67a0aeab2f4eebf81139f042ef71b",
-  "source_index_sha256": "29ea3c04cd532b56ac6127fd751de722819d1b8240a37ed2579f59dc0b6b8fd3",
-  "source_snapshot_id": "4fb12e779106902404ec6beb59ac6d0ee524b412de4f9cf41e9957a46e258bfe"
+  "source_artifact_manifest_sha256": "bee61541eb2eec6e9e8357ccebd87d5902955efb9491549560e9b135c34e69b9",
+  "source_index_sha256": "5567d4883c267c7584cfad530ffa0ee0de426ce879a4c1b44c17e2c97f66be10",
+  "source_snapshot_id": "6315b949ad04a7c9f8a6ea544e6bce00304ccbb7d7895192cebe2294a9666421"
 }
