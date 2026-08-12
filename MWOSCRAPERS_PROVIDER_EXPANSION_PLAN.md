@@ -1,8 +1,9 @@
 # Plan rozszerzenia providerów MwoScrapers
 
-Status: realizacja — fundament i cztery nowe adaptery ukończone; trwa zamrożenie
-artefaktu 0.2.0, końcowe E2E i wydanie testing. Promocja stable pozostaje za bramką
-trzech kolejnych udanych dziennych health probe.
+Status: realizacja — fundament i cztery nowe adaptery ukończone, a zamrożony
+artefakt 0.2.0 jest opublikowany w testing. Promocja stable wymaga aktualnego
+udanego health probe wszystkich providerów oraz pełnej certyfikacji E2E na
+BlueStacks i X88, ale nie ma już kalendarzowej bramki trzech kolejnych dni.
 
 Orchestrator scalony przed promocją pozostaje zgodny z bieżącym stable: wybiera
 kontrakt diagnostyczny na podstawie wersji modułu w locku stable, a nie na podstawie
@@ -254,9 +255,12 @@ usuwany z zamrożonego zestawu, a pełne E2E zaczyna się ponownie.
 1. Zwiększyć wersję modułu MwoScrapers i, jeśli wymaga tego zależność, wrappera.
 2. Opublikować **jedno wydanie testing zawierające cały zamrożony zestaw** i
    potwierdzić jego instalację oraz regresję na BlueStacks i X88 Pro.
-3. Promować ten sam zestaw do stable dopiero po E2E laboratoryjnym oraz co najmniej
-   trzech kolejnych udanych dziennych live probe; provider HTML wymaga co najmniej
-   siedmiu dni obserwacji.
+3. Promować ten sam zestaw do stable po pełnym E2E laboratoryjnym oraz co najmniej
+   jednym aktualnym, udanym live probe obejmującym wszystkie włączane providery.
+   Wynik nie może być starszy niż okno świeżości watchdog (`36h`). Bramka jest
+   oparta na działaniu i kompletności bieżącej próby, a nie na liczbie dni
+   obserwacji. Provider oparty o kruche parsowanie HTML wymaga osobnej, jawnej
+   decyzji ryzyka, ale nie narzuca zwłoki całemu zestawowi.
 4. Dopiero po promocji rozpocząć aktualizację pozostałych urządzeń. Wszystkie dostają
    ten sam stable lock i tę samą konfigurację providerów; nie tworzymy wydań ani
    wariantów per urządzenie.
@@ -292,7 +296,7 @@ wydania kolejnej wersji.
 - kwalifikacja i implementacja fali 1: 3–5 dni;
 - kumulatywne testy BlueStacks i X88: 1–2 dni;
 - zbiorczy release oraz rollout pozostałej floty: 1–2 dni;
-- obserwacja przed stable: minimum 3 dni kalendarzowe;
+- aktualny health probe przed stable: bez dodatkowej zwłoki kalendarzowej;
 - fala 2, dopiero po ocenie danych: dodatkowe 3–6 dni.
 
 Rekomendacja: zaakceptować cel **do 6 kwalifikowanych providerów**, implementować i
