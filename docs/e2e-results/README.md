@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-08
 
+- [Kwalifikacja sześciu providerów MwoScrapers 0.2.0](2026-08-12-mwoscrapers-provider-expansion.md)
 - [OpenSubtitles.org — domyślna konfiguracja i test kanarków](2026-08-12-opensubtitles-org-rollout.md)
 - [Kwalifikacja destrukcyjnego restore Kodi Flatpak](2026-08-12-flatpak-destructive-restore.md)
 - [Certyfikat wersji ostatecznej upstream Sync v1](2026-08-05-upstream-sync-v1-final.md)

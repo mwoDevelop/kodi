@@ -24,6 +24,13 @@ SCHEDULED_WORKFLOWS = {
         Path("mwoscrapers/.github/workflows/discover-provider-upstreams.yml"),
         "41 4 * * *",
     ),
+    (
+        "mwoDevelop/script.module.mwoscrapers",
+        "probe-provider-health.yml",
+    ): (
+        Path("mwoscrapers/.github/workflows/probe-provider-health.yml"),
+        "3 5 * * *",
+    ),
     ("mwoDevelop/umbrellaplug.github.io", "propose-upstream-update.yml"): (
         Path("umbrella/.github/workflows/propose-upstream-update.yml"),
         "50 4 * * *",
@@ -106,7 +113,7 @@ def test_watchdog_rejects_failure_and_stale_success():
 
 def test_versioned_manifest_is_valid():
     loaded = load_manifest("manifests/upstream-watchdog.json")
-    assert len(loaded["workflows"]) == 5
+    assert len(loaded["workflows"]) == 6
     assert {
         (item["repository"], item["workflow"])
         for item in loaded["workflows"]

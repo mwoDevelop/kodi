@@ -469,6 +469,77 @@ def test_json_adapter_retries_once_and_preserves_hard_failure(monkeypatch):
     ]
 
 
+def test_provider_configuration_uses_only_device_scoped_optional_relay():
+    executor = object.__new__(ProductionExecutor)
+    executor.adb = "adb"
+    executor.adb_server_port = 5038
+    executor.fleet = {
+        "references": {
+            "KODI_DEVICE_X88PRO20_TORRENTIO_ENDPOINT": (
+                "http://192.0.2.39:18766/torrentio"
+            )
+        }
+    }
+
+    x88 = executor._provider_configuration_argv("x88pro20", "192.0.2.7:5555")
+    sony = executor._provider_configuration_argv("sony-tv", "192.0.2.12:5555")
+
+    assert x88[-2:] == [
+        "--torrentio-endpoint",
+        "http://192.0.2.39:18766/torrentio",
+    ]
+    assert "--torrentio-endpoint" not in sony
+
+
+def test_android_rollout_uses_complete_six_provider_probe():
+    assert operation_runner.expanded_provider_probe.__module__ == (
+        "tools.kodi_mwoscrapers_probe"
+    )
+
+
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    (("0.1.10", "legacy"), ("0.2.0", "expanded")),
+)
+def test_android_rollout_selects_probe_from_promoted_stable_lock(
+    monkeypatch, tmp_path, version, expected
+):
+    executor = object.__new__(ProductionExecutor)
+    executor.repository = tmp_path
+    executor.adb = "adb"
+    executor.adb_server_port = 5038
+    lock = tmp_path / "manifests/locks/stable.json"
+    lock.parent.mkdir(parents=True)
+    lock.write_text(
+        json.dumps(
+            {
+                "components": {
+                    "script.module.mwoscrapers": {"version": version}
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls = []
+
+    def probe(name):
+        def execute(*args):
+            calls.append((name, args))
+            return {"report": {}}
+
+        return execute
+
+    monkeypatch.setattr(
+        operation_runner, "legacy_provider_probe", probe("legacy")
+    )
+    monkeypatch.setattr(
+        operation_runner, "expanded_provider_probe", probe("expanded")
+    )
+
+    assert executor._provider_probe("serial") == {"report": {}}
+    assert calls == [(expected, ("adb", 5038, "serial", 75))]
+
+
 def test_android_rollout_configures_opensubtitles_from_private_references(
     monkeypatch,
 ):
@@ -507,7 +578,7 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
         "_portable_with_retry",
         lambda *_args: {"status": "CONVERGED", "apply_status": "NO_CHANGE"},
     )
-    monkeypatch.setattr(operation_runner, "provider_probe", lambda *_args: {})
+    monkeypatch.setattr(executor, "_provider_probe", lambda *_args: {})
     monkeypatch.setattr(
         operation_runner, "rd_probe", lambda *_args: {"healthy": True}
     )

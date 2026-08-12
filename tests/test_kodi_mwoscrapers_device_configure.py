@@ -1,3 +1,4 @@
+import base64
 import json
 import runpy
 import sys
@@ -22,7 +23,7 @@ def test_device_configure_binds_umbrella_to_mwoscrapers(monkeypatch, tmp_path):
 
         def getAddonInfo(self, key):
             assert key == "version"
-            return "0.1.10"
+            return "0.2.0"
 
     monkeypatch.setitem(sys.modules, "xbmcaddon", SimpleNamespace(Addon=Addon))
     monkeypatch.setitem(
@@ -33,14 +34,37 @@ def test_device_configure_binds_umbrella_to_mwoscrapers(monkeypatch, tmp_path):
         ),
     )
     output = tmp_path / "report.json"
+    payload = base64.urlsafe_b64encode(
+        json.dumps(
+            {
+                "enabled": [
+                    "torrentio",
+                    "comet",
+                    "torz",
+                    "mediafusion",
+                    "eztv",
+                    "piratebay",
+                ],
+                "endpoints": {
+                    "torrentio": "https://torrentio.strem.fun",
+                    "comet": "https://comet.feels.legal",
+                    "torz": "https://stremthru.elfhosted.com/stremio/torz",
+                    "mediafusion": "https://mediafusionfortheweebs.midnightignite.me",
+                    "eztv": "https://eztvx.to",
+                    "piratebay": "https://apibay.org",
+                },
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).rstrip(b"=").decode("ascii")
     monkeypatch.setattr(
         sys,
         "argv",
         [
             "kodi_mwoscrapers_configure.py",
             str(output),
-            "https://torrentio.strem.fun",
-            "https://comet.feels.legal",
+            payload,
         ],
     )
 
@@ -52,6 +76,10 @@ def test_device_configure_binds_umbrella_to_mwoscrapers(monkeypatch, tmp_path):
     report = json.loads(output.read_text(encoding="utf-8"))
     assert report["ok"] is True
     assert report["external_provider_enabled"] is True
+    assert report["providers"]["torz"]["enabled"] is True
+    assert report["providers"]["mediafusion"]["enabled"] is True
+    assert report["providers"]["eztv"]["enabled"] is True
+    assert report["providers"]["piratebay"]["enabled"] is True
     assert settings["plugin.video.umbrella"] == {
         "provider.external.enabled": "true",
         "external_provider.name": "mwoscrapers",

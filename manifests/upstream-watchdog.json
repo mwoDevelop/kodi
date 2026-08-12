@@ -15,6 +15,10 @@
       "workflow": "discover-provider-upstreams.yml"
     },
     {
+      "repository": "mwoDevelop/script.module.mwoscrapers",
+      "workflow": "probe-provider-health.yml"
+    },
+    {
       "repository": "mwoDevelop/umbrellaplug.github.io",
       "workflow": "propose-upstream-update.yml"
     },

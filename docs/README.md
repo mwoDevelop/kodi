@@ -33,6 +33,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | Obszar | Dokument |
 |---|---|
 | Repozytorium, forki i architektura dostawców | [Plan architektury projektu](../PLAN.md) |
+| Rozszerzenie providerów MwoScrapers | [Plan wdrożenia większej liczby providerów](../MWOSCRAPERS_PROVIDER_EXPANSION_PLAN.md) |
 | Synchronizacja profilu i urządzenia | [Plan Profile Sync](../PROFILE_SYNC_PLAN.md) |
 | Dziennik wdrożenia Profile Sync | [Zapis stanu realizacji](profile-sync-implementation.md) |
 | Synchronizacja upstream | [Plan synchronizacji upstream](../UPSTREAM_SYNC_PLAN.md) |

@@ -594,6 +594,22 @@ def validate_watchdog_policy(document):
     }
 
 
+def watchdog_workflow_keys(repository):
+    manifest_path = Path(repository) / "manifests/upstream-watchdog.json"
+    document = json.loads(manifest_path.read_text(encoding="utf-8"))
+    workflows = document.get("workflows")
+    if document.get("schema") != 1 or not isinstance(workflows, list):
+        raise ImageError("watchdog manifest contract is invalid")
+    keys = {
+        (item.get("repository"), item.get("workflow"))
+        for item in workflows
+        if isinstance(item, dict)
+    }
+    if len(keys) != len(workflows) or any(not all(key) for key in keys):
+        raise ImageError("watchdog manifest contains invalid or duplicate workflows")
+    return keys
+
+
 def deploy_watchdog(session, repository, image):
     report = preflight(session)
     if report["raid"] != {"array": "UU", "recovery_percent": None}:
@@ -602,6 +618,7 @@ def deploy_watchdog(session, repository, image):
     _install, docker = container_station(session)
     compose = _watchdog_compose(docker)
     deployment = Path(repository) / "deploy/qnap-upstream-watchdog"
+    expected_workflows = watchdog_workflow_keys(repository)
     compose_text = (deployment / "compose.yaml").read_text(encoding="utf-8")
     prior_compose = session.execute(
         "cat " + shlex.quote(str(WATCHDOG_ROOT / "compose.yaml")),
@@ -639,15 +656,24 @@ def deploy_watchdog(session, repository, image):
             )
             if raw:
                 candidate = json.loads(raw)
+                observed_workflows = {
+                    (item.get("repository"), item.get("workflow"))
+                    for item in candidate.get("workflows", [])
+                    if isinstance(item, dict)
+                }
                 if (
                     candidate.get("schema") == 1
-                    and len(candidate.get("workflows", [])) == 5
+                    and observed_workflows == expected_workflows
+                    and len(candidate.get("workflows", []))
+                    == len(expected_workflows)
                 ):
                     status = candidate
                     break
             time.sleep(5)
         if status is None:
-            raise ImageError("watchdog did not publish five-workflow status")
+            raise ImageError(
+                "watchdog did not publish the exact manifest workflow set"
+            )
     except Exception:
         if prior_compose and prior_environment:
             session.upload_text(

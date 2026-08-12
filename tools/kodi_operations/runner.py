@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from tools.kodi_inventory import inventory_device
+from tools.kodi_devices import device_env_prefix
 from tools.kodi_flatpak_restore import (
     create_snapshot as create_flatpak_snapshot,
     install_binary as install_flatpak_binary,
@@ -23,7 +23,11 @@ from tools.kodi_flatpak_restore import (
     restore_snapshot as restore_flatpak_snapshot,
     verify_remote_snapshot as verify_flatpak_remote_snapshot,
 )
-from tools.kodi_mwoscrapers_endpoint_probe import probe as provider_probe
+from tools.kodi_inventory import inventory_device
+from tools.kodi_mwoscrapers_endpoint_probe import (
+    probe as legacy_provider_probe,
+)
+from tools.kodi_mwoscrapers_probe import probe as expanded_provider_probe
 from tools.kodi_profile import create_snapshot, verify_snapshot
 from tools.kodi_reinstall import (
     deploy_target,
@@ -37,6 +41,7 @@ from tools.kodi_transports import TransportError
 from tools.kodi_umbrella_rd_probe import probe as rd_probe
 from tools.qnap_images import status as qnap_status
 
+from .github import GitHubClient
 from .model import (
     EXIT_CODES,
     OperationPlan,
@@ -45,7 +50,6 @@ from .model import (
     StepResult,
     overall_status,
 )
-from .github import GitHubClient
 from .planner import rollout_plan
 from .store import RunStore
 
@@ -243,6 +247,50 @@ class ProductionExecutor:
             time.sleep(3)
             return self._portable(command, device_id)
 
+    def _provider_configuration_argv(
+        self, device_id: str, serial: str
+    ) -> list[str]:
+        argv = [
+            sys.executable,
+            "tools/kodi_mwoscrapers_configure.py",
+            "--serial",
+            serial,
+            "--adb",
+            self.adb,
+            "--adb-server-port",
+            str(self.adb_server_port),
+        ]
+        endpoint = self.fleet["references"].get(
+            device_env_prefix(device_id) + "_TORRENTIO_ENDPOINT"
+        )
+        if endpoint:
+            argv.extend(["--torrentio-endpoint", endpoint])
+        return argv
+
+    def _provider_probe(self, serial: str) -> dict[str, Any]:
+        """Select diagnostics from the promoted stable provider contract."""
+        stable = json.loads(
+            (self.repository / "manifests/locks/stable.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        version = stable["components"]["script.module.mwoscrapers"][
+            "version"
+        ]
+        try:
+            numeric = tuple(
+                int(part)
+                for part in version.split("+", 1)[0].split("-", 1)[0].split(".")
+            )
+        except (AttributeError, ValueError) as error:
+            raise ValueError("invalid stable MwoScrapers version") from error
+        probe = (
+            expanded_provider_probe
+            if numeric >= (0, 2, 0)
+            else legacy_provider_probe
+        )
+        return probe(self.adb, self.adb_server_port, serial, 75)
+
     def _android_converge(self, device_id: str) -> StepOutcome:
         serial = self.fleet["devices"][device_id]["endpoints"]["adb"]
         stable = self._run_json(
@@ -302,16 +350,7 @@ class ProductionExecutor:
             adapter="opensubtitles",
         )
         providers = self._run_json(
-            [
-                sys.executable,
-                "tools/kodi_mwoscrapers_configure.py",
-                "--serial",
-                serial,
-                "--adb",
-                self.adb,
-                "--adb-server-port",
-                str(self.adb_server_port),
-            ],
+            self._provider_configuration_argv(device_id, serial),
             adapter="mwoscrapers",
         )
         profile_sync = self._run_json_with_retry(
@@ -364,9 +403,7 @@ class ProductionExecutor:
         retry_seconds = int(getattr(self, "retry_seconds", 5))
         diagnostics = None
         for attempt in range(1, attempts + 1):
-            provider = provider_probe(
-                self.adb, self.adb_server_port, serial, 75
-            )
+            provider = self._provider_probe(serial)
             rd = rd_probe(self.adb, self.adb_server_port, serial, 90)
             diagnostics = {
                 "attempts": attempt,
