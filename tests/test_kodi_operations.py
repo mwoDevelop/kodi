@@ -492,6 +492,104 @@ def test_provider_configuration_uses_only_device_scoped_optional_relay():
 
 
 def test_android_rollout_uses_complete_six_provider_probe():
-    assert operation_runner.provider_probe.__module__ == (
+    assert operation_runner.expanded_provider_probe.__module__ == (
         "tools.kodi_mwoscrapers_probe"
     )
+
+
+@pytest.mark.parametrize(
+    ("version", "expected"),
+    (("0.1.10", "legacy"), ("0.2.0", "expanded")),
+)
+def test_android_rollout_selects_probe_from_promoted_stable_lock(
+    monkeypatch, tmp_path, version, expected
+):
+    executor = object.__new__(ProductionExecutor)
+    executor.repository = tmp_path
+    executor.adb = "adb"
+    executor.adb_server_port = 5038
+    lock = tmp_path / "manifests/locks/stable.json"
+    lock.parent.mkdir(parents=True)
+    lock.write_text(
+        json.dumps(
+            {
+                "components": {
+                    "script.module.mwoscrapers": {"version": version}
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls = []
+
+    def probe(name):
+        def execute(*args):
+            calls.append((name, args))
+            return {"report": {}}
+
+        return execute
+
+    monkeypatch.setattr(
+        operation_runner, "legacy_provider_probe", probe("legacy")
+    )
+    monkeypatch.setattr(
+        operation_runner, "expanded_provider_probe", probe("expanded")
+    )
+
+    assert executor._provider_probe("serial") == {"report": {}}
+    assert calls == [(expected, ("adb", 5038, "serial", 75))]
+
+
+def test_android_rollout_configures_opensubtitles_from_private_references(
+    monkeypatch,
+):
+    executor = object.__new__(ProductionExecutor)
+    executor.adb = "adb"
+    executor.adb_server_port = 5038
+    executor.fleet = {
+        "devices": {
+            "bluestacks1": {
+                "endpoints": {"adb": "127.0.0.1:5555"},
+            }
+        },
+        "references": {},
+    }
+    executor.external_attempts = 1
+    calls = []
+
+    def run_json(argv, timeout=900, adapter=None):
+        calls.append((tuple(argv), timeout, adapter))
+        if adapter == "opensubtitles":
+            return {"ok": True, "changed": False}
+        if adapter == "rapideo":
+            return {"ok": True, "changed": False}
+        if adapter == "mwoscrapers":
+            return {"ok": True, "changed": False}
+        if adapter == "profile-sync":
+            return {"status": "NO_CHANGE"}
+        if adapter == "umbrella-private":
+            return {"status": "NO_CHANGE"}
+        return {"result": "pass", "actions": []}
+
+    monkeypatch.setattr(executor, "_run_json", run_json)
+    monkeypatch.setattr(executor, "_run_json_with_retry", run_json)
+    monkeypatch.setattr(
+        executor,
+        "_portable_with_retry",
+        lambda *_args: {"status": "CONVERGED", "apply_status": "NO_CHANGE"},
+    )
+    monkeypatch.setattr(executor, "_provider_probe", lambda *_args: {})
+    monkeypatch.setattr(
+        operation_runner, "rd_probe", lambda *_args: {"healthy": True}
+    )
+
+    outcome = executor._android_converge("bluestacks1")
+
+    opensubtitles = next(call for call in calls if call[2] == "opensubtitles")
+    assert opensubtitles[0][1:4] == (
+        "tools/kodi_opensubtitles_configure.py",
+        "--serial",
+        "127.0.0.1:5555",
+    )
+    assert opensubtitles[0][4:6] == ("--references", ".env")
+    assert outcome.summary["opensubtitles"] == "pass"

@@ -98,3 +98,8 @@ Kandydat spełnia bramkę wydania zbiorczego do kanału testing. Promocja tego s
 artefaktu do stable i rollout pozostałej floty wymagają trzech kolejnych udanych
 dziennych uruchomień health probe. Nie należy omijać tej bramki ani publikować
 wariantów per urządzenie.
+
+Kod orchestratora może zostać scalony wcześniej bez rozjechania produkcji: wybiera
+sondę dwóch lub sześciu providerów z wersji `script.module.mwoscrapers` przypiętej w
+aktualnym locku stable. Dopiero promocja locka do 0.2.0 przełącza produkcyjną bramę na
+pełną macierz sześciu providerów.

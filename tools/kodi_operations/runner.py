@@ -24,7 +24,10 @@ from tools.kodi_flatpak_restore import (
     verify_remote_snapshot as verify_flatpak_remote_snapshot,
 )
 from tools.kodi_inventory import inventory_device
-from tools.kodi_mwoscrapers_probe import probe as provider_probe
+from tools.kodi_mwoscrapers_endpoint_probe import (
+    probe as legacy_provider_probe,
+)
+from tools.kodi_mwoscrapers_probe import probe as expanded_provider_probe
 from tools.kodi_profile import create_snapshot, verify_snapshot
 from tools.kodi_reinstall import (
     deploy_target,
@@ -264,6 +267,30 @@ class ProductionExecutor:
             argv.extend(["--torrentio-endpoint", endpoint])
         return argv
 
+    def _provider_probe(self, serial: str) -> dict[str, Any]:
+        """Select diagnostics from the promoted stable provider contract."""
+        stable = json.loads(
+            (self.repository / "manifests/locks/stable.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        version = stable["components"]["script.module.mwoscrapers"][
+            "version"
+        ]
+        try:
+            numeric = tuple(
+                int(part)
+                for part in version.split("+", 1)[0].split("-", 1)[0].split(".")
+            )
+        except (AttributeError, ValueError) as error:
+            raise ValueError("invalid stable MwoScrapers version") from error
+        probe = (
+            expanded_provider_probe
+            if numeric >= (0, 2, 0)
+            else legacy_provider_probe
+        )
+        return probe(self.adb, self.adb_server_port, serial, 75)
+
     def _android_converge(self, device_id: str) -> StepOutcome:
         serial = self.fleet["devices"][device_id]["endpoints"]["adb"]
         stable = self._run_json(
@@ -306,6 +333,21 @@ class ProductionExecutor:
                 str(self.adb_server_port),
             ],
             adapter="rapideo",
+        )
+        opensubtitles = self._run_json(
+            [
+                sys.executable,
+                "tools/kodi_opensubtitles_configure.py",
+                "--serial",
+                serial,
+                "--references",
+                ".env",
+                "--adb",
+                self.adb,
+                "--adb-server-port",
+                str(self.adb_server_port),
+            ],
+            adapter="opensubtitles",
         )
         providers = self._run_json(
             self._provider_configuration_argv(device_id, serial),
@@ -353,15 +395,15 @@ class ProductionExecutor:
                 *defaults.get("actions", []),
             ]
         ) or portable.get("apply_status") not in {None, "NO_CHANGE"} or bool(
-            rapideo.get("changed") or providers.get("changed")
+            rapideo.get("changed")
+            or opensubtitles.get("changed")
+            or providers.get("changed")
         )
         attempts = int(getattr(self, "external_attempts", 3))
         retry_seconds = int(getattr(self, "retry_seconds", 5))
         diagnostics = None
         for attempt in range(1, attempts + 1):
-            provider = provider_probe(
-                self.adb, self.adb_server_port, serial, 75
-            )
+            provider = self._provider_probe(serial)
             rd = rd_probe(self.adb, self.adb_server_port, serial, 90)
             diagnostics = {
                 "attempts": attempt,
@@ -388,6 +430,13 @@ class ProductionExecutor:
                     "pass"
                     if rapideo.get("ok")
                     else rapideo.get("result", rapideo.get("status"))
+                ),
+                "opensubtitles": (
+                    "pass"
+                    if opensubtitles.get("ok")
+                    else opensubtitles.get(
+                        "result", opensubtitles.get("status")
+                    )
                 ),
                 "providers": (
                     "pass"

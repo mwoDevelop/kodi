@@ -4,6 +4,10 @@ Status: realizacja — fundament i cztery nowe adaptery ukończone; trwa zamroż
 artefaktu 0.2.0, końcowe E2E i wydanie testing. Promocja stable pozostaje za bramką
 trzech kolejnych udanych dziennych health probe.
 
+Orchestrator scalony przed promocją pozostaje zgodny z bieżącym stable: wybiera
+kontrakt diagnostyczny na podstawie wersji modułu w locku stable, a nie na podstawie
+samej obecności kodu kandydata w `main`.
+
 Strategia wdrożenia: **lab-first, jeden zbiorczy release dla floty**. BlueStacks i
 X88 Pro są jedynymi urządzeniami kwalifikacyjnymi podczas dodawania providerów.
 Pozostałe urządzenia zachowują bieżący stable aż cały wybrany zestaw przejdzie testy

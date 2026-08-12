@@ -246,6 +246,14 @@ automatycznie zastępowana.
 
 ## Rapideo i VPN X88
 
+Każdy pełny `converge` Androida uzgadnia także oficjalny dodatek
+OpenSubtitles.org, pobiera prywatne konto z `OPENSUBTITLES_USER` i
+`OPENSUBTITLES_PASS`, ustawia go jako domyślną usługę dla filmów i seriali oraz
+wykonuje test logowania, wyszukania i pobrania polskich napisów przez TLS.
+Poświadczenia nie występują w planach, raportach ani argumentach procesu. Adapter
+izoluje też kompatybilnościową poprawkę endpointu HTTP obecną w dodatku 5.1.5:
+atomowo przełącza ją na HTTPS i przy nieudanej walidacji przywraca poprzedni plik.
+
 Pełny rollout eksportuje istniejący, zweryfikowany token Rapideo z publishera do
 `.kodi-private/rapideo/token.json` (tryb `0600`). Adapter urządzenia otrzymuje
 token przez krótkotrwały plik, usuwa go z pamięci współdzielonej po wykonaniu i

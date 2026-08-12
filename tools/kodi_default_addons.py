@@ -27,7 +27,7 @@ except ModuleNotFoundError:
 
 SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
-KINDS = {"repository", "module", "plugin"}
+KINDS = {"repository", "module", "plugin", "subtitle"}
 LICENSES = {"GPL-2.0-only", "GPL-3.0-only", "not-declared"}
 OFFICIAL_PREFIX = "https://mirrors.kodi.tv/addons/omega/"
 REMOTE_ADDONS = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi/addons"
