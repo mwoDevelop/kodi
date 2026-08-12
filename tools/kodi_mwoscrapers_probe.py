@@ -72,16 +72,18 @@ def _validate(report):
             raise RuntimeError("Kodi provider returned a false-positive episode")
     for provider, supported in capabilities.items():
         provider_rows = [row for row in rows if row.get("provider") == provider]
-        if supported.get("movies") and not any(
-            row.get("kind") == "movie" and row.get("result_count", 0) > 0
-            for row in provider_rows
-        ):
-            raise RuntimeError(f"Kodi provider has no movie coverage: {provider}")
-        if supported.get("episodes") and not any(
-            row.get("kind") == "episode" and row.get("result_count", 0) > 0
-            for row in provider_rows
-        ):
-            raise RuntimeError(f"Kodi provider has no episode coverage: {provider}")
+        for case, kind in EXPECTED_CASES.items():
+            if kind == "negative" or not supported.get(f"{kind}s"):
+                continue
+            matching = [
+                row
+                for row in provider_rows
+                if row.get("case") == case and row.get("kind") == kind
+            ]
+            if len(matching) != 1 or matching[0].get("result_count", 0) <= 0:
+                raise RuntimeError(
+                    f"Kodi provider has no {kind} coverage for {case}: {provider}"
+                )
 
 
 def _report(adb, port, serial):

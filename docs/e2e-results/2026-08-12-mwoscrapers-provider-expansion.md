@@ -12,8 +12,8 @@ planem. Pozostała flota nie została zaktualizowana przed wydaniem zbiorczym.
 
 Artefakt końcowy:
 
-- SHA-256 ZIP: `41872b42a837d1e34c2d4a46670f6048c6b53e49d149634b8d34c11047cf20e2`;
-- commit komponentu: `1838a71725e65fe9d0e3341c606ce2ff453a635e`;
+- SHA-256 ZIP: `84a7fb312fb45ef34ff2188085a8f62c22dff9501700646cb63e7521a5d98669`;
+- commit komponentu: `5a56e0f90624b3f632e50985a98976cdb0977440`;
 - 31 plików;
 - ta sama paczka zainstalowana na obu urządzeniach;
 - ponowna instalacja oraz konfiguracja zakończyły się `ok=true`,
@@ -37,7 +37,7 @@ Na obu urządzeniach:
 - Umbrella 6.7.81.20 znalazła kontrolny tytuł;
 - konto Real-Debrid odpowiedziało jako aktywne premium;
 - kandydat „Big Buck Bunny” został rozwiązany i odtwarzany przez co najmniej 15 s;
-- czas rozwiązania końcowego artefaktu wyniósł 12,731 s na BlueStacks oraz 29,063 s
+- czas rozwiązania końcowego artefaktu wyniósł 12,730 s na BlueStacks oraz 28,887 s
   na X88 Pro.
 
 „Sintel” został odtworzony na BlueStacks, natomiast na X88 wyczerpał kontrolowany
@@ -56,23 +56,29 @@ tym konkretnym wyjściu VPN, ale nie zatrzymuje wyszukiwania MwoScrapers jako ca
 
 ## Regresja i automatyzacja
 
-- MwoScrapers: `62 passed`, Ruff bez błędów, walidator dodatku widzi 6 providerów;
+- MwoScrapers: `66 passed`, Ruff bez błędów, walidator dodatku widzi 6 providerów;
 - repo główne: `458 passed`;
 - odtwarzalny `tests/e2e/run.sh`: dwa identyczne buildy repo i `458 passed`;
 - sanitizowany live probe wszystkich providerów: healthy;
 - dzienny workflow `probe-provider-health.yml` zapisuje tylko status, czas i liczbę
   wyników oraz jest objęty watchdogiem QNAP.
 
-Niezależny review PR wykrył i zamknięto cztery luki przed wydaniem:
+Niezależny review PR wykrył i zamknięto siedem luk przed wydaniem:
 
 - znaki diakrytyczne są rozkładane bez pozostawiania łączących znaków Unicode,
   dzięki czemu np. `Pokémon` pasuje do nazwy wydania `Pokemon`;
+- normalizacja zachowuje alfanumeryczne znaki Unicode oraz transliteruje typowe
+  niedekomponujące się litery łacińskie, m.in. `Æ`, `Ł`, `Ø` i `Œ`;
 - wdrożenie watchdoga wyprowadza oczekiwany, dokładny zbiór workflow z manifestu,
   zamiast używać historycznej stałej pięciu pozycji;
 - sonda urządzenia wymaga dokładnie sześciu providerów i pełnych 42 unikalnych
   przypadków, więc niepełny lub zduplikowany raport nie może dać fałszywego sukcesu.
+- gate wymaga dodatniego wyniku dla każdego wspieranego przypadku filmowego i
+  odcinka, a nie tylko dowolnego jednego wyniku danego typu;
 - EZTV zachowuje nadrzędne dopasowanie pól `season`/`episode`, a dla niepełnych
   rekordów lub mirrorów używa ścisłego fallbacku `SxxExx` z nazwy wydania.
+- EZTV sprawdza do dziesięciu stron w kolejności hierarchicznej obejmującej
+  krańce i środek, zamiast systematycznie pomijać środkowy zakres wyników.
 
 ## Decyzja wydaniowa
 

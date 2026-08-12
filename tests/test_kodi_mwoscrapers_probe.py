@@ -38,6 +38,16 @@ def test_provider_probe_gate_requires_coverage_and_no_false_positive():
     with pytest.raises(RuntimeError, match="episode coverage"):
         _validate(_report(episode=0))
 
+    report = _report()
+    target = next(
+        row
+        for row in report["probe"]
+        if row["provider"] == "torrentio" and row["case"] == "movie-older"
+    )
+    target["result_count"] = 0
+    with pytest.raises(RuntimeError, match="movie-older"):
+        _validate(report)
+
 
 def test_provider_probe_gate_rejects_incomplete_registry_and_matrix():
     report = _report()
