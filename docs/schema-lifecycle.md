@@ -20,4 +20,6 @@ jest walidowana w CI i nie może samodzielnie zmieniać znaczenia wersji.
 Snapshot disaster recovery schema 1 jest bieżącym kontenerem. Jego zawartość
 może jednak zostać oznaczona jako `LEGACY_QUARANTINED`, jeżeli przywróciłaby
 stary dodatek WatchNixtoons2. Historyczny `policy_sha256` snapshotu nie jest
-samodzielnym dokumentem policy i nie podlega migracji.
+samodzielnym dokumentem policy i nie podlega migracji. Pole `installer`
+przechowuje dokładnie jedną tożsamość platformy: zweryfikowane APK Androida
+albo przypięty scope/origin/ref Flatpaka. Nie jest to nowa wersja schematu.

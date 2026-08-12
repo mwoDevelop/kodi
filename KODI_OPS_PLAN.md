@@ -1,6 +1,6 @@
 # Plan uproszczenia operacji release, rollout i restore Kodi
 
-Status: implementacja w toku; plan jest kontraktem bram release
+Status: wdrożony; plan pozostaje kontraktem bram release
 
 Data: 2026-08-11
 
@@ -389,6 +389,8 @@ identyczny rollout nie może wykonywać niepotrzebnych instalacji ani restartów
 
 ### Etap 3 — `restore`
 
+Status: zakończony 2026-08-12 dla Android i Linux/Flatpak.
+
 1. Opakować istniejący Android reinstall/restore za adapterem.
 2. Wymagać trybu repair/reinstall, jednego celu, ważnego backupu i ponownej
    weryfikacji tożsamości bezpośrednio przed destrukcją.
@@ -398,6 +400,13 @@ identyczny rollout nie może wykonywać niepotrzebnych instalacji ani restartów
 
 Brama: test od czystej instalacji do `COMPLETE`, a następnie drugi przebieg
 `NO_CHANGE`; w v1 nie istnieje restore całej floty.
+
+Kwalifikacja Flatpak potwierdziła dwa principale na jednym hoście NUC. Dla
+wspólnego systemowego Flatpaka adapter zachowuje binaria i destrukcyjnie
+odtwarza wyłącznie kanoniczny katalog danych przypiętego UID. `nuc-alek` i
+`nuc-mwo` przeszły backup, reset, odtworzenie, ponowne enrollment, stable
+rollout, E2E i wspólny przebieg no-op. Szczegóły:
+`docs/e2e-results/2026-08-12-flatpak-destructive-restore.md`.
 
 ### Etap 4 — `release`
 
@@ -652,12 +661,12 @@ ujawniania sekretów.
 13. `manifests/locks/qnap-stable.json` jest jedynym źródłem zatwierdzonych
     digestów QNAP; `.kodi-private/qnap-images.json` jest wyłącznie cache.
 
-## 12. Szacunek realizacji
+## 12. Historyczny szacunek realizacji
 
 - Etap 0–1: 2–3 dni;
 - Etap 2: 3–5 dni;
 - Etap 3 Android: 1–2 dni;
-- feasibility i implementacja restore Flatpak: 2–4 dni;
+- feasibility i implementacja restore Flatpak: zakończone;
 - Etap 4: 2–3 dni;
 - Etap 5 i pełna stabilizacja: 1–2 dni.
 
