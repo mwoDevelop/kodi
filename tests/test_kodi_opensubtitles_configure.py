@@ -110,3 +110,58 @@ def test_device_probe_rejects_vip_promotional_subtitle(monkeypatch):
     assert not module._is_vip_placeholder(
         b"1\n00:00:01,000 --> 00:00:03,000\nPrawdziwy tekst napisow.\n"
     )
+    assert (
+        module._safe_previous_setting(
+            "subtitles.movie", "service.subtitles.opensubtitles", True
+        )
+        == ""
+    )
+    assert (
+        module._safe_previous_setting(
+            "subtitles.movie", "service.subtitles.other", True
+        )
+        == "service.subtitles.other"
+    )
+
+
+def test_vip_required_is_a_sanitized_nonfatal_optional_status(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(
+        opensubtitles,
+        "adb_command",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout=""),
+    )
+    monkeypatch.setattr(opensubtitles, "_wait_for_kodi_ready", lambda *_args: None)
+    monkeypatch.setattr(
+        opensubtitles,
+        "_dispatch",
+        lambda *_args: {
+            "ok": False,
+            "schema": 1,
+            "stage": "download",
+            "status": "VIP_REQUIRED",
+            "error_type": "VipRequiredError",
+            "vip": False,
+            "vip_placeholder": True,
+            "default_service_quarantined": True,
+        },
+    )
+    script = tmp_path / "device.py"
+    script.write_text("pass\n", encoding="utf-8")
+
+    result = opensubtitles.configure(
+        "adb",
+        5038,
+        "serial",
+        PROFILE,
+        {
+            "OPENSUBTITLES_USER": "secret-user",
+            "OPENSUBTITLES_PASS": "secret-pass",
+        },
+        script,
+    )
+
+    assert result["status"] == "VIP_REQUIRED"
+    assert result["default_service_quarantined"] is True
+    assert "secret-user" not in json.dumps(result)

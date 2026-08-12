@@ -259,6 +259,9 @@ w ramach odtwarzacza Umbrella. Konto `.org` wymaga [jawnego importu do
 ustawienia hasła po stronie `.com`. Import przenosi istniejący status VIP, ale zwykła
 wpłata na produkt „Development Support” nie jest dowodem subskrypcji. Do czasu
 udanej kwalifikacji `.org` nie może być raportowany jako działająca usługa napisów.
+Wykrycie placeholdera zdejmuje `.org` z roli domyślnej usługi filmów i seriali, ale
+nie odinstalowuje dodatku. Rollout raportuje wtedy opcjonalny stan `VIP_REQUIRED`;
+po aktywacji VIP ponowne uzgodnienie automatycznie przywraca usługę jako domyślną.
 Ewentualne dane `.com` powinny mieć
 oddzielne prywatne referencje, zamiast przeciążać referencje `.org`.
 

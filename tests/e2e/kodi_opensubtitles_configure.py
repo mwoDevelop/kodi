@@ -84,6 +84,16 @@ def _set_setting(setting_id, value):
         raise RuntimeError("Kodi rejected subtitle setting")
 
 
+def _safe_previous_setting(setting_id, value, vip_required):
+    if (
+        vip_required
+        and setting_id in {"subtitles.movie", "subtitles.tv"}
+        and value == ADDON_ID
+    ):
+        return ""
+    return value
+
+
 def _publish(path, report):
     temporary = path + ".tmp"
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -217,13 +227,25 @@ def main():
         )
     except Exception as error:  # noqa: BLE001 - sanitized device boundary
         report["error_type"] = type(error).__name__
+        vip_required = isinstance(error, VipRequiredError)
+        if vip_required:
+            report["status"] = "VIP_REQUIRED"
         if addon is not None and previous_addon:
             try:
                 for setting_id, value in previous_addon.items():
                     addon.setSetting(setting_id, value)
                 for setting_id, value in previous_kodi.items():
-                    _set_setting(setting_id, value)
+                    _set_setting(
+                        setting_id,
+                        _safe_previous_setting(
+                            setting_id, value, vip_required
+                        ),
+                    )
                 report["rolled_back"] = True
+                report["default_service_quarantined"] = vip_required and any(
+                    previous_kodi.get(setting_id) == ADDON_ID
+                    for setting_id in ("subtitles.movie", "subtitles.tv")
+                )
             except Exception:  # noqa: BLE001 - preserve original diagnosis
                 report["rolled_back"] = False
         if transport_changed and source_path and previous_source is not None:

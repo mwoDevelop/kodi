@@ -141,6 +141,11 @@ def configure(
         if report is None:
             raise TimeoutError("OpenSubtitles private adapter timed out")
         if not report.get("ok"):
+            if (
+                report.get("error_type") == "VipRequiredError"
+                and report.get("status") == "VIP_REQUIRED"
+            ):
+                return {"adapter": ADAPTER, "serial": serial, **report}
             raise RuntimeError(
                 "OpenSubtitles private adapter failed: %s at %s (login %s)"
                 % (
