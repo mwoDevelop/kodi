@@ -35,6 +35,32 @@ ADDON_ORDER = (
 )
 
 
+def desired_origins(prepared, channel, stable_components=None):
+    """Return only origins that the selected channel must own.
+
+    Testing reuses stable artifacts for unchanged components. Keeping their
+    stable origin avoids needless repository ownership churn and lets Kodi
+    update them from the stable channel. Only artifacts that differ from the
+    stable lock are owned by the testing repository.
+    """
+    if channel == "stable":
+        return {
+            addon_id: prepared["repository_id"]
+            for addon_id in prepared["addons"]
+        }
+    if stable_components is None:
+        stable_lock = json.loads(
+            (ROOT / "manifests/locks/stable.json").read_text(encoding="utf-8")
+        )
+        stable_components = stable_lock["components"]
+    return {
+        addon_id: prepared["repository_id"]
+        for addon_id, artifact in prepared["addons"].items()
+        if stable_components.get(addon_id, {}).get("zip_sha256")
+        != artifact.get("sha256")
+    }
+
+
 def wake_android_tv(adb, port, serial):
     for command in (
         "input keyevent KEYCODE_WAKEUP",
@@ -151,10 +177,7 @@ def reconcile(device_id, adb, port, channel="stable"):
                 repair_orphan=True,
             )
         actions.append({"addon": addon_id, "action": "installed", "version": artifact["version"], "repaired_orphan": bool(applied.get("repaired_orphan"))})
-    origins = {
-        addon_id: repository_id
-        for addon_id in prepared["addons"]
-    }
+    origins = desired_origins(prepared, channel)
     assign_addon_origins_in_kodi(
         adb,
         port,

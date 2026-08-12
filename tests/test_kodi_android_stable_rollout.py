@@ -4,6 +4,7 @@ from pathlib import Path
 
 from tools.kodi_android_stable_rollout import (
     ADDON_ORDER,
+    desired_origins,
     ensure_kodi_ready,
     reconcile,
 )
@@ -48,6 +49,7 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     addons = {
         addon_id: {
             "path": tmp_path / (addon_id + ".zip"),
+            "sha256": ("1" if addon_id == ADDON_ORDER[0] else "2") * 64,
             "version": "2.0.0",
         }
         for addon_id in ADDON_ORDER
@@ -102,6 +104,10 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
         "tools.kodi_android_stable_rollout.assign_addon_origins_in_kodi",
         lambda _adb, _port, target, *_args, **_kwargs: assigned.append(target),
     )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.desired_origins",
+        lambda _prepared, _channel: {ADDON_ORDER[0]: repository_id},
+    )
 
     result = reconcile("x88pro20", "adb", 5038, channel="testing")
 
@@ -110,8 +116,24 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     assert assigned == [
         {
             "serial": "device",
-            "addon_origins": {
-                addon_id: repository_id for addon_id in ADDON_ORDER
-            },
+            "addon_origins": {ADDON_ORDER[0]: repository_id},
         }
     ]
+
+
+def test_testing_channel_owns_only_artifacts_that_differ_from_stable():
+    prepared = {
+        "repository_id": "repository.mwodevelop.testing",
+        "addons": {
+            "unchanged": {"sha256": "a" * 64},
+            "candidate": {"sha256": "b" * 64},
+        },
+    }
+    stable = {
+        "unchanged": {"zip_sha256": "a" * 64},
+        "candidate": {"zip_sha256": "c" * 64},
+    }
+
+    assert desired_origins(prepared, "testing", stable) == {
+        "candidate": "repository.mwodevelop.testing"
+    }
