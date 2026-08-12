@@ -168,25 +168,46 @@ def restore_plan(repository: Path, device: str, mode: str):
     if device not in fleet["devices"]:
         raise PlanError("unknown restore device: %s" % device)
     platform = fleet["devices"][device]["platform"]
-    if not platform.startswith("android"):
-        raise PlanError(
-            "Flatpak restore is not qualified for destructive v1 restore; use rollout repair"
-        )
+    if not platform.startswith("android") and platform != "linux-flatpak":
+        raise PlanError("restore platform is unsupported: %s" % platform)
+    restore_adapter = (
+        "restore" if platform.startswith("android") else "flatpak-restore"
+    )
     base = rollout_plan(repository, (device,), full_diagnostics=True)
     steps = [
-        PlanStep("restore:preflight", "restore", "preflight", device, False, True),
-        PlanStep("restore:backup", "restore", "backup", device, True, True),
+        PlanStep(
+            "restore:preflight", restore_adapter, "preflight", device, False, True
+        ),
+        PlanStep(
+            "restore:backup", restore_adapter, "backup", device, True, True
+        ),
     ]
     if mode == "reinstall":
         steps.extend(
             (
-                PlanStep("restore:uninstall", "restore", "uninstall", device, True, True),
-                PlanStep("restore:install", "restore", "install", device, True, True),
+                PlanStep(
+                    "restore:uninstall",
+                    restore_adapter,
+                    "uninstall",
+                    device,
+                    True,
+                    True,
+                ),
+                PlanStep(
+                    "restore:install",
+                    restore_adapter,
+                    "install",
+                    device,
+                    True,
+                    True,
+                ),
             )
         )
     steps.extend(
         (
-            PlanStep("restore:profile", "restore", "profile", device, True, True),
+            PlanStep(
+                "restore:profile", restore_adapter, "profile", device, True, True
+            ),
             *base.steps[2:],
         )
     )

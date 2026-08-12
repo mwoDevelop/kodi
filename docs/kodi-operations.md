@@ -145,9 +145,22 @@ powiązany z celem:
   --yes
 ```
 
-W v1 nie istnieje `restore --all`. Destrukcyjny restore Linux/Flatpak jest
-fail-closed jako niezakwalifikowany; dla profili NUC użyj bezpiecznego
-`rollout --device nuc-mwo` albo `rollout --device nuc-alek`.
+W v1 nie istnieje `restore --all`. Destrukcyjny restore Linux/Flatpak działa
+per principal i wymaga dokładnie jednego celu. Adapter przypina host, UID,
+kanoniczny katalog danych, scope Flatpaka, origin i ref. Najpierw tworzy oraz
+weryfikuje prywatny snapshot bez cache i tożsamości Profile Sync, następnie
+ponownie identyfikuje cel bezpośrednio przed usunięciem danych. Dla wspólnej
+instalacji systemowej zachowuje binaria Kodi i resetuje wyłącznie katalog
+danego użytkownika; dla instalacji user-scope wykonuje odinstalowanie i
+instalację z przypiętego origin/ref. Po odtworzeniu uruchamia ten sam stable
+rollout, ponowne enrollment i pełne E2E.
+
+```bash
+.venv/bin/python tools/kodi_ops.py restore \
+  --device nuc-alek --mode reinstall --dry-run
+.venv/bin/python tools/kodi_ops.py restore \
+  --device nuc-alek --mode reinstall --yes
+```
 
 ## Stan przenośny i Profile Sync
 
