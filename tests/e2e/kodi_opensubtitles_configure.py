@@ -13,13 +13,25 @@ import xbmc
 import xbmcaddon
 import xbmcvfs
 
-
 ADDON_ID = "service.subtitles.opensubtitles"
 # The upstream add-on still targets this XML-RPC API. Use TLS for the rollout
 # probe so private credentials never cross the network in cleartext.
 API_URL = "https://api.opensubtitles.org/xml-rpc"
 INSECURE_ENDPOINT = b'BASE_URL_XMLRPC = u"http://api.opensubtitles.org/xml-rpc"'
 SECURE_ENDPOINT = b'BASE_URL_XMLRPC = u"https://api.opensubtitles.org/xml-rpc"'
+VIP_PLACEHOLDER_MARKERS = (
+    b"become opensubtitles.org vip member",
+    b"osdb.link/vip",
+)
+
+
+class VipRequiredError(RuntimeError):
+    """The legacy API returned its promotional SRT instead of subtitles."""
+
+
+def _is_vip_placeholder(payload):
+    sample = payload[:4096].lower()
+    return any(marker in sample for marker in VIP_PLACEHOLDER_MARKERS)
 
 
 def _secure_addon_transport(addon):
@@ -137,6 +149,12 @@ def main():
             "XBMC_Subtitles_Login_v%s" % addon.getAddonInfo("version"),
         )
         report["login_status"] = login.get("status")
+        account = login.get("data") or {}
+        report["vip"] = str(account.get("IsVIP", "0")).lower() in {
+            "1",
+            "true",
+            "yes",
+        }
         token = login.get("token")
         if login.get("status") != "200 OK" or not token:
             raise RuntimeError("OpenSubtitles authentication failed")
@@ -169,6 +187,11 @@ def main():
         subtitle = zlib.decompress(packed, 16 + zlib.MAX_WBITS)
         if len(subtitle) < 32:
             raise RuntimeError("OpenSubtitles test subtitle is empty")
+        if _is_vip_placeholder(subtitle):
+            report["vip_placeholder"] = True
+            raise VipRequiredError(
+                "OpenSubtitles returned a VIP placeholder instead of subtitles"
+            )
 
         report.update(
             {
@@ -189,6 +212,7 @@ def main():
                 "stage": "complete",
                 "tls_endpoint": True,
                 "transport_changed": transport_changed,
+                "vip_placeholder": False,
             }
         )
     except Exception as error:  # noqa: BLE001 - sanitized device boundary

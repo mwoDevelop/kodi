@@ -1,11 +1,12 @@
+import importlib.util
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from tools import kodi_opensubtitles_configure as opensubtitles
-
 
 PROFILE = {
     "adapter": "opensubtitles-org-v1",
@@ -88,4 +89,24 @@ def test_configure_cleans_remote_credentials_and_returns_sanitized_report(
     assert "secret-pass" not in serialized
     assert any(
         item[0] == "shell" and opensubtitles.REMOTE_CONFIG in item[1] for item in calls
+    )
+
+
+def test_device_probe_rejects_vip_promotional_subtitle(monkeypatch):
+    for name in ("xbmc", "xbmcaddon", "xbmcvfs"):
+        monkeypatch.setitem(sys.modules, name, SimpleNamespace())
+    script = (
+        Path(__file__).parent / "e2e" / "kodi_opensubtitles_configure.py"
+    )
+    spec = importlib.util.spec_from_file_location("opensubtitles_device_probe", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module._is_vip_placeholder(
+        b"1\n00:00:00,001 --> 04:00:00,000\n"
+        b"Become OpenSubtitles.org VIP member\n"
+        b"to get subtitles -> osdb.link/vip\n"
+    )
+    assert not module._is_vip_placeholder(
+        b"1\n00:00:01,000 --> 00:00:03,000\nPrawdziwy tekst napisow.\n"
     )

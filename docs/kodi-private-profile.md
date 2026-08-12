@@ -244,9 +244,11 @@ Adapter OpenSubtitles.org instaluje przypiętą wersję dodatku z oficjalnego lu
 Kodi, ustawia konto wskazane przez `OPENSUBTITLES_USER` i `OPENSUBTITLES_PASS`,
 język polski z angielskim jako zapasowym oraz wybiera ten dodatek jako domyślną
 usługę napisów dla filmów i seriali. Test poinstalacyjny loguje się przez TLS,
-wyszukuje polskie napisy kontrolne i pobiera jeden plik. W przypadku błędu
-przywraca poprzednie ustawienia urządzenia, a raport zawiera tylko etap i status,
-nigdy dane konta. Ponieważ oficjalny dodatek 5.1.5 deklaruje starszy punkt XML-RPC
+wyszukuje polskie napisy kontrolne i pobiera jeden plik. Nie wystarcza sam status
+`200 OK` ani niepusty plik: adapter odrzuca promocyjny SRT zwracany przez stare API
+dla konta bez VIP. W przypadku błędu przywraca poprzednie ustawienia urządzenia, a
+raport zawiera tylko etap, status VIP i rodzaj błędu, nigdy dane konta. Ponieważ
+oficjalny dodatek 5.1.5 deklaruje starszy punkt XML-RPC
 przez nieszyfrowany HTTP, adapter atomowo przełącza tę jedną stałą na obsługiwany
 HTTPS i obejmuje ją tym samym rollbackiem.
 
@@ -254,8 +256,10 @@ Nie należy mylić tej usługi z wbudowanym klientem napisów Umbrella. Umbrella
 `https://api.opensubtitles.com/api/v1`, osobnego systemu kont `.com`, i działa tylko
 w ramach odtwarzacza Umbrella. Konto `.org` wymaga [jawnego importu do
 `.com`](https://www.opensubtitles.com/en/users/import) oraz
-ustawienia hasła po stronie `.com`; do czasu udanej migracji osobny dodatek `.org`
-pozostaje działającą usługą napisów całego Kodi. Ewentualne dane `.com` powinny mieć
+ustawienia hasła po stronie `.com`. Import przenosi istniejący status VIP, ale zwykła
+wpłata na produkt „Development Support” nie jest dowodem subskrypcji. Do czasu
+udanej kwalifikacji `.org` nie może być raportowany jako działająca usługa napisów.
+Ewentualne dane `.com` powinny mieć
 oddzielne prywatne referencje, zamiast przeciążać referencje `.org`.
 
 Tymczasowy plik danych uwierzytelniających i oczyszczony wynik są zawsze usuwane z
