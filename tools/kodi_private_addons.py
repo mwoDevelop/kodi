@@ -6,6 +6,12 @@ from __future__ import annotations
 from pathlib import Path
 
 try:
+    from kodi_opensubtitles_configure import (
+        ADAPTER as OPENSUBTITLES_ADAPTER,
+        configure as configure_opensubtitles,
+        resolve_credentials as resolve_opensubtitles_credentials,
+        validate_profile as validate_opensubtitles_profile,
+    )
     from kodi_rapideo_configure import (
         ADAPTER as RAPIDEO_ADAPTER,
         configure as configure_rapideo,
@@ -13,6 +19,12 @@ try:
         validate_profile as validate_rapideo_profile,
     )
 except ModuleNotFoundError:
+    from tools.kodi_opensubtitles_configure import (
+        ADAPTER as OPENSUBTITLES_ADAPTER,
+        configure as configure_opensubtitles,
+        resolve_credentials as resolve_opensubtitles_credentials,
+        validate_profile as validate_opensubtitles_profile,
+    )
     from tools.kodi_rapideo_configure import (
         ADAPTER as RAPIDEO_ADAPTER,
         configure as configure_rapideo,
@@ -22,6 +34,12 @@ except ModuleNotFoundError:
 
 
 ADAPTERS = {
+    OPENSUBTITLES_ADAPTER: {
+        "configure": configure_opensubtitles,
+        "device_script": "tests/e2e/kodi_opensubtitles_configure.py",
+        "resolve": resolve_opensubtitles_credentials,
+        "validate": validate_opensubtitles_profile,
+    },
     RAPIDEO_ADAPTER: {
         "configure": configure_rapideo,
         "device_script": "tests/e2e/kodi_rapideo_configure.py",

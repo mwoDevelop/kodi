@@ -222,6 +222,11 @@ odniesienia do wartości w ignorowanym pliku mode-`0600` `.env`:
       "adapter": "rapideo-v1",
       "username_ref": "RAPIDEO_USER",
       "password_ref": "RAPIDEO_PASS"
+    },
+    {
+      "adapter": "opensubtitles-org-v1",
+      "username_ref": "OPENSUBTITLES_USER",
+      "password_ref": "OPENSUBTITLES_PASS"
     }
   ]
 }
@@ -235,6 +240,24 @@ weryfikuje punkt końcowy konta. Dopiero gdy nie ma autorytatywnego tokenu, wyko
 logowanie danymi z `.env`. Nie usuwa już działającego tokenu przed udanym
 uwierzytelnieniem, więc błąd sieci lub VPN nie niszczy poprzedniej sesji.
 
+Adapter OpenSubtitles.org instaluje przypiętą wersję dodatku z oficjalnego lustra
+Kodi, ustawia konto wskazane przez `OPENSUBTITLES_USER` i `OPENSUBTITLES_PASS`,
+język polski z angielskim jako zapasowym oraz wybiera ten dodatek jako domyślną
+usługę napisów dla filmów i seriali. Test poinstalacyjny loguje się przez TLS,
+wyszukuje polskie napisy kontrolne i pobiera jeden plik. W przypadku błędu
+przywraca poprzednie ustawienia urządzenia, a raport zawiera tylko etap i status,
+nigdy dane konta. Ponieważ oficjalny dodatek 5.1.5 deklaruje starszy punkt XML-RPC
+przez nieszyfrowany HTTP, adapter atomowo przełącza tę jedną stałą na obsługiwany
+HTTPS i obejmuje ją tym samym rollbackiem.
+
+Nie należy mylić tej usługi z wbudowanym klientem napisów Umbrella. Umbrella używa
+`https://api.opensubtitles.com/api/v1`, osobnego systemu kont `.com`, i działa tylko
+w ramach odtwarzacza Umbrella. Konto `.org` wymaga [jawnego importu do
+`.com`](https://www.opensubtitles.com/en/users/import) oraz
+ustawienia hasła po stronie `.com`; do czasu udanej migracji osobny dodatek `.org`
+pozostaje działającą usługą napisów całego Kodi. Ewentualne dane `.com` powinny mieć
+oddzielne prywatne referencje, zamiast przeciążać referencje `.org`.
+
 Tymczasowy plik danych uwierzytelniających i oczyszczony wynik są zawsze usuwane z
 pamięci współdzielonej Android. Ani raport przywracania, ani argumenty procesu nie
 zawierają poświadczeń ani tokenów. Token można bezpiecznie odświeżyć niezależnie:
@@ -247,6 +270,11 @@ Dostępna jest również samodzielna idempotentna ponowna próba konfiguracji ur
 
 ```bash
 .venv/bin/python tools/kodi_rapideo_configure.py \
+  --serial ADB_ENDPOINT --references .env \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --adb-server-port 5038
+
+.venv/bin/python tools/kodi_opensubtitles_configure.py \
   --serial ADB_ENDPOINT --references .env \
   --adb /home/mwo/android-sdk/platform-tools/adb \
   --adb-server-port 5038
