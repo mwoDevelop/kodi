@@ -409,7 +409,7 @@ def test_origin_migration_requires_matching_indexed_versions(tmp_path):
     assert origin == "repository.mwodevelop"
 
 
-def test_origin_migration_rejects_different_candidate_version(tmp_path):
+def test_origin_migration_retries_a_stale_candidate_version(tmp_path):
     database = tmp_path / "Addons33.db"
     create_addons_database(database, "repository.mwodevelop.testing")
     connection = sqlite3.connect(database)
@@ -425,7 +425,7 @@ def test_origin_migration_rejects_different_candidate_version(tmp_path):
         connection.execute("INSERT INTO addonlinkrepo VALUES (2, 2)")
     connection.close()
 
-    with pytest.raises(RuntimeError, match="candidates differ"):
+    with pytest.raises(RepositoryIndexNotReady, match="candidates differ"):
         apply_addon_origins(
             database,
             {"plugin.video.umbrella": "repository.mwodevelop"},

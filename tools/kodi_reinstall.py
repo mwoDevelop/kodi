@@ -697,7 +697,7 @@ def apply_addon_origins(
                             "to": candidate[0],
                         }
                         if expected != actual:
-                            raise RuntimeError(
+                            raise RepositoryIndexNotReady(
                                 "%s repository candidates differ" % addon_id
                             )
                 connection.execute(
