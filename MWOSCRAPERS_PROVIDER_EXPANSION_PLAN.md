@@ -1,9 +1,9 @@
 # Plan rozszerzenia providerów MwoScrapers
 
-Status: realizacja — fundament i cztery nowe adaptery ukończone, a zamrożony
-artefakt 0.2.0 jest opublikowany w testing. Promocja stable wymaga aktualnego
-udanego health probe wszystkich providerów oraz pełnej certyfikacji E2E na
-BlueStacks i X88, ale nie ma już kalendarzowej bramki trzech kolejnych dni.
+Status: ukończony — fundament i cztery nowe adaptery zostały wdrożone jako jeden
+zbiorczy MwoScrapers 0.2.0. Ten sam artefakt przeszedł aktualny health probe oraz
+pełną certyfikację E2E na BlueStacks i X88, został wypromowany do stable i wdrożony
+na wszystkie osiągalne urządzenia. Nie obowiązuje kalendarzowa bramka kolejnych dni.
 
 Orchestrator scalony przed promocją pozostaje zgodny z bieżącym stable: wybiera
 kontrakt diagnostyczny na podstawie wersji modułu w locku stable, a nie na podstawie
@@ -11,8 +11,9 @@ samej obecności kodu kandydata w `main`.
 
 Strategia wdrożenia: **lab-first, jeden zbiorczy release dla floty**. BlueStacks i
 X88 Pro są jedynymi urządzeniami kwalifikacyjnymi podczas dodawania providerów.
-Pozostałe urządzenia zachowują bieżący stable aż cały wybrany zestaw przejdzie testy
-na obu urządzeniach laboratoryjnych.
+Pozostałe urządzenia zachowywały poprzedni stable aż cały wybrany zestaw przeszedł
+testy na obu urządzeniach laboratoryjnych; rollout floty rozpoczął się dopiero po
+atomowej promocji locka stable.
 
 ## 1. Cel i granice
 

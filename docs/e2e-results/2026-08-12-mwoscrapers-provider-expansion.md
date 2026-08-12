@@ -12,9 +12,10 @@ planem. Pozostała flota nie została zaktualizowana przed wydaniem zbiorczym.
 
 Artefakt końcowy:
 
-- SHA-256 ZIP: `6b50015ed1bc0f3a447c2532108f79ae15fcef5c0a05baa65fc3e9f335d7f54f`;
-- commit komponentu: `a26a9dc7c002bb13cf538ce31f254c71e7a2fa59`;
-- 31 plików;
+- wersja stable: `0.2.0`;
+- SHA-256 ZIP: `23238732672279d5d4c0fda3869cf89a0e5be8133eed09478781f6aa18d9e73d`;
+- commit komponentu: `eeef07bcf7152d205410cf2b700fda5688ba082d`;
+- 26 wpisów archiwum;
 - ta sama paczka zainstalowana na obu urządzeniach;
 - ponowna instalacja oraz konfiguracja zakończyły się `ok=true`,
   `changed=false`, bez czyszczenia cache.
@@ -57,8 +58,8 @@ tym konkretnym wyjściu VPN, ale nie zatrzymuje wyszukiwania MwoScrapers jako ca
 ## Regresja i automatyzacja
 
 - MwoScrapers: `68 passed`, Ruff bez błędów, walidator dodatku widzi 6 providerów;
-- repo główne: `462 passed`;
-- odtwarzalny `tests/e2e/run.sh`: dwa identyczne buildy repo i `462 passed`;
+- repo główne po poprawkach promocji: `475 passed`;
+- odtwarzalny `tests/e2e/run.sh`: dwa identyczne buildy repo i `475 passed`;
 - sanitizowany live probe wszystkich providerów: healthy;
 - dzienny workflow `probe-provider-health.yml` zapisuje tylko status, czas i liczbę
   wyników oraz jest objęty watchdogiem QNAP.
@@ -94,12 +95,20 @@ Niezależny review PR wykrył i zamknięto trzynaście luk przed wydaniem:
 
 ## Decyzja wydaniowa
 
-Kandydat spełnia bramkę wydania zbiorczego do kanału testing. Promocja tego samego
-artefaktu do stable i rollout pozostałej floty wymagają trzech kolejnych udanych
-dziennych uruchomień health probe. Nie należy omijać tej bramki ani publikować
-wariantów per urządzenie.
+Aktualny health probe `31626132595` zakończył się sukcesem dla commita końcowego, a
+certyfikacja urządzeń `31635027591` przeszła na BlueStacks i X88. Nie stosuje się już
+bramki trzech kolejnych dni: jeden świeży, kompletny sukces oraz E2E obu urządzeń
+laboratoryjnych wystarczają do promocji.
 
-Kod orchestratora może zostać scalony wcześniej bez rozjechania produkcji: wybiera
-sondę dwóch lub sześciu providerów z wersji `script.module.mwoscrapers` przypiętej w
-aktualnym locku stable. Dopiero promocja locka do 0.2.0 przełącza produkcyjną bramę na
-pełną macierz sześciu providerów.
+Snapshot `6315b949ad04a7c9f8a6ea544e6bce00304ccbb7d7895192cebe2294a9666421`
+został atomowo wypromowany do stable. Publiczny smoke potwierdził 44 pliki repo oraz
+ZIP 0.2.0 o powyższym SHA-256. Pełny rollout `8441b0f801cc436b9bf23f9a5725b5b9`
+potwierdził na BlueStacks, X88 i Sony: `providers=pass`, działający Real-Debrid,
+Rapideo, zbieżny Profile Sync, osiem favourites i brak brakujących artwork. Bedroom
+TV oraz oba profile NUC były w tej próbie niedostępne i pozostają do uzgodnienia tym
+samym stable przy najbliższym osiągalnym rolloucie; nie wymaga to nowego wydania.
+
+Podczas promocji poprawiono również generyczny rollout kanałów: niezmienione dodatki
+zachowują origin stable, migracja dotyczy tylko rzeczywiście zmienionych artefaktów,
+a nieaktualny indeks repo Kodi jest odświeżany przed przypisaniem originu. Dwa pełne
+CI poprawki przeszły przed scaleniem.
