@@ -145,15 +145,26 @@ def test_restore_repair_never_plans_binary_install(monkeypatch, tmp_path):
     )
 
 
-def test_restore_rejects_unqualified_flatpak_lifecycle(monkeypatch, tmp_path):
+def test_restore_plans_qualified_flatpak_lifecycle(monkeypatch, tmp_path):
     root = repository(tmp_path)
     flatpak = fleet()
     flatpak["order"].append("nuc-mwo")
     flatpak["devices"]["nuc-mwo"] = {"platform": "linux-flatpak"}
     monkeypatch.setattr(planner, "load_fleet", lambda _root: flatpak)
+    policy = json.loads(
+        (root / "manifests/kodi-operations.json").read_text()
+    )
+    policy["device_order"].append("nuc-mwo")
+    (root / "manifests/kodi-operations.json").write_text(json.dumps(policy))
 
-    with pytest.raises(planner.PlanError, match="Flatpak restore"):
-        planner.restore_plan(root, "nuc-mwo", "reinstall")
+    plan = planner.restore_plan(root, "nuc-mwo", "reinstall")
+
+    restore_steps = [step for step in plan.steps if step.step_id.startswith("restore:")]
+    assert restore_steps
+    assert {step.adapter for step in restore_steps} == {"flatpak-restore"}
+    assert {"uninstall", "install", "profile"}.issubset(
+        step.action for step in restore_steps
+    )
 
 
 def test_private_run_store_is_atomic_and_mode_restricted(tmp_path):
@@ -217,6 +228,46 @@ def test_resume_reprobes_completed_steps(monkeypatch, tmp_path):
     assert resumed["status"] == "COMPLETE"
     assert second.calls
     assert all(verify for _step, _dry, verify, _mutation in second.calls)
+
+
+def test_restore_resume_does_not_reverify_profile_after_device_adapter_ran(
+    monkeypatch, tmp_path
+):
+    root = repository(tmp_path)
+    flatpak = fleet()
+    flatpak["order"].append("nuc-mwo")
+    flatpak["devices"]["nuc-mwo"] = {"platform": "linux-flatpak"}
+    monkeypatch.setattr(planner, "load_fleet", lambda _root: flatpak)
+    policy_path = root / "manifests/kodi-operations.json"
+    policy = json.loads(policy_path.read_text())
+    policy["device_order"].append("nuc-mwo")
+    policy_path.write_text(json.dumps(policy))
+    plan = planner.restore_plan(root, "nuc-mwo", "reinstall")
+
+    class First(FakeExecutor):
+        def execute(self, step, *, dry_run, verify_only=False):
+            self.calls.append((step.step_id, dry_run, verify_only, step.mutation))
+            if step.step_id == "device:nuc-mwo":
+                return StepOutcome(StepResult.ERROR, {"failed": True})
+            return StepOutcome(StepResult.PASS, {"safe": True})
+
+    first = First()
+    report, code = OperationRunner(root, first).run(plan)
+    assert code == 5
+
+    class Resume(FakeExecutor):
+        def execute(self, step, *, dry_run, verify_only=False):
+            if step.step_id == "restore:profile" and verify_only:
+                raise AssertionError("profile was superseded by device adapter")
+            self.calls.append((step.step_id, dry_run, verify_only, step.mutation))
+            return StepOutcome(StepResult.PASS, {"safe": True})
+
+    resumed, code = OperationRunner(root, Resume()).run(
+        plan, run_id=report["run_id"], resume=True
+    )
+
+    assert code == 0
+    assert resumed["status"] == "COMPLETE"
 
 
 def test_canary_diagnostic_failure_stops_later_waves(monkeypatch, tmp_path):

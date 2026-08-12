@@ -15,6 +15,14 @@ from pathlib import Path
 from typing import Any
 
 from tools.kodi_inventory import inventory_device
+from tools.kodi_flatpak_restore import (
+    create_snapshot as create_flatpak_snapshot,
+    install_binary as install_flatpak_binary,
+    preflight_target as preflight_flatpak_target,
+    reset_profile as reset_flatpak_profile,
+    restore_snapshot as restore_flatpak_snapshot,
+    verify_remote_snapshot as verify_flatpak_remote_snapshot,
+)
 from tools.kodi_mwoscrapers_endpoint_probe import probe as provider_probe
 from tools.kodi_profile import create_snapshot, verify_snapshot
 from tools.kodi_reinstall import (
@@ -384,6 +392,33 @@ class ProductionExecutor:
     def _restore_target(self, device_id):
         if device_id in self._restore_targets:
             return self._restore_targets[device_id]
+        device = self.fleet["devices"].get(device_id)
+        if not device:
+            raise ValueError("restore target is absent from the fleet")
+        if device["platform"] == "linux-flatpak":
+            run_id = getattr(self, "run_id", None)
+            backup = (
+                self.repository
+                / ".kodi-private/kodi-ops/backups"
+                / run_id
+                / device_id
+                if run_id
+                else None
+            )
+            snapshot = None
+            if backup and backup.is_dir() and not backup.is_symlink():
+                snapshot = verify_snapshot(backup)
+            target = preflight_flatpak_target(
+                device_id,
+                self.repository,
+                snapshot_manifest=snapshot,
+            )
+            target["platform"] = "linux-flatpak"
+            if backup and snapshot:
+                target["operation_backup"] = backup
+                target["snapshot_manifest"] = snapshot
+            self._restore_targets[device_id] = target
+            return target
         _path, configured = load_config(
             ".kodi-private/kodi-reinstall.json", self.repository
         )
@@ -396,6 +431,7 @@ class ProductionExecutor:
             self.adb,
             self.adb_server_port,
         )
+        target["platform"] = "android"
         run_id = getattr(self, "run_id", None)
         if run_id:
             backup = (
@@ -412,6 +448,10 @@ class ProductionExecutor:
 
     def _restore_execute(self, step, dry_run, verify_only):
         target = self._restore_target(step.target)
+        if target["platform"] == "linux-flatpak":
+            return self._flatpak_restore_execute(
+                step, target, dry_run, verify_only
+            )
         if dry_run:
             return StepOutcome(
                 StepResult.PASS,
@@ -546,6 +586,116 @@ class ProductionExecutor:
                 },
             )
         raise NotImplementedError("unknown restore phase")
+
+    def _flatpak_restore_execute(self, step, target, dry_run, verify_only):
+        snapshot = target.get("operation_backup")
+        if dry_run:
+            return StepOutcome(
+                StepResult.PASS,
+                {
+                    "device": step.target,
+                    "model": target["model"],
+                    "principal_uid": target["principal_uid"],
+                    "flatpak_scope": target["installer"]["scope"],
+                    "installed_version": target["installed_version"],
+                    "runtime_paths_qualified": target[
+                        "runtime_paths_qualified"
+                    ],
+                    "action": step.action,
+                },
+            )
+        if verify_only:
+            if step.action == "backup":
+                if not snapshot:
+                    raise RuntimeError("fresh Flatpak restore backup is missing")
+                verify_snapshot(snapshot)
+            elif step.action == "uninstall":
+                if target["data_exists"]:
+                    raise RuntimeError("Flatpak profile returned after reset")
+            elif step.action == "install":
+                if not target["data_exists"]:
+                    raise RuntimeError("Flatpak data root is absent after install")
+            elif step.action == "profile":
+                if not snapshot:
+                    raise RuntimeError("Flatpak restore snapshot is missing")
+                verify_flatpak_remote_snapshot(target, snapshot)
+            return StepOutcome(
+                StepResult.PASS,
+                {"device": step.target, "action": step.action, "verified": True},
+            )
+        if step.action == "preflight":
+            return StepOutcome(
+                StepResult.PASS,
+                {
+                    "device": step.target,
+                    "model": target["model"],
+                    "principal_uid": target["principal_uid"],
+                    "flatpak_scope": target["installer"]["scope"],
+                    "installed_version": target["installed_version"],
+                    "runtime_paths_qualified": target[
+                        "runtime_paths_qualified"
+                    ],
+                },
+            )
+        if step.action == "backup":
+            run_id = getattr(self, "run_id", None)
+            if not run_id:
+                raise RuntimeError("restore executor has no bound run ID")
+            destination = (
+                self.repository
+                / ".kodi-private/kodi-ops/backups"
+                / run_id
+                / step.target
+            )
+            if destination.is_dir():
+                manifest = verify_snapshot(destination)
+                result = StepResult.NO_CHANGE
+            else:
+                manifest = create_flatpak_snapshot(
+                    target,
+                    destination,
+                    self.repository / "manifests/kodi-profile-policy.json",
+                    self.repository,
+                )
+                result = StepResult.PASS
+            target["operation_backup"] = destination
+            target["snapshot_manifest"] = manifest
+            return StepOutcome(
+                result,
+                {
+                    "device": step.target,
+                    "backup_id": "%s/%s" % (run_id, step.target),
+                    "snapshot_id": manifest["snapshot_id"],
+                },
+            )
+        if not snapshot:
+            snapshot = target.get("operation_backup")
+        if not snapshot:
+            raise RuntimeError("destructive Flatpak phase requires a fresh backup")
+        manifest = verify_snapshot(snapshot)
+        if step.action == "uninstall":
+            result = reset_flatpak_profile(
+                target,
+                manifest,
+                self.repository / ".kodi-private/flatpak-profile-sync",
+            )
+            target["data_exists"] = False
+            return StepOutcome(
+                StepResult.PASS, {"device": step.target, **result}
+            )
+        if step.action == "install":
+            result = install_flatpak_binary(target, manifest)
+            target["data_exists"] = True
+            return StepOutcome(
+                StepResult.PASS, {"device": step.target, **result}
+            )
+        if step.action == "profile":
+            result = restore_flatpak_snapshot(target, snapshot)
+            verify_flatpak_remote_snapshot(target, snapshot)
+            return StepOutcome(
+                StepResult.PASS, {"device": step.target, **result}
+            )
+        raise NotImplementedError("unknown Flatpak restore phase")
 
     def _release_snapshot(self, commit):
         return self.github.snapshot_for_commit(commit)
@@ -765,7 +915,7 @@ class ProductionExecutor:
             )
         if step.adapter == "release":
             return self._release_execute(step, dry_run, verify_only)
-        if step.adapter == "restore":
+        if step.adapter in {"restore", "flatpak-restore"}:
             return self._restore_execute(step, dry_run, verify_only)
         if step.adapter == "qnap":
             rows = qnap_status(".env", repository=self.repository)
@@ -1009,17 +1159,31 @@ class OperationRunner:
                         StepResult.PASS.value,
                         StepResult.NO_CHANGE.value,
                     }:
-                        superseded = (
-                            plan.operation == "restore"
-                            and step.action == "uninstall"
-                            and any(
-                                state["steps"].get(later.step_id, {}).get("result")
-                                in {
-                                    StepResult.PASS.value,
-                                    StepResult.NO_CHANGE.value,
-                                }
-                                for later in plan.steps
-                                if later.action in {"install", "profile"}
+                        later_states = [
+                            (later, state["steps"].get(later.step_id))
+                            for later in plan.steps
+                        ]
+                        superseded = plan.operation == "restore" and (
+                            (
+                                step.action == "uninstall"
+                                and any(
+                                    item
+                                    and item.get("result")
+                                    in {
+                                        StepResult.PASS.value,
+                                        StepResult.NO_CHANGE.value,
+                                    }
+                                    for later, item in later_states
+                                    if later.action in {"install", "profile"}
+                                )
+                            )
+                            or (
+                                step.action == "profile"
+                                and any(
+                                    item is not None
+                                    for later, item in later_states
+                                    if later.step_id.startswith("device:")
+                                )
                             )
                         )
                         if superseded:

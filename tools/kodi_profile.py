@@ -625,11 +625,53 @@ def verify_snapshot(snapshot):
             }
     if actual != manifest["files"]:
         raise ValueError("snapshot payload inventory mismatch")
-    for item in manifest["installer"]["apks"]:
-        path = snapshot / "installer" / item["name"]
-        data = path.read_bytes()
-        if digest(data) != item["sha256"] or len(data) != item["size"]:
-            raise ValueError("snapshot APK inventory mismatch")
+    installer = manifest.get("installer")
+    if not isinstance(installer, dict) or len(installer) != 1:
+        raise ValueError("snapshot installer identity is invalid")
+    if "apks" in installer:
+        if not isinstance(installer["apks"], list):
+            raise ValueError("snapshot APK inventory is invalid")
+        for item in installer["apks"]:
+            path = snapshot / "installer" / item["name"]
+            data = path.read_bytes()
+            if digest(data) != item["sha256"] or len(data) != item["size"]:
+                raise ValueError("snapshot APK inventory mismatch")
+    elif "flatpak" in installer:
+        flatpak = installer["flatpak"]
+        ref_parts = str(flatpak.get("ref", "")).split("/")
+        required = {
+            "app_id",
+            "architecture",
+            "origin",
+            "ref",
+            "scope",
+            "version",
+        }
+        if (
+            not isinstance(flatpak, dict)
+            or set(flatpak) != required
+            or flatpak.get("scope") not in {"user", "system"}
+            or any(
+                not isinstance(flatpak.get(field), str) or not flatpak[field]
+                for field in required.difference({"scope"})
+            )
+            or not re.fullmatch(
+                r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}",
+                flatpak["app_id"],
+            )
+            or not re.fullmatch(
+                r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}",
+                flatpak["origin"],
+            )
+            or not re.fullmatch(r"[A-Za-z0-9._-]+", flatpak["architecture"])
+            or len(ref_parts) != 4
+            or ref_parts[:2] != ["app", flatpak["app_id"]]
+            or ref_parts[2] != flatpak["architecture"]
+            or not re.fullmatch(r"[A-Za-z0-9._-]+", ref_parts[3])
+        ):
+            raise ValueError("snapshot Flatpak installer identity is invalid")
+    else:
+        raise ValueError("snapshot installer platform is unsupported")
     identity = {
         key: manifest[key]
         for key in (

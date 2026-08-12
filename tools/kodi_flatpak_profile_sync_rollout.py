@@ -630,6 +630,72 @@ def _pair_state(
     return state.path, enrollment
 
 
+def qualify_clean_runtime_paths(device, transport, lifecycle, probe, timeout=90):
+    """Generate and verify Kodi runtime mappings after a cache-free restore."""
+
+    if probe["running"]:
+        raise RuntimeError("Flatpak Kodi must be stopped before qualification")
+    if probe["runtime_paths_qualified"]:
+        return probe
+    identity = transport.probe_identity()
+    operation = "qualify-" + secrets.token_hex(8)
+    paths = _process_paths(operation)
+    data_root = probe["data_root"]
+    stage = posixpath.join(data_root, "temp", ".mwodevelop-" + operation)
+    display = 80 + identity.uid % 10
+    display_name = ":%s" % display
+    launch = (
+        "set -eu; test ! -e {lock}; mkdir -p -- {stage}; "
+        "nohup Xvfb {display} -screen 0 1280x720x24 -nolisten tcp "
+        "</dev/null >{xlog} 2>&1 & echo $! >{xpid}; sleep 1; "
+        "nohup setsid env HOME={home} XDG_RUNTIME_DIR={runtime} DISPLAY={display} "
+        "flatpak run {app} --standalone </dev/null >{klog} 2>&1 & "
+        "echo $! >{kpid}"
+    ).format(
+        lock=shlex.quote("/tmp/.X%s-lock" % display),
+        stage=shlex.quote(stage),
+        display=shlex.quote(display_name),
+        xlog=shlex.quote(paths["xlog"]),
+        xpid=shlex.quote(paths["xpid"]),
+        home=shlex.quote(identity.home),
+        runtime=shlex.quote("/run/user/%s" % identity.uid),
+        app=shlex.quote(device["expected"]["flatpak_app_id"]),
+        klog=shlex.quote(paths["klog"]),
+        kpid=shlex.quote(paths["kpid"]),
+    )
+    client, sftp = _connect_sftp(transport)
+    try:
+        _remote_command(transport, launch)
+        try:
+            kodi_log = posixpath.join(data_root, "temp", "kodi.log")
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                if _event_server_ready(sftp, kodi_log):
+                    packets = _stage_event_packets(sftp, stage, "Quit")
+                    _send_staged_event_builtin(transport, packets)
+                    break
+                time.sleep(2)
+            else:
+                raise RuntimeError("Flatpak Kodi runtime qualification timed out")
+            stop_deadline = time.monotonic() + 30
+            while lifecycle.probe_kodi()["running"]:
+                if time.monotonic() >= stop_deadline:
+                    raise RuntimeError(
+                        "Flatpak Kodi did not stop after runtime qualification"
+                    )
+                time.sleep(2)
+        finally:
+            _remote_command(transport, _cleanup_command(operation))
+            _remove_tree(sftp, stage)
+    finally:
+        sftp.close()
+        client.close()
+    qualified = lifecycle.probe_kodi()
+    if qualified["running"] or not qualified["runtime_paths_qualified"]:
+        raise RuntimeError("Flatpak Kodi runtime qualification failed")
+    return qualified
+
+
 def rollout(args):
     repository = Path(__file__).resolve().parents[1]
     profile_sync_zip = repository / (
@@ -645,8 +711,12 @@ def rollout(args):
     transport = transport_for_device(device, references=references)
     lifecycle = lifecycle_for_device(device, transport)
     probe = lifecycle.probe_kodi()
-    if probe["running"] or not probe["runtime_paths_qualified"]:
+    if probe["running"]:
         raise RuntimeError("Flatpak Kodi must be stopped and path-qualified")
+    if not probe["runtime_paths_qualified"]:
+        probe = qualify_clean_runtime_paths(
+            device, transport, lifecycle, probe, timeout=min(args.timeout, 90)
+        )
     if args.revision_id is not None and not REVISION.fullmatch(
         args.revision_id
     ):

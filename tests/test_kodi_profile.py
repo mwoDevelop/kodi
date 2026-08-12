@@ -416,6 +416,81 @@ def test_verify_snapshot_rejects_payload_tampering(tmp_path):
         verify_snapshot(snapshot)
 
 
+def test_verify_snapshot_accepts_bound_flatpak_installer(tmp_path):
+    snapshot = tmp_path / "snapshot"
+    payload = snapshot / "payload/userdata"
+    payload.mkdir(parents=True)
+    settings = payload / "guisettings.xml"
+    settings.write_bytes(b"<settings/>")
+    identity = {
+        "schema": 1,
+        "policy_sha256": "a" * 64,
+        "device": {
+            "logical_device_id": "nuc-alek",
+            "principal_uid": 1001,
+            "host_fingerprint": "b" * 64,
+        },
+        "selected_skin": "skin.estuary",
+        "addons": [],
+        "files": {
+            "userdata/guisettings.xml": {
+                "sha256": digest(settings.read_bytes()),
+                "size": settings.stat().st_size,
+            }
+        },
+        "installer": {
+            "flatpak": {
+                "app_id": "tv.kodi.Kodi",
+                "architecture": "x86_64",
+                "origin": "flathub",
+                "ref": "app/tv.kodi.Kodi/x86_64/stable",
+                "scope": "system",
+                "version": "21.3-Omega",
+            }
+        },
+    }
+    manifest = {
+        **identity,
+        "created_utc": "2026-08-12T00:00:00+00:00",
+        "snapshot_id": digest(canonical_json(identity)),
+    }
+    (snapshot / "manifest.json").write_bytes(canonical_json(manifest))
+
+    assert verify_snapshot(snapshot)["snapshot_id"] == manifest["snapshot_id"]
+
+
+def test_verify_snapshot_rejects_unbound_flatpak_ref(tmp_path):
+    snapshot = tmp_path / "snapshot"
+    (snapshot / "payload").mkdir(parents=True)
+    identity = {
+        "schema": 1,
+        "policy_sha256": "a" * 64,
+        "device": {},
+        "selected_skin": "skin.estuary",
+        "addons": [],
+        "files": {},
+        "installer": {
+            "flatpak": {
+                "app_id": "tv.kodi.Kodi",
+                "architecture": "x86_64",
+                "origin": "flathub",
+                "ref": "app/example.Other/x86_64/stable",
+                "scope": "system",
+                "version": "21.3-Omega",
+            }
+        },
+    }
+    manifest = {
+        **identity,
+        "created_utc": "2026-08-12T00:00:00+00:00",
+        "snapshot_id": digest(canonical_json(identity)),
+    }
+    (snapshot / "manifest.json").write_bytes(canonical_json(manifest))
+
+    with pytest.raises(ValueError, match="Flatpak installer"):
+        verify_snapshot(snapshot)
+
+
 def test_activate_skin_accepts_only_the_expected_confirmation(monkeypatch):
     monkeypatch.setattr("tools.kodi_profile.time.sleep", lambda _seconds: None)
 
