@@ -85,3 +85,60 @@ def test_compose_lock_requires_exact_complete_approved_inputs(monkeypatch, tmp_p
     assert len(document["candidate_id"]) == 64
     with pytest.raises(ValueError, match="complete"):
         qnap_lock.compose_lock(paths[:-1])
+
+
+def test_deploy_can_reconcile_only_selected_stable_service(monkeypatch, tmp_path):
+    document = lock_document()
+    path = tmp_path / "qnap-stable.json"
+    path.write_text(json.dumps(document))
+    running = {
+        name: {"image": item["image"], "status": "running"}
+        for name, item in document["services"].items()
+    }
+    running["upstream-watchdog"]["image"] = (
+        "ghcr.io/mwodevelop/kodi-upstream-watchdog@sha256:" + "e" * 64
+    )
+    deployments = []
+
+    class Lock:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+    monkeypatch.setattr(qnap_lock, "RemoteLock", Lock)
+    monkeypatch.setattr(
+        qnap_lock.qnap_images,
+        "status",
+        lambda *_args, **_kwargs: {
+            name: dict(item) for name, item in running.items()
+        },
+    )
+
+    def deploy(name, image, *_args, **_kwargs):
+        deployments.append((name, image))
+        running[name]["image"] = image
+
+    monkeypatch.setattr(qnap_lock.qnap_images, "deploy", deploy)
+
+    result = qnap_lock.deploy(
+        path, service_names=["upstream-watchdog"]
+    )
+
+    assert result["result"] == "DEPLOYED"
+    assert result["services"] == {"upstream-watchdog": "DEPLOYED"}
+    assert deployments == [
+        ("upstream-watchdog", document["services"]["upstream-watchdog"]["image"])
+    ]
+
+
+def test_deploy_rejects_service_outside_stable_lock(tmp_path):
+    path = tmp_path / "qnap-stable.json"
+    path.write_text(json.dumps(lock_document()))
+
+    with pytest.raises(ValueError, match="unknown QNAP stable services"):
+        qnap_lock.deploy(path, service_names=["missing"])

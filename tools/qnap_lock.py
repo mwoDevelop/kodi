@@ -179,10 +179,14 @@ class RemoteLock:
             self.session.close()
 
 
-def deploy(lock_path, references=".env", repository=ROOT):
+def deploy(lock_path, references=".env", repository=ROOT, service_names=None):
     lock = load_lock(lock_path)
+    selected = list(service_names or lock["services"])
+    unknown = sorted(set(selected).difference(lock["services"]))
+    if unknown:
+        raise ValueError("unknown QNAP stable services: %s" % ", ".join(unknown))
     expected = {
-        name: item["image"] for name, item in lock["services"].items()
+        name: lock["services"][name]["image"] for name in selected
     }
     before = qnap_images.status(references, repository=repository)
     actions = {}
@@ -220,6 +224,7 @@ def main():
     deploy_parser = commands.add_parser("deploy")
     deploy_parser.add_argument("--lock", required=True)
     deploy_parser.add_argument("--references", default=".env")
+    deploy_parser.add_argument("--service", action="append")
     compose = commands.add_parser("compose")
     compose.add_argument("--approval", action="append", required=True)
     compose.add_argument("--output", required=True)
@@ -234,7 +239,7 @@ def main():
         lock = load_lock(args.output)
         result = {"schema": 1, "candidate_id": lock["candidate_id"], "services": sorted(lock["services"])}
     else:
-        result = deploy(args.lock, args.references)
+        result = deploy(args.lock, args.references, service_names=args.service)
     print(json.dumps(result, indent=2, sort_keys=True))
 
 

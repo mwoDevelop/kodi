@@ -40,6 +40,7 @@ except ModuleNotFoundError:
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_STATE = ROOT / ".kodi-private/qnap-images.json"
+DEFAULT_STABLE_LOCK = ROOT / "manifests/locks/qnap-stable.json"
 IMAGE = re.compile(
     r"^ghcr\.io/mwodevelop/[a-z0-9-]+@sha256:[a-f0-9]{64}$"
 )
@@ -801,7 +802,7 @@ def main():
         default=str(ROOT.parent / "kodi-profile-sync-server"),
     )
     sub = parser.add_subparsers(dest="command", required=True)
-    for command in ("build", "deploy", "update"):
+    for command in ("build", "update"):
         item = sub.add_parser(command)
         item.add_argument("services", nargs="*", default=["all"])
         item.add_argument("--builder", default="mwodevelop-kodi")
@@ -811,6 +812,12 @@ def main():
             default="actions",
         )
         item.add_argument("--dry-run", action="store_true")
+        if command == "update":
+            item.add_argument("--allow-unpromoted", action="store_true")
+    deploy_parser = sub.add_parser("deploy")
+    deploy_parser.add_argument("services", nargs="*", default=["all"])
+    deploy_parser.add_argument("--lock", default=str(DEFAULT_STABLE_LOCK))
+    deploy_parser.add_argument("--dry-run", action="store_true")
     sub.add_parser("status")
     args = parser.parse_args()
     try:
@@ -819,7 +826,40 @@ def main():
         else:
             available = services(args.profile_sync_repository)
             names = selected_services(args.services, available)
+            if args.command == "deploy":
+                try:
+                    from tools.qnap_lock import deploy as deploy_stable
+                    from tools.qnap_lock import load_lock
+                except ModuleNotFoundError:
+                    from qnap_lock import deploy as deploy_stable
+                    from qnap_lock import load_lock
+
+                lock = load_lock(args.lock)
+                selected = {
+                    name: lock["services"][name]["image"] for name in names
+                }
+                if args.dry_run:
+                    result = {
+                        "schema": 1,
+                        "deploy": selected,
+                        "channel": "stable",
+                        "dry_run": True,
+                    }
+                else:
+                    result = deploy_stable(
+                        args.lock,
+                        args.references,
+                        repository=ROOT,
+                        service_names=names,
+                    )
+                print(json.dumps(result, indent=2, sort_keys=True))
+                return 0
             if args.command in {"build", "update"}:
+                if args.command == "update" and not args.allow_unpromoted:
+                    raise ImageError(
+                        "update deploys an unpromoted build; pass "
+                        "--allow-unpromoted only for controlled candidate testing"
+                    )
                 if args.publisher == "local":
                     ensure_builder(args.builder, args.dry_run)
                     login_ghcr(args.dry_run)
@@ -844,10 +884,8 @@ def main():
                     return 0
                 existing.update(built)
                 save_state(args.state, existing)
-            else:
-                existing = load_state(args.state)["images"]
             deployed = {}
-            if args.command in {"deploy", "update"}:
+            if args.command == "update":
                 if args.dry_run:
                     result = {
                         "schema": 1,
@@ -876,7 +914,13 @@ def main():
                 **({"build": built} if args.command == "build" else {}),
                 **({"deploy": deployed} if deployed else {}),
             }
-    except (ImageError, QnapError, OSError, subprocess.CalledProcessError) as error:
+    except (
+        ImageError,
+        QnapError,
+        ValueError,
+        OSError,
+        subprocess.CalledProcessError,
+    ) as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
