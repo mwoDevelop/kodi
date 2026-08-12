@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-08
 
+- [Kwalifikacja destrukcyjnego restore Kodi Flatpak](2026-08-12-flatpak-destructive-restore.md)
 - [Certyfikat wersji ostatecznej upstream Sync v1](2026-08-05-upstream-sync-v1-final.md)
 - [Certyfikat przywracania prywatnego Rapideo](2026-08-04-rapideo-private-restore.md)
 - [Domyślne wdrożenie dodatku Rapideo](2026-08-04-rapideo-default-rollout.md)
