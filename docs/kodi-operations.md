@@ -5,13 +5,21 @@ testowalne adaptery w content-addressed plan i zapisuje prywatny raport pod
 `.kodi-private/kodi-ops/runs/<run_id>/`. Nie umieszcza endpointów, ustawień ani
 poświadczeń w publicznym raporcie.
 
+Bieżący kontrakt CLI definiuje `tools/kodi_ops.py`, kolejność i politykę fal
+`manifests/kodi-operations.json`, członkostwo floty `.env` razem z
+`.kodi-private/devices.json`, a zatwierdzone artefakty dwa locki pod
+`manifests/locks/`. Ten dokument opisuje właśnie te źródła prawdy.
+
 ## Wymagania
 
 - uruchamiaj polecenia z głównego katalogu repozytorium;
 - używaj `.venv/bin/python`;
 - `.env` i `.kodi-private/devices.json` muszą mieć tryb `0600` i zawierać
   aktualną listę `KODI_SYNC_DEVICES`;
-- pełny rollout używa BlueStacks i X88 jako canary w tej kolejności;
+- aby pełny rollout spełniał kontrakt floty, `KODI_SYNC_DEVICES` musi zawierać
+  BlueStacks i X88; planner używa ich wtedy jako canary w tej kolejności, ale
+  nie dopisuje do prywatnego inventory brakujących urządzeń, dlatego zawsze
+  sprawdź listę `devices` i `canaries` w dry-run;
 - preflight odtwarza ulotne połączenia sieciowe ADB z prywatnego inventory,
   dzięki czemu restart izolowanego demona ADB nie wymaga ręcznego `adb connect`;
 - release wymaga czystego `main` równego dokładnemu `origin/main` oraz
@@ -20,14 +28,37 @@ poświadczeń w publicznym raporcie.
 
 ## Rollout
 
-Najpierw wygeneruj plan i wykonaj tylko sondy odczytowe:
+### Najczęstsze wywołania
+
+| Cel | Polecenie |
+|---|---|
+| Plan całej floty bez apply | `.venv/bin/python tools/kodi_ops.py rollout --dry-run` |
+| Pełna flota | `.venv/bin/python tools/kodi_ops.py rollout` |
+| Jeden cel | `.venv/bin/python tools/kodi_ops.py rollout --device sony-tv` |
+| Kilka celów | `.venv/bin/python tools/kodi_ops.py rollout --device sony-tv --device nuc-mwo` |
+| Wznowienie | `.venv/bin/python tools/kodi_ops.py rollout --resume RUN_ID` |
+
+Najpierw wygeneruj plan. Dry-run zapisuje prywatny plan i raport, waliduje
+inventory oraz locki, sprawdza QNAP i urządzenia, a także może ponownie
+połączyć ulotne endpointy z lokalnym demonem ADB. Nie wykonuje konfiguracji
+urządzeń, deployu QNAP, workflow GitHub ani lokalnego zestawu E2E:
 
 ```bash
 .venv/bin/python tools/kodi_ops.py rollout --dry-run
 ```
 
-Pełny rollout uzgadnia przypięte obrazy QNAP, następnie BlueStacks, X88,
-pozostałe Android TV i oba profile NUC:
+Pełny rollout wykonuje następujące fazy:
+
+1. przypina commit planu oraz SHA locków stable i QNAP;
+2. odtwarza ulotne połączenia lokalnego demona ADB i sprawdza QNAP;
+3. uzgadnia wyłącznie zatwierdzone digesty QNAP;
+4. z urządzenia `KODI_SYNC_PUBLISHER` eksportuje prywatny stan Rapideo i
+   Umbrella, publikuje portable favourites/artwork i promuje rewizję Profile
+   Sync po sprawdzeniu BlueStacks oraz X88;
+5. uzgadnia kolejno BlueStacks, X88, pozostałe Android TV oraz profile NUC;
+6. uruchamia hermetyczny zestaw `tests/e2e/run.sh`.
+
+Wywołanie:
 
 ```bash
 .venv/bin/python tools/kodi_ops.py rollout
@@ -39,8 +70,18 @@ hash zadeklarowanych inputów, platformy, SHA raportu antymalware i dokładny
 run workflow. Prywatny `.kodi-private/qnap-images.json` jest tylko cache i nie
 autoryzuje wdrożenia.
 
-Ogranicz mutacje do jednego urządzenia; QNAP pozostaje wtedy read-only, a
-BlueStacks i X88 nie są dodawane jako ukryte cele:
+Adapter Androida uzgadnia stable repo i dodatki, Rapideo, mwoScrapers,
+tożsamość Profile Sync, prywatne ustawienia Umbrella oraz portable
+favourites/artwork. Następnie przy każdym rzeczywistym (nie dry-run) przebiegu
+sprawdza provider mwoScrapers i Real-Debrid, z retry określonym w
+`manifests/kodi-operations.json`. Adapter Flatpak wykonuje swój stable rollout
+i synchronizację Profile Sync; ogólne sondy providera i Real-Debrid są obecnie
+częścią adaptera Android, a nie adaptera Flatpak.
+
+Ogranicz mutacje do jednego urządzenia. QNAP pozostaje wtedy read-only, faza
+publikacji/promocji Profile Sync jest pomijana, a BlueStacks i X88 nie są
+dodawane jako ukryte cele. Adapter celu nadal uzgadnia go z aktywną rewizją i
+przypiętymi prywatnymi snapshotami:
 
 ```bash
 .venv/bin/python tools/kodi_ops.py rollout --device sony-tv
@@ -54,24 +95,42 @@ Wybierz kilka urządzeń. Orchestrator zachowa ich kanoniczną kolejność:
   --device nuc-mwo
 ```
 
-Wymuś ponawianą diagnostykę zewnętrznego providera i Real-Debrid także dla
-niezmienionych celów:
+Opcja `--full-diagnostics` jest akceptowana i zapisywana w planie. W bieżącym
+runnerze Android provider i Real-Debrid są sprawdzane przy każdym rzeczywistym
+rolloucie, również przy wyniku `NO_CHANGE`, dlatego flaga nie rozszerza obecnie
+zakresu diagnostyki:
 
 ```bash
 .venv/bin/python tools/kodi_ops.py rollout --full-diagnostics
 ```
 
 Po przerwaniu wznów dokładnie zapisany plan. Nie można dołączać nowych
-selektorów urządzeń:
+selektorów urządzeń ani zmieniać trybu dry-run:
 
 ```bash
 .venv/bin/python tools/kodi_ops.py rollout --resume RUN_ID
+```
+
+Jeśli run był dry-runem, również wznowienie musi zawierać `--dry-run`. Globalne
+nadpisanie ścieżki ADB lub portu lokalnego demona umieszcza się przed nazwą
+operacji:
+
+```bash
+.venv/bin/python tools/kodi_ops.py \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --adb-server-port 5038 \
+  rollout --device sony-tv
 ```
 
 Zmiana stable locka lub QNAP locka kończy wznowienie jako `DRIFTED`; utwórz
 wtedy nowy dry-run. Zewnętrzna awaria po wyczerpaniu retry daje
 `DIAGNOSTIC_FAILED`, stan `PARTIAL` i kod 2. Na canary zatrzymuje dalsze fale,
 ale bez dowodu lokalnej regresji nie cofa poprawnej konfiguracji.
+
+Niedostępny canary zatrzymuje pełny rollout. Niedostępne urządzenie poza
+canary otrzymuje `DEFERRED`, a kolejne cele i E2E są nadal wykonywane; cały run
+kończy się wtedy jako `PARTIAL`. W scoped rollout każdy wskazany cel jest
+wymagany, ale wynik pozostaje jawnie zapisany w raporcie.
 
 ## Release
 
@@ -242,6 +301,11 @@ Każdy run zapisuje:
 Katalog ma tryb `0700`, a pliki `0600`. Raporty są budowane z allowlisty pól.
 Pełne backupy pozostają osobno pod `.kodi-private/kodi-ops/backups/` i nie są
 kopiowane do evidence ani Git.
+
+`plan.json` zawiera content-addressed `plan_id`, przypięty commit, snapshot
+stable, SHA obu locków, wybrane urządzenia i kolejność kroków. `state.json`
+jest stanem wznawiania, `report.json` końcowym podsumowaniem, a `evidence/`
+zawiera zredagowany wynik każdego wykonanego etapu.
 
 ## Diagnostyka niskiego poziomu
 

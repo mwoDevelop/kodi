@@ -135,11 +135,15 @@ Do typowych operacji używaj jednego orchestratora:
 ```bash
 .venv/bin/python tools/kodi_ops.py rollout --dry-run
 .venv/bin/python tools/kodi_ops.py rollout
+.venv/bin/python tools/kodi_ops.py rollout --device sony-tv
 .venv/bin/python tools/kodi_ops.py release --dry-run
 ```
 
-Pełne przykłady full/scoped rollout, resume, release z ręcznym approval i
-bezpiecznego restore opisuje [instrukcja operacji Kodi](docs/kodi-operations.md).
+Pełny rollout obejmuje zatwierdzone obrazy QNAP, publikację Profile Sync,
+BlueStacks i X88 jako canary, pozostałe Android TV, profile NUC oraz końcowe
+E2E. Scoped rollout mutuje wyłącznie jawnie wskazane urządzenia. Pełne
+przykłady, resume, wyniki, kody wyjścia, release z ręcznym approval i
+bezpieczny restore opisuje [instrukcja operacji Kodi](docs/kodi-operations.md).
 
 Zobacz [indeks dokumentacji](docs/README.md), który prowadzi do instrukcji
 operacyjnych, architektury, review i materiałów historycznych.

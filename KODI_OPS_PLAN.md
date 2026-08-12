@@ -85,22 +85,26 @@ stable. Domyślna kolejność:
 
 1. globalny preflight;
 2. uzgodnienie QNAP z zatwierdzonymi digestami;
-3. BlueStacks jako pierwszy canary;
-4. X88 jako drugi canary;
-5. Sony TV i Bedroom TV;
-6. `nuc-mwo` i `nuc-alek`;
-7. zbiorcze testy E2E i ponowny audyt idempotencji.
+3. publikacja prywatnego stanu i promocja rewizji Profile Sync po sprawdzeniu
+   obu canary;
+4. BlueStacks jako pierwszy canary;
+5. X88 jako drugi canary;
+6. Sony TV i Bedroom TV;
+7. `nuc-mwo` i `nuc-alek`;
+8. zbiorcze testy E2E.
 
-Preflight obejmuje:
+Zrealizowane planowanie, preflight i właściwe fale łącznie obejmują:
 
-- walidację `.env` i prywatnego rejestru schema 2;
-- jednoznaczność logical device ID, endpointów i oczekiwanej tożsamości;
-- kontrolę publicznego stable locka, indeksu repo oraz SHA-256 ZIP-ów;
-- status ADB/SSH, wersję Kodi i kwalifikację ścieżek runtime;
-- stan QNAP, RAID, Container Station, Profile Sync, relay i watchdoga;
-- lokalną blokadę operatora oraz zdalne generation/CAS checks wykluczające
-  konflikt z innym hostem, GitHub Actions i operacją QNAP;
-- przypięcie `source_snapshot_id`, SHA locka i publicznych SHA-256 na cały run.
+- walidację `.env`, prywatnego rejestru, polityki operacji i logical device ID;
+- przypięcie commita, `source_snapshot_id` oraz SHA locków stable i QNAP na
+  cały run;
+- lokalną blokadę wykluczającą drugą operację z tego hosta;
+- odtworzenie ulotnych połączeń ADB;
+- read-only inventory ADB/SSH, wersję Kodi i kwalifikację ścieżek runtime w
+  fali danego urządzenia;
+- kontrolę usług QNAP, a w pełnym rolloucie deploy przez lock/CAS wyłącznie
+  zatwierdzonych digestów;
+- weryfikację origin, SHA i stanu dodatków przez adapter danej platformy.
 
 Dla każdej usługi QNAP release oblicza content hash zadeklarowanych inputów
 builda. Zmiana tego hasha uruchamia build i zapis zatwierdzonego, niezmiennego
@@ -142,20 +146,20 @@ sekrety wyłącznie przez bezpieczne wejście lub referencję, nigdy w argv. Nie
 kopiuje `.env`, pełnych settings ani credential payloadów do evidence, Git lub
 CI. Nie kopiuje cache, baz bibliotek ani wygenerowanych plików Kodi.
 
-Po każdym urządzeniu wykonywane są:
-
-- kontrola inventory wersji i origin;
-- Profile Sync pairing, heartbeat, podpisany kandydat i sync/no-op;
-- kontrola liczby favourites i kompletności thumbnails;
-- deterministyczna brama: exact SHA/origin, enablement, podpisany sync/no-op,
-  gotowość backendu i kompletność managed state;
-- ponawiana diagnostyka zewnętrzna: provider, VPN, resolver oraz playback;
-- sanitizacja logów i zapis prywatnego raportu.
+Adapter Androida wykonuje kontrolę inventory wersji/origin, uzgadnia dodatki i
+prywatne ustawienia, sprawdza Profile Sync oraz kompletność portable
+favourites/artwork, a następnie ponawia sondy providera i Real-Debrid. Nie
+deklaruje osobnego testu klienta VPN ani playbacku. Adapter Flatpak wykonuje
+przypięty stable rollout, kontrolę ścieżek runtime oraz synchronizację Profile
+Sync. Oba zapisują wyłącznie allowlistowe, zredagowane podsumowanie; końcowy
+etap uruchamia hermetyczne E2E repozytorium.
 
 Diagnostyka zależna od zewnętrznego providera nie wyzwala rollbacku bez
-klasyfikacji przyczyny. Jest obowiązkowa dla canary, zmienionego urządzenia i
-restore; dla niezmienionego urządzenia wystarcza deterministyczny smoke, chyba
-że operator jawnie wybierze pełną weryfikację.
+klasyfikacji przyczyny. Bieżący adapter Android wykonuje sondy providera i
+Real-Debrid przy każdym rzeczywistym rolloucie, także dla urządzenia bez zmian.
+Opcja `--full-diagnostics` jest zapisywana w planie, ale nie zwiększa obecnie
+zakresu tych sond. Adapter Flatpak ma osobną bramę stable i Profile Sync i nie
+wykonuje androidowych sond providera/Real-Debrid.
 
 Po wyczerpaniu retry awaria zależna od zewnętrznego upstreamu otrzymuje wynik
 etapu `DIAGNOSTIC_FAILED`, stan runu `PARTIAL` i kod 2; dla canary zatrzymuje
@@ -208,10 +212,10 @@ dla wyświetlonego, content-addressed planu:
 11. wywołuje ograniczony `rollout --device ...`;
 12. przeprowadza pełne E2E i zachowuje potwierdzenie odtworzenia.
 
-`restore --all` nie istnieje w v1. Obecny `kodi_reinstall.py` pokrywa Android;
-czysta instalacja Linux/Flatpak jest nowym adapterem i przed implementacją
-przechodzi osobną feasibility gate dotyczącą instalacji Flatpak, sesji
-użytkownika oraz mapowania prywatnego rejestru i reinstall configu.
+`restore --all` nie istnieje w v1. `kodi_reinstall.py` pokrywa Android, a
+zakwalifikowany adapter `kodi_flatpak_restore.py` obsługuje pojedynczy principal
+Linux/Flatpak z przypięciem UID, instalacji Flatpak i kanonicznego katalogu
+danych. Wyniki kwalifikacji obu profili NUC są opisane w datowanym raporcie E2E.
 
 ## 3. Architektura implementacji
 
