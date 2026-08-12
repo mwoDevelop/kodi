@@ -73,7 +73,9 @@ zależność MwoScrapers na podstawie metadanych repozytorium, sprawdza kontrakt
 providerów oraz kompiluje downstreamowy resolver.
 
 Aby wyrównać konfigurację providerów na docelowym urządzeniu Android z Kodi i
-unieważnić wyłącznie cache providerów Umbrella, uruchom:
+unieważnić wyłącznie cache providerów Umbrella, uruchom poniższe polecenie. Bez
+powtarzania `--enable-provider` włącza ono kanoniczny zestaw: Torrentio, Comet,
+Torz, MediaFusion, EZTV i Pirate Bay API.
 
 ```bash
 python3 tools/kodi_mwoscrapers_configure.py \

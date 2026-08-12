@@ -17,6 +17,7 @@ workflow obsługuje również `workflow_dispatch`, umożliwiający kontrolowane 
 | 04:35 codziennie | `mwoDevelop/ch.repo` | `mwodevelop-watchnixtoons2-update.yml` | Wykrywa upstream WatchNixtoons2, materializuje i skanuje izolowanego kandydata, a następnie go testuje. | Zweryfikowana zmiana może zaktualizować `automation/watchnixtoons2-upstream` i otworzyć PR wymagający review. Nie publikuje repozytorium Kodi. |
 | 04:41 codziennie | `mwoDevelop/script.module.mwoscrapers` | `discover-provider-upstreams.yml` | Obserwuje najnowsze źródła providerów i utrzymuje stan review dotyczący wyłącznie pochodzenia. | Zmieniona obserwacja może zaktualizować `automation/provider-provenance` i otworzyć PR wymagający review. Nie importuje ani nie wykonuje kodu providera. |
 | 04:50 codziennie | `mwoDevelop/umbrellaplug.github.io` | `propose-upstream-update.yml` | Odtwarza stos poprawek downstream Umbrella na dokładnym commitcie upstream, skanuje kandydata i go testuje. | Zweryfikowana zmiana może zaktualizować `automation/umbrella-upstream` i otworzyć PR wymagający review. Chronione ścieżki muszą pozostać niezmienione. |
+| 05:03 codziennie | `mwoDevelop/script.module.mwoscrapers` | `probe-provider-health.yml` | Sprawdza publiczne kontrakty wszystkich kwalifikowanych providerów na kontrolowanym filmie i odcinku. | Tylko do odczytu. Artefakt przechowuje wyłącznie status, czas i liczbę wyników; nie zapisuje nazw źródeł, magnetów, hashy ani URL-i treści. |
 
 Audyt providerów i ich discovery są celowo rozdzielone:
 
@@ -81,6 +82,8 @@ gh run list --repo mwoDevelop/script.module.mwoscrapers \
   --workflow check-provider-upstreams.yml --event schedule --limit 1
 gh run list --repo mwoDevelop/script.module.mwoscrapers \
   --workflow discover-provider-upstreams.yml --event schedule --limit 1
+gh run list --repo mwoDevelop/script.module.mwoscrapers \
+  --workflow probe-provider-health.yml --event schedule --limit 3
 gh run list --repo mwoDevelop/ch.repo \
   --workflow mwodevelop-watchnixtoons2-update.yml --event schedule --limit 1
 gh run list --repo mwoDevelop/umbrellaplug.github.io \

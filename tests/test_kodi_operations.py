@@ -466,3 +466,25 @@ def test_json_adapter_retries_once_and_preserves_hard_failure(monkeypatch):
         (["python", "adapter.py"], 60, "profile-sync"),
         (["python", "adapter.py"], 60, "profile-sync"),
     ]
+
+
+def test_provider_configuration_uses_only_device_scoped_optional_relay():
+    executor = object.__new__(ProductionExecutor)
+    executor.adb = "adb"
+    executor.adb_server_port = 5038
+    executor.fleet = {
+        "references": {
+            "KODI_DEVICE_X88PRO20_TORRENTIO_ENDPOINT": (
+                "http://192.0.2.39:18766/torrentio"
+            )
+        }
+    }
+
+    x88 = executor._provider_configuration_argv("x88pro20", "192.0.2.7:5555")
+    sony = executor._provider_configuration_argv("sony-tv", "192.0.2.12:5555")
+
+    assert x88[-2:] == [
+        "--torrentio-endpoint",
+        "http://192.0.2.39:18766/torrentio",
+    ]
+    assert "--torrentio-endpoint" not in sony

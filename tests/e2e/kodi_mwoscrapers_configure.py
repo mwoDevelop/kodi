@@ -1,19 +1,28 @@
 """Apply and verify the canonical non-secret mwoScrapers provider settings."""
 
+import base64
 import ipaddress
 import json
 import os
 import sys
 from urllib.parse import urlsplit
 
-import xbmcvfs
 import xbmcaddon
-
+import xbmcvfs
 
 MODULE_ID = "script.module.mwoscrapers"
 UMBRELLA_ID = "plugin.video.umbrella"
 PUBLIC_TORRENTIO = "https://torrentio.strem.fun"
 PUBLIC_COMET = "https://comet.feels.legal"
+PUBLIC_ENDPOINTS = {
+    "torrentio": PUBLIC_TORRENTIO,
+    "comet": PUBLIC_COMET,
+    "torz": "https://stremthru.elfhosted.com/stremio/torz",
+    "mediafusion": "https://mediafusionfortheweebs.midnightignite.me",
+    "eztv": "https://eztvx.to",
+    "piratebay": "https://apibay.org",
+}
+CANONICAL_PROVIDERS = list(PUBLIC_ENDPOINTS)
 
 
 def _private_relay(endpoint):
@@ -52,6 +61,25 @@ def _endpoint_class(value):
     return "lan-relay" if _private_relay(value) else "public"
 
 
+def _configuration():
+    if len(sys.argv) == 4:
+        return {
+            "enabled": CANONICAL_PROVIDERS,
+            "endpoints": {
+                "torrentio": sys.argv[2],
+                "comet": sys.argv[3],
+            },
+        }
+    if len(sys.argv) != 3:
+        raise ValueError("invalid provider configuration arguments")
+    encoded = sys.argv[2].encode("ascii")
+    encoded += b"=" * (-len(encoded) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(encoded).decode("utf-8"))
+    if set(payload) != {"enabled", "endpoints"}:
+        raise ValueError("invalid provider configuration payload")
+    return payload
+
+
 def _write(path, payload):
     temporary = path + ".tmp"
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -64,20 +92,38 @@ def _write(path, payload):
 
 
 def main():
-    output, torrentio, comet = sys.argv[1:4]
+    output = sys.argv[1]
     report = {"ok": False, "schema": 1}
     stage = "validation"
     try:
-        torrentio = _torrentio_endpoint(torrentio)
-        comet = _comet_endpoint(comet)
+        configuration = _configuration()
+        enabled = configuration["enabled"]
+        endpoints = configuration["endpoints"]
+        if (
+            not isinstance(enabled, list)
+            or not all(isinstance(name, str) for name in enabled)
+            or set(enabled) - set(PUBLIC_ENDPOINTS)
+            or set(endpoints) != set(PUBLIC_ENDPOINTS)
+        ):
+            raise ValueError("invalid provider set")
+        validated = {}
+        for name, expected in PUBLIC_ENDPOINTS.items():
+            value = str(endpoints[name]).rstrip("/")
+            if name == "torrentio":
+                value = _torrentio_endpoint(value)
+            elif name == "comet":
+                value = _comet_endpoint(value)
+            elif value != expected:
+                raise ValueError(f"unexpected {name} endpoint")
+            validated[name] = value
         stage = "settings"
         addon = xbmcaddon.Addon(MODULE_ID)
-        module_expected = {
-            "provider.torrentio": "true",
-            "provider.torrentio.endpoint": torrentio,
-            "provider.comet": "true",
-            "provider.comet.endpoint": comet,
-        }
+        module_expected = {}
+        for name, endpoint in validated.items():
+            module_expected[f"provider.{name}"] = (
+                "true" if name in enabled else "false"
+            )
+            module_expected[f"provider.{name}.endpoint"] = endpoint
         module_changed = any(
             addon.getSetting(key) != value
             for key, value in module_expected.items()
@@ -124,14 +170,23 @@ def main():
                 "cache_cleared": changed,
                 "cache_clear_mode": cache_mode,
                 "changed": changed,
-                "comet_enabled": True,
-                "comet_endpoint_class": "public",
                 "external_provider_enabled": True,
                 "external_provider_module": MODULE_ID,
                 "module_version": addon.getAddonInfo("version"),
                 "ok": True,
-                "torrentio_enabled": True,
-                "torrentio_endpoint_class": _endpoint_class(torrentio),
+                "providers": {
+                    name: {
+                        "enabled": name in enabled,
+                        "endpoint_class": _endpoint_class(endpoint),
+                    }
+                    for name, endpoint in validated.items()
+                },
+                "torrentio_enabled": "torrentio" in enabled,
+                "torrentio_endpoint_class": _endpoint_class(
+                    validated["torrentio"]
+                ),
+                "comet_enabled": "comet" in enabled,
+                "comet_endpoint_class": "public",
             }
         )
     except Exception as error:  # noqa: BLE001 - sanitized device boundary
