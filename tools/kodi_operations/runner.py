@@ -164,6 +164,16 @@ class ProductionExecutor:
             raise OperationAdapterError(adapter or Path(argv[1]).stem) from error
         return json.loads(result.stdout)
 
+    def _run_json_with_retry(
+        self, argv: list[str], *, timeout=900, adapter=None, delay=3
+    ) -> dict[str, Any]:
+        """Retry one transient adapter failure without weakening its contract."""
+        try:
+            return self._run_json(argv, timeout=timeout, adapter=adapter)
+        except OperationAdapterError:
+            time.sleep(delay)
+            return self._run_json(argv, timeout=timeout, adapter=adapter)
+
     def _inventory(self, device_id: str) -> dict[str, Any]:
         try:
             result = inventory_device(
@@ -281,7 +291,7 @@ class ProductionExecutor:
             ],
             adapter="mwoscrapers",
         )
-        profile_sync = self._run_json(
+        profile_sync = self._run_json_with_retry(
             [
                 sys.executable,
                 "tools/kodi_android_profile_sync.py",

@@ -391,3 +391,27 @@ def test_preflight_reconnects_only_android_transports_without_reporting_endpoint
         "192.0.2.10:5555",
     ]
     assert "192.0.2.10:5555" not in json.dumps(outcome.summary)
+
+
+def test_json_adapter_retries_once_and_preserves_hard_failure(monkeypatch):
+    executor = object.__new__(ProductionExecutor)
+    calls = []
+
+    def run_json(argv, timeout=900, adapter=None):
+        calls.append((argv, timeout, adapter))
+        raise OperationAdapterError(adapter)
+
+    monkeypatch.setattr(executor, "_run_json", run_json)
+    monkeypatch.setattr(
+        "tools.kodi_operations.runner.time.sleep", lambda _seconds: None
+    )
+
+    with pytest.raises(OperationAdapterError):
+        executor._run_json_with_retry(
+            ["python", "adapter.py"], timeout=60, adapter="profile-sync"
+        )
+
+    assert calls == [
+        (["python", "adapter.py"], 60, "profile-sync"),
+        (["python", "adapter.py"], 60, "profile-sync"),
+    ]
