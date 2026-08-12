@@ -12,8 +12,8 @@ planem. Pozostała flota nie została zaktualizowana przed wydaniem zbiorczym.
 
 Artefakt końcowy:
 
-- SHA-256 ZIP: `84a7fb312fb45ef34ff2188085a8f62c22dff9501700646cb63e7521a5d98669`;
-- commit komponentu: `5a56e0f90624b3f632e50985a98976cdb0977440`;
+- SHA-256 ZIP: `6b50015ed1bc0f3a447c2532108f79ae15fcef5c0a05baa65fc3e9f335d7f54f`;
+- commit komponentu: `a26a9dc7c002bb13cf538ce31f254c71e7a2fa59`;
 - 31 plików;
 - ta sama paczka zainstalowana na obu urządzeniach;
 - ponowna instalacja oraz konfiguracja zakończyły się `ok=true`,
@@ -37,7 +37,7 @@ Na obu urządzeniach:
 - Umbrella 6.7.81.20 znalazła kontrolny tytuł;
 - konto Real-Debrid odpowiedziało jako aktywne premium;
 - kandydat „Big Buck Bunny” został rozwiązany i odtwarzany przez co najmniej 15 s;
-- czas rozwiązania końcowego artefaktu wyniósł 12,730 s na BlueStacks oraz 28,887 s
+- czas rozwiązania końcowego artefaktu wyniósł 12,729 s na BlueStacks oraz 28,949 s
   na X88 Pro.
 
 „Sintel” został odtworzony na BlueStacks, natomiast na X88 wyczerpał kontrolowany
@@ -56,14 +56,14 @@ tym konkretnym wyjściu VPN, ale nie zatrzymuje wyszukiwania MwoScrapers jako ca
 
 ## Regresja i automatyzacja
 
-- MwoScrapers: `66 passed`, Ruff bez błędów, walidator dodatku widzi 6 providerów;
+- MwoScrapers: `68 passed`, Ruff bez błędów, walidator dodatku widzi 6 providerów;
 - repo główne: `460 passed`;
 - odtwarzalny `tests/e2e/run.sh`: dwa identyczne buildy repo i `460 passed`;
 - sanitizowany live probe wszystkich providerów: healthy;
 - dzienny workflow `probe-provider-health.yml` zapisuje tylko status, czas i liczbę
   wyników oraz jest objęty watchdogiem QNAP.
 
-Niezależny review PR wykrył i zamknięto dziewięć luk przed wydaniem:
+Niezależny review PR wykrył i zamknięto jedenaście luk przed wydaniem:
 
 - znaki diakrytyczne są rozkładane bez pozostawiania łączących znaków Unicode,
   dzięki czemu np. `Pokémon` pasuje do nazwy wydania `Pokemon`;
@@ -83,6 +83,10 @@ Niezależny review PR wykrył i zamknięto dziewięć luk przed wydaniem:
   rekordów lub mirrorów używa ścisłego fallbacku `SxxExx` z nazwy wydania.
 - EZTV sprawdza do dziesięciu stron w kolejności hierarchicznej obejmującej
   krańce i środek, zamiast systematycznie pomijać środkowy zakres wyników.
+- konstrukcja kolejności stron zatrzymuje się na limicie przed rozwinięciem
+  niezaufanego `torrents_count`, więc zawyżona wartość nie zużywa pamięci Kodi;
+- porównanie same-origin normalizuje domyślne porty HTTP/HTTPS, zachowując
+  odrzucanie rzeczywistych przekierowań między originami.
 
 ## Decyzja wydaniowa
 
