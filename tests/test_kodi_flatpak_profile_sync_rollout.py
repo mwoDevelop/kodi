@@ -7,7 +7,7 @@ import subprocess
 import sys
 import types
 import zipfile
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree
 
 import pytest
@@ -128,12 +128,15 @@ def test_flatpak_required_addons_cover_managed_settings_and_favourites():
 
 def test_flatpak_required_addons_are_exactly_pinned_by_stable_lock():
     result = required_addons(".")
+    stable = json.loads(
+        Path("manifests/locks/stable.json").read_text(encoding="utf-8")
+    )["components"]
 
     assert tuple(result) == DEFAULT_REQUIRED_ADDONS
-    assert result["plugin.video.umbrella"] == "6.7.81.20"
-    assert result["script.module.mwoscrapers"] == "0.1.10"
-    assert result["script.mwoscrapers"] == "0.1.1"
-    assert result["plugin.video.watchnixtoons2.mwodevelop"] == "0.27.1"
+    assert result == {
+        addon_id: stable[addon_id]["version"]
+        for addon_id in DEFAULT_REQUIRED_ADDONS
+    }
 
 
 def test_flatpak_required_artifacts_match_stable_lock():
