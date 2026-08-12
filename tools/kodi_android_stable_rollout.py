@@ -61,6 +61,36 @@ def desired_origins(prepared, channel, stable_components=None):
     }
 
 
+def origin_transition(prepared, channel, origins, opposite_components=None):
+    """Describe the only repository-origin transition allowed by a rollout."""
+    if not origins:
+        return {}, {}
+    opposite_channel = "testing" if channel == "stable" else "stable"
+    opposite_repository = (
+        "repository.mwodevelop.testing"
+        if opposite_channel == "testing"
+        else "repository.mwodevelop"
+    )
+    if opposite_components is None:
+        opposite_lock = json.loads(
+            (ROOT / "manifests/locks" / (opposite_channel + ".json")).read_text(
+                encoding="utf-8"
+            )
+        )
+        opposite_components = opposite_lock["components"]
+    previous = {addon_id: opposite_repository for addon_id in origins}
+    transitions = {}
+    for addon_id in origins:
+        previous_version = opposite_components.get(addon_id, {}).get("version")
+        target_version = prepared["addons"][addon_id]["version"]
+        if previous_version and previous_version != target_version:
+            transitions[addon_id] = {
+                "from": previous_version,
+                "to": target_version,
+            }
+    return previous, transitions
+
+
 def wake_android_tv(adb, port, serial):
     for command in (
         "input keyevent KEYCODE_WAKEUP",
@@ -178,10 +208,18 @@ def reconcile(device_id, adb, port, channel="stable"):
             )
         actions.append({"addon": addon_id, "action": "installed", "version": artifact["version"], "repaired_orphan": bool(applied.get("repaired_orphan"))})
     origins = desired_origins(prepared, channel)
+    previous_origins, version_transitions = origin_transition(
+        prepared, channel, origins
+    )
     assign_addon_origins_in_kodi(
         adb,
         port,
-        {"serial": serial, "addon_origins": origins},
+        {
+            "serial": serial,
+            "addon_origins": origins,
+            "addon_previous_origins": previous_origins,
+            "addon_version_transitions": version_transitions,
+        },
         ROOT / "tools/kodi_profile_origin_device.py",
         timeout=180,
     )

@@ -6,6 +6,7 @@ from tools.kodi_android_stable_rollout import (
     ADDON_ORDER,
     desired_origins,
     ensure_kodi_ready,
+    origin_transition,
     reconcile,
 )
 
@@ -108,6 +109,13 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
         "tools.kodi_android_stable_rollout.desired_origins",
         lambda _prepared, _channel: {ADDON_ORDER[0]: repository_id},
     )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.origin_transition",
+        lambda _prepared, _channel, _origins: (
+            {ADDON_ORDER[0]: "repository.mwodevelop"},
+            {ADDON_ORDER[0]: {"from": "1.0.0", "to": "2.0.0"}},
+        ),
+    )
 
     result = reconcile("x88pro20", "adb", 5038, channel="testing")
 
@@ -117,6 +125,12 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
         {
             "serial": "device",
             "addon_origins": {ADDON_ORDER[0]: repository_id},
+            "addon_previous_origins": {
+                ADDON_ORDER[0]: "repository.mwodevelop"
+            },
+            "addon_version_transitions": {
+                ADDON_ORDER[0]: {"from": "1.0.0", "to": "2.0.0"}
+            },
         }
     ]
 
@@ -136,4 +150,23 @@ def test_testing_channel_owns_only_artifacts_that_differ_from_stable():
 
     assert desired_origins(prepared, "testing", stable) == {
         "candidate": "repository.mwodevelop.testing"
+    }
+
+
+def test_testing_origin_transition_allows_the_pinned_version_change():
+    prepared = {
+        "repository_id": "repository.mwodevelop.testing",
+        "addons": {"candidate": {"version": "2.0.0"}},
+    }
+
+    previous, transitions = origin_transition(
+        prepared,
+        "testing",
+        {"candidate": "repository.mwodevelop.testing"},
+        {"candidate": {"version": "1.0.0"}},
+    )
+
+    assert previous == {"candidate": "repository.mwodevelop"}
+    assert transitions == {
+        "candidate": {"from": "1.0.0", "to": "2.0.0"}
     }
