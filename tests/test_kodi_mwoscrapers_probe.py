@@ -1,5 +1,6 @@
 import pytest
 
+from tools import kodi_mwoscrapers_probe
 from tools.kodi_mwoscrapers_probe import (
     EXPECTED_CASES,
     EXPECTED_PROVIDERS,
@@ -64,3 +65,45 @@ def test_provider_probe_gate_rejects_incomplete_registry_and_matrix():
     report["probe"].append(dict(report["probe"][0]))
     with pytest.raises(RuntimeError, match="matrix is incomplete"):
         _validate(report)
+
+
+def test_provider_probe_dispatches_once_then_waits_for_final_report(monkeypatch):
+    calls = []
+    expected = {"schema": 1, "probe": []}
+
+    class Rpc:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def call(self, method, payload):
+            calls.append((method, payload))
+
+    monkeypatch.setattr(kodi_mwoscrapers_probe, "AdbJsonRpcClient", Rpc)
+    monkeypatch.setattr(
+        kodi_mwoscrapers_probe,
+        "AdbEventClient",
+        lambda *_args: pytest.fail("EventServer must not relaunch a dispatched probe"),
+    )
+    monkeypatch.setattr(
+        kodi_mwoscrapers_probe,
+        "_wait_report",
+        lambda *_args: expected,
+    )
+
+    result = kodi_mwoscrapers_probe._dispatch_and_wait(
+        "adb", 5038, "serial", "RunScript(probe.py)", 123.0
+    )
+
+    assert result is expected
+    assert calls == [
+        (
+            "XBMC.ExecuteBuiltin",
+            {"command": "RunScript(probe.py)", "wait": False},
+        )
+    ]

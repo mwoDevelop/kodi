@@ -24,7 +24,7 @@ from tools.kodi_flatpak_restore import (
     verify_remote_snapshot as verify_flatpak_remote_snapshot,
 )
 from tools.kodi_inventory import inventory_device
-from tools.kodi_mwoscrapers_endpoint_probe import probe as provider_probe
+from tools.kodi_mwoscrapers_probe import probe as provider_probe
 from tools.kodi_profile import create_snapshot, verify_snapshot
 from tools.kodi_reinstall import (
     deploy_target,

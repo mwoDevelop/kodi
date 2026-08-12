@@ -6,6 +6,7 @@ import subprocess
 import pytest
 
 from tools.kodi_operations import planner
+from tools.kodi_operations import runner as operation_runner
 from tools.kodi_operations.model import OperationPlan, PlanStep, StepResult
 from tools.kodi_operations.model import RunStatus
 from tools.kodi_operations.runner import (
@@ -488,3 +489,9 @@ def test_provider_configuration_uses_only_device_scoped_optional_relay():
         "http://192.0.2.39:18766/torrentio",
     ]
     assert "--torrentio-endpoint" not in sony
+
+
+def test_android_rollout_uses_complete_six_provider_probe():
+    assert operation_runner.provider_probe.__module__ == (
+        "tools.kodi_mwoscrapers_probe"
+    )

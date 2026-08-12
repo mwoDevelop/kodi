@@ -57,13 +57,13 @@ tym konkretnym wyjściu VPN, ale nie zatrzymuje wyszukiwania MwoScrapers jako ca
 ## Regresja i automatyzacja
 
 - MwoScrapers: `66 passed`, Ruff bez błędów, walidator dodatku widzi 6 providerów;
-- repo główne: `458 passed`;
-- odtwarzalny `tests/e2e/run.sh`: dwa identyczne buildy repo i `458 passed`;
+- repo główne: `460 passed`;
+- odtwarzalny `tests/e2e/run.sh`: dwa identyczne buildy repo i `460 passed`;
 - sanitizowany live probe wszystkich providerów: healthy;
 - dzienny workflow `probe-provider-health.yml` zapisuje tylko status, czas i liczbę
   wyników oraz jest objęty watchdogiem QNAP.
 
-Niezależny review PR wykrył i zamknięto siedem luk przed wydaniem:
+Niezależny review PR wykrył i zamknięto dziewięć luk przed wydaniem:
 
 - znaki diakrytyczne są rozkładane bez pozostawiania łączących znaków Unicode,
   dzięki czemu np. `Pokémon` pasuje do nazwy wydania `Pokemon`;
@@ -75,6 +75,10 @@ Niezależny review PR wykrył i zamknięto siedem luk przed wydaniem:
   przypadków, więc niepełny lub zduplikowany raport nie może dać fałszywego sukcesu.
 - gate wymaga dodatniego wyniku dla każdego wspieranego przypadku filmowego i
   odcinka, a nie tylko dowolnego jednego wyniku danego typu;
+- produkcyjny rollout Android używa tej samej pełnej sondy sześciu providerów,
+  zamiast historycznej diagnostyki ograniczonej do Torrentio i Comet;
+- po zaakceptowanym wywołaniu `RunScript` host tylko czeka na raport do końca
+  deadline'u i nie uruchamia równoległych kopii macierzy co 15 sekund;
 - EZTV zachowuje nadrzędne dopasowanie pól `season`/`episode`, a dla niepełnych
   rekordów lub mirrorów używa ścisłego fallbacku `SxxExx` z nazwy wydania.
 - EZTV sprawdza do dziesięciu stron w kolejności hierarchicznej obejmującej

@@ -110,6 +110,23 @@ def _wait_report(adb, port, serial, deadline):
     return None
 
 
+def _dispatch_and_wait(adb, port, serial, command, deadline):
+    try:
+        with AdbJsonRpcClient(adb, port, serial) as rpc:
+            rpc.call("XBMC.ExecuteBuiltin", {"command": command, "wait": False})
+    except (OSError, RuntimeError, TimeoutError):
+        events = AdbEventClient(adb, port, serial)
+        while time.monotonic() < deadline:
+            try:
+                events.execute_builtin(command)
+            except (OSError, RuntimeError, TimeoutError, subprocess.TimeoutExpired):
+                time.sleep(1)
+                continue
+            return _wait_report(adb, port, serial, deadline)
+        return None
+    return _wait_report(adb, port, serial, deadline)
+
+
 def probe(adb, port, serial, timeout):
     script = ROOT / "tests/e2e/kodi_mwoscrapers_probe.py"
     adb_command(adb, port, serial, "push", str(script), REMOTE_SCRIPT, timeout=30)
@@ -126,21 +143,7 @@ def probe(adb, port, serial, timeout):
         _wait_for_kodi_ready(adb, port, serial)
         command = f"RunScript({REMOTE_SCRIPT},{REMOTE_REPORT})"
         deadline = time.monotonic() + timeout
-        report = None
-        try:
-            with AdbJsonRpcClient(adb, port, serial) as rpc:
-                rpc.call("XBMC.ExecuteBuiltin", {"command": command, "wait": False})
-            report = _wait_report(
-                adb, port, serial, min(deadline, time.monotonic() + 15)
-            )
-        except (OSError, RuntimeError, TimeoutError):
-            report = None
-        events = AdbEventClient(adb, port, serial)
-        while report is None and time.monotonic() < deadline:
-            events.execute_builtin(command)
-            report = _wait_report(
-                adb, port, serial, min(deadline, time.monotonic() + 15)
-            )
+        report = _dispatch_and_wait(adb, port, serial, command, deadline)
         if report is None:
             raise TimeoutError("Kodi MwoScrapers probe timed out")
         if report.get("registry_error"):
