@@ -556,6 +556,7 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
     }
     executor.external_attempts = 1
     calls = []
+    retry_adapters = []
 
     def run_json(argv, timeout=900, adapter=None):
         calls.append((tuple(argv), timeout, adapter))
@@ -571,8 +572,14 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
             return {"status": "NO_CHANGE"}
         return {"result": "pass", "actions": []}
 
+    def run_json_with_retry(argv, timeout=900, adapter=None):
+        retry_adapters.append(adapter)
+        return run_json(argv, timeout=timeout, adapter=adapter)
+
     monkeypatch.setattr(executor, "_run_json", run_json)
-    monkeypatch.setattr(executor, "_run_json_with_retry", run_json)
+    monkeypatch.setattr(
+        executor, "_run_json_with_retry", run_json_with_retry
+    )
     monkeypatch.setattr(
         executor,
         "_portable_with_retry",
@@ -592,4 +599,5 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
         "127.0.0.1:5555",
     )
     assert opensubtitles[0][4:6] == ("--references", ".env")
+    assert retry_adapters == ["opensubtitles", "profile-sync"]
     assert outcome.summary["opensubtitles"] == "pass"

@@ -334,7 +334,10 @@ class ProductionExecutor:
             ],
             adapter="rapideo",
         )
-        opensubtitles = self._run_json(
+        # The legacy XML-RPC service and Kodi event dispatch can fail
+        # transiently even when the account state is unchanged. Retry the
+        # complete fail-closed adapter once, just like Profile Sync.
+        opensubtitles = self._run_json_with_retry(
             [
                 sys.executable,
                 "tools/kodi_opensubtitles_configure.py",
