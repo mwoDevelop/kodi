@@ -74,3 +74,51 @@ def test_prepare_fetches_content_addressed_public_stable(tmp_path, monkeypatch):
     assert result["addons"]["service.test"]["sha256"] == addon_sha
     assert result["repository"]["sha256"] == repository_sha
     assert stat.S_IMODE(result["repository"]["path"].stat().st_mode) == 0o600
+
+
+def test_prepare_fetches_content_addressed_public_testing(tmp_path):
+    addon = addon_zip("service.test", "2.0.0")
+    repository = addon_zip("repository.mwodevelop.testing", "1.0.0")
+    addon_sha = hashlib.sha256(addon).hexdigest()
+    repository_sha = hashlib.sha256(repository).hexdigest()
+    relative = "testing/omega/service.test/service.test-2.0.0.zip"
+    manifest = (
+        "%s  %s\n%s  repository.mwodevelop.testing-1.0.0.zip\n"
+        % (addon_sha, relative, repository_sha)
+    ).encode()
+    payloads = {
+        kodi_stable_artifacts.PUBLIC + "/artifact-manifest.sha256": manifest,
+        kodi_stable_artifacts.PUBLIC + "/" + relative: addon,
+        kodi_stable_artifacts.PUBLIC
+        + "/repository.mwodevelop.testing-1.0.0.zip": repository,
+    }
+
+    def opener(url, timeout=0):
+        assert timeout > 0
+        return Response(payloads[url], url)
+
+    lock = tmp_path / "manifests/locks"
+    lock.mkdir(parents=True)
+    (lock / "testing.json").write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "channel": "testing",
+                "components": {
+                    "service.test": {
+                        "version": "2.0.0",
+                        "zip_sha256": addon_sha,
+                    }
+                },
+            }
+        )
+    )
+
+    result = kodi_stable_artifacts.prepare(
+        tmp_path, opener=opener, channel="testing"
+    )
+
+    assert result["channel"] == "testing"
+    assert result["repository_id"] == "repository.mwodevelop.testing"
+    assert result["addons"]["service.test"]["sha256"] == addon_sha
+    assert result["repository"]["sha256"] == repository_sha

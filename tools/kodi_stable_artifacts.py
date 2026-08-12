@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch and verify the exact public stable Kodi artifacts into private cache."""
+"""Fetch and verify exact public Kodi channel artifacts into private cache."""
 
 from __future__ import annotations
 
@@ -16,6 +16,13 @@ from zipfile import ZipFile
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = "https://mwodevelop.github.io/kodi"
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+CHANNELS = {
+    "stable": {"schema": 2, "repository_id": "repository.mwodevelop"},
+    "testing": {
+        "schema": 1,
+        "repository_id": "repository.mwodevelop.testing",
+    },
+}
 
 
 def digest(path):
@@ -84,12 +91,18 @@ def _validate_zip(path, addon_id, version):
         raise ValueError("stable ZIP metadata differs from lock")
 
 
-def prepare(repository=ROOT, opener=urllib.request.urlopen):
+def prepare(repository=ROOT, opener=urllib.request.urlopen, channel="stable"):
     repository = Path(repository).resolve()
-    lock_path = repository / "manifests/locks/stable.json"
+    if channel not in CHANNELS:
+        raise ValueError("unsupported Kodi repository channel")
+    channel_config = CHANNELS[channel]
+    lock_path = repository / "manifests/locks" / (channel + ".json")
     lock = json.loads(lock_path.read_text(encoding="utf-8"))
-    if lock.get("schema") != 2 or lock.get("channel") != "stable":
-        raise ValueError("stable artifacts require schema 2 lock")
+    if (
+        lock.get("schema") != channel_config["schema"]
+        or lock.get("channel") != channel
+    ):
+        raise ValueError("Kodi channel lock identity is invalid")
     lock_sha = digest(lock_path)
     cache = repository / ".kodi-private/kodi-ops/artifacts" / lock_sha
     cache.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -98,34 +111,41 @@ def prepare(repository=ROOT, opener=urllib.request.urlopen):
     artifacts = {}
     for addon_id, pin in lock["components"].items():
         version = pin["version"]
-        relative = "stable/omega/%s/%s-%s.zip" % (addon_id, addon_id, version)
+        relative = "%s/omega/%s/%s-%s.zip" % (
+            channel,
+            addon_id,
+            addon_id,
+            version,
+        )
         expected = pin["zip_sha256"]
         if public.get(relative) != expected:
-            raise ValueError("public artifact manifest differs from stable lock")
+            raise ValueError("public artifact manifest differs from channel lock")
         destination = cache / (addon_id + ".zip")
         if not destination.is_file() or digest(destination) != expected:
             _download(PUBLIC + "/" + relative, destination, opener=opener)
         if digest(destination) != expected:
-            raise ValueError("downloaded stable artifact digest differs")
+            raise ValueError("downloaded channel artifact digest differs")
         _validate_zip(destination, addon_id, version)
         artifacts[addon_id] = {
             "path": destination,
             "sha256": expected,
             "version": version,
         }
-    repository_id = "repository.mwodevelop"
+    repository_id = channel_config["repository_id"]
     repository_version = "1.0.0"
     relative = "%s-%s.zip" % (repository_id, repository_version)
     expected = public.get(relative)
     if not expected:
-        raise ValueError("public artifact manifest lacks stable repository ZIP")
+        raise ValueError("public artifact manifest lacks channel repository ZIP")
     destination = cache / (repository_id + ".zip")
     if not destination.is_file() or digest(destination) != expected:
         _download(PUBLIC + "/" + relative, destination, opener=opener)
     if digest(destination) != expected:
-        raise ValueError("stable repository ZIP digest differs")
+        raise ValueError("channel repository ZIP digest differs")
     _validate_zip(destination, repository_id, repository_version)
     return {
+        "channel": channel,
+        "repository_id": repository_id,
         "lock_sha256": lock_sha,
         "repository": {
             "path": destination,

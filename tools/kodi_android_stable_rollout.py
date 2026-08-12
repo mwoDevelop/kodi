@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Idempotently reconcile exact public stable artifacts on one Android Kodi."""
+"""Idempotently reconcile exact public channel artifacts on Android Kodi."""
 
 from __future__ import annotations
 
@@ -26,8 +26,7 @@ from tools.kodi_reinstall import assign_addon_origins_in_kodi
 from tools.kodi_stable_artifacts import prepare
 
 
-ORDER = (
-    "repository.mwodevelop",
+ADDON_ORDER = (
     "script.module.mwoscrapers",
     "script.mwoscrapers",
     "plugin.video.umbrella",
@@ -100,7 +99,7 @@ def ensure_kodi_ready(adb, port, serial):
         return "restarted"
 
 
-def reconcile(device_id, adb, port):
+def reconcile(device_id, adb, port, channel="stable"):
     references = load_private_references(ROOT / ".env")
     device = resolve_private_endpoint(
         resolve_device(load_registry(ROOT / ".kodi-private/devices.json"), device_id),
@@ -111,13 +110,14 @@ def reconcile(device_id, adb, port):
         raise ValueError("Android stable rollout requires an Android device")
     serial = device["endpoints"]["adb"]
     kodi_preflight = ensure_kodi_ready(adb, port, serial)
-    prepared = prepare(ROOT)
+    prepared = prepare(ROOT, channel=channel)
+    repository_id = prepared["repository_id"]
     available = {
-        "repository.mwodevelop": prepared["repository"],
+        repository_id: prepared["repository"],
         **prepared["addons"],
     }
     actions = []
-    for addon_id in ORDER:
+    for addon_id in (repository_id, *ADDON_ORDER):
         artifact = available[addon_id]
         current = addon_details(adb, port, serial, addon_id)
         if current and current.get("enabled") and str(current.get("version")) == artifact["version"]:
@@ -152,7 +152,7 @@ def reconcile(device_id, adb, port):
             )
         actions.append({"addon": addon_id, "action": "installed", "version": artifact["version"], "repaired_orphan": bool(applied.get("repaired_orphan"))})
     origins = {
-        addon_id: "repository.mwodevelop"
+        addon_id: repository_id
         for addon_id in prepared["addons"]
     }
     assign_addon_origins_in_kodi(
@@ -165,6 +165,7 @@ def reconcile(device_id, adb, port):
     return {
         "schema": 1,
         "device": device_id,
+        "channel": channel,
         "result": "pass",
         "lock_sha256": prepared["lock_sha256"],
         "kodi_preflight": kodi_preflight,
@@ -177,8 +178,22 @@ def main():
     parser.add_argument("--device", required=True)
     parser.add_argument("--adb", default="/home/mwo/android-sdk/platform-tools/adb")
     parser.add_argument("--adb-server-port", type=int, default=5038)
+    parser.add_argument(
+        "--channel", choices=("stable", "testing"), default="stable"
+    )
     args = parser.parse_args()
-    print(json.dumps(reconcile(args.device, args.adb, args.adb_server_port), indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            reconcile(
+                args.device,
+                args.adb,
+                args.adb_server_port,
+                args.channel,
+            ),
+            indent=2,
+            sort_keys=True,
+        )
+    )
 
 
 if __name__ == "__main__":
