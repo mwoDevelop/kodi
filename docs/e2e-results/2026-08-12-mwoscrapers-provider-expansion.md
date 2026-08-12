@@ -112,3 +112,10 @@ Podczas promocji poprawiono również generyczny rollout kanałów: niezmienione
 zachowują origin stable, migracja dotyczy tylko rzeczywiście zmienionych artefaktów,
 a nieaktualny indeks repo Kodi jest odświeżany przed przypisaniem originu. Dwa pełne
 CI poprawki przeszły przed scaleniem.
+
+Końcowy przebieg idempotencji `514e1828b2914cbab470ab029da73c2b` zwrócił
+`NO_CHANGE` na BlueStacks, X88 i Sony oraz ponownie `providers=pass`, zdrowy
+Real-Debrid, działające Rapideo i `475 passed`. QNAP uzgodnił trzy zdrowe usługi bez
+zmian. Jednorazowy wcześniejszy błąd transportu adaptera OpenSubtitles został
+odtworzony jako poprawne `VIP_REQUIRED`; orchestrator otrzymał jeden ograniczony,
+fail-closed retry tego adaptera, zweryfikowany dwoma pełnymi przebiegami CI.
