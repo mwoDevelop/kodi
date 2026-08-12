@@ -248,8 +248,11 @@ automatycznie zastępowana.
 
 Każdy pełny `converge` Androida uzgadnia także oficjalny dodatek
 OpenSubtitles.org, pobiera prywatne konto z `OPENSUBTITLES_USER` i
-`OPENSUBTITLES_PASS`, ustawia go jako domyślną usługę dla filmów i seriali oraz
-wykonuje test logowania, wyszukania i pobrania polskich napisów przez TLS.
+`OPENSUBTITLES_PASS` oraz wykonuje test logowania, wyszukania i pobrania polskich
+napisów przez TLS. Dopiero poprawne pobranie rzeczywistych napisów ustawia dodatek
+jako domyślną usługę dla filmów i seriali. Odpowiedź reklamowa dla konta bez VIP
+powoduje kontrolowany wynik `VIP_REQUIRED` i zdjęcie niedziałającego dodatku z obu
+domyślnych pól, bez jego odinstalowania i bez przerwania pozostałego rolloutu.
 Poświadczenia nie występują w planach, raportach ani argumentach procesu. Adapter
 izoluje też kompatybilnościową poprawkę endpointu HTTP obecną w dodatku 5.1.5:
 atomowo przełącza ją na HTTPS i przy nieudanej walidacji przywraca poprzedni plik.
