@@ -1,4 +1,6 @@
 import re
+import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -77,3 +79,32 @@ def test_e2e_index_lists_every_dated_markdown_report():
         if report.name != "README.md" and f"]({report.name})" not in index
     ]
     assert not missing, "Reports missing from E2E index: " + ", ".join(missing)
+
+
+def test_kodi_operations_docs_cover_current_rollout_cli_and_phase_order():
+    guide = (ROOT / "docs" / "kodi-operations.md").read_text(encoding="utf-8")
+    help_text = subprocess.run(
+        (sys.executable, str(ROOT / "tools" / "kodi_ops.py"), "rollout", "--help"),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    public_options = set(re.findall(r"--[a-z][a-z-]+", help_text)) - {"--help"}
+
+    assert public_options
+    assert all(option in guide for option in public_options)
+    phases = (
+        "uzgadnia wyłącznie zatwierdzone digesty QNAP",
+        "publikuje portable favourites/artwork",
+        "uzgadnia kolejno BlueStacks, X88",
+        "tests/e2e/run.sh",
+    )
+    positions = [guide.index(phase) for phase in phases]
+    assert positions == sorted(positions)
+    assert re.search(
+        r"flaga\s+nie rozszerza obecnie\s+zakresu diagnostyki",
+        guide,
+    )
+    assert "czysta instalacja Linux/Flatpak jest nowym adapterem" not in (
+        ROOT / "KODI_OPS_PLAN.md"
+    ).read_text(encoding="utf-8")
