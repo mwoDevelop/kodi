@@ -26,6 +26,7 @@ def test_versioned_default_manifest_is_valid():
     assert [item["id"] for item in document["addons"]] == [
         "repository.rapideo_pl",
         "script.module.xbmcswift2",
+        "service.subtitles.opensubtitles",
         "plugin.video.rapideo_pl",
     ]
     assert all(item["url"].startswith("https://") for item in document["addons"])

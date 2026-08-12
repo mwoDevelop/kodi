@@ -22,6 +22,16 @@
       "origin": "repository.xbmc.org"
     },
     {
+      "id": "service.subtitles.opensubtitles",
+      "version": "5.1.5",
+      "kind": "subtitle",
+      "url": "https://mirrors.kodi.tv/addons/omega/service.subtitles.opensubtitles/service.subtitles.opensubtitles-5.1.5.zip",
+      "sha256": "5d03f76827089c3878537f1d983465c4dd7676cae04fbdb3c5f3f1b4ab50b1e4",
+      "source": "https://github.com/juokelis/service.subtitles.opensubtitles",
+      "license": "GPL-2.0-only",
+      "origin": "repository.xbmc.org"
+    },
+    {
       "id": "plugin.video.rapideo_pl",
       "version": "1.5.0",
       "kind": "plugin",

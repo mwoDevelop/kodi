@@ -6,6 +6,7 @@ import subprocess
 import pytest
 
 from tools.kodi_operations import planner
+from tools.kodi_operations import runner as operation_runner
 from tools.kodi_operations.model import OperationPlan, PlanStep, StepResult
 from tools.kodi_operations.model import RunStatus
 from tools.kodi_operations.runner import (
@@ -466,3 +467,58 @@ def test_json_adapter_retries_once_and_preserves_hard_failure(monkeypatch):
         (["python", "adapter.py"], 60, "profile-sync"),
         (["python", "adapter.py"], 60, "profile-sync"),
     ]
+
+
+def test_android_rollout_configures_opensubtitles_from_private_references(
+    monkeypatch,
+):
+    executor = object.__new__(ProductionExecutor)
+    executor.adb = "adb"
+    executor.adb_server_port = 5038
+    executor.fleet = {
+        "devices": {
+            "bluestacks1": {
+                "endpoints": {"adb": "127.0.0.1:5555"},
+            }
+        },
+        "references": {},
+    }
+    executor.external_attempts = 1
+    calls = []
+
+    def run_json(argv, timeout=900, adapter=None):
+        calls.append((tuple(argv), timeout, adapter))
+        if adapter == "opensubtitles":
+            return {"ok": True, "changed": False}
+        if adapter == "rapideo":
+            return {"ok": True, "changed": False}
+        if adapter == "mwoscrapers":
+            return {"ok": True, "changed": False}
+        if adapter == "profile-sync":
+            return {"status": "NO_CHANGE"}
+        if adapter == "umbrella-private":
+            return {"status": "NO_CHANGE"}
+        return {"result": "pass", "actions": []}
+
+    monkeypatch.setattr(executor, "_run_json", run_json)
+    monkeypatch.setattr(executor, "_run_json_with_retry", run_json)
+    monkeypatch.setattr(
+        executor,
+        "_portable_with_retry",
+        lambda *_args: {"status": "CONVERGED", "apply_status": "NO_CHANGE"},
+    )
+    monkeypatch.setattr(operation_runner, "provider_probe", lambda *_args: {})
+    monkeypatch.setattr(
+        operation_runner, "rd_probe", lambda *_args: {"healthy": True}
+    )
+
+    outcome = executor._android_converge("bluestacks1")
+
+    opensubtitles = next(call for call in calls if call[2] == "opensubtitles")
+    assert opensubtitles[0][1:4] == (
+        "tools/kodi_opensubtitles_configure.py",
+        "--serial",
+        "127.0.0.1:5555",
+    )
+    assert opensubtitles[0][4:6] == ("--references", ".env")
+    assert outcome.summary["opensubtitles"] == "pass"

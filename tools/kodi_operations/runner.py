@@ -286,6 +286,21 @@ class ProductionExecutor:
             ],
             adapter="rapideo",
         )
+        opensubtitles = self._run_json(
+            [
+                sys.executable,
+                "tools/kodi_opensubtitles_configure.py",
+                "--serial",
+                serial,
+                "--references",
+                ".env",
+                "--adb",
+                self.adb,
+                "--adb-server-port",
+                str(self.adb_server_port),
+            ],
+            adapter="opensubtitles",
+        )
         providers = self._run_json(
             [
                 sys.executable,
@@ -341,7 +356,9 @@ class ProductionExecutor:
                 *defaults.get("actions", []),
             ]
         ) or portable.get("apply_status") not in {None, "NO_CHANGE"} or bool(
-            rapideo.get("changed") or providers.get("changed")
+            rapideo.get("changed")
+            or opensubtitles.get("changed")
+            or providers.get("changed")
         )
         attempts = int(getattr(self, "external_attempts", 3))
         retry_seconds = int(getattr(self, "retry_seconds", 5))
@@ -376,6 +393,13 @@ class ProductionExecutor:
                     "pass"
                     if rapideo.get("ok")
                     else rapideo.get("result", rapideo.get("status"))
+                ),
+                "opensubtitles": (
+                    "pass"
+                    if opensubtitles.get("ok")
+                    else opensubtitles.get(
+                        "result", opensubtitles.get("status")
+                    )
                 ),
                 "providers": (
                     "pass"
