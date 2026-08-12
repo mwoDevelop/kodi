@@ -12,13 +12,13 @@
       "zip_sha256": "b0e95a6d559556ea735b72b06aed935ad64870bddc955005090f42cb76d64909"
     },
     "script.module.mwoscrapers": {
-      "commit": "bfb7ffdb2fde3b23776cc1e6c25c5c81a07cc938",
+      "commit": "eeef07bcf7152d205410cf2b700fda5688ba082d",
       "provider_api": 1,
-      "version": "0.1.10",
-      "zip_sha256": "25e2d3d5e5703d9611c78d2309caf3f0fa589f6e7b3e63ae329ceb7cd359a6c0"
+      "version": "0.2.0",
+      "zip_sha256": "23238732672279d5d4c0fda3869cf89a0e5be8133eed09478781f6aa18d9e73d"
     },
     "script.mwoscrapers": {
-      "commit": "bfb7ffdb2fde3b23776cc1e6c25c5c81a07cc938",
+      "commit": "eeef07bcf7152d205410cf2b700fda5688ba082d",
       "version": "0.1.1",
       "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
     },
