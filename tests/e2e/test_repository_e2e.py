@@ -63,7 +63,14 @@ def test_installable_repository_and_provider_contract(tmp_path):
         module = importlib.import_module("mwoscrapers")
         assert module.PROVIDER_API_VERSION == 1
         providers = module.sources(ret_all=True)
-        assert [name for name, _ in providers] == ["torrentio", "comet"]
+        addon = ElementTree.parse(
+            profile / "script.module.mwoscrapers" / "addon.xml"
+        ).getroot()
+        version = tuple(int(part) for part in addon.attrib["version"].split("."))
+        expected = ["torrentio", "comet"]
+        if version >= (0, 2, 0):
+            expected.extend(["torz", "mediafusion", "eztv", "piratebay"])
+        assert [name for name, _ in providers] == expected
     finally:
         sys.path.pop(0)
         sys.modules.pop("mwoscrapers", None)
