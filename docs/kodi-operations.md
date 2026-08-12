@@ -12,6 +12,8 @@ poświadczeń w publicznym raporcie.
 - `.env` i `.kodi-private/devices.json` muszą mieć tryb `0600` i zawierać
   aktualną listę `KODI_SYNC_DEVICES`;
 - pełny rollout używa BlueStacks i X88 jako canary w tej kolejności;
+- preflight odtwarza ulotne połączenia sieciowe ADB z prywatnego inventory,
+  dzięki czemu restart izolowanego demona ADB nie wymaga ręcznego `adb connect`;
 - release wymaga czystego `main` równego dokładnemu `origin/main` oraz
   zalogowanego GitHub CLI;
 - restore wymaga wcześniejszego dry-run i jawnego `--yes`.

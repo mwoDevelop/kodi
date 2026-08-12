@@ -120,6 +120,36 @@ class ProductionExecutor:
         self._restore_targets = {}
         self.github = GitHubClient(self.repository)
 
+    def _connect_android_transports(self) -> dict[str, int]:
+        """Restore the local ADB daemon's volatile network connections."""
+        attempted = 0
+        connected = 0
+        for device in self.fleet["devices"].values():
+            if not device["platform"].startswith("android"):
+                continue
+            endpoint = device["endpoints"]["adb"]
+            attempted += 1
+            try:
+                result = subprocess.run(
+                    [
+                        self.adb,
+                        "-P",
+                        str(self.adb_server_port),
+                        "connect",
+                        endpoint,
+                    ],
+                    cwd=self.repository,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+            if result.returncode == 0 and "connected" in result.stdout.casefold():
+                connected += 1
+        return {"adb_attempted": attempted, "adb_connected": connected}
+
     def _run_json(self, argv: list[str], timeout=900, adapter=None) -> dict[str, Any]:
         try:
             result = subprocess.run(
@@ -714,9 +744,14 @@ class ProductionExecutor:
         verify_only: bool = False,
     ) -> StepOutcome:
         if step.adapter == "preflight":
+            transports = self._connect_android_transports()
             return StepOutcome(
                 StepResult.PASS,
-                {"policy": "valid", "fleet_members": len(self.fleet["order"])},
+                {
+                    "policy": "valid",
+                    "fleet_members": len(self.fleet["order"]),
+                    **transports,
+                },
             )
         if step.adapter == "release":
             return self._release_execute(step, dry_run, verify_only)

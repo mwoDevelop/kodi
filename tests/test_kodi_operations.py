@@ -339,3 +339,55 @@ def test_portable_dispatch_retries_once_and_preserves_hard_failure(monkeypatch):
         executor._portable_with_retry("publish", "sony-tv")
 
     assert calls == [("publish", "sony-tv"), ("publish", "sony-tv")]
+
+
+def test_preflight_reconnects_only_android_transports_without_reporting_endpoints(
+    monkeypatch, tmp_path
+):
+    executor = object.__new__(ProductionExecutor)
+    executor.repository = tmp_path
+    executor.adb = "adb"
+    executor.adb_server_port = 5038
+    executor.fleet = {
+        "order": ["android", "flatpak"],
+        "devices": {
+            "android": {
+                "platform": "android-tv",
+                "endpoints": {"adb": "192.0.2.10:5555"},
+            },
+            "flatpak": {
+                "platform": "linux-flatpak",
+                "endpoints": {"ssh": "192.0.2.20"},
+            },
+        },
+    }
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return type(
+            "Result", (), {"returncode": 0, "stdout": "already connected\n"}
+        )()
+
+    monkeypatch.setattr("tools.kodi_operations.runner.subprocess.run", run)
+
+    outcome = executor.execute(
+        PlanStep("preflight", "preflight", "validate"),
+        dry_run=False,
+    )
+
+    assert outcome.result == StepResult.PASS
+    assert outcome.summary == {
+        "policy": "valid",
+        "fleet_members": 2,
+        "adb_attempted": 1,
+        "adb_connected": 1,
+    }
+    assert calls[0][0] == [
+        "adb",
+        "-P",
+        "5038",
+        "connect",
+        "192.0.2.10:5555",
+    ]
+    assert "192.0.2.10:5555" not in json.dumps(outcome.summary)
