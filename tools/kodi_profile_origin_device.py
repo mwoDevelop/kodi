@@ -138,7 +138,7 @@ def _apply(
                             "to": candidate[0],
                         }
                         if expected != actual:
-                            raise RuntimeError(
+                            raise RepositoryIndexNotReady(
                                 "repository candidates differ"
                             )
                 connection.execute(

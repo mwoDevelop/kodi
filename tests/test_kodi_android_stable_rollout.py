@@ -110,8 +110,12 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
         lambda _prepared, _channel: {ADDON_ORDER[0]: repository_id},
     )
     monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.installed_addon_origins_in_kodi",
+        lambda *_args: {ADDON_ORDER[0]: "repository.mwodevelop"},
+    )
+    monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.origin_transition",
-        lambda _prepared, _channel, _origins: (
+        lambda _prepared, _channel, _origins, _current: (
             {ADDON_ORDER[0]: "repository.mwodevelop"},
             {ADDON_ORDER[0]: {"from": "1.0.0", "to": "2.0.0"}},
         ),
@@ -163,10 +167,43 @@ def test_testing_origin_transition_allows_the_pinned_version_change():
         prepared,
         "testing",
         {"candidate": "repository.mwodevelop.testing"},
+        {"candidate": "repository.mwodevelop"},
         {"candidate": {"version": "1.0.0"}},
     )
 
     assert previous == {"candidate": "repository.mwodevelop"}
+    assert transitions == {
+        "candidate": {"from": "1.0.0", "to": "2.0.0"}
+    }
+
+
+def test_stable_transition_ignores_addons_already_owned_by_stable():
+    prepared = {
+        "repository_id": "repository.mwodevelop",
+        "addons": {
+            "already-stable": {"version": "2.0.0"},
+            "candidate": {"version": "2.0.0"},
+        },
+    }
+
+    previous, transitions = origin_transition(
+        prepared,
+        "stable",
+        {
+            "already-stable": "repository.mwodevelop",
+            "candidate": "repository.mwodevelop",
+        },
+        {
+            "already-stable": "repository.mwodevelop",
+            "candidate": "repository.mwodevelop.testing",
+        },
+        {
+            "already-stable": {"version": "2.0.0"},
+            "candidate": {"version": "1.0.0"},
+        },
+    )
+
+    assert previous == {"candidate": "repository.mwodevelop.testing"}
     assert transitions == {
         "candidate": {"from": "1.0.0", "to": "2.0.0"}
     }

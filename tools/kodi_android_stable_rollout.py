@@ -22,7 +22,10 @@ from tools.kodi_profile import (
     _wait_for_kodi_ready,
     adb_command,
 )
-from tools.kodi_reinstall import assign_addon_origins_in_kodi
+from tools.kodi_reinstall import (
+    assign_addon_origins_in_kodi,
+    installed_addon_origins_in_kodi,
+)
 from tools.kodi_stable_artifacts import prepare
 
 
@@ -61,7 +64,13 @@ def desired_origins(prepared, channel, stable_components=None):
     }
 
 
-def origin_transition(prepared, channel, origins, opposite_components=None):
+def origin_transition(
+    prepared,
+    channel,
+    origins,
+    current_origins,
+    opposite_components=None,
+):
     """Describe the only repository-origin transition allowed by a rollout."""
     if not origins:
         return {}, {}
@@ -78,9 +87,17 @@ def origin_transition(prepared, channel, origins, opposite_components=None):
             )
         )
         opposite_components = opposite_lock["components"]
-    previous = {addon_id: opposite_repository for addon_id in origins}
+    previous = {}
     transitions = {}
     for addon_id in origins:
+        current_origin = current_origins.get(addon_id)
+        if current_origin in (None, "", prepared["repository_id"]):
+            continue
+        if current_origin != opposite_repository:
+            raise RuntimeError(
+                "%s has an unexpected repository origin" % addon_id
+            )
+        previous[addon_id] = current_origin
         previous_version = opposite_components.get(addon_id, {}).get("version")
         target_version = prepared["addons"][addon_id]["version"]
         if previous_version and previous_version != target_version:
@@ -208,8 +225,15 @@ def reconcile(device_id, adb, port, channel="stable"):
             )
         actions.append({"addon": addon_id, "action": "installed", "version": artifact["version"], "repaired_orphan": bool(applied.get("repaired_orphan"))})
     origins = desired_origins(prepared, channel)
+    current_origins = installed_addon_origins_in_kodi(
+        adb,
+        port,
+        serial,
+        origins,
+        ROOT / "tools/kodi_profile_origin_device.py",
+    )
     previous_origins, version_transitions = origin_transition(
-        prepared, channel, origins
+        prepared, channel, origins, current_origins
     )
     assign_addon_origins_in_kodi(
         adb,
