@@ -50,6 +50,28 @@ def test_watchdog_policy_accepts_hardened_immutable_service():
     }
 
 
+def test_watchdog_workflow_keys_follow_manifest(tmp_path):
+    manifest = tmp_path / "manifests/upstream-watchdog.json"
+    manifest.parent.mkdir()
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "workflows": [
+                    {"repository": "owner/repo", "workflow": "first.yml"},
+                    {"repository": "owner/repo", "workflow": "second.yml"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert qnap_images.watchdog_workflow_keys(tmp_path) == {
+        ("owner/repo", "first.yml"),
+        ("owner/repo", "second.yml"),
+    }
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [

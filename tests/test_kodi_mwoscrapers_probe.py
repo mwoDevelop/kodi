@@ -1,30 +1,29 @@
 import pytest
 
-from tools.kodi_mwoscrapers_probe import _validate
+from tools.kodi_mwoscrapers_probe import (
+    EXPECTED_CASES,
+    EXPECTED_PROVIDERS,
+    _validate,
+)
 
 
 def _report(negative=0, movie=1, episode=1):
+    counts = {"movie": movie, "episode": episode, "negative": negative}
     return {
-        "capabilities": {"provider": {"movies": True, "episodes": True}},
+        "capabilities": {
+            provider: {"movies": True, "episodes": True}
+            for provider in EXPECTED_PROVIDERS
+        },
         "probe": [
             {
-                "provider": "provider",
-                "kind": "movie",
-                "result_count": movie,
+                "provider": provider,
+                "case": case,
+                "kind": kind,
+                "result_count": counts[kind],
                 "error_type": None,
-            },
-            {
-                "provider": "provider",
-                "kind": "episode",
-                "result_count": episode,
-                "error_type": None,
-            },
-            {
-                "provider": "provider",
-                "kind": "negative",
-                "result_count": negative,
-                "error_type": None,
-            },
+            }
+            for provider in EXPECTED_PROVIDERS
+            for case, kind in EXPECTED_CASES.items()
         ],
     }
 
@@ -38,3 +37,20 @@ def test_provider_probe_gate_requires_coverage_and_no_false_positive():
         _validate(_report(movie=0))
     with pytest.raises(RuntimeError, match="episode coverage"):
         _validate(_report(episode=0))
+
+
+def test_provider_probe_gate_rejects_incomplete_registry_and_matrix():
+    report = _report()
+    report["capabilities"].pop("torz")
+    with pytest.raises(RuntimeError, match="registry differs"):
+        _validate(report)
+
+    report = _report()
+    report["probe"].pop()
+    with pytest.raises(RuntimeError, match="matrix is incomplete"):
+        _validate(report)
+
+    report = _report()
+    report["probe"].append(dict(report["probe"][0]))
+    with pytest.raises(RuntimeError, match="matrix is incomplete"):
+        _validate(report)

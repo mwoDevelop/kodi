@@ -12,8 +12,8 @@ planem. Pozostała flota nie została zaktualizowana przed wydaniem zbiorczym.
 
 Artefakt końcowy:
 
-- SHA-256 ZIP: `35b10986237140bbd1d9525615eca1c20f06126fefe2a35703d768465462359b`;
-- commit komponentu: `2c24bc35db600ae9f7a3210b178633995c2eda70`;
+- SHA-256 ZIP: `1a704291d67d8f4339ee84651f60dd44d240cee2643a26826f42e6e42c1ccd0b`;
+- commit komponentu: `d347147093125943e62472553726d9374047952f`;
 - 31 plików;
 - ta sama paczka zainstalowana na obu urządzeniach;
 - ponowna instalacja oraz konfiguracja zakończyły się `ok=true`,
@@ -37,7 +37,7 @@ Na obu urządzeniach:
 - Umbrella 6.7.81.20 znalazła kontrolny tytuł;
 - konto Real-Debrid odpowiedziało jako aktywne premium;
 - kandydat „Big Buck Bunny” został rozwiązany i odtwarzany przez co najmniej 15 s;
-- czas rozwiązania po finalnym limicie wyniósł około 13 s na BlueStacks oraz 29 s
+- czas rozwiązania końcowego artefaktu wyniósł 12,748 s na BlueStacks oraz 29,071 s
   na X88 Pro.
 
 „Sintel” został odtworzony na BlueStacks, natomiast na X88 wyczerpał kontrolowany
@@ -56,12 +56,21 @@ tym konkretnym wyjściu VPN, ale nie zatrzymuje wyszukiwania MwoScrapers jako ca
 
 ## Regresja i automatyzacja
 
-- MwoScrapers: `59 passed`, Ruff bez błędów, walidator dodatku widzi 6 providerów;
-- repo główne: `455 passed`;
-- odtwarzalny `tests/e2e/run.sh`: dwa identyczne buildy repo i `455 passed`;
+- MwoScrapers: `61 passed`, Ruff bez błędów, walidator dodatku widzi 6 providerów;
+- repo główne: `458 passed`;
+- odtwarzalny `tests/e2e/run.sh`: dwa identyczne buildy repo i `458 passed`;
 - sanitizowany live probe wszystkich providerów: healthy;
 - dzienny workflow `probe-provider-health.yml` zapisuje tylko status, czas i liczbę
   wyników oraz jest objęty watchdogiem QNAP.
+
+Niezależny review PR wykrył i zamknięto trzy regresje przed wydaniem:
+
+- znaki diakrytyczne są rozkładane bez pozostawiania łączących znaków Unicode,
+  dzięki czemu np. `Pokémon` pasuje do nazwy wydania `Pokemon`;
+- wdrożenie watchdoga wyprowadza oczekiwany, dokładny zbiór workflow z manifestu,
+  zamiast używać historycznej stałej pięciu pozycji;
+- sonda urządzenia wymaga dokładnie sześciu providerów i pełnych 42 unikalnych
+  przypadków, więc niepełny lub zduplikowany raport nie może dać fałszywego sukcesu.
 
 ## Decyzja wydaniowa
 

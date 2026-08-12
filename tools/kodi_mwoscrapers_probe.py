@@ -21,6 +21,23 @@ from tools.kodi_profile import (
 
 REMOTE_SCRIPT = "/sdcard/Download/mwo-mwoscrapers-probe.py"
 REMOTE_REPORT = "/sdcard/Download/mwo-mwoscrapers-probe.json"
+EXPECTED_PROVIDERS = {
+    "comet",
+    "eztv",
+    "mediafusion",
+    "piratebay",
+    "torrentio",
+    "torz",
+}
+EXPECTED_CASES = {
+    "movie-sintel": "movie",
+    "movie-big-buck-bunny": "movie",
+    "movie-older": "movie",
+    "movie-non-english": "movie",
+    "episode-breaking-bad-s01e01": "episode",
+    "episode-game-of-thrones-s01e01": "episode",
+    "negative-breaking-bad-s99e99": "negative",
+}
 
 
 def _validate(report):
@@ -28,6 +45,20 @@ def _validate(report):
     capabilities = report.get("capabilities")
     if not isinstance(rows, list) or not isinstance(capabilities, dict):
         raise TypeError("Kodi provider probe report is incomplete")
+    if set(capabilities) != EXPECTED_PROVIDERS:
+        raise RuntimeError("Kodi provider registry differs from the release set")
+    observed_cases = [
+        (row.get("provider"), row.get("case"), row.get("kind"))
+        for row in rows
+        if isinstance(row, dict)
+    ]
+    expected_cases = {
+        (provider, case, kind)
+        for provider in EXPECTED_PROVIDERS
+        for case, kind in EXPECTED_CASES.items()
+    }
+    if len(observed_cases) != len(expected_cases) or set(observed_cases) != expected_cases:
+        raise RuntimeError("Kodi provider probe matrix is incomplete or duplicated")
     errors = [
         row
         for row in rows
