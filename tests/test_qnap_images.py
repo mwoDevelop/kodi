@@ -85,6 +85,12 @@ def test_private_build_state_round_trip(tmp_path):
     assert stat.S_IMODE(state.stat().st_mode) == 0o600
 
 
+def test_default_stable_lock_is_versioned():
+    assert qnap_images.DEFAULT_STABLE_LOCK == (
+        qnap_images.ROOT / "manifests/locks/qnap-stable.json"
+    )
+
+
 def test_build_dry_run_is_content_addressed(monkeypatch, tmp_path):
     service = qnap_images.Service(
         name="upstream-watchdog",

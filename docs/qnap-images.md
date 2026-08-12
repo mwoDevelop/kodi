@@ -10,7 +10,7 @@ Container Station:
 Uruchamia należące do repozytorium buildy GitHub Actions, publikuje obrazy
 wieloarchitekturowe do GHCR, weryfikuje wymagane platformy manifestów, rejestruje
 niezmienne odniesienia do digestów w ignorowanym przez Git pliku
-`.kodi-private/qnap-images.json` i wdraża wyłącznie te digesty. Build odrzuca brudne
+`.kodi-private/qnap-images.json`. Build odrzuca brudne
 lub niewypchnięte repozytorium źródłowe, dlatego obraz zawsze odpowiada dokładnemu
 commitowi Git.
 
@@ -40,8 +40,8 @@ Podejrzyj wszystkie buildy bez logowania do GHCR i bez uruchamiania Dockera:
 python tools/qnap_images.py build all --dry-run
 ```
 
-Zbuduj i opublikuj wszystkie obrazy przez GitHub Actions, a następnie wdróż ich
-zapisane, niezmienne digesty:
+Zbuduj i opublikuj obrazy-kandydatów przez GitHub Actions, a produkcyjnie wdróż
+wyłącznie digesty z zatwierdzonego stable locka:
 
 ```bash
 python tools/qnap_images.py build all
@@ -53,10 +53,11 @@ Rutynowy rollout wykonuj przez `tools/kodi_ops.py rollout`; wtedy deploy jest
 dozwolony wyłącznie z zatwierdzonego stable locka, pod zdalną blokadą i z
 kontrolą CAS obserwowanego runtime.
 
-Połączona forma to:
+Połączona forma build + deploy celowo omija promocję stable i jest dostępna
+wyłącznie do kontrolowanego testu kandydata z jawnym potwierdzeniem:
 
 ```bash
-python tools/qnap_images.py update all
+python tools/qnap_images.py update all --allow-unpromoted
 ```
 
 Domyślnym mechanizmem publikacji jest GitHub Actions. Pozwala to uniknąć lokalnego,
@@ -71,7 +72,7 @@ python tools/qnap_images.py build all --publisher local
 W operacji częściowej zastąp `all` jedną lub kilkoma nazwami:
 
 ```bash
-python tools/qnap_images.py update upstream-watchdog
+python tools/qnap_images.py update upstream-watchdog --allow-unpromoted
 python tools/qnap_images.py build profile-sync provider-relay
 ```
 
