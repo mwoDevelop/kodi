@@ -163,3 +163,45 @@ def test_deploy_rejects_service_outside_stable_lock(tmp_path):
 
     with pytest.raises(ValueError, match="unknown QNAP stable services"):
         qnap_lock.deploy(path, service_names=["missing"])
+
+
+def test_deploy_waits_for_selected_service_health(monkeypatch, tmp_path):
+    document = lock_document()
+    path = tmp_path / "qnap-stable.json"
+    path.write_text(json.dumps(document))
+    expected = document["services"]["control-plane"]["image"]
+    calls = 0
+
+    class Lock:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+    def status(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        health = "healthy" if calls >= 4 else "starting"
+        return {
+            name: {
+                "image": item["image"],
+                "status": "running",
+                "health": health if name == "control-plane" else "healthy",
+            }
+            for name, item in document["services"].items()
+        }
+
+    monkeypatch.setattr(qnap_lock, "RemoteLock", Lock)
+    monkeypatch.setattr(qnap_lock.qnap_images, "status", status)
+    monkeypatch.setattr(qnap_lock.time, "sleep", lambda _seconds: None)
+
+    result = qnap_lock.deploy(path, service_names=["control-plane"])
+
+    assert result["result"] == "NO_CHANGE"
+    assert result["services"] == {"control-plane": "NO_CHANGE"}
+    assert calls == 4
+    assert expected.endswith("a" * 64)

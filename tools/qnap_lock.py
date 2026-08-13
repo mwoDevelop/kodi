@@ -10,6 +10,7 @@ import os
 import re
 import shlex
 import tempfile
+import time
 import uuid
 from pathlib import Path
 import sys
@@ -206,12 +207,23 @@ def deploy(lock_path, references=".env", repository=ROOT, service_names=None):
                 continue
             qnap_images.deploy(name, image, references, repository=repository)
             actions[name] = "DEPLOYED"
-        after = qnap_images.status(references, repository=repository)
-        for name, image in expected.items():
-            if after[name].get("image") != image:
-                raise RuntimeError("QNAP post-deploy digest mismatch: %s" % name)
-            if after[name].get("status") != "running":
-                raise RuntimeError("QNAP service is not running: %s" % name)
+        deadline = time.monotonic() + 120
+        while True:
+            after = qnap_images.status(references, repository=repository)
+            pending = []
+            for name, image in expected.items():
+                if after[name].get("image") != image:
+                    raise RuntimeError("QNAP post-deploy digest mismatch: %s" % name)
+                if not qnap_images.service_is_healthy(after[name]):
+                    pending.append(name)
+            if not pending:
+                break
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    "QNAP services did not become healthy: %s"
+                    % ", ".join(sorted(pending))
+                )
+            time.sleep(3)
     return {
         "schema": 1,
         "candidate_id": lock["candidate_id"],

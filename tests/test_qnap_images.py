@@ -420,6 +420,26 @@ def test_status_treats_empty_docker_inspect_as_missing(monkeypatch):
     }
 
 
+def test_service_health_accepts_initial_watchdog_runtime_evidence_only():
+    assert qnap_images.service_is_healthy(
+        {
+            "status": "running",
+            "health": "starting",
+            "runtime_healthy": True,
+        }
+    )
+    assert not qnap_images.service_is_healthy(
+        {
+            "status": "running",
+            "health": "unhealthy",
+            "runtime_healthy": True,
+        }
+    )
+    assert not qnap_images.service_is_healthy(
+        {"status": "running", "health": "starting"}
+    )
+
+
 def test_selected_services_is_ordered_and_strict():
     available = {"profile-sync": object(), "provider-relay": object()}
     assert qnap_images.selected_services(["all"], available) == [

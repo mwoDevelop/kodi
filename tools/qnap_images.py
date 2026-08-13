@@ -843,6 +843,22 @@ def status(references, repository=ROOT):
         session.close()
 
 
+def service_is_healthy(item):
+    """Return whether a runtime row is ready for normal operation.
+
+    The watchdog performs a relatively expensive Docker health check every five
+    minutes.  Direct runtime evidence is already available sooner, so accept
+    that evidence only while Docker still reports the initial ``starting``
+    state.  An explicit Docker ``unhealthy`` state always remains a failure.
+    """
+    if item.get("status") != "running":
+        return False
+    health = item.get("health")
+    if health in {None, "healthy"}:
+        return True
+    return health == "starting" and item.get("runtime_healthy") is True
+
+
 def selected_services(values, available):
     values = values or ["all"]
     if "all" in values:
