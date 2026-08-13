@@ -3,6 +3,7 @@
   "components": {
     "service.subtitles.opensubtitles-com": {
       "repository": "mwoDevelop/service.subtitles.opensubtitles-com",
+      "branch": "master",
       "source": "opensubtitles-com",
       "include": [
         "addon.xml",

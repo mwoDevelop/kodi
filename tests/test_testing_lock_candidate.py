@@ -15,6 +15,7 @@ def test_repository_targets_include_non_upstream_components():
         "owned": {
             "repository": "example/owned",
             "source": "owned-addon",
+            "branch": "master",
         },
     }
     upstreams = {
@@ -29,7 +30,7 @@ def test_repository_targets_include_non_upstream_components():
 
     assert component_repository_targets(root, components, upstreams) == {
         "example/fork": (root / "fork", "mwo-main"),
-        "example/owned": (root / "owned-addon", "main"),
+        "example/owned": (root / "owned-addon", "master"),
     }
 
 
