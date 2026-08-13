@@ -1,4 +1,4 @@
-# Instalacja read-only Control Plane na QNAP
+# Instalacja Control Plane na QNAP
 
 Pierwszy przyrost jest czwartą aplikacją Container Station zarządzaną przez
 `tools/qnap_images.py`. Obraz musi zawierać `linux/amd64` i `linux/arm/v7`, a
@@ -39,3 +39,12 @@ Po wdrożeniu należy potwierdzić:
 4. `GET /v1/fleet` z certyfikatem nie zawiera tokenów ani kluczy;
 5. backup i restore do izolowanej bazy zachowują checkpoint audytu;
 6. drugi refresh identycznych źródeł nie zmienia ich digestu payloadu.
+
+Po aktualizacji z wydania `0.1.x` baza jest migrowana expand-only ze schematu 1
+do 2. Przed wdrożeniem należy zachować podpisany backup. Restore backupu schematu
+1 pozostaje obsługiwany i migruje dopiero kopię w katalogu docelowym.
+
+Lifecycle bundle testuje główny E2E `tests/e2e/control_plane_readonly.py`:
+uruchamia Profile Sync i Control Plane, wykonuje lokalnym CLI `prepare`, `ready`
+oraz `publish`, po czym odczytuje generację 1 przez operator API mTLS. Żądanie bez
+certyfikatu i każda mutacja HTTP nadal muszą zostać odrzucone.

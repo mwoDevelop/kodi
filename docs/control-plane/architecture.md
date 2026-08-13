@@ -1,6 +1,6 @@
 # Architektura QNAP Control Plane
 
-## Pierwszy przyrost: read-only
+## Aktualny przyrost: read-only API i lokalny writer bundle
 
 ```text
 GitHub Actions (publiczny read)
@@ -16,9 +16,16 @@ GitHub Actions (publiczny read)
    zredagowane enrollmenty, heartbeat i raporty
 ```
 
-Control Plane utrwala tylko zredagowane snapshoty operacyjne. Nie montuje bazy
+Control Plane utrwala zredagowane snapshoty operacyjne oraz własne, niemutowalne
+bundle desired state. Nie montuje bazy
 Profile Sync, nie montuje Docker socketu i nie dostaje klucza publishera,
 promotora ani administratora. Nie może też wywołać żadnej mutacji HTTP.
+
+Lokalny CLI QNAP realizuje `PREPARING -> READY -> PUBLISHED`. `READY` wymaga
+dowodu wiążącego dokładny commit, lock, indeks, artifact manifest, atestację i
+drzewa komponentów. Publikacja head używa oczekiwanej generacji (CAS). API mTLS
+może tylko odczytać opublikowany head; agent Kodi nie konsumuje go jeszcze bez
+osobnego, ograniczonego assignmentu.
 
 Tożsamość wywołującego API jest zapisywana jako fingerprint SHA-256 certyfikatu
 klienta. W audycie nie jest zapisywany certyfikat, subject ani credential.
@@ -29,7 +36,7 @@ klienta. W audycie nie jest zapisywany certyfikat, subject ani credential.
 |---|---|---|
 | kod i artefakty dodatków | GitHub/stable Kodi repo | Control Plane tylko obserwuje |
 | enrollment, rewizja, assignment, raport | Profile Sync | odczyt przez wersjonowany kontrakt |
-| snapshot obserwacyjny i audit | Control Plane | bez sekretów i pełnych podpisanych dokumentów |
+| snapshot, bundle desired state i audit | Control Plane | bez wartości sekretów i assignmentów |
 | prywatny inventory i sekrety | nadal localhost | migracja dopiero po bramie secret-envelope |
 
 ## Degraded mode
