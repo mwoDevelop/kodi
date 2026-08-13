@@ -35,6 +35,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | Repozytorium, forki i architektura dostawców | [Plan architektury projektu](../PLAN.md) |
 | Rozszerzenie providerów MwoScrapers | [Plan wdrożenia większej liczby providerów](../MWOSCRAPERS_PROVIDER_EXPANSION_PLAN.md) |
 | Synchronizacja profilu i urządzenia | [Plan Profile Sync](../PROFILE_SYNC_PLAN.md) |
+| Control plane QNAP i autonomiczna konwergencja | [Plan administracji QNAP i Device Agenta](../QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN.md) |
 | Dziennik wdrożenia Profile Sync | [Zapis stanu realizacji](profile-sync-implementation.md) |
 | Synchronizacja upstream | [Plan synchronizacji upstream](../UPSTREAM_SYNC_PLAN.md) |
 | Bramka bezpieczeństwa upstream | [Projekt skanowania w poszukiwaniu złośliwego oprogramowania](UPSTREAM_MALWARE_SCANNING_PLAN.md) |
@@ -46,6 +47,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 
 ## Recenzje i zapisy decyzji
 
+- [Review planu administracji QNAP i autonomicznej konwergencji](QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN_REVIEW.md)
 - [Review planu usunięcia kodu legacy](LEGACY_REMOVAL_PLAN_REVIEW.md)
 - [Review architektury Profile Sync](PROFILE_SYNC_PLAN_REVIEW.md)
 - [Review Profile Sync na QNAP](PROFILE_SYNC_QNAP_PLAN_REVIEW.md)
