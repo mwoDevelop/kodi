@@ -49,6 +49,7 @@ from tools.kodi_reinstall import (
 from tools.kodi_sync_inventory import load_sync_inventory
 from tools.kodi_transports import TransportError
 from tools.kodi_umbrella_rd_probe import probe as rd_probe
+from tools.qnap_images import service_is_healthy as qnap_service_is_healthy
 from tools.qnap_images import status as qnap_status
 
 from .github import GitHubClient
@@ -1057,8 +1058,7 @@ class ProductionExecutor:
             unhealthy = sorted(
                 name
                 for name, value in rows.items()
-                if value.get("status") != "running"
-                or value.get("health") not in {None, "healthy"}
+                if not qnap_service_is_healthy(value)
             )
             summary = {
                 "services": len(rows),
