@@ -1039,6 +1039,20 @@ class ProductionExecutor:
         if step.adapter in {"restore", "flatpak-restore"}:
             return self._restore_execute(step, dry_run, verify_only)
         if step.adapter == "qnap":
+            if step.action == "reconcile" and not dry_run and not verify_only:
+                # Reconcile must materialize the approved lock before evaluating
+                # health.  A newly added service is necessarily missing before
+                # its first deployment and must not prevent that deployment.
+                self._run_json(
+                    [
+                        sys.executable,
+                        "tools/qnap_lock.py",
+                        "deploy",
+                        "--lock",
+                        "manifests/locks/qnap-stable.json",
+                    ],
+                    timeout=1200,
+                )
             rows = qnap_status(".env", repository=self.repository)
             unhealthy = sorted(
                 name
@@ -1054,19 +1068,6 @@ class ProductionExecutor:
             if unhealthy:
                 return StepOutcome(StepResult.DIAGNOSTIC_FAILED, summary)
             if step.action == "reconcile" and not dry_run and not verify_only:
-                # The deploy adapter is enabled only after the versioned QNAP
-                # lock exists. Its exact lock-to-private-state bridge is kept in
-                # qnap_lock.py and refuses unapproved digests.
-                self._run_json(
-                    [
-                        sys.executable,
-                        "tools/qnap_lock.py",
-                        "deploy",
-                        "--lock",
-                        "manifests/locks/qnap-stable.json",
-                    ],
-                    timeout=1200,
-                )
                 return StepOutcome(StepResult.PASS, summary)
             return StepOutcome(StepResult.NO_CHANGE, summary)
         if step.adapter == "profile-sync":

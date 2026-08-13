@@ -208,6 +208,40 @@ def test_dry_run_does_not_execute_mutations(monkeypatch, tmp_path):
     assert all(dry_run for _step, dry_run, _verify, _mutation in executor.calls)
 
 
+def test_qnap_reconcile_deploys_before_health_evaluation(monkeypatch, tmp_path):
+    root = repository(tmp_path)
+    executor = object.__new__(ProductionExecutor)
+    executor.repository = root
+    calls = []
+    executor._run_json = lambda argv, timeout: calls.append((argv, timeout)) or {}
+
+    def status(_env, repository):
+        assert repository == root
+        assert calls, "approved lock must be deployed before health is evaluated"
+        return {"control-plane": {"status": "running", "health": "healthy"}}
+
+    monkeypatch.setattr(operation_runner, "qnap_status", status)
+    step = PlanStep(
+        step_id="qnap",
+        wave=0,
+        adapter="qnap",
+        action="reconcile",
+        mutation=True,
+        required=True,
+        capabilities=("probe", "deploy"),
+    )
+
+    outcome = executor.execute(step, dry_run=False)
+
+    assert outcome.result == StepResult.PASS
+    assert outcome.summary["unhealthy"] == []
+    assert calls[0][0][-3:] == [
+        "deploy",
+        "--lock",
+        "manifests/locks/qnap-stable.json",
+    ]
+
+
 def test_resume_reprobes_completed_steps(monkeypatch, tmp_path):
     root = repository(tmp_path)
     monkeypatch.setattr(planner, "load_fleet", lambda _root: fleet())
