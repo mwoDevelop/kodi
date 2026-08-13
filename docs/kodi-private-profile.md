@@ -227,6 +227,12 @@ odniesienia do wartości w ignorowanym pliku mode-`0600` `.env`:
       "adapter": "opensubtitles-org-v1",
       "username_ref": "OPENSUBTITLES_USER",
       "password_ref": "OPENSUBTITLES_PASS"
+    },
+    {
+      "adapter": "opensubtitles-com-v1",
+      "username_ref": "OPENSUBTITLES_USER",
+      "password_ref": "OPENSUBTITLES_PASS",
+      "token_ref": "OPENSUBTITLES_TOKEN"
     }
   ]
 }
@@ -246,24 +252,32 @@ język polski z angielskim jako zapasowym oraz wybiera ten dodatek jako domyśln
 usługę napisów dla filmów i seriali. Test poinstalacyjny loguje się przez TLS,
 wyszukuje polskie napisy kontrolne i pobiera jeden plik. Nie wystarcza sam status
 `200 OK` ani niepusty plik: adapter odrzuca promocyjny SRT zwracany przez stare API
-dla konta bez VIP. W przypadku błędu przywraca poprzednie ustawienia urządzenia, a
-raport zawiera tylko etap, status VIP i rodzaj błędu, nigdy dane konta. Ponieważ
+dla konta bez VIP. Przy odpowiedzi promocyjnej zachowuje poprawnie zweryfikowane
+poświadczenia i szyfrowany endpoint, ale zdejmuje niedziałającą usługę z roli
+domyślnej. Inne błędy powodują rollback. Raport zawiera tylko etap, status VIP i
+rodzaj błędu, nigdy dane konta. Ponieważ
 oficjalny dodatek 5.1.5 deklaruje starszy punkt XML-RPC
 przez nieszyfrowany HTTP, adapter atomowo przełącza tę jedną stałą na obsługiwany
 HTTPS i obejmuje ją tym samym rollbackiem.
 
-Nie należy mylić tej usługi z wbudowanym klientem napisów Umbrella. Umbrella używa
-`https://api.opensubtitles.com/api/v1`, osobnego systemu kont `.com`, i działa tylko
-w ramach odtwarzacza Umbrella. Konto `.org` wymaga [jawnego importu do
-`.com`](https://www.opensubtitles.com/en/users/import) oraz
-ustawienia hasła po stronie `.com`. Import przenosi istniejący status VIP, ale zwykła
-wpłata na produkt „Development Support” nie jest dowodem subskrypcji. Do czasu
-udanej kwalifikacji `.org` nie może być raportowany jako działająca usługa napisów.
+Drugi adapter konfiguruje wbudowanego klienta napisów Umbrella. Używa on
+`https://api.opensubtitles.com/api/v1` i działa tylko w ramach odtwarzacza Umbrella.
+W tej instalacji oba portale przyjmują te same `OPENSUBTITLES_USER` oraz
+`OPENSUBTITLES_PASS`; nie duplikujemy więc sekretów. `OPENSUBTITLES_TOKEN` jest
+krótkotrwałym bootstrapem: adapter najpierw waliduje token zapisany na urządzeniu,
+potem bootstrap, a po ich wygaśnięciu loguje się tym samym użytkownikiem i hasłem
+oraz zapisuje odnowiony token w ustawieniach Umbrella. Kontroluje wyszukiwanie
+polskich napisów, a opcjonalny test pobrania weryfikuje, że wynik jest rzeczywistym
+plikiem napisów, nie stroną HTML.
+
+Konto `.org` może wymagać [jawnego importu do
+`.com`](https://www.opensubtitles.com/en/users/import) i ustawienia hasła po stronie
+`.com`. Import przenosi istniejący status VIP, ale zwykła wpłata na produkt
+„Development Support” nie jest dowodem subskrypcji. Do czasu udanej kwalifikacji
+`.org` nie może być raportowany jako działająca usługa napisów.
 Wykrycie placeholdera zdejmuje `.org` z roli domyślnej usługi filmów i seriali, ale
 nie odinstalowuje dodatku. Rollout raportuje wtedy opcjonalny stan `VIP_REQUIRED`;
 po aktywacji VIP ponowne uzgodnienie automatycznie przywraca usługę jako domyślną.
-Ewentualne dane `.com` powinny mieć
-oddzielne prywatne referencje, zamiast przeciążać referencje `.org`.
 
 Tymczasowy plik danych uwierzytelniających i oczyszczony wynik są zawsze usuwane z
 pamięci współdzielonej Android. Ani raport przywracania, ani argumenty procesu nie
@@ -285,6 +299,15 @@ Dostępna jest również samodzielna idempotentna ponowna próba konfiguracji ur
   --serial ADB_ENDPOINT --references .env \
   --adb /home/mwo/android-sdk/platform-tools/adb \
   --adb-server-port 5038
+
+.venv/bin/python tools/kodi_opensubtitles_com_configure.py \
+  --serial ADB_ENDPOINT --references .env \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --adb-server-port 5038
+
+# Kontrolowane E2E pobrania; zużywa limit konta, więc nie jest częścią rutynowego rolloutu.
+.venv/bin/python tools/kodi_opensubtitles_com_configure.py \
+  --serial ADB_ENDPOINT --references .env --probe-download
 ```
 
 To samo uzgodnienie można przeprowadzić ponownie bez ponownej instalacji Kodi:

@@ -70,7 +70,8 @@ hash zadeklarowanych inputów, platformy, SHA raportu antymalware i dokładny
 run workflow. Prywatny `.kodi-private/qnap-images.json` jest tylko cache i nie
 autoryzuje wdrożenia.
 
-Adapter Androida uzgadnia stable repo i dodatki, Rapideo, mwoScrapers,
+Adapter Androida uzgadnia stable repo i dodatki, Rapideo, oba adaptery
+OpenSubtitles (`.org` i klient `.com` w Umbrella), mwoScrapers,
 tożsamość Profile Sync, prywatne ustawienia Umbrella oraz portable
 favourites/artwork. Następnie przy każdym rzeczywistym (nie dry-run) przebiegu
 sprawdza provider mwoScrapers i Real-Debrid, z retry określonym w
@@ -256,6 +257,13 @@ domyślnych pól, bez jego odinstalowania i bez przerwania pozostałego rolloutu
 Poświadczenia nie występują w planach, raportach ani argumentach procesu. Adapter
 izoluje też kompatybilnościową poprawkę endpointu HTTP obecną w dodatku 5.1.5:
 atomowo przełącza ją na HTTPS i przy nieudanej walidacji przywraca poprzedni plik.
+
+Następnie ten sam `converge` przekazuje `OPENSUBTITLES_USER` i
+`OPENSUBTITLES_PASS` również klientowi OpenSubtitles.com w Umbrella. Istniejący
+token urządzenia ma pierwszeństwo, `OPENSUBTITLES_TOKEN` z `.env` służy jako
+bootstrap, a po wygaśnięciu obu adapter wykonuje login i zapisuje świeży token.
+Rutynowy rollout sprawdza autoryzację i wyszukiwanie bez zużywania limitu pobrań;
+jawne `--probe-download` jest przeznaczone do kontrolowanego E2E.
 
 Pełny rollout eksportuje istniejący, zweryfikowany token Rapideo z publishera do
 `.kodi-private/rapideo/token.json` (tryb `0600`). Adapter urządzenia otrzymuje

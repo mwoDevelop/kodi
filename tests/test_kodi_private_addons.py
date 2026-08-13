@@ -13,11 +13,17 @@ OPENSUBTITLES_PROFILE = {
     "username_ref": "OPENSUBTITLES_USER",
     "password_ref": "OPENSUBTITLES_PASS",
 }
+OPENSUBTITLES_COM_PROFILE = {
+    "adapter": "opensubtitles-com-v1",
+    "username_ref": "OPENSUBTITLES_USER",
+    "password_ref": "OPENSUBTITLES_PASS",
+    "token_ref": "OPENSUBTITLES_TOKEN",
+}
 
 
 def test_registry_validates_allow_listed_profile_and_references():
     profiles = private_addons.validate_profiles(
-        [PROFILE, OPENSUBTITLES_PROFILE]
+        [PROFILE, OPENSUBTITLES_PROFILE, OPENSUBTITLES_COM_PROFILE]
     )
     private_addons.validate_references(
         profiles,
@@ -26,9 +32,10 @@ def test_registry_validates_allow_listed_profile_and_references():
             "RAPIDEO_PASS": "pass",
             "OPENSUBTITLES_USER": "subtitle-user",
             "OPENSUBTITLES_PASS": "subtitle-pass",
+            "OPENSUBTITLES_TOKEN": "subtitle-token",
         },
     )
-    assert profiles == [PROFILE, OPENSUBTITLES_PROFILE]
+    assert profiles == [PROFILE, OPENSUBTITLES_PROFILE, OPENSUBTITLES_COM_PROFILE]
 
 
 def test_registry_rejects_unknown_adapter():

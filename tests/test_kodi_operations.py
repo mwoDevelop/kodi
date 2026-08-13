@@ -562,6 +562,8 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
         calls.append((tuple(argv), timeout, adapter))
         if adapter == "opensubtitles":
             return {"ok": True, "changed": False}
+        if adapter == "opensubtitles-com":
+            return {"ok": True, "changed": False}
         if adapter == "rapideo":
             return {"ok": True, "changed": False}
         if adapter == "mwoscrapers":
@@ -593,11 +595,25 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
     outcome = executor._android_converge("bluestacks1")
 
     opensubtitles = next(call for call in calls if call[2] == "opensubtitles")
+    opensubtitles_com = next(
+        call for call in calls if call[2] == "opensubtitles-com"
+    )
     assert opensubtitles[0][1:4] == (
         "tools/kodi_opensubtitles_configure.py",
         "--serial",
         "127.0.0.1:5555",
     )
     assert opensubtitles[0][4:6] == ("--references", ".env")
-    assert retry_adapters == ["opensubtitles", "profile-sync"]
+    assert opensubtitles_com[0][1:4] == (
+        "tools/kodi_opensubtitles_com_configure.py",
+        "--serial",
+        "127.0.0.1:5555",
+    )
+    assert opensubtitles_com[0][4:6] == ("--references", ".env")
+    assert retry_adapters == [
+        "opensubtitles",
+        "opensubtitles-com",
+        "profile-sync",
+    ]
     assert outcome.summary["opensubtitles"] == "pass"
+    assert outcome.summary["opensubtitles_com"] == "pass"
