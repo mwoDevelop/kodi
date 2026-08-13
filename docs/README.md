@@ -15,7 +15,8 @@ kompilacji.
 | Release, rollout i restore | [Operacje Kodi](kodi-operations.md) | Jeden wznawialny interfejs, canary, przykłady wywołań, wyniki i kody wyjścia |
 | Profile prywatne | [Prywatne migawki profilu Kodi](kodi-private-profile.md) | Tworzenie kopii zapasowych, przywracanie, tożsamość urządzenia, stan przenośny i granice bezpieczeństwa |
 | Automatyzacja cykliczna | [Procesy cykliczne](scheduled-processes.md) | Workflow cron GitHub, watchdog QNAP, częstotliwość Profile Sync i weryfikacja na żywo |
-| Kontenery QNAP | [Cykl życia obrazu QNAP](qnap-images.md) | Twórz, publikuj, wdrażaj i sprawdzaj trzy obrazy Container Station |
+| Kontenery QNAP | [Cykl życia obrazu QNAP](qnap-images.md) | Twórz, publikuj, wdrażaj i sprawdzaj obrazy Container Station |
+| QNAP Control Plane | [Architektura i ADR-y Control Plane](control-plane/README.md) | Read-only stan floty, mTLS, audyt oraz kolejne fazy autonomicznej konwergencji |
 | E2E | [Przewodnik po testach E2E](../tests/e2e/README.md) | Testowe punkty wejścia i wymagania środowiskowe |
 | Upstream Sync E2E | [Scenariusze synchronizacji upstream](../tests/e2e/upstream_sync/README.md) | Powtarzalne fixture i scenariusze aktualizacji |
 

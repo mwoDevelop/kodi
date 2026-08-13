@@ -1,5 +1,18 @@
 # Powtarzalne E2E
 
+## Read-only QNAP Control Plane
+
+Uruchom rzeczywisty przepływ między równorzędnymi checkoutami serwera Profile
+Sync i Control Plane, z dwoma oddzielnymi CA, uwierzytelnieniem mTLS operatora,
+odrzuceniem klienta bez certyfikatu i odrzuceniem mutacji:
+
+```bash
+.venv/bin/python tests/e2e/control_plane_readonly.py
+```
+
+Test korzysta wyłącznie z tymczasowych baz, portów i certyfikatów; nie łączy się z
+produkcyjnym QNAP ani urządzeniami Kodi.
+
 Uruchom z dowolnego katalogu:
 
 ```bash

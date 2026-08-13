@@ -6,6 +6,8 @@ jest walidowana w CI i nie może samodzielnie zmieniać znaczenia wersji.
 
 | Format | Bieżące schematy | Legacy | Reader produkcyjny | Migrator offline |
 |---|---:|---:|---|---|
+| `audit_event` | 1 | — | Kodi Control Plane | — |
+| `control_plane_snapshot` | 1 | — | Kodi Control Plane | — |
 | `device_registry` | 2 | 1 | `tools/kodi_devices.py` | `tools/migrations/legacy_config.py` |
 | `disaster_recovery_snapshot` | 1 | — | `tools/kodi_profile.py` | klasyfikator zawartości WatchNixtoons2 |
 | `favourite_artwork_manifest` | 1 | — | `tools/favourite_artwork.py` | — |
@@ -23,3 +25,10 @@ stary dodatek WatchNixtoons2. Historyczny `policy_sha256` snapshotu nie jest
 samodzielnym dokumentem policy i nie podlega migracji. Pole `installer`
 przechowuje dokładnie jedną tożsamość platformy: zweryfikowane APK Androida
 albo przypięty scope/origin/ref Flatpaka. Nie jest to nowa wersja schematu.
+
+`control_plane_snapshot` schema 1 przechowuje wyłącznie zredagowany ostatni
+poprawny odczyt i bezpieczny status błędu źródła. `audit_event` schema 1 wiąże
+monotoniczną sekwencję, poprzedni hash i hash bieżącego zdarzenia. Ich reader
+znajduje się w osobnym repozytorium `mwoDevelop/kodi-control-plane`. Schematy
+mutujące (`desired_state`, bundle, delegacja, envelope i convergence report)
+zostaną zarejestrowane razem z readerem i fixture przed uruchomieniem ich writera.

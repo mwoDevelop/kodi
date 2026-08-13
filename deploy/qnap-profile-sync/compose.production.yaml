@@ -1,0 +1,38 @@
+services:
+  profile-sync:
+    command:
+      - --listen
+      - 0.0.0.0
+      - --allow-non-loopback
+      - --port
+      - "8765"
+      - --database
+      - /data/state.sqlite
+      - --key-registry
+      - /run/profile-sync/key-registry.json
+      - --tls-cert
+      - /run/profile-sync/tls/server.crt
+      - --tls-key
+      - /run/profile-sync/tls/server.key
+      - --integration-listen
+      - 0.0.0.0
+      - --integration-port
+      - "8767"
+      - --integration-client-ca
+      - /run/profile-sync/integration/clients-ca.crt
+    volumes:
+      - type: bind
+        source: ${PROFILE_SYNC_INTEGRATION_CLIENT_CA:?set integration client CA}
+        target: /run/profile-sync/integration/clients-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - default
+      - control-plane
+
+networks:
+  default: {}
+  control-plane:
+    name: mwodevelop-control
+    external: true

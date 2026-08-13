@@ -22,6 +22,8 @@ Ograniczenia bezpieczeństwa:
 - renderuj z wyraźną nazwą projektu Compose; nie dodawaj `container_name`;
 - utrzymuj główny system plików w trybie tylko do odczytu i ograniczaj możliwości;
 - nigdy nie używaj `--unsafe-accept-signatures` w tym wdrożeniu;
+- read-only API integracyjne `8767` podłącz wyłącznie do zewnętrznej sieci Compose
+  `mwodevelop-control`, bez publikowania portu na QNAP; wymagaj certyfikatu klienta;
 - wykonaj kopię zapasową bazy danych poprzez operację tworzenia kopii zapasowej
   aplikacji, a nie poprzez kopiowanie aktywnego pliku bazy danych WAL.
 

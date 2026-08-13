@@ -23,6 +23,7 @@ SMOKE_LABEL = "io.mwodevelop.profile-sync.mode"
 KEY_TARGET = "/run/profile-sync/key-registry.json"
 TLS_CERT_TARGET = "/run/profile-sync/tls/server.crt"
 TLS_KEY_TARGET = "/run/profile-sync/tls/server.key"
+INTEGRATION_CA_TARGET = "/run/profile-sync/integration/clients-ca.crt"
 
 
 class PolicyError(ValueError):
@@ -138,15 +139,18 @@ def validate_policy(document, mode, allow_placeholder=False):
     if not 1024 <= published <= 65535:
         raise PolicyError("published port must be unprivileged")
     volumes = service.get("volumes")
-    if not isinstance(volumes, list) or len(volumes) != 4:
-        raise PolicyError("exactly four bind mount targets are required")
-    by_target = {item.get("target"): item for item in volumes}
-    if set(by_target) != {
+    expected_targets = {
         "/data",
         KEY_TARGET,
         TLS_CERT_TARGET,
         TLS_KEY_TARGET,
-    }:
+    }
+    if mode == "production":
+        expected_targets.add(INTEGRATION_CA_TARGET)
+    if not isinstance(volumes, list) or len(volumes) != len(expected_targets):
+        raise PolicyError("unexpected bind mount target count")
+    by_target = {item.get("target"): item for item in volumes}
+    if set(by_target) != expected_targets:
         raise PolicyError("unexpected bind mount target")
     explicit_bind_targets_from_source = set(
         document.get("_mwodevelop_source_policy", {}).get(
@@ -174,7 +178,14 @@ def validate_policy(document, mode, allow_placeholder=False):
         TLS_KEY_TARGET,
         explicit_bind_targets_from_source,
     )
-    for target in (KEY_TARGET, TLS_CERT_TARGET, TLS_KEY_TARGET):
+    integration_ca_source = None
+    if mode == "production":
+        integration_ca_source = _absolute_source(
+            by_target[INTEGRATION_CA_TARGET],
+            INTEGRATION_CA_TARGET,
+            explicit_bind_targets_from_source,
+        )
+    for target in expected_targets - {"/data"}:
         if by_target[target].get("read_only") is not True:
             raise PolicyError("security configuration must be read-only")
     tmpfs = service.get("tmpfs", [])
@@ -196,6 +207,17 @@ def validate_policy(document, mode, allow_placeholder=False):
         for source in (tls_cert_source, tls_key_source):
             if not source.startswith(production_root + "/config/tls/"):
                 raise PolicyError("production TLS file is outside ProfileSync")
+        if not integration_ca_source.startswith(production_root + "/config/tls/"):
+            raise PolicyError("integration client CA is outside ProfileSync")
+        networks = service.get("networks", {})
+        if "control-plane" not in networks:
+            raise PolicyError("production integration network is missing")
+        command = " ".join(str(item) for item in service.get("command", []))
+        if (
+            "--integration-listen 0.0.0.0" not in command
+            or "--integration-client-ca " + INTEGRATION_CA_TARGET not in command
+        ):
+            raise PolicyError("production mTLS integration listener is missing")
         if labels.get(SMOKE_LABEL) == "smoke":
             raise PolicyError("production cannot carry the smoke label")
     else:
@@ -239,7 +261,11 @@ def render_compose(repository, mode, env_file, docker="docker"):
         "-f",
         str(deployment / "compose.yaml"),
     ]
-    if mode == "smoke":
+    if mode == "production":
+        arguments.extend(
+            ["-f", str(deployment / "compose.production.yaml")]
+        )
+    else:
         arguments.extend(["-f", str(deployment / "compose.smoke.yaml")])
     arguments.extend(["config", "--format", "json", "--no-normalize"])
     command = [docker, "compose", *arguments]
@@ -267,7 +293,12 @@ def render_compose(repository, mode, env_file, docker="docker"):
         document = json.loads(result.stdout)
     except json.JSONDecodeError as error:
         raise PolicyError("docker compose returned invalid JSON") from error
-    compose_text = (deployment / "compose.yaml").read_text(encoding="utf-8")
+    compose_files = [deployment / "compose.yaml"]
+    if mode == "production":
+        compose_files.append(deployment / "compose.production.yaml")
+    compose_text = "\n".join(
+        path.read_text(encoding="utf-8") for path in compose_files
+    )
     document["_mwodevelop_source_policy"] = {
         "bind_create_host_path_false": sorted(
             explicit_bind_targets(compose_text)

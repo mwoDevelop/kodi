@@ -48,7 +48,11 @@ def load_lock(path):
     if not SHA256.fullmatch(str(document["candidate_id"])):
         raise ValueError("invalid QNAP candidate ID")
     available = qnap_images.services()
-    if set(document["services"]) != set(available):
+    supported_sets = {
+        frozenset(available),
+        frozenset(set(available) - {"control-plane"}),
+    }
+    if frozenset(document["services"]) not in supported_sets:
         raise ValueError("QNAP lock service set differs from deployment policy")
     for name, item in document["services"].items():
         required = {

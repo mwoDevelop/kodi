@@ -1,0 +1,117 @@
+services:
+  control-plane:
+    image: ${CONTROL_PLANE_IMAGE:?set immutable image digest}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "${CONTROL_PLANE_UID:-10001}:${CONTROL_PLANE_GID:-10001}"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - --listen
+      - 0.0.0.0
+      - --port
+      - "9443"
+      - --database
+      - /data/control-plane.sqlite
+      - --tls-cert
+      - /run/control-plane/tls/server.crt
+      - --tls-key
+      - /run/control-plane/tls/server.key
+      - --client-ca
+      - /run/control-plane/tls/clients-ca.crt
+      - --checkpoint-key
+      - /run/control-plane/audit-checkpoint.key
+      - --profile-sync-host
+      - profile-sync
+      - --profile-sync-port
+      - "8767"
+      - --profile-sync-server-name
+      - ${CONTROL_PLANE_PROFILE_SYNC_SERVER_NAME:?set certificate identity}
+      - --profile-sync-ca
+      - /run/control-plane/profile-sync/ca.crt
+      - --profile-sync-client-cert
+      - /run/control-plane/profile-sync/client.crt
+      - --profile-sync-client-key
+      - /run/control-plane/profile-sync/client.key
+      - --github-repository
+      - mwoDevelop/kodi
+      - --refresh-seconds
+      - "60"
+    ports:
+      - name: control-plane-api
+        target: 9443
+        published: "${CONTROL_PLANE_PORT:-19443}"
+        host_ip: ${CONTROL_PLANE_HOST_IP:?set explicit listener address}
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: ${CONTROL_PLANE_DATA:?set data directory}
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_TLS_CERT:?set server certificate}
+        target: /run/control-plane/tls/server.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_TLS_KEY:?set server key}
+        target: /run/control-plane/tls/server.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_CLIENT_CA:?set client CA}
+        target: /run/control-plane/tls/clients-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_CHECKPOINT_KEY:?set checkpoint key}
+        target: /run/control-plane/audit-checkpoint.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_PROFILE_SYNC_CA:?set Profile Sync CA}
+        target: /run/control-plane/profile-sync/ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_PROFILE_SYNC_CLIENT_CERT:?set Profile Sync client certificate}
+        target: /run/control-plane/profile-sync/client.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_PROFILE_SYNC_CLIENT_KEY:?set Profile Sync client key}
+        target: /run/control-plane/profile-sync/client.key
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    mem_limit: 256m
+    pids_limit: 128
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:9080/ready', timeout=3))['status'] in {'ready','degraded'}"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - control-plane
+
+networks:
+  control-plane:
+    name: mwodevelop-control
+    external: true

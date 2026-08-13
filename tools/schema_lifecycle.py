@@ -11,6 +11,8 @@ from pathlib import Path
 
 SCHEMA = 1
 REQUIRED_FORMATS = {
+    "audit_event",
+    "control_plane_snapshot",
     "device_registry",
     "disaster_recovery_snapshot",
     "favourite_artwork_manifest",
