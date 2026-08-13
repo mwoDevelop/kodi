@@ -14,6 +14,7 @@ from tools.qnap_profile_sync import (
     production_pair_request,
     production_backup_paths,
     create_production_pairing,
+    revoke_production_enrollment,
     validate_production_files,
     qnap_connection_settings,
     smoke_root,
@@ -98,6 +99,41 @@ def test_production_pairing_writes_code_only_to_private_file(
     assert output.stat().st_mode & 0o077 == 0
     assert '"code":"12345678"' in output.read_text()
     assert "--target-tag android-emulator:x86_64" in session.command
+
+
+def test_production_revocation_uses_exact_host_only_enrollment(monkeypatch):
+    class Session:
+        command = None
+
+        def execute(self, command, timeout=30):
+            self.command = command
+            assert timeout == 120
+            return '{"enrollment_id":"enr:device-01234567","revoked":true}'
+
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.container_station",
+        lambda _session: ("/container-station", "/usr/bin/docker"),
+    )
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.production_compose_command",
+        lambda _docker: "docker compose",
+    )
+    session = Session()
+
+    result = revoke_production_enrollment(session, "enr:device-01234567")
+
+    assert result == {
+        "enrollment_id": "enr:device-01234567",
+        "revoked": True,
+    }
+    assert "profile_sync_server.admin" in session.command
+    assert session.command.endswith(" revoke enr:device-01234567")
+
+
+@pytest.mark.parametrize("enrollment_id", ("device-1", "../escape", "enr:x"))
+def test_production_revocation_rejects_invalid_enrollment(enrollment_id):
+    with pytest.raises(QnapError, match="invalid production enrollment"):
+        revoke_production_enrollment(None, enrollment_id)
 
 
 @pytest.mark.parametrize("backup_id", ("../escape", "/absolute", "x"))

@@ -55,6 +55,20 @@ python tools/qnap_profile_sync.py --references .env \
   --backup-id production-20260731 --output /private/production.sqlite
 ```
 
+Rotacja urządzenia może pozostawić starszy enrollment z nadal ważnym tokenem. Po
+potwierdzeniu, że najwyższa generacja ma świeży heartbeat i udany raport aktywnej
+rewizji, unieważnij dokładny starszy identyfikator przez hostowy interfejs CLI:
+
+```bash
+.venv/bin/python tools/qnap_profile_sync.py --references .env \
+  revoke-production-enrollment --enrollment-id 'enr:<dokładny-id>'
+```
+
+Najpierw wykonaj kopię online. Polecenie nie przyjmuje logicznej nazwy urządzenia ani
+zakresu generacji, aby przypadkowo nie objąć bieżącego enrollmentu. Revocation jest
+nieodwracalna dla danego tokenu; w razie utraty aktualnego enrollmentu utwórz nową
+generację kontrolowanym parowaniem zamiast reaktywować stary token.
+
 Zaszyfruj kopię poza serwerem NAS za pomocą osobnego trybu `0600`, 32-bajtowego klucza i
 wykonaj odszyfrowanie oraz sprawdzenie integralności SQLite przed uznaniem, że kopia
 zapasowa została ukończona:

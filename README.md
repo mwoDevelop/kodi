@@ -154,6 +154,9 @@ Zobacz [Procesy cykliczne](docs/scheduled-processes.md), aby poznać aktualny ka
 workflow cron GitHub, monitoring QNAP, częstotliwość działania Kodi Profile Sync,
 granice zapisu i polecenia weryfikacji na żywo.
 
+Bieżące uszczelnienie pokrycia skanów i porządkowanie enrollmentów opisuje
+[plan domknięcia audytu cyklicznego](SCHEDULED_TASK_HARDENING_PLAN.md).
+
 Instrukcja [budowania i wdrażania obrazów QNAP](docs/qnap-images.md) opisuje wspólny
 interfejs `build`, `deploy`, `update` i `status` dla wszystkich trzech obrazów
 Container Station używanych przez projekt Kodi.
