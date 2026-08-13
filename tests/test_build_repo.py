@@ -40,6 +40,7 @@ def test_testing_index_and_dependency_closure(tmp_path):
         "plugin.video.watchnixtoons2.mwodevelop",
         "repository.mwodevelop.testing",
         "service.mwodevelop.profilesync",
+        "service.subtitles.opensubtitles-com",
         "script.module.mwoscrapers",
         "script.mwoscrapers",
     }
@@ -75,6 +76,7 @@ def test_home_page_catalogs_both_channels(tmp_path):
     assert "MwoScrapers Manager" in home
     assert "WatchNixtoons2 (mwoDevelop)" in home
     assert "mwoDevelop Profile Sync" in home
+    assert "OpenSubtitles.com (mwoDevelop)" in home
 
 
 def test_kodi_file_source_lists_stable_repository_zip(tmp_path):
@@ -150,3 +152,6 @@ def test_metadata_assets_are_published_next_to_zip(tmp_path):
     )
     assert (watchnixtoons / "icon.png").is_file()
     assert (watchnixtoons / "fanart.jpg").is_file()
+    opensubtitles = output / "testing/omega/service.subtitles.opensubtitles-com"
+    assert (opensubtitles / "resources/media/os_logo_512x512.png").is_file()
+    assert (opensubtitles / "resources/media/os_fanart.jpg").is_file()

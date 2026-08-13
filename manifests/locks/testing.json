@@ -22,6 +22,11 @@
       "version": "0.1.1",
       "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
     },
+    "service.subtitles.opensubtitles-com": {
+      "commit": "27b00fc2ba9c1637f6cd4c858a1c702bee786280",
+      "version": "1.0.13.1",
+      "zip_sha256": "29840c090d06376d56520634eac84680e42d5e1f62aa122417046ecc592fc9ca"
+    },
     "service.mwodevelop.profilesync": {
       "commit": "f0ea3696a6c669b4f5c106a8f5a68f1d2931979f",
       "version": "1.0.3",

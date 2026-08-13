@@ -124,7 +124,10 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     result = reconcile("x88pro20", "adb", 5038, channel="testing")
 
     assert result["channel"] == "testing"
-    assert [item[0] for item in installed] == [repository_id, *ADDON_ORDER]
+    assert [item[0] for item in installed] == [
+        repository_id,
+        *(addon_id for addon_id in ADDON_ORDER if addon_id in prepared["addons"]),
+    ]
     assert assigned == [
         {
             "serial": "device",

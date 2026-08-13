@@ -34,6 +34,7 @@ ADDON_ORDER = (
     "script.mwoscrapers",
     "plugin.video.umbrella",
     "plugin.video.watchnixtoons2.mwodevelop",
+    "service.subtitles.opensubtitles-com",
     "service.mwodevelop.profilesync",
 )
 
@@ -190,7 +191,8 @@ def reconcile(device_id, adb, port, channel="stable"):
         **prepared["addons"],
     }
     actions = []
-    for addon_id in (repository_id, *ADDON_ORDER):
+    managed = tuple(addon_id for addon_id in ADDON_ORDER if addon_id in available)
+    for addon_id in (repository_id, *managed):
         artifact = available[addon_id]
         current = addon_details(adb, port, serial, addon_id)
         if current and current.get("enabled") and str(current.get("version")) == artifact["version"]:

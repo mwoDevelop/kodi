@@ -57,13 +57,17 @@ def test_com_configure_cleans_secrets_and_returns_sanitized_report(
             "ok": True,
             "schema": 1,
             "stage": "complete",
-            "addon_id": "plugin.video.umbrella",
-            "addon_version": "6.7.81.20",
+            "addon_id": "service.subtitles.opensubtitles-com",
+            "addon_version": "1.0.13.1",
             "changed": True,
             "credentials_stored": True,
+            "default_movie_service": True,
+            "default_tv_service": True,
+            "legacy_service_visible": True,
             "search_status": 200,
             "search_results": 25,
             "token_source": "bootstrap",
+            "umbrella_addon_version": "6.7.81.20",
         },
     )
     script = tmp_path / "device.py"
@@ -101,7 +105,7 @@ def test_com_configure_cleans_secrets_and_returns_sanitized_report(
 
 
 def test_device_probe_validates_real_subtitle_bytes(monkeypatch):
-    for name in ("xbmcaddon", "xbmcvfs"):
+    for name in ("xbmc", "xbmcaddon", "xbmcvfs"):
         monkeypatch.setitem(sys.modules, name, SimpleNamespace())
     script = (
         Path(__file__).parent

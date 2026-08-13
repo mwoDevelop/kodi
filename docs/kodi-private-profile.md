@@ -248,8 +248,8 @@ uwierzytelnieniem, więc błąd sieci lub VPN nie niszczy poprzedniej sesji.
 
 Adapter OpenSubtitles.org instaluje przypiętą wersję dodatku z oficjalnego lustra
 Kodi, ustawia konto wskazane przez `OPENSUBTITLES_USER` i `OPENSUBTITLES_PASS`,
-język polski z angielskim jako zapasowym oraz wybiera ten dodatek jako domyślną
-usługę napisów dla filmów i seriali. Test poinstalacyjny loguje się przez TLS,
+język polski z angielskim jako zapasowym i zachowuje dodatek jako alternatywę
+widoczną w oknie wyszukiwania napisów. Test poinstalacyjny loguje się przez TLS,
 wyszukuje polskie napisy kontrolne i pobiera jeden plik. Nie wystarcza sam status
 `200 OK` ani niepusty plik: adapter odrzuca promocyjny SRT zwracany przez stare API
 dla konta bez VIP. Przy odpowiedzi promocyjnej zachowuje poprawnie zweryfikowane
@@ -260,8 +260,11 @@ oficjalny dodatek 5.1.5 deklaruje starszy punkt XML-RPC
 przez nieszyfrowany HTTP, adapter atomowo przełącza tę jedną stałą na obsługiwany
 HTTPS i obejmuje ją tym samym rollbackiem.
 
-Drugi adapter konfiguruje wbudowanego klienta napisów Umbrella. Używa on
-`https://api.opensubtitles.com/api/v1` i działa tylko w ramach odtwarzacza Umbrella.
+Drugi adapter konfiguruje zarówno zarządzany dodatek
+`service.subtitles.opensubtitles-com`, jak i wbudowanego klienta napisów Umbrella.
+Oba używają `https://api.opensubtitles.com/api/v1`. Osobny dodatek działa w całym
+Kodi i jest ustawiany jako domyślna usługa napisów dla filmów i seriali; klient
+Umbrella pozostaje dostępny także wewnątrz odtwarzacza tego dodatku.
 W tej instalacji oba portale przyjmują te same `OPENSUBTITLES_USER` oraz
 `OPENSUBTITLES_PASS`; nie duplikujemy więc sekretów. `OPENSUBTITLES_TOKEN` jest
 krótkotrwałym bootstrapem: adapter najpierw waliduje token zapisany na urządzeniu,
@@ -277,7 +280,7 @@ Konto `.org` może wymagać [jawnego importu do
 `.org` nie może być raportowany jako działająca usługa napisów.
 Wykrycie placeholdera zdejmuje `.org` z roli domyślnej usługi filmów i seriali, ale
 nie odinstalowuje dodatku. Rollout raportuje wtedy opcjonalny stan `VIP_REQUIRED`;
-po aktywacji VIP ponowne uzgodnienie automatycznie przywraca usługę jako domyślną.
+sprawny dodatek `.com` pozostaje domyślny, a `.org` jest widoczną alternatywą.
 
 Tymczasowy plik danych uwierzytelniających i oczyszczony wynik są zawsze usuwane z
 pamięci współdzielonej Android. Ani raport przywracania, ani argumenty procesu nie
@@ -308,6 +311,10 @@ Dostępna jest również samodzielna idempotentna ponowna próba konfiguracji ur
 # Kontrolowane E2E pobrania; zużywa limit konta, więc nie jest częścią rutynowego rolloutu.
 .venv/bin/python tools/kodi_opensubtitles_com_configure.py \
   --serial ADB_ENDPOINT --references .env --probe-download
+
+# Odtwarzalny test obu pozycji w menu i domyślnej usługi .com.
+.venv/bin/python tests/e2e/kodi_subtitle_menu_probe.py \
+  --serial ADB_ENDPOINT --adb-server-port 5038
 ```
 
 To samo uzgodnienie można przeprowadzić ponownie bez ponownej instalacji Kodi:

@@ -49,6 +49,7 @@ DEFAULT_REQUIRED_ADDONS = (
     "script.mwoscrapers",
     "plugin.video.umbrella",
     "plugin.video.watchnixtoons2.mwodevelop",
+    "service.subtitles.opensubtitles-com",
 )
 MARKER_NAME = "flatpak-rollout-result.json"
 REVISION = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -301,6 +302,7 @@ def required_addons(repository, overrides=None):
         items = [
             (addon_id, stable[addon_id]["version"])
             for addon_id in DEFAULT_REQUIRED_ADDONS
+            if addon_id in stable
         ]
     if (
         len(items) != len({addon_id for addon_id, _version in items})

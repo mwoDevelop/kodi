@@ -10,3 +10,6 @@
 [submodule "profile-sync-addon"]
 	path = profile-sync-addon
 	url = https://github.com/mwoDevelop/service.mwodevelop.profilesync.git
+[submodule "opensubtitles-com"]
+	path = opensubtitles-com
+	url = https://github.com/mwoDevelop/service.subtitles.opensubtitles-com.git
