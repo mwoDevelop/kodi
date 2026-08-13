@@ -145,6 +145,9 @@ def test_vip_required_is_a_sanitized_nonfatal_optional_status(
             "vip": False,
             "vip_placeholder": True,
             "default_service_quarantined": True,
+            "credentials_stored": True,
+            "credentials_retained": True,
+            "tls_endpoint": True,
         },
     )
     script = tmp_path / "device.py"
@@ -164,4 +167,6 @@ def test_vip_required_is_a_sanitized_nonfatal_optional_status(
 
     assert result["status"] == "VIP_REQUIRED"
     assert result["default_service_quarantined"] is True
+    assert result["credentials_retained"] is True
+    assert result["tls_endpoint"] is True
     assert "secret-user" not in json.dumps(result)

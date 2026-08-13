@@ -113,6 +113,8 @@ def main():
     previous_source = None
     source_path = None
     transport_changed = False
+    username = None
+    password = None
     desired_kodi = {
         "locale.subtitlelanguage": "Polish",
         "subtitles.languages": ["Polish", "English"],
@@ -156,7 +158,7 @@ def main():
             username,
             password,
             "en",
-            "XBMC_Subtitles_Login_v%s" % addon.getAddonInfo("version"),
+            "XBMC_Subtitles_Login_v{}".format(addon.getAddonInfo("version")),
         )
         report["login_status"] = login.get("status")
         account = login.get("data") or {}
@@ -230,10 +232,8 @@ def main():
         vip_required = isinstance(error, VipRequiredError)
         if vip_required:
             report["status"] = "VIP_REQUIRED"
-        if addon is not None and previous_addon:
+        if vip_required and addon is not None and previous_addon:
             try:
-                for setting_id, value in previous_addon.items():
-                    addon.setSetting(setting_id, value)
                 for setting_id, value in previous_kodi.items():
                     _set_setting(
                         setting_id,
@@ -241,14 +241,34 @@ def main():
                             setting_id, value, vip_required
                         ),
                     )
-                report["rolled_back"] = True
-                report["default_service_quarantined"] = vip_required and any(
-                    previous_kodi.get(setting_id) == ADDON_ID
+                report["credentials_stored"] = (
+                    addon.getSetting("OSuser") == username
+                    and addon.getSetting("OSpass") == password
+                )
+                report["credentials_retained"] = report["credentials_stored"]
+                report["default_service_quarantined"] = all(
+                    _get_setting(setting_id) != ADDON_ID
                     for setting_id in ("subtitles.movie", "subtitles.tv")
                 )
+                report["tls_endpoint"] = True
+                report["transport_changed"] = transport_changed
+            except Exception:  # noqa: BLE001 - preserve original diagnosis
+                report["credentials_retained"] = False
+        elif addon is not None and previous_addon:
+            try:
+                for setting_id, value in previous_addon.items():
+                    addon.setSetting(setting_id, value)
+                for setting_id, value in previous_kodi.items():
+                    _set_setting(setting_id, value)
+                report["rolled_back"] = True
             except Exception:  # noqa: BLE001 - preserve original diagnosis
                 report["rolled_back"] = False
-        if transport_changed and source_path and previous_source is not None:
+        if (
+            not vip_required
+            and transport_changed
+            and source_path
+            and previous_source is not None
+        ):
             try:
                 temporary = source_path + ".mwo-tls.tmp"
                 with open(temporary, "wb") as destination:
@@ -261,7 +281,7 @@ def main():
         if token:
             try:
                 server.LogOut(token)
-            except Exception:  # noqa: BLE001 - logout is best effort
+            except Exception:  # noqa: BLE001,S110 - logout is best effort
                 pass
         _publish(report_path, report)
 
