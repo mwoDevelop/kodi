@@ -17,10 +17,20 @@ from typing import Any
 from tools.kodi_devices import device_env_prefix
 from tools.kodi_flatpak_restore import (
     create_snapshot as create_flatpak_snapshot,
+)
+from tools.kodi_flatpak_restore import (
     install_binary as install_flatpak_binary,
+)
+from tools.kodi_flatpak_restore import (
     preflight_target as preflight_flatpak_target,
+)
+from tools.kodi_flatpak_restore import (
     reset_profile as reset_flatpak_profile,
+)
+from tools.kodi_flatpak_restore import (
     restore_snapshot as restore_flatpak_snapshot,
+)
+from tools.kodi_flatpak_restore import (
     verify_remote_snapshot as verify_flatpak_remote_snapshot,
 )
 from tools.kodi_inventory import inventory_device
@@ -177,14 +187,23 @@ class ProductionExecutor:
         return json.loads(result.stdout)
 
     def _run_json_with_retry(
-        self, argv: list[str], *, timeout=900, adapter=None, delay=3
+        self,
+        argv: list[str],
+        *,
+        timeout=900,
+        adapter=None,
+        delay=3,
+        attempts=2,
     ) -> dict[str, Any]:
-        """Retry one transient adapter failure without weakening its contract."""
-        try:
-            return self._run_json(argv, timeout=timeout, adapter=adapter)
-        except OperationAdapterError:
-            time.sleep(delay)
-            return self._run_json(argv, timeout=timeout, adapter=adapter)
+        """Retry a bounded transient adapter failure without weakening its contract."""
+        for attempt in range(1, attempts + 1):
+            try:
+                return self._run_json(argv, timeout=timeout, adapter=adapter)
+            except OperationAdapterError:
+                if attempt == attempts:
+                    raise
+                time.sleep(delay)
+        raise AssertionError("bounded adapter retry exhausted without a result")
 
     def _inventory(self, device_id: str) -> dict[str, Any]:
         try:
@@ -240,12 +259,16 @@ class ProductionExecutor:
         }
 
     def _portable_with_retry(self, command: str, device_id: str) -> dict[str, Any]:
-        """Retry one transient in-Kodi dispatch without masking a hard failure."""
+        """Retry one transient dispatch or incomplete in-Kodi convergence."""
         try:
-            return self._portable(command, device_id)
+            result = self._portable(command, device_id)
         except OperationAdapterError:
             time.sleep(3)
             return self._portable(command, device_id)
+        if result.get("status") != "CONVERGED":
+            time.sleep(3)
+            return self._portable(command, device_id)
+        return result
 
     def _provider_configuration_argv(
         self, device_id: str, serial: str
@@ -336,7 +359,7 @@ class ProductionExecutor:
         )
         # The legacy XML-RPC service and Kodi event dispatch can fail
         # transiently even when the account state is unchanged. Retry the
-        # complete fail-closed adapter once, just like Profile Sync.
+        # complete fail-closed adapter with a small bounded retry budget.
         opensubtitles = self._run_json_with_retry(
             [
                 sys.executable,
@@ -351,6 +374,7 @@ class ProductionExecutor:
                 str(self.adb_server_port),
             ],
             adapter="opensubtitles",
+            attempts=3,
         )
         opensubtitles_com = self._run_json_with_retry(
             [
@@ -366,6 +390,7 @@ class ProductionExecutor:
                 str(self.adb_server_port),
             ],
             adapter="opensubtitles-com",
+            attempts=3,
         )
         providers = self._run_json(
             self._provider_configuration_argv(device_id, serial),
@@ -422,7 +447,16 @@ class ProductionExecutor:
         retry_seconds = int(getattr(self, "retry_seconds", 5))
         diagnostics = None
         for attempt in range(1, attempts + 1):
-            provider = self._provider_probe(serial)
+            try:
+                provider = self._provider_probe(serial)
+            except TimeoutError:
+                provider = {}
+            except RuntimeError as error:
+                if str(error) != (
+                    "Kodi provider probe contains network or contract errors"
+                ):
+                    raise
+                provider = {}
             rd = rd_probe(self.adb, self.adb_server_port, serial, 90)
             diagnostics = {
                 "attempts": attempt,

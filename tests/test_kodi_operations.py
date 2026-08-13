@@ -1,5 +1,4 @@
 import json
-import os
 import stat
 import subprocess
 
@@ -7,8 +6,7 @@ import pytest
 
 from tools.kodi_operations import planner
 from tools.kodi_operations import runner as operation_runner
-from tools.kodi_operations.model import OperationPlan, PlanStep, StepResult
-from tools.kodi_operations.model import RunStatus
+from tools.kodi_operations.model import OperationPlan, PlanStep, RunStatus, StepResult
 from tools.kodi_operations.runner import (
     DeviceUnavailable,
     OperationAdapterError,
@@ -393,6 +391,54 @@ def test_portable_dispatch_retries_once_and_preserves_hard_failure(monkeypatch):
     assert calls == [("publish", "sony-tv"), ("publish", "sony-tv")]
 
 
+def test_portable_dispatch_retries_once_after_incomplete_convergence(monkeypatch):
+    executor = object.__new__(ProductionExecutor)
+    results = iter(
+        [
+            {"status": "APPLY_PENDING"},
+            {"status": "CONVERGED", "apply_status": "NO_CHANGE"},
+        ]
+    )
+    calls = []
+
+    def portable(command, device_id):
+        calls.append((command, device_id))
+        return next(results)
+
+    monkeypatch.setattr(executor, "_portable", portable)
+    monkeypatch.setattr(
+        "tools.kodi_operations.runner.time.sleep", lambda _seconds: None
+    )
+
+    result = executor._portable_with_retry("apply", "sony-tv")
+
+    assert result == {"status": "CONVERGED", "apply_status": "NO_CHANGE"}
+    assert calls == [("apply", "sony-tv"), ("apply", "sony-tv")]
+
+
+def test_json_adapter_supports_explicit_bounded_third_attempt(monkeypatch):
+    executor = object.__new__(ProductionExecutor)
+    calls = []
+
+    def run_json(argv, timeout=900, adapter=None, attempts=2):
+        calls.append((tuple(argv), timeout, adapter))
+        if len(calls) < 3:
+            raise OperationAdapterError(adapter)
+        return {"status": "VIP_REQUIRED"}
+
+    monkeypatch.setattr(executor, "_run_json", run_json)
+    monkeypatch.setattr(
+        "tools.kodi_operations.runner.time.sleep", lambda _seconds: None
+    )
+
+    result = executor._run_json_with_retry(
+        ["python", "adapter.py"], adapter="opensubtitles", attempts=3
+    )
+
+    assert result == {"status": "VIP_REQUIRED"}
+    assert len(calls) == 3
+
+
 def test_preflight_reconnects_only_android_transports_without_reporting_endpoints(
     monkeypatch, tmp_path
 ):
@@ -574,7 +620,7 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
             return {"status": "NO_CHANGE"}
         return {"result": "pass", "actions": []}
 
-    def run_json_with_retry(argv, timeout=900, adapter=None):
+    def run_json_with_retry(argv, timeout=900, adapter=None, attempts=2):
         retry_adapters.append(adapter)
         return run_json(argv, timeout=timeout, adapter=adapter)
 
@@ -617,3 +663,57 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
     ]
     assert outcome.summary["opensubtitles"] == "pass"
     assert outcome.summary["opensubtitles_com"] == "pass"
+
+
+def test_android_rollout_retries_sanitized_provider_network_error(monkeypatch):
+    executor = object.__new__(ProductionExecutor)
+    executor.adb = "adb"
+    executor.adb_server_port = 5038
+    executor.fleet = {
+        "devices": {
+            "sony-tv": {"endpoints": {"adb": "192.0.2.12:5555"}}
+        },
+        "references": {},
+    }
+    executor.external_attempts = 2
+    executor.retry_seconds = 0
+    provider_calls = []
+
+    def run_json(argv, timeout=900, adapter=None, attempts=2):
+        if adapter in {"rapideo", "opensubtitles", "opensubtitles-com"}:
+            return {"ok": True, "changed": False}
+        if adapter == "mwoscrapers":
+            return {"ok": True, "changed": False}
+        if adapter in {"profile-sync", "umbrella-private"}:
+            return {"status": "NO_CHANGE"}
+        return {"result": "pass", "actions": []}
+
+    def provider_probe(*_args):
+        provider_calls.append(True)
+        if len(provider_calls) == 1:
+            raise RuntimeError(
+                "Kodi provider probe contains network or contract errors"
+            )
+        return {"report": {}}
+
+    monkeypatch.setattr(executor, "_run_json", run_json)
+    monkeypatch.setattr(executor, "_run_json_with_retry", run_json)
+    monkeypatch.setattr(
+        executor,
+        "_portable_with_retry",
+        lambda *_args: {"status": "CONVERGED", "apply_status": "NO_CHANGE"},
+    )
+    monkeypatch.setattr(executor, "_provider_probe", provider_probe)
+    monkeypatch.setattr(
+        operation_runner, "rd_probe", lambda *_args: {"healthy": True}
+    )
+
+    outcome = executor._android_converge("sony-tv")
+
+    assert provider_calls == [True, True]
+    assert outcome.result is StepResult.NO_CHANGE
+    assert outcome.summary["diagnostics"] == {
+        "attempts": 2,
+        "provider": True,
+        "real_debrid": True,
+    }
