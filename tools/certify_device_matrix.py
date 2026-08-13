@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the redacted release canary matrix against already rolled-out testing."""
+"""Run the redacted release canary matrix after workflow-controlled testing rollout."""
 
 from __future__ import annotations
 
