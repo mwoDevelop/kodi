@@ -18,6 +18,7 @@ from tools.kodi_flatpak_profile_sync_rollout import (
     _cleanup_command,
     _event_packets,
     _event_server_ready,
+    _installation_mode,
     _replace_private_document,
     _send_staged_event_builtin,
     _stage_event_packets,
@@ -29,6 +30,45 @@ from tools.kodi_flatpak_profile_sync_rollout import (
     required_addons,
     stable_profile_sync_zip,
 )
+
+
+def _receipt(device="nuc-mwo", version="1.0.0"):
+    artifact = {
+        "filename": "service.test.zip",
+        "sha256": "a" * 64,
+        "version": version,
+    }
+    return {
+        "logical_device_id": device,
+        "profile_sync_version": "1.0.3",
+        "repository_version": "1.0.0",
+        "required_addons": {"service.test": version},
+        "required_artifacts": {"service.test": artifact},
+        "dependency_artifacts": {},
+    }
+
+
+def test_installation_receipt_allows_a_valid_stable_upgrade():
+    previous = _receipt(version="1.0.0")
+    expected = _receipt(version="2.0.0")
+    legacy = _receipt(version="1.0.0")
+    legacy.pop("dependency_artifacts")
+
+    assert _installation_mode(previous, expected, "nuc-mwo") == "install"
+    assert _installation_mode(legacy, expected, "nuc-mwo") == "install"
+    assert _installation_mode(expected, expected, "nuc-mwo") == "sync"
+
+
+def test_installation_receipt_rejects_wrong_identity_or_digest():
+    expected = _receipt(version="2.0.0")
+    wrong_device = _receipt(device="nuc-alek")
+    invalid_digest = _receipt()
+    invalid_digest["required_artifacts"]["service.test"]["sha256"] = "tampered"
+
+    with pytest.raises(ValueError, match="installation receipt differs"):
+        _installation_mode(wrong_device, expected, "nuc-mwo")
+    with pytest.raises(ValueError, match="installation receipt differs"):
+        _installation_mode(invalid_digest, expected, "nuc-mwo")
 
 
 def _write_addon_zip(path, member="service.test/addon.xml"):
