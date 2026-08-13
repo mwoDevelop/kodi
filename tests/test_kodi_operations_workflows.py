@@ -13,6 +13,18 @@ def test_certification_publishes_versioned_immutable_attestation():
     assert "attestation_id" in workflow
 
 
+def test_certification_rolls_testing_to_both_canaries_before_matrix():
+    workflow = text(".github/workflows/certify-testing.yml")
+
+    rollout = "python tools/kodi_android_stable_rollout.py"
+    matrix = "python tools/certify_device_matrix.py"
+    assert workflow.count(rollout) == 2
+    assert workflow.index(rollout) < workflow.index(matrix)
+    assert "--device bluestacks1" in workflow
+    assert '--device "$ANDROID_TV"' in workflow
+    assert workflow.count("--channel testing") == 2
+
+
 def test_promotion_binds_exact_attestation_and_qnap_candidate():
     workflow = text(".github/workflows/promote-stable.yml")
 
