@@ -16,17 +16,20 @@ def _values(document):
     }
 
 
+API_KEY_FIXTURE = "not-a-secret-test-value"
+
+
 def test_documents_configure_credentials_and_global_defaults():
     settings, gui = opensubtitles_com_documents(
         b'<settings version="2"><setting id="search_cache_duration">5</setting></settings>',
         b'<settings><setting id="subtitles.movie"></setting><setting id="subtitles.tv">old</setting></settings>',
         "account",
         "secret",
-        "api-key-0123456789",
+        API_KEY_FIXTURE,
     )
 
     assert _values(settings) == {
-        "APIKey": "api-key-0123456789",
+        "APIKey": API_KEY_FIXTURE,
         "OSpass": "secret",
         "OSuser": "account",
         "search_cache_duration": "5",
@@ -43,13 +46,13 @@ def test_documents_create_addon_settings_but_require_existing_gui_settings():
         b"<settings/>",
         "account",
         "secret",
-        "api-key-0123456789",
+        API_KEY_FIXTURE,
     )
     assert ElementTree.fromstring(settings).attrib == {"version": "2"}
 
     with pytest.raises(ValueError, match="guisettings.xml is missing"):
         opensubtitles_com_documents(
-            None, None, "account", "secret", "api-key-0123456789"
+            None, None, "account", "secret", API_KEY_FIXTURE
         )
 
 
@@ -60,7 +63,7 @@ def test_documents_reject_duplicate_security_sensitive_settings():
             b"<settings/>",
             "account",
             "secret",
-            "api-key-0123456789",
+            API_KEY_FIXTURE,
         )
 
 
