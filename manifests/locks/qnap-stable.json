@@ -1,44 +1,56 @@
 {
-  "candidate_id": "eb0a3d8422d963777bb60f133d43f17dd288fd8b6c184dc18359c2522b5d656c",
+  "candidate_id": "db43a88a5e54523b3706428368303cb7f46ff566629f40d8a4421df15c6069a6",
   "channel": "stable",
   "schema": 1,
   "services": {
-    "profile-sync": {
-      "image": "ghcr.io/mwodevelop/kodi-profile-sync-server@sha256:b7e757a492f420d6075d2f07bd251317e0ffbffd2c7b15d09e7acdf576788e7f",
-      "input_sha256": "5175fc29293eaff55eab37d6f111eae4cab50aab75184ea614d3558f3aec3603",
+    "control-plane": {
+      "image": "ghcr.io/mwodevelop/kodi-control-plane@sha256:9497ce5fcdb1680c10855120763981a2837d561744a38b3b1d92fcb35b130f9f",
+      "input_sha256": "fd0f03a9cd61113b2c29af2452769a4acbc8a23854673cbeb99fbae35449ed8e",
       "platforms": [
         "linux/amd64",
         "linux/arm/v7"
       ],
-      "security_report_sha256": "f3b97c1d66e7377f641531101407af8b8baf911f0bd2f497572ce094bdc0bda5",
-      "source_commit": "3ab3b45a3cbb46295515c0c49b40810f0575e88e",
+      "security_report_sha256": "0ceb9be48f4e3ee87635a38bc9747b12f8fafb54d4cb18233d501144eb2bbda2",
+      "source_commit": "653162eaa3a3c29051d7d9eeab16e07b6f66d9f6",
+      "source_repository": "mwoDevelop/kodi-control-plane",
+      "workflow_run_id": "31741448363"
+    },
+    "profile-sync": {
+      "image": "ghcr.io/mwodevelop/kodi-profile-sync-server@sha256:3276fd64b9beee51c819a151f8354b65cb43cc9d3fd68031b4809b29145fb4e0",
+      "input_sha256": "a406a1085d6346d64909dbedc8c6515101a712e9445adb00efea486d4a6c8499",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm/v7"
+      ],
+      "security_report_sha256": "a634303863337904c15d9c09b57977b79cf33a3528db19ab0190f3d90b1d91db",
+      "source_commit": "5472c4616da9421df5069785a9c7e742f577cf20",
       "source_repository": "mwoDevelop/kodi-profile-sync-server",
-      "workflow_run_id": "31536864711"
+      "workflow_run_id": "31741785535"
     },
     "provider-relay": {
-      "image": "ghcr.io/mwodevelop/mwoscrapers-relay@sha256:39fdaf6e8a984b0649697e4903c5ed4571de7f00901bfa9089a39143bd971659",
+      "image": "ghcr.io/mwodevelop/mwoscrapers-relay@sha256:01234d60d22364f317424199cd439eb94977ef36a5b11e43c6f030eed8ace0f3",
       "input_sha256": "6f2ef1dbaef028d5365e3d1cd90c3f99269bc821b9d997dfd5bd4782c56b13fb",
       "platforms": [
         "linux/amd64",
         "linux/arm/v7"
       ],
-      "security_report_sha256": "826b109ca1bf2ad44a91fe5684fe67590b514bf7809bb014c422f9863efd09b2",
-      "source_commit": "eeef07bcf7152d205410cf2b700fda5688ba082d",
+      "security_report_sha256": "1db47512900a5688c9e5aca1be880fb5614109b4252b9ed08d184fb8a2c6a88c",
+      "source_commit": "fb026f07f5f2740dd2baad578c98043cb94dab3e",
       "source_repository": "mwoDevelop/script.module.mwoscrapers",
-      "workflow_run_id": "31635060277"
+      "workflow_run_id": "31742112195"
     },
     "upstream-watchdog": {
-      "image": "ghcr.io/mwodevelop/kodi-upstream-watchdog@sha256:9f89ed59e3b3166ea4c7c5bf7ffe14395014281083a1f0c1c8ff87cb263efab6",
+      "image": "ghcr.io/mwodevelop/kodi-upstream-watchdog@sha256:310c972f5deb47c7a994333f721cc9a463f173928623309edb614cab38add244",
       "input_sha256": "bac3df29ca8e156cd294061568dc84df44b4e1406232e6e1aa1fd9531412bd58",
       "platforms": [
         "linux/amd64",
         "linux/arm64",
         "linux/arm/v7"
       ],
-      "security_report_sha256": "b8d162a34522b78fe0c8eea94c688f41adc3defada56fada9c772576afec7913",
-      "source_commit": "6bc0d2260a488b68117484680b44489199cee2c3",
+      "security_report_sha256": "e680d0a7fd6e9a1ac43e9849d17a8d79db6936a8315139398b0436f4830c0e71",
+      "source_commit": "737da5abfc663da6c6f1773db430d41aeee37630",
       "source_repository": "mwoDevelop/kodi",
-      "workflow_run_id": "31690284491"
+      "workflow_run_id": "31742433107"
     }
   }
 }
