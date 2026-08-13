@@ -27,22 +27,19 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools import build_repo
 from tools.kodi_devices import (
     load_registry,
     resolve_device,
     resolve_private_endpoint,
 )
-from tools import build_repo
 from tools.kodi_inventory import load_private_references
 from tools.kodi_lifecycle import lifecycle_for_device
 from tools.kodi_transports import transport_for_device
 from tools.profile_sync_portable_release import bootstrap_active
-from tools.qnap_profile_sync import (
-    PRODUCTION_PORT,
-    connect as connect_qnap,
-    create_production_pairing,
-    production_pair_request,
-)
+from tools.qnap_profile_sync import PRODUCTION_PORT, create_production_pairing
+from tools.qnap_profile_sync import connect as connect_qnap
+from tools.qnap_profile_sync import production_pair_request
 
 
 PROFILE_SYNC_ID = "service.mwodevelop.profilesync"
@@ -58,6 +55,86 @@ REVISION = re.compile(r"^sha256:[0-9a-f]{64}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 ADDON_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 ADDON_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.~+_-]{0,63}$")
+RECEIPT_KEYS = {
+    "logical_device_id",
+    "profile_sync_version",
+    "repository_version",
+    "required_addons",
+    "required_artifacts",
+    "dependency_artifacts",
+}
+
+
+def _valid_artifact_receipts(artifacts):
+    if not isinstance(artifacts, dict):
+        return False
+    for addon_id, artifact in artifacts.items():
+        if not isinstance(addon_id, str) or not ADDON_ID.fullmatch(addon_id):
+            return False
+        if not isinstance(artifact, dict) or set(artifact) != {
+            "filename",
+            "sha256",
+            "version",
+        }:
+            return False
+        filename = artifact.get("filename")
+        version = artifact.get("version")
+        if (
+            not isinstance(filename, str)
+            or not filename
+            or PurePosixPath(filename).name != filename
+            or not isinstance(version, str)
+            or not ADDON_VERSION.fullmatch(version)
+            or not isinstance(artifact.get("sha256"), str)
+            or not SHA256.fullmatch(artifact["sha256"])
+        ):
+            return False
+    return True
+
+
+def _valid_installation_receipt(receipt, logical_device_id):
+    """Validate receipt shape without treating old stable versions as authority."""
+    if not isinstance(receipt, dict):
+        return False
+    keys = set(receipt)
+    if keys != RECEIPT_KEYS and keys != RECEIPT_KEYS - {"dependency_artifacts"}:
+        return False
+    if receipt.get("logical_device_id") != logical_device_id:
+        return False
+    if not all(
+        isinstance(receipt.get(field), str)
+        and ADDON_VERSION.fullmatch(receipt[field])
+        for field in ("profile_sync_version", "repository_version")
+    ):
+        return False
+    required = receipt.get("required_addons")
+    artifacts = receipt.get("required_artifacts")
+    if not isinstance(required, dict) or not _valid_artifact_receipts(artifacts):
+        return False
+    if set(required) != set(artifacts):
+        return False
+    if any(
+        not isinstance(addon_id, str)
+        or not ADDON_ID.fullmatch(addon_id)
+        or not isinstance(version, str)
+        or not ADDON_VERSION.fullmatch(version)
+        or artifacts[addon_id]["version"] != version
+        for addon_id, version in required.items()
+    ):
+        return False
+    return "dependency_artifacts" not in receipt or _valid_artifact_receipts(
+        receipt["dependency_artifacts"]
+    )
+
+
+def _installation_mode(receipt, expected, logical_device_id):
+    if receipt is None:
+        return "install"
+    if receipt == expected:
+        return "sync"
+    if not _valid_installation_receipt(receipt, logical_device_id):
+        raise ValueError("private Flatpak installation receipt differs")
+    return "install"
 
 
 class HostEd25519:
@@ -860,17 +937,10 @@ def rollout(args):
                 for addon_id, artifact in dependency_artifacts.items()
             },
         }
-        mode = "install"
+        receipt = None
         if receipt_path.exists():
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-            if receipt == expected:
-                mode = "sync"
-            elif receipt != {
-                key: value
-                for key, value in expected.items()
-                if key != "dependency_artifacts"
-            }:
-                raise ValueError("private Flatpak installation receipt differs")
+        mode = _installation_mode(receipt, expected, args.device)
         payload = temporary / "payload"
         payload.mkdir()
         required_payload = payload / "required"

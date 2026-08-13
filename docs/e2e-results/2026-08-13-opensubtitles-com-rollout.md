@@ -27,3 +27,13 @@ przez pozornie poprawną odpowiedź `.org`.
 Eksport z BlueStacks potwierdził obecność niepustych ustawień
 `opensubsusername`, `opensubspassword` i `opensubstoken` w prywatnym pliku Umbrella
 mode-`0600`. Wartości nie są publikowane w tym raporcie ani w repozytorium.
+
+## Regresja pełnego rolloutu
+
+Pierwszy pełny rollout ujawnił niezależną lukę adaptera Flatpak: poprawny receipt
+poprzedniego stable MwoScrapers 0.1.10 był błędnie traktowany jak manipulacja po
+awansie stable do 0.2.0. Walidacja nadal odrzuca obcą tożsamość, zły SHA-256 i
+uszkodzoną strukturę, ale dopuszcza kontrolowaną zmianę z jednego poprawnego stable
+do następnego. Oba profile NUC przeszły instalację 0.2.0, a następnie osobny przebieg
+`rollout_mode=sync` z `sync_status=NO_CHANGE`, aktywną rewizją Profile Sync i ośmioma
+favourites.
