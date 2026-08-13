@@ -13,7 +13,7 @@ workflow obsługuje również `workflow_dispatch`, umożliwiający kontrolowane 
 | UTC | Repozytorium | Workflow | Cel | Granica zapisu |
 | --- | --- | --- | --- | --- |
 | 04:20 codziennie | `mwoDevelop/kodi` | `reconcile-upstreams.yml` | Wykrywa stan wszystkich zarządzanych komponentów i przygotowuje dokładnego kandydata na lock kanału testing. | Discovery jest tylko do odczytu. Zmieniony lock jest proponowany na `automation/testing-lock`; nigdy nie jest automatycznie scalany ani promowany. |
-| 04:23 codziennie | `mwoDevelop/script.module.mwoscrapers` | `check-provider-upstreams.yml` | Pobiera zaakceptowane niezmienne artefakty Coco, Magneto i Viper, weryfikuje przypięte digesty i skanuje wspólną bramą antymalware. | Tylko do odczytu. Przesyła artefakt audytu przechowywany przez 14 dni i nigdy nie zmienia gałęzi. Niedostępny artefakt, niezgodność digestu lub błąd skanowania powodują błąd workflow. |
+| 04:23 codziennie | `mwoDevelop/script.module.mwoscrapers` | `check-provider-upstreams.yml` | Pobiera zaakceptowane niezmienne artefakty Coco i Viper, weryfikuje przypięte digesty, bezpiecznie materializuje zawartość i skanuje dokładne ZIP-y oraz pliki wspólną bramą antymalware. | Tylko do odczytu. Weryfikacja pokrycia wymaga zgodności liczby archiwów, plików i bajtów z raportem skanera. Workflow przesyła artefakt audytu przechowywany przez 14 dni i nigdy nie zmienia gałęzi. Niedostępny artefakt, niezgodność digestu, niepełne pokrycie lub błąd skanowania powodują błąd workflow. |
 | 04:35 codziennie | `mwoDevelop/ch.repo` | `mwodevelop-watchnixtoons2-update.yml` | Wykrywa upstream WatchNixtoons2, materializuje i skanuje izolowanego kandydata, a następnie go testuje. | Zweryfikowana zmiana może zaktualizować `automation/watchnixtoons2-upstream` i otworzyć PR wymagający review. Nie publikuje repozytorium Kodi. |
 | 04:41 codziennie | `mwoDevelop/script.module.mwoscrapers` | `discover-provider-upstreams.yml` | Obserwuje najnowsze źródła providerów i utrzymuje stan review dotyczący wyłącznie pochodzenia. | Zmieniona obserwacja może zaktualizować `automation/provider-provenance` i otworzyć PR wymagający review. Nie importuje ani nie wykonuje kodu providera. |
 | 04:50 codziennie | `mwoDevelop/umbrellaplug.github.io` | `propose-upstream-update.yml` | Odtwarza stos poprawek downstream Umbrella na dokładnym commitcie upstream, skanuje kandydata i go testuje. | Zweryfikowana zmiana może zaktualizować `automation/umbrella-upstream` i otworzyć PR wymagający review. Chronione ścieżki muszą pozostać niezmienione. |
@@ -25,6 +25,12 @@ Audyt providerów i ich discovery są celowo rozdzielone:
   pobrania, identyczny bajtowo i czysty w skanowaniu;
 - discovery 04:41 obserwuje nowy stan upstream i może zgłosić lub zaproponować
   aktualizację pochodzenia bez akceptowania nowych bajtów wykonywalnych.
+
+Magneto nie jest aktywnym źródłem audytu. Jego przypięty artefakt został usunięty
+upstream, dlatego obserwację wycofano 12 sierpnia 2026 r. i zachowano wyłącznie jako
+rekord historyczny w `.upstream/retired-observations.json` repozytorium mwoScrapers.
+Poprzednie błędy pobrania Magneto były prawidłowym zachowaniem fail-closed, a nie
+awarią skanera; aktywny cykl obejmuje obecnie dokładnie Coco i Viper.
 
 Żaden cykliczny workflow nie scala PR, nie promuje `testing` do `stable`, nie zmienia
 poświadczeń Real-Debrid ani nie zapisuje konfiguracji użytkownika Kodi.

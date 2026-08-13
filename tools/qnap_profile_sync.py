@@ -37,6 +37,7 @@ except ModuleNotFoundError:
 RUN_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,47}$")
 SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 TARGET_TAG = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,63}$")
+ENROLLMENT = re.compile(r"^enr:[A-Za-z0-9._-]{8,128}$")
 ADMIN_PATH = re.compile(
     r"^/v1/(?:revisions|blobs/sha256:[a-f0-9]{64}|"
     r"channels/[a-z0-9][a-z0-9._-]{0,63}/"
@@ -725,6 +726,28 @@ def create_production_pairing(
     }
 
 
+def revoke_production_enrollment(session, enrollment_id):
+    """Revoke one exact production enrollment through the host-only CLI."""
+
+    if not ENROLLMENT.fullmatch(enrollment_id):
+        raise QnapError("invalid production enrollment id")
+    _install, docker = container_station(session)
+    command = (
+        production_compose_command(docker)
+        + " exec -T profile-sync python -m profile_sync_server.admin"
+        + " --database /data/state.sqlite revoke "
+        + shlex.quote(enrollment_id)
+    )
+    payload = session.execute(command, timeout=120)
+    try:
+        document = json.loads(payload)
+    except json.JSONDecodeError as error:
+        raise QnapError("production revocation returned invalid JSON") from error
+    if document != {"enrollment_id": enrollment_id, "revoked": True}:
+        raise QnapError("production revocation returned invalid identity")
+    return document
+
+
 def _production_loopback_post(
     session,
     path,
@@ -1058,6 +1081,8 @@ def main():
     pairing.add_argument("--channel", required=True)
     pairing.add_argument("--target-tag", action="append", default=[])
     pairing.add_argument("--output", required=True)
+    revoke = subparsers.add_parser("revoke-production-enrollment")
+    revoke.add_argument("--enrollment-id", required=True)
     admin_request = subparsers.add_parser("admin-request")
     admin_request.add_argument("--path", required=True)
     admin_request.add_argument("--document", required=True)
@@ -1112,6 +1137,11 @@ def main():
                 args.channel,
                 args.target_tag,
                 args.output,
+            )
+        elif args.command == "revoke-production-enrollment":
+            result = revoke_production_enrollment(
+                session,
+                args.enrollment_id,
             )
         elif args.command == "admin-request":
             result = production_admin_request(
