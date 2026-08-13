@@ -1,6 +1,6 @@
 {
-  "attestation_id": "912e8164d34f9eaea638179eb5232dd90e6749a9917477a20290e87a63c7e160",
-  "attestation_sha256": "f3c86da29d677e6f2936ec19d320766792c3c074cdd4cd53011233c14e3912c7",
+  "attestation_id": "15bc74500e96fb3e7686121b012b8d0a9564eefd6bf8769ef2b7e2d480a12729",
+  "attestation_sha256": "4aa7d8f4c70869a2bc5283e222715834c6c920f7aec05bdd0945e34ea06e15c8",
   "channel": "stable",
   "components": {
     "plugin.video.umbrella": {
@@ -28,10 +28,15 @@
       "commit": "f0ea3696a6c669b4f5c106a8f5a68f1d2931979f",
       "version": "1.0.3",
       "zip_sha256": "541bc709b1a6106466509af2de273ba1562ac8297cfc0027209eb6df22c665b8"
+    },
+    "service.subtitles.opensubtitles-com": {
+      "commit": "27b00fc2ba9c1637f6cd4c858a1c702bee786280",
+      "version": "1.0.13.1",
+      "zip_sha256": "29840c090d06376d56520634eac84680e42d5e1f62aa122417046ecc592fc9ca"
     }
   },
   "schema": 2,
-  "source_artifact_manifest_sha256": "bee61541eb2eec6e9e8357ccebd87d5902955efb9491549560e9b135c34e69b9",
-  "source_index_sha256": "5567d4883c267c7584cfad530ffa0ee0de426ce879a4c1b44c17e2c97f66be10",
-  "source_snapshot_id": "6315b949ad04a7c9f8a6ea544e6bce00304ccbb7d7895192cebe2294a9666421"
+  "source_artifact_manifest_sha256": "88a1195402c99bf6df9d9de60ea832c3600c87ae1d2ace16eff50545a8ff9cfc",
+  "source_index_sha256": "91533894da99ae328e386aa8c39d2f34f958c2e75703c390f3f8f999c870cb91",
+  "source_snapshot_id": "15ac5f39fb94dbfa1570b294dc79e1618ff7612ce352b30f56e11bae65cccd45"
 }
