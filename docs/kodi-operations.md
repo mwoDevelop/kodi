@@ -76,8 +76,11 @@ tożsamość Profile Sync, prywatne ustawienia Umbrella oraz portable
 favourites/artwork. Następnie przy każdym rzeczywistym (nie dry-run) przebiegu
 sprawdza provider mwoScrapers i Real-Debrid, z retry określonym w
 `manifests/kodi-operations.json`. Adapter Flatpak wykonuje swój stable rollout
-i synchronizację Profile Sync; ogólne sondy providera i Real-Debrid są obecnie
-częścią adaptera Android, a nie adaptera Flatpak.
+i synchronizację Profile Sync. Przy zatrzymanym Kodi atomowo konfiguruje też
+zarządzany dodatek OpenSubtitles.com, waliduje login i polskie wyniki przez API
+oraz ustawia go jako domyślną usługę filmów i seriali; błąd zachowuje poprzednie
+pliki ustawień. Ogólne sondy providera i Real-Debrid są obecnie częścią adaptera
+Android, a nie adaptera Flatpak.
 
 Ogranicz mutacje do jednego urządzenia. QNAP pozostaje wtedy read-only, faza
 publikacji/promocji Profile Sync jest pomijana, a BlueStacks i X88 nie są

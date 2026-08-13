@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -37,13 +38,17 @@ from tools.kodi_inventory import load_private_references
 from tools.kodi_lifecycle import lifecycle_for_device
 from tools.kodi_transports import transport_for_device
 from tools.profile_sync_portable_release import bootstrap_active
-from tools.qnap_profile_sync import PRODUCTION_PORT, create_production_pairing
+from tools.qnap_profile_sync import (
+    PRODUCTION_PORT,
+    create_production_pairing,
+    production_pair_request,
+)
 from tools.qnap_profile_sync import connect as connect_qnap
-from tools.qnap_profile_sync import production_pair_request
-
 
 PROFILE_SYNC_ID = "service.mwodevelop.profilesync"
 REPOSITORY_ID = "repository.mwodevelop"
+OPENSUBTITLES_COM_ID = "service.subtitles.opensubtitles-com"
+OPENSUBTITLES_COM_API = "https://api.opensubtitles.com/api/v1"
 DEFAULT_REQUIRED_ADDONS = (
     "script.module.mwoscrapers",
     "script.mwoscrapers",
@@ -551,6 +556,217 @@ def _replace_private_document(path, payload):
     finally:
         temporary.unlink(missing_ok=True)
     return True
+
+
+def _set_xml_setting(root, setting_id, value, default=None):
+    matches = [
+        element
+        for element in root.iter("setting")
+        if element.attrib.get("id") == setting_id
+    ]
+    if len(matches) > 1:
+        raise ValueError(f"duplicate Kodi setting: {setting_id}")
+    element = matches[0] if matches else ElementTree.SubElement(root, "setting")
+    element.attrib["id"] = setting_id
+    if default is None:
+        element.attrib.pop("default", None)
+    else:
+        element.attrib["default"] = default
+    element.text = value
+
+
+def opensubtitles_com_documents(settings, guisettings, username, password, api_key):
+    """Return complete Kodi settings documents without exposing their values."""
+    settings_root = (
+        ElementTree.fromstring(settings)
+        if settings
+        else ElementTree.Element("settings", {"version": "2"})
+    )
+    if settings_root.tag != "settings":
+        raise ValueError("OpenSubtitles.com settings root differs")
+    _set_xml_setting(settings_root, "OSuser", username)
+    _set_xml_setting(settings_root, "OSpass", password)
+    _set_xml_setting(settings_root, "APIKey", api_key, default="true")
+
+    if not guisettings:
+        raise ValueError("Kodi guisettings.xml is missing")
+    gui_root = ElementTree.fromstring(guisettings)
+    if gui_root.tag != "settings":
+        raise ValueError("Kodi guisettings root differs")
+    _set_xml_setting(gui_root, "subtitles.movie", OPENSUBTITLES_COM_ID)
+    _set_xml_setting(gui_root, "subtitles.tv", OPENSUBTITLES_COM_ID)
+    return (
+        ElementTree.tostring(settings_root, encoding="utf-8") + b"\n",
+        ElementTree.tostring(gui_root, encoding="utf-8") + b"\n",
+    )
+
+
+def _opensubtitles_com_api_key(repository):
+    settings = ElementTree.parse(
+        repository / "opensubtitles-com/resources/settings.xml"
+    ).getroot()
+    for element in settings.iter("setting"):
+        if element.attrib.get("id") == "APIKey":
+            default = element.findtext("default") or ""
+            if re.fullmatch(r"[A-Za-z0-9_-]{16,128}", default):
+                return default
+    raise ValueError("OpenSubtitles.com API key is unavailable")
+
+
+def _opensubtitles_com_request(method, path, api_key, token=None, payload=None):
+    headers = {
+        "Accept": "application/json",
+        "Api-Key": api_key,
+        "Content-Type": "application/json",
+        "User-Agent": "OpenSubtitles.com Kodi plugin v1.0.13.1",
+    }
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    body = None if payload is None else json.dumps(payload).encode("utf-8")
+    with urllib.request.urlopen(
+        urllib.request.Request(
+            OPENSUBTITLES_COM_API + path,
+            data=body,
+            headers=headers,
+            method=method,
+        ),
+        timeout=30,
+    ) as response:
+        if response.status != 200:
+            raise RuntimeError("OpenSubtitles.com returned an unexpected status")
+        return json.load(response)
+
+
+def validate_opensubtitles_com(username, password, api_key):
+    login = _opensubtitles_com_request(
+        "POST",
+        "/login",
+        api_key,
+        payload={"username": username, "password": password},
+    )
+    token = login.get("token")
+    if not isinstance(token, str) or not token:
+        raise RuntimeError("OpenSubtitles.com login returned no token")
+    query = urllib.parse.urlencode({"imdb_id": "1104001", "languages": "pl"})
+    search = _opensubtitles_com_request(
+        "GET", "/subtitles?" + query, api_key, token=token
+    )
+    rows = search.get("data") or []
+    if not rows:
+        raise RuntimeError("OpenSubtitles.com returned no Polish test subtitle")
+    return {"login": "pass", "search_results": len(rows)}
+
+
+def _read_sftp_file(sftp, path):
+    try:
+        with sftp.open(path, "rb") as handle:
+            return handle.read()
+    except OSError:
+        return None
+
+
+def _xml_settings_match(payload, expected):
+    if not payload:
+        return False
+    try:
+        root = ElementTree.fromstring(payload)
+    except ElementTree.ParseError:
+        return False
+    if root.tag != "settings":
+        return False
+    for setting_id, value in expected.items():
+        matches = [
+            element
+            for element in root.iter("setting")
+            if element.attrib.get("id") == setting_id
+        ]
+        if len(matches) != 1 or (matches[0].text or "") != value:
+            return False
+    return True
+
+
+def _replace_sftp_file(sftp, path, payload):
+    temporary = path + ".mwodevelop-new-" + secrets.token_hex(8)
+    try:
+        with sftp.open(temporary, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+        sftp.chmod(temporary, 0o600)
+        sftp.posix_rename(temporary, path)
+    finally:
+        try:
+            sftp.remove(temporary)
+        except OSError:
+            pass
+
+
+def configure_flatpak_opensubtitles_com(
+    repository, sftp, data_root, references
+):
+    username = references.get("OPENSUBTITLES_USER")
+    password = references.get("OPENSUBTITLES_PASS")
+    if not username or not password:
+        raise ValueError("OpenSubtitles.com private references are missing")
+    api_key = _opensubtitles_com_api_key(repository)
+    validation = validate_opensubtitles_com(username, password, api_key)
+    settings_dir = posixpath.join(
+        data_root, "userdata/addon_data", OPENSUBTITLES_COM_ID
+    )
+    _mkdirs(sftp, settings_dir)
+    settings_path = posixpath.join(settings_dir, "settings.xml")
+    guisettings_path = posixpath.join(data_root, "userdata/guisettings.xml")
+    previous_settings = _read_sftp_file(sftp, settings_path)
+    previous_gui = _read_sftp_file(sftp, guisettings_path)
+    desired_settings, desired_gui = opensubtitles_com_documents(
+        previous_settings,
+        previous_gui,
+        username,
+        password,
+        api_key,
+    )
+    settings_match = _xml_settings_match(
+        previous_settings,
+        {"OSuser": username, "OSpass": password, "APIKey": api_key},
+    )
+    defaults_match = _xml_settings_match(
+        previous_gui,
+        {
+            "subtitles.movie": OPENSUBTITLES_COM_ID,
+            "subtitles.tv": OPENSUBTITLES_COM_ID,
+        },
+    )
+    if settings_match:
+        desired_settings = previous_settings
+    if defaults_match:
+        desired_gui = previous_gui
+    changed = []
+    try:
+        if previous_settings != desired_settings:
+            _replace_sftp_file(sftp, settings_path, desired_settings)
+            changed.append("settings")
+        if previous_gui != desired_gui:
+            _replace_sftp_file(sftp, guisettings_path, desired_gui)
+            changed.append("defaults")
+        if (
+            _read_sftp_file(sftp, settings_path) != desired_settings
+            or _read_sftp_file(sftp, guisettings_path) != desired_gui
+        ):
+            raise RuntimeError("OpenSubtitles.com Flatpak verification differs")
+    except BaseException:
+        if "settings" in changed:
+            if previous_settings is None:
+                sftp.remove(settings_path)
+            else:
+                _replace_sftp_file(sftp, settings_path, previous_settings)
+        if "defaults" in changed and previous_gui is not None:
+            _replace_sftp_file(sftp, guisettings_path, previous_gui)
+        raise
+    return {
+        **validation,
+        "configured": True,
+        "default_service": OPENSUBTITLES_COM_ID,
+        "changed": bool(changed),
+    }
 
 
 def _process_paths(operation):
@@ -1143,6 +1359,9 @@ def rollout(args):
                 encoding="utf-8",
             )
             receipt_path.chmod(0o600)
+            opensubtitles_com = configure_flatpak_opensubtitles_com(
+                repository, sftp, data_root, references
+            )
             favourites = posixpath.join(data_root, "userdata/favourites.xml")
             favourite_count = 0
             if _exists(sftp, favourites):
@@ -1165,6 +1384,7 @@ def rollout(args):
                 "rollout_mode": mode,
                 "favourites": favourite_count,
                 "required_addons": result["required_addons"],
+                "opensubtitles_com": opensubtitles_com,
                 "server_url_sha256": hashlib.sha256(
                     server_url.encode("utf-8")
                 ).hexdigest(),

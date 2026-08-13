@@ -1137,6 +1137,9 @@ class ProductionExecutor:
                     "platform": "linux-flatpak",
                     "rollout_mode": status,
                     "sync_status": result.get("sync_status"),
+                    "opensubtitles_com": (
+                        result.get("opensubtitles_com", {}).get("login")
+                    ),
                 },
             )
         if step.adapter == "tests":

@@ -19,6 +19,11 @@ Data próby: 2026-08-13.
 | BlueStacks1 | 1.0.13.1 | 25 wyników, HTTP 200 | 57 281 B, HTTP 200 | `.com` dla filmów i TV | oba dodatki, okno 10153 |
 | X88 Pro 20 | 1.0.13.1 | 25 wyników, HTTP 200 | 57 281 B, HTTP 200 | `.com` dla filmów i TV | oba dodatki, okno 10153 |
 
+Po promocji stable pełny rollout potwierdził ten sam dodatek i domyślne ustawienia
+na Sony TV. Oba profile Kodi Flatpak (`nuc-mwo`, `nuc-alek`) otrzymały konto przez
+transakcyjny adapter przy zatrzymanym Kodi; walidacja loginu i polskich wyników
+przeszła, a ponowny przebieg zachował tę samą konfigurację bez mutacji.
+
 Pobrany plik przeszedł kontrolę treści SRT i nie był HTML-em ani banerem VIP.
 Test okna napisów uruchomił rzeczywiste odtwarzanie i potwierdził przez JSON-RPC
 okno `Subtitle search` (`id=10153`). Na BlueStacks dodatkowo zachowano prywatny,
