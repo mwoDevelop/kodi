@@ -393,6 +393,7 @@ class GitHubClient:
         }
 
     def wait_deploy(self, merge_commit):
+        redispatched = False
         for _attempt in range(90):
             rows = self.gh_json(
                 "run",
@@ -412,8 +413,30 @@ class GitHubClient:
             if matches:
                 run = max(matches, key=lambda item: item["databaseId"])
                 if run["status"] == "completed":
+                    if run["conclusion"] == "success":
+                        return {"run_id": str(run["databaseId"]), "url": run["url"]}
+                    if run["conclusion"] == "cancelled" and not redispatched:
+                        # GitHub keeps at most one pending run per concurrency
+                        # group. A later Pages writer can therefore replace a
+                        # pending stable deployment even when
+                        # cancel-in-progress is false. Retry exactly once, but
+                        # only while this merge commit is still origin/main.
+                        self._run(("git", "fetch", "origin", "main"))
+                        remote = self._run(
+                            ("git", "rev-parse", "origin/main")
+                        ).stdout.strip()
+                        if remote != merge_commit:
+                            raise GitHubError(
+                                "cancelled stable deploy is no longer current"
+                            )
+                        self.dispatch(
+                            "deploy-stable.yml",
+                            merge_commit,
+                            {"dry_run": "false"},
+                        )
+                        redispatched = True
+                        continue
                     if run["conclusion"] != "success":
                         raise GitHubError("exact stable deploy run failed")
-                    return {"run_id": str(run["databaseId"]), "url": run["url"]}
             time.sleep(5)
         raise GitHubError("exact stable deploy run did not complete")
