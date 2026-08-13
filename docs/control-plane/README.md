@@ -2,8 +2,10 @@
 
 Ta część dokumentacji opisuje wdrażaną architekturę, w której QNAP przejmuje
 rutynową obserwowalność, a następnie sterowanie konwergencją konfiguracji Kodi.
-Pierwszy release jest celowo **tylko do odczytu**: nie przyjmuje sekretów, nie
-tworzy assignmentów i nie zmienia urządzeń.
+Sieciowy interfejs pozostaje celowo **tylko do odczytu**: nie przyjmuje sekretów,
+nie tworzy assignmentów i nie zmienia urządzeń. Drugi przyrost dodaje lokalnemu
+CLI QNAP niemutowalny `convergence_bundle_v1`, exact-artifact evidence i atomową
+publikację head przez CAS. Nie jest to jeszcze assignment dla urządzenia.
 
 ## Nawigacja
 
@@ -23,8 +25,14 @@ Control Plane udostępnia przez mTLS wyłącznie:
 - `GET /v1/rollouts`;
 - `GET /v1/services`;
 - `GET /v1/audit/checkpoint`.
+- `GET /v1/desired-state/<channel>`.
 
 Profile Sync udostępnia mu osobny kontrakt mTLS
 `/v1/integration/{fleet,rollouts}` w prywatnej sieci Compose. Consumer API nadal
 jest jedynym interfejsem publikowanym do LAN, a loopback admin API nie jest
 publikowane ani do LAN, ani do Control Plane.
+
+Mutacje bundle (`prepare`, `ready`, `publish`) są dostępne wyłącznie z lokalnego
+CLI w kontenerze/hoście QNAP i zapisują audit w tej samej transakcji co zmiana
+stanu. Przykłady i kontrakt znajdują się w repo
+[`kodi-control-plane`](https://github.com/mwoDevelop/kodi-control-plane/blob/main/docs/convergence-bundle-v1.md).

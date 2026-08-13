@@ -33,31 +33,67 @@ def run(*args, cwd):
 
 def create_ca(root, name):
     run(
-        "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-        "-days", "1", "-sha256", "-subj", f"/CN={name}",
-        "-addext", "basicConstraints=critical,CA:TRUE,pathlen:0",
-        "-addext", "keyUsage=critical,keyCertSign,cRLSign",
-        "-keyout", "ca.key", "-out", "ca.crt", cwd=root,
+        "openssl",
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-days",
+        "1",
+        "-sha256",
+        "-subj",
+        f"/CN={name}",
+        "-addext",
+        "basicConstraints=critical,CA:TRUE,pathlen:0",
+        "-addext",
+        "keyUsage=critical,keyCertSign,cRLSign",
+        "-keyout",
+        "ca.key",
+        "-out",
+        "ca.crt",
+        cwd=root,
     )
 
 
 def issue(root, name, common_name, usage, *, server=False):
     run(
-        "openssl", "req", "-newkey", "rsa:2048", "-nodes",
-        "-subj", f"/CN={common_name}", "-keyout", f"{name}.key",
-        "-out", f"{name}.csr", cwd=root,
+        "openssl",
+        "req",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-subj",
+        f"/CN={common_name}",
+        "-keyout",
+        f"{name}.key",
+        "-out",
+        f"{name}.csr",
+        cwd=root,
     )
     lines = [f"extendedKeyUsage={usage}", "keyUsage=digitalSignature"]
     if server:
         lines.insert(0, "subjectAltName=IP:127.0.0.1")
         lines[-1] += ",keyEncipherment"
-    (root / f"{name}.ext").write_text(
-        "\n".join(lines) + "\n", encoding="utf-8"
-    )
+    (root / f"{name}.ext").write_text("\n".join(lines) + "\n", encoding="utf-8")
     run(
-        "openssl", "x509", "-req", "-in", f"{name}.csr", "-CA",
-        "ca.crt", "-CAkey", "ca.key", "-CAcreateserial", "-days", "1",
-        "-sha256", "-extfile", f"{name}.ext", "-out", f"{name}.crt",
+        "openssl",
+        "x509",
+        "-req",
+        "-in",
+        f"{name}.csr",
+        "-CA",
+        "ca.crt",
+        "-CAkey",
+        "ca.key",
+        "-CAcreateserial",
+        "-days",
+        "1",
+        "-sha256",
+        "-extfile",
+        f"{name}.ext",
+        "-out",
+        f"{name}.crt",
         cwd=root,
     )
     (root / f"{name}.key").chmod(0o600)
@@ -98,6 +134,129 @@ def terminate(process):
         process.wait(timeout=5)
 
 
+def digest(character):
+    return "sha256:" + character * 64
+
+
+def publish_fixture_bundle(temporary, checkpoint):
+    sys.path.insert(0, str(CONTROL_PLANE / "src"))
+    try:
+        from kodi_control_plane.desired_state import make_bundle
+    finally:
+        sys.path.pop(0)
+    bundle = make_bundle(
+        {
+            "schema": 1,
+            "created_at": int(time.time()),
+            "profile_revision_id": digest("1"),
+            "release_intent_id": digest("2"),
+            "release": {
+                "repository": "mwoDevelop/kodi",
+                "channel": "stable",
+                "commit": "3" * 40,
+                "lock_sha256": digest("4"),
+                "artifact_manifest_sha256": digest("5"),
+                "index_sha256": digest("6"),
+                "attestation_sha256": digest("7"),
+            },
+            "agent": {
+                "minimum_version": "1.0.4",
+                "fallback_version": "1.0.3",
+            },
+            "secret_set_version": 0,
+            "policy_sha256": digest("8"),
+            "required_capabilities": ["assignment_v2", "bundle_v1"],
+            "adapters": {"portable": "1.0.0"},
+            "components": [
+                {
+                    "id": "service.mwodevelop.profilesync",
+                    "version": "1.0.4",
+                    "repository": "mwoDevelop/kodi",
+                    "zip_sha256": digest("9"),
+                    "tree_sha256": digest("a"),
+                }
+            ],
+            "apply_order": ["service.mwodevelop.profilesync"],
+        }
+    )
+    evidence = {
+        "schema": 1,
+        "bundle_id": bundle["bundle_id"],
+        "verified_at": int(time.time()),
+        "verifier": "github:mwoDevelop/kodi/.github/workflows/deploy-stable.yml",
+        "profile_revision_id": bundle["profile_revision_id"],
+        "release": bundle["release"],
+        "component_trees": {
+            component["id"]: component["tree_sha256"]
+            for component in bundle["components"]
+        },
+    }
+    bundle_path = temporary / "bundle.json"
+    evidence_path = temporary / "evidence.json"
+    bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+    common = (
+        sys.executable,
+        "-m",
+        "kodi_control_plane.admin",
+        "--database",
+        str(temporary / "control.sqlite"),
+    )
+    environment = {**os.environ, "PYTHONPATH": str(CONTROL_PLANE / "src")}
+    subprocess.run(
+        common
+        + (
+            "bundle-prepare",
+            "--document",
+            str(bundle_path),
+            "--checkpoint-key",
+            str(checkpoint),
+        ),
+        cwd=CONTROL_PLANE,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        common
+        + (
+            "bundle-ready",
+            "--bundle-id",
+            bundle["bundle_id"],
+            "--evidence",
+            str(evidence_path),
+            "--checkpoint-key",
+            str(checkpoint),
+        ),
+        cwd=CONTROL_PLANE,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        common
+        + (
+            "bundle-publish",
+            "--channel",
+            "stable",
+            "--bundle-id",
+            bundle["bundle_id"],
+            "--expected-generation",
+            "0",
+            "--checkpoint-key",
+            str(checkpoint),
+        ),
+        cwd=CONTROL_PLANE,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return bundle
+
+
 def main():
     for repository in (PROFILE_SERVER, CONTROL_PLANE):
         if not (repository / "src").is_dir():
@@ -119,43 +278,84 @@ def main():
         checkpoint.write_bytes(os.urandom(32))
         checkpoint.chmod(0o600)
         consumer_port, admin_port, integration_port = (
-            free_port(), free_port(), free_port()
+            free_port(),
+            free_port(),
+            free_port(),
         )
         api_port, health_port = free_port(), free_port()
         profile = subprocess.Popen(
             (
-                sys.executable, "-m", "profile_sync_server.http", "--listen",
-                "127.0.0.1", "--port", str(consumer_port), "--admin-port",
-                str(admin_port), "--database", str(temporary / "profile.sqlite"),
-                "--unsafe-accept-signatures", "--tls-cert",
-                str(profile_tls / "server.crt"), "--tls-key",
-                str(profile_tls / "server.key"), "--integration-listen",
-                "127.0.0.1", "--integration-port", str(integration_port),
-                "--integration-client-ca", str(profile_tls / "ca.crt"),
+                sys.executable,
+                "-m",
+                "profile_sync_server.http",
+                "--listen",
+                "127.0.0.1",
+                "--port",
+                str(consumer_port),
+                "--admin-port",
+                str(admin_port),
+                "--database",
+                str(temporary / "profile.sqlite"),
+                "--unsafe-accept-signatures",
+                "--tls-cert",
+                str(profile_tls / "server.crt"),
+                "--tls-key",
+                str(profile_tls / "server.key"),
+                "--integration-listen",
+                "127.0.0.1",
+                "--integration-port",
+                str(integration_port),
+                "--integration-client-ca",
+                str(profile_tls / "ca.crt"),
             ),
             cwd=PROFILE_SERVER,
             env={**os.environ, "PYTHONPATH": str(PROFILE_SERVER / "src")},
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
         processes.append(profile)
         control = subprocess.Popen(
             (
-                sys.executable, "-m", "kodi_control_plane.http", "--listen",
-                "127.0.0.1", "--port", str(api_port), "--health-port",
-                str(health_port), "--database", str(temporary / "control.sqlite"),
-                "--tls-cert", str(operator_tls / "server.crt"), "--tls-key",
-                str(operator_tls / "server.key"), "--client-ca",
-                str(operator_tls / "ca.crt"), "--checkpoint-key", str(checkpoint),
-                "--profile-sync-host", "127.0.0.1", "--profile-sync-port",
-                str(integration_port), "--profile-sync-server-name", "127.0.0.1",
-                "--profile-sync-ca", str(profile_tls / "ca.crt"),
-                "--profile-sync-client-cert", str(profile_tls / "client.crt"),
-                "--profile-sync-client-key", str(profile_tls / "client.key"),
-                "--refresh-seconds", "15",
+                sys.executable,
+                "-m",
+                "kodi_control_plane.http",
+                "--listen",
+                "127.0.0.1",
+                "--port",
+                str(api_port),
+                "--health-port",
+                str(health_port),
+                "--database",
+                str(temporary / "control.sqlite"),
+                "--tls-cert",
+                str(operator_tls / "server.crt"),
+                "--tls-key",
+                str(operator_tls / "server.key"),
+                "--client-ca",
+                str(operator_tls / "ca.crt"),
+                "--checkpoint-key",
+                str(checkpoint),
+                "--profile-sync-host",
+                "127.0.0.1",
+                "--profile-sync-port",
+                str(integration_port),
+                "--profile-sync-server-name",
+                "127.0.0.1",
+                "--profile-sync-ca",
+                str(profile_tls / "ca.crt"),
+                "--profile-sync-client-cert",
+                str(profile_tls / "client.crt"),
+                "--profile-sync-client-key",
+                str(profile_tls / "client.key"),
+                "--refresh-seconds",
+                "15",
             ),
             cwd=CONTROL_PLANE,
             env={**os.environ, "PYTHONPATH": str(CONTROL_PLANE / "src")},
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
         processes.append(control)
         context = ssl.create_default_context(cafile=operator_tls / "ca.crt")
@@ -183,16 +383,32 @@ def main():
                     raise
             else:
                 raise RuntimeError("operator API accepted a mutation")
+            bundle = publish_fixture_bundle(temporary, checkpoint)
+            _status, desired = request(endpoint + "/v1/desired-state/stable", context)
+            if (
+                desired["status"] != "ready"
+                or desired["head"]["generation"] != 1
+                or desired["head"]["bundle_id"] != bundle["bundle_id"]
+            ):
+                raise RuntimeError("published convergence bundle is unavailable")
             _status, services = request(endpoint + "/v1/services", context)
-            print(json.dumps({
-                "schema": 1,
-                "status": "PASS",
-                "fleet_devices": len(fleet["profile_sync"]["data"]["devices"]),
-                "profile_sync_database_schema": 4,
-                "mtls_without_client": "REJECTED",
-                "mutation": "REJECTED",
-                "services": [item["source"] for item in services["services"]],
-            }, indent=2, sort_keys=True))
+            print(
+                json.dumps(
+                    {
+                        "schema": 1,
+                        "status": "PASS",
+                        "fleet_devices": len(fleet["profile_sync"]["data"]["devices"]),
+                        "profile_sync_database_schema": 4,
+                        "mtls_without_client": "REJECTED",
+                        "mutation": "REJECTED",
+                        "bundle_lifecycle": "PREPARING_READY_PUBLISHED",
+                        "bundle_generation": desired["head"]["generation"],
+                        "services": [item["source"] for item in services["services"]],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
         finally:
             for process in reversed(processes):
                 terminate(process)

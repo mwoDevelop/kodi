@@ -1,9 +1,19 @@
 # Plan przeniesienia administracji na QNAP i autonomicznej konwergencji Kodi
 
-Status: plan po niezależnym review; do realizacji etapowej po zamknięciu ADR i
-spike'ów fazy 0
+Status: w realizacji etapowej; faza 1 wydana, faza 2 rozpoczęta
 
 Data: 2026-08-13
+
+Aktualizacja 2026-08-14:
+
+- wydano i wdrożono read-only Control Plane, kontrakt integracyjny Profile Sync,
+  mTLS, zredagowany cache, audit, backup/restore i monitoring QNAP;
+- wydano `convergence_bundle_v1`: content addressing, exact-artifact evidence,
+  stany `PREPARING/READY`, CAS head oraz kompatybilny restore schematu bazy 1;
+- sieciowe API pozostaje read-only, a writer bundle działa wyłącznie lokalnym CLI
+  QNAP;
+- w toku pozostają release intent/delegowany assignment, magazyn sekretów,
+  Device Agent, autonomiczne dodatki, kontroler fal/UI i clean bootstrap.
 
 Repo nadrzędne: `mwoDevelop/kodi`
 
