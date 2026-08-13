@@ -155,7 +155,10 @@ jobs:
             gh release download "$tag" --pattern snapshot.tar --dir existing
             gh release download "$tag" --pattern security-report.json --dir existing
             cmp snapshot.tar existing/snapshot.tar
-            cmp security-report.json existing/security-report.json
+            python tools/upstream_security_scan.py verify \
+              --candidate verified-security-candidate \
+              --report existing/security-report.json \
+              --policy manifests/upstream-security.json
           else
             gh release create "$tag" snapshot.tar security-report.json \
               --title "Kodi testing snapshot $SNAPSHOT_ID" \

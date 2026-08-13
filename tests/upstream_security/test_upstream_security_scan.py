@@ -528,7 +528,10 @@ def test_testing_and_stable_publication_preserve_scanner_evidence():
     ) < testing.index("Create immutable snapshot bundle")
     assert 'if [ "$DRY_RUN" = "true" ]' in testing
     assert "snapshot.tar security-report.json" in testing
-    assert testing.count("upstream_security_scan.py verify") == 1
+    assert testing.count("upstream_security_scan.py verify") == 2
+    assert "cmp snapshot.tar existing/snapshot.tar" in testing
+    assert "--report existing/security-report.json" in testing
+    assert "cmp security-report.json existing/security-report.json" not in testing
     assert "--pattern security-report.json" in stable
     assert stable.count("upstream_security_scan.py verify") == 1
     assert "needs.materialize.outputs.deploy == 'true'" in stable
