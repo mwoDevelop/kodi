@@ -23,6 +23,8 @@ def test_certification_rolls_testing_to_both_canaries_before_matrix():
     assert "--device bluestacks1" in workflow
     assert '--device "$ANDROID_TV"' in workflow
     assert workflow.count("--channel testing") == 2
+    assert workflow.count('--devices "$KODI_DEVICES_FILE"') == 3
+    assert workflow.count('--references "$KODI_REFERENCES_FILE"') == 3
 
 
 def test_promotion_binds_exact_attestation_and_qnap_candidate():

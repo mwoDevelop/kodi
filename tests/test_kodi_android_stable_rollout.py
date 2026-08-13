@@ -46,6 +46,7 @@ def test_android_stable_preflight_restarts_a_stale_kodi_process(monkeypatch):
 def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     installed = []
     assigned = []
+    loaded = {}
     repository_id = "repository.mwodevelop.testing"
     addons = {
         addon_id: {
@@ -67,10 +68,11 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     }
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.load_private_references",
-        lambda _path: {},
+        lambda path: loaded.setdefault("references", path) and {},
     )
     monkeypatch.setattr(
-        "tools.kodi_android_stable_rollout.load_registry", lambda _path: {}
+        "tools.kodi_android_stable_rollout.load_registry",
+        lambda path: loaded.setdefault("devices", path) and {},
     )
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.resolve_device",
@@ -121,9 +123,20 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
         ),
     )
 
-    result = reconcile("x88pro20", "adb", 5038, channel="testing")
+    result = reconcile(
+        "x88pro20",
+        "adb",
+        5038,
+        channel="testing",
+        devices_file=tmp_path / "devices.json",
+        references_file=tmp_path / "references.env",
+    )
 
     assert result["channel"] == "testing"
+    assert loaded == {
+        "devices": tmp_path / "devices.json",
+        "references": tmp_path / "references.env",
+    }
     assert [item[0] for item in installed] == [
         repository_id,
         *(addon_id for addon_id in ADDON_ORDER if addon_id in prepared["addons"]),
