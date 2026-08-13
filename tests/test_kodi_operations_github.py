@@ -75,3 +75,51 @@ def test_promotion_content_is_bound_to_exact_pr_head(tmp_path):
     candidate["qnap_candidate_sha256"] = "f" * 64
     with pytest.raises(GitHubError, match="QNAP lock differs"):
         client.validate_promotion_content(pr, snapshot, attestation, candidate)
+
+
+def test_wait_deploy_redispatches_once_when_pending_run_was_replaced(
+    monkeypatch, tmp_path
+):
+    client = GitHubClient(tmp_path)
+    commit = "a" * 40
+    listings = iter(
+        [
+            [
+                {
+                    "databaseId": 10,
+                    "headSha": commit,
+                    "status": "completed",
+                    "conclusion": "cancelled",
+                    "url": "https://example.invalid/run/10",
+                }
+            ],
+            [
+                {
+                    "databaseId": 11,
+                    "headSha": commit,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "url": "https://example.invalid/run/11",
+                }
+            ],
+        ]
+    )
+    dispatched = []
+
+    client.gh_json = lambda *_args: next(listings)
+    client.dispatch = lambda workflow, head, fields: dispatched.append(
+        (workflow, head, fields)
+    )
+
+    class Result:
+        stdout = commit + "\n"
+
+    client._run = lambda *_args, **_kwargs: Result()
+    monkeypatch.setattr("tools.kodi_operations.github.time.sleep", lambda _s: None)
+
+    result = client.wait_deploy(commit)
+
+    assert result["run_id"] == "11"
+    assert dispatched == [
+        ("deploy-stable.yml", commit, {"dry_run": "false"})
+    ]
