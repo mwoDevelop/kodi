@@ -397,6 +397,29 @@ def test_status_explains_watchdog_health(monkeypatch):
     ]
 
 
+def test_status_treats_empty_docker_inspect_as_missing(monkeypatch):
+    class Session(StatusSession):
+        def execute(self, command, allowed=(0,), timeout=None):
+            if "qnap-control-plane-control-plane-1" in command:
+                return "[]"
+            return super().execute(command, allowed=allowed, timeout=timeout)
+
+    monkeypatch.setattr(
+        qnap_images,
+        "connect",
+        lambda _repository, _references: Session(),
+    )
+    monkeypatch.setattr(
+        qnap_images,
+        "container_station",
+        lambda _session: ("/share/install", "docker"),
+    )
+
+    assert qnap_images.status(".env")["control-plane"] == {
+        "status": "missing"
+    }
+
+
 def test_selected_services_is_ordered_and_strict():
     available = {"profile-sync": object(), "provider-relay": object()}
     assert qnap_images.selected_services(["all"], available) == [

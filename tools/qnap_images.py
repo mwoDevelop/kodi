@@ -26,6 +26,7 @@ try:
         preflight,
     )
     from qnap_provider_relay import deploy as deploy_relay
+    from qnap_control_plane import deploy as deploy_control_plane
 except ModuleNotFoundError:
     from tools.qnap_profile_sync import (
         QnapError,
@@ -36,6 +37,7 @@ except ModuleNotFoundError:
         preflight,
     )
     from tools.qnap_provider_relay import deploy as deploy_relay
+    from tools.qnap_control_plane import deploy as deploy_control_plane
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,12 +75,29 @@ class Service:
     input_paths: tuple[str, ...] = ()
 
 
-def services(profile_sync_repository=None):
+def services(profile_sync_repository=None, control_plane_repository=None):
     profile = Path(
         profile_sync_repository
         or ROOT.parent / "kodi-profile-sync-server"
     ).expanduser().resolve()
+    control_plane = Path(
+        control_plane_repository
+        or ROOT.parent / "kodi-control-plane"
+    ).expanduser().resolve()
     return {
+        "control-plane": Service(
+            "control-plane",
+            "ghcr.io/mwodevelop/kodi-control-plane",
+            control_plane,
+            Path("Dockerfile"),
+            ("linux/amd64", "linux/arm/v7"),
+            True,
+            "mwoDevelop/kodi-control-plane",
+            "container.yml",
+            "sha-{commit}",
+            (("publish_rc", "true"),),
+            ("Dockerfile", "pyproject.toml", "README.md", "src"),
+        ),
         "profile-sync": Service(
             "profile-sync",
             "ghcr.io/mwodevelop/kodi-profile-sync-server",
@@ -733,6 +752,14 @@ def deploy(service_name, image, references, repository=ROOT):
             )
         elif service_name == "upstream-watchdog":
             result = deploy_watchdog(session, repository, image)
+        elif service_name == "control-plane":
+            result = deploy_control_plane(
+                session,
+                repository,
+                image,
+                host_ip,
+                Path(repository) / ".kodi-private/control-plane",
+            )
         else:
             raise ImageError("unknown service: %s" % service_name)
     finally:
@@ -746,6 +773,7 @@ def status(references, repository=ROOT):
         _install, docker = container_station(session)
         rows = {}
         for name, container in (
+            ("control-plane", "qnap-control-plane-control-plane-1"),
             ("profile-sync", "qnap-profile-sync-profile-sync-1"),
             ("provider-relay", "qnap-provider-relay-provider-relay-1"),
             (
@@ -759,7 +787,15 @@ def status(references, repository=ROOT):
             if not raw:
                 rows[name] = {"status": "missing"}
                 continue
-            item = json.loads(raw)[0]
+            try:
+                inspected = json.loads(raw)
+            except json.JSONDecodeError:
+                rows[name] = {"status": "invalid", "runtime_status": "invalid"}
+                continue
+            if not isinstance(inspected, list) or not inspected:
+                rows[name] = {"status": "missing"}
+                continue
+            item = inspected[0]
             rows[name] = {
                 "health": item["State"].get("Health", {}).get("Status"),
                 "image": item["Config"]["Image"],
@@ -827,6 +863,10 @@ def main():
         "--profile-sync-repository",
         default=str(ROOT.parent / "kodi-profile-sync-server"),
     )
+    parser.add_argument(
+        "--control-plane-repository",
+        default=str(ROOT.parent / "kodi-control-plane"),
+    )
     sub = parser.add_subparsers(dest="command", required=True)
     for command in ("build", "update"):
         item = sub.add_parser(command)
@@ -850,8 +890,10 @@ def main():
         if args.command == "status":
             result = {"schema": 1, "services": status(args.references)}
         else:
-            available = services(args.profile_sync_repository)
-            names = selected_services(args.services, available)
+            available = services(
+                args.profile_sync_repository,
+                args.control_plane_repository,
+            )
             if args.command == "deploy":
                 try:
                     from tools.qnap_lock import deploy as deploy_stable
@@ -861,6 +903,17 @@ def main():
                     from qnap_lock import load_lock
 
                 lock = load_lock(args.lock)
+                names = (
+                    list(lock["services"])
+                    if not args.services or args.services == ["all"]
+                    else selected_services(args.services, available)
+                )
+                missing_from_lock = sorted(set(names).difference(lock["services"]))
+                if missing_from_lock:
+                    raise ImageError(
+                        "services are not promoted in the stable lock: %s"
+                        % ", ".join(missing_from_lock)
+                    )
                 selected = {
                     name: lock["services"][name]["image"] for name in names
                 }
@@ -880,6 +933,7 @@ def main():
                     )
                 print(json.dumps(result, indent=2, sort_keys=True))
                 return 0
+            names = selected_services(args.services, available)
             if args.command in {"build", "update"}:
                 if args.command == "update" and not args.allow_unpromoted:
                     raise ImageError(

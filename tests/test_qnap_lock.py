@@ -32,6 +32,27 @@ def test_qnap_lock_accepts_complete_content_addressed_approval(tmp_path):
     assert qnap_lock.load_lock(path)["candidate_id"] == lock_document()["candidate_id"]
 
 
+def test_qnap_lock_accepts_transitional_lock_without_control_plane(tmp_path):
+    document = lock_document()
+    document["services"].pop("control-plane")
+    identity = {
+        "schema": 1,
+        "channel": "stable",
+        "services": document["services"],
+    }
+    document["candidate_id"] = hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    path = tmp_path / "qnap-stable.json"
+    path.write_text(json.dumps(document))
+
+    assert set(qnap_lock.load_lock(path)["services"]) == {
+        "profile-sync",
+        "provider-relay",
+        "upstream-watchdog",
+    }
+
+
 def test_qnap_lock_rejects_mutated_digest(tmp_path):
     document = lock_document()
     document["services"]["profile-sync"]["image"] = (

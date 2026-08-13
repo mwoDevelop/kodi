@@ -1,8 +1,9 @@
 # Budowanie i wdrażanie obrazów QNAP
 
-`tools/qnap_images.py` jest wspólnym punktem wejścia na hoście dla trzech aplikacji Kodi
+`tools/qnap_images.py` jest wspólnym punktem wejścia na hoście dla czterech aplikacji Kodi
 Container Station:
 
+- `control-plane` (odczytowy agregator floty i audytu);
 - `profile-sync`;
 - `provider-relay`;
 - `upstream-watchdog`.
@@ -19,7 +20,7 @@ zreviewowany `manifests/locks/qnap-stable.json`, a nie ten prywatny cache.
 `tools/kodi_ops.py release` uruchamia build tylko po zmianie deterministycznego
 hasha zadeklarowanych inputów. Każdy workflow publikuje approval zawierający
 immutable digest obrazu, commit, input hash, platformy, SHA raportu skanera i
-run ID. `tools/qnap_candidate.py` składa komplet trzech approval w jeden asset
+run ID. `tools/qnap_candidate.py` składa komplet czterech approval w jeden asset
 testing, a PR promocji kopiuje dokładnie jego bajty do stable locka.
 
 ## Typowe polecenia
@@ -74,6 +75,7 @@ W operacji częściowej zastąp `all` jedną lub kilkoma nazwami:
 ```bash
 python tools/qnap_images.py update upstream-watchdog --allow-unpromoted
 python tools/qnap_images.py build profile-sync provider-relay
+python tools/qnap_images.py build control-plane
 ```
 
 Domyślnym checkoutem serwera Profile Sync jest katalog równorzędny
@@ -84,6 +86,21 @@ python tools/qnap_images.py \
   --profile-sync-repository /path/to/kodi-profile-sync-server \
   build profile-sync
 ```
+
+Analogicznie źródło Control Plane jest domyślnie pobierane z
+`../kodi-control-plane` i może zostać wskazane przez
+`--control-plane-repository`. Przed pierwszym wdrożeniem wygeneruj rozdzielone
+materiały mTLS; prywatne CA operatora nie jest współdzielone z CA Profile Sync:
+
+```bash
+python tools/control_plane_credentials.py --host-ip 192.168.1.39
+python tools/qnap_images.py deploy control-plane --dry-run
+```
+
+Stary stable lock zawierający trzy usługi pozostaje czytelny tylko na czas
+przejścia. `deploy all` wdraża wtedy dokładnie usługi obecne w locku; jawne
+wdrożenie `control-plane` zostanie odrzucone do chwili promocji kompletnego,
+czterousługowego locka.
 
 ## Granica bezpieczeństwa
 
@@ -104,6 +121,10 @@ python tools/qnap_images.py \
   pięciu workflow;
 - watchdog może działać poprawnie, ale celowo zgłaszać `unhealthy`, gdy jeden z
   monitorowanych workflow GitHub zakończył się błędem. Wdrożenie nie ukrywa tej awarii upstream.
+- wdrożenie Control Plane publikuje wyłącznie API mTLS, nie montuje socketa
+  Dockera, używa oddzielnego CA operatorów i łączy się z read-only integration
+  API Profile Sync przez prywatną sieć Compose;
 
-Wszystkie trzy aplikacje wykorzystują `/var/run/docker.sock`, silnik zarządzany przez
-GUI Container Station. Skrypt nigdy nie kieruje operacji do QNAP `system-docker`.
+Wszystkie kontenery są uruchamiane przez silnik zarządzany przez GUI Container
+Station. Żaden kontener aplikacyjny nie otrzymuje `/var/run/docker.sock`, a skrypt
+nigdy nie kieruje operacji do QNAP `system-docker`.

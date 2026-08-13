@@ -54,8 +54,15 @@ harmonogramów aktualizacji:
 | Usługa | Interwał | Sonda |
 | --- | --- | --- |
 | Backend Profile Sync | 30 sekund | lokalny endpoint gotowości HTTPS wewnątrz kontenera |
+| Read-only Control Plane | 30 sekund | loopback `/ready`; stan może być `degraded`, gdy zredagowany ostatni poprawny odczyt nadal jest dostępny |
 | Przekaźnik providerów mwoScrapers | 30 sekund | lokalny endpoint `/health` wewnątrz kontenera |
 | Watchdog upstream | 5 minut | ostatnia utrwalona ocena workflow GitHub |
+
+Control Plane odświeża co 60 sekund read-only widoki Profile Sync przez prywatne
+mTLS oraz publiczny stan workflow GitHub. Błąd źródła nie usuwa ostatniego
+poprawnego payloadu: zapisuje kod błędu, przechodzi w `degraded` i dopisuje
+zdarzenie do łańcucha audytu. Ten collector nie jest procesem aktualizacji i nie
+ma endpointu mutującego, klucza assignmentów ani dostępu do socketa Dockera.
 
 ## Klienci Kodi Profile Sync
 

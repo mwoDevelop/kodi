@@ -343,6 +343,8 @@ def production_environment(image, host_ip):
             % (root / "config" / "tls" / "server.crt"),
             "PROFILE_SYNC_TLS_KEY=%s"
             % (root / "config" / "tls" / "server.key"),
+            "PROFILE_SYNC_INTEGRATION_CLIENT_CA=%s"
+            % (root / "config" / "tls" / "integration-clients-ca.crt"),
             "PROFILE_SYNC_UID=10001",
             "PROFILE_SYNC_GID=10001",
             "",
@@ -417,6 +419,8 @@ def production_compose_command(docker):
         + shlex.quote(str(root / "app" / "production.env"))
         + " -f "
         + shlex.quote(str(root / "app" / "compose.yaml"))
+        + " -f "
+        + shlex.quote(str(root / "app" / "compose.production.yaml"))
     )
 
 
@@ -434,7 +438,7 @@ def verify_production(host_ip, ca_certificate, attempts=45):
             if (
                 document.get("status") == "ready"
                 and document.get("mode") == "verified-tls"
-                and document.get("database_schema") == 3
+                and document.get("database_schema") == 4
                 and document.get("service") == "kodi-profile-sync-server"
             ):
                 return {
@@ -471,7 +475,9 @@ def deploy_production(
     security = validate_production_files(
         key_registry, tls_certificate, tls_key
     )
-    _local_regular_file(ca_certificate, "TLS CA certificate")
+    integration_ca = _local_regular_file(
+        ca_certificate, "TLS CA certificate"
+    )
     _install, docker = container_station(session)
     root = production_root()
     app = root / "app"
@@ -507,7 +513,13 @@ def deploy_production(
     compose_source = (deployment / "compose.yaml").read_text(
         encoding="utf-8"
     )
+    production_overlay = (deployment / "compose.production.yaml").read_text(
+        encoding="utf-8"
+    )
     session.upload_text(str(app / "compose.yaml"), compose_source, 0o600)
+    session.upload_text(
+        str(app / "compose.production.yaml"), production_overlay, 0o600
+    )
     session.upload_text(
         str(app / "production.env"),
         production_environment(image, host_ip),
@@ -529,15 +541,30 @@ def deploy_production(
         security["tls_key"].read_text(encoding="utf-8"),
         0o400,
     )
+    session.upload_text(
+        str(tls / "integration-clients-ca.crt"),
+        integration_ca.read_text(encoding="utf-8"),
+        0o400,
+    )
     session.execute(
         "chown -R 10001:10001 {data} {backups} "
-        "&& chown 10001:10001 {registry} {cert} {key}".format(
+        "&& chown 10001:10001 {registry} {cert} {key} {integration_ca}".format(
             data=shlex.quote(str(data)),
             backups=shlex.quote(str(backups)),
             registry=shlex.quote(str(config / "key-registry.json")),
             cert=shlex.quote(str(tls / "server.crt")),
             key=shlex.quote(str(tls / "server.key")),
+            integration_ca=shlex.quote(
+                str(tls / "integration-clients-ca.crt")
+            ),
         )
+    )
+    session.execute(
+        docker
+        + " network inspect mwodevelop-control >/dev/null 2>&1 || "
+        + docker
+        + " network create --driver bridge --label io.mwodevelop.managed=true "
+        + "mwodevelop-control >/dev/null"
     )
     compose = production_compose_command(docker)
     rendered_payload = session.execute(
@@ -549,7 +576,7 @@ def deploy_production(
         raise QnapError("remote Compose returned invalid policy JSON") from error
     rendered["_mwodevelop_source_policy"] = {
         "bind_create_host_path_false": sorted(
-            explicit_bind_targets(compose_source)
+            explicit_bind_targets(compose_source + "\n" + production_overlay)
         )
     }
     policy = validate_policy(rendered, "production")
@@ -558,7 +585,7 @@ def deploy_production(
     resources = status(session, PRODUCTION_PROJECT)
     if (
         resources["containers"] != 1
-        or resources["networks"] != 1
+        or resources["networks"] not in {1, 2}
         or resources["volumes"] != 0
     ):
         raise QnapError("production project has unexpected resources")
@@ -961,7 +988,7 @@ def verify(session):
             if (
                 document.get("status") == "ready"
                 and document.get("service") == "kodi-profile-sync-server"
-                and document.get("database_schema") == 3
+                and document.get("database_schema") == 4
             ):
                 state = status(session, SMOKE_PROJECT)
                 if (
