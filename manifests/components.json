@@ -1,6 +1,22 @@
 {
   "schema": 1,
   "components": {
+    "service.subtitles.opensubtitles-com": {
+      "repository": "mwoDevelop/service.subtitles.opensubtitles-com",
+      "source": "opensubtitles-com",
+      "include": [
+        "addon.xml",
+        "changelog.txt",
+        "LICENSE.txt",
+        "README.md",
+        "service.py",
+        "test_connection.py",
+        "fanart.jpg",
+        "icon.png",
+        "logo.png",
+        "resources/**"
+      ]
+    },
     "plugin.video.watchnixtoons2.mwodevelop": {
       "repository": "mwoDevelop/ch.repo",
       "source": "watchnixtoons2/mwodevelop/plugin.video.watchnixtoons2.mwodevelop",

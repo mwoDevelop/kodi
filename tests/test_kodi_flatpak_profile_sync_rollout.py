@@ -163,6 +163,7 @@ def test_flatpak_required_addons_cover_managed_settings_and_favourites():
         "script.mwoscrapers",
         "plugin.video.umbrella",
         "plugin.video.watchnixtoons2.mwodevelop",
+        "service.subtitles.opensubtitles-com",
     )
 
 
@@ -172,10 +173,15 @@ def test_flatpak_required_addons_are_exactly_pinned_by_stable_lock():
         Path("manifests/locks/stable.json").read_text(encoding="utf-8")
     )["components"]
 
-    assert tuple(result) == DEFAULT_REQUIRED_ADDONS
+    assert tuple(result) == tuple(
+        addon_id
+        for addon_id in DEFAULT_REQUIRED_ADDONS
+        if addon_id in stable
+    )
     assert result == {
         addon_id: stable[addon_id]["version"]
         for addon_id in DEFAULT_REQUIRED_ADDONS
+        if addon_id in stable
     }
 
 

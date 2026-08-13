@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configure and verify Umbrella's OpenSubtitles.com client inside Kodi."""
+"""Configure and verify both OpenSubtitles.com integrations inside Kodi."""
 
 import json
 import os
@@ -8,12 +8,16 @@ import sys
 from urllib import error as urlerror
 from urllib import parse, request
 
+import xbmc
 import xbmcaddon
 import xbmcvfs
 
-ADDON_ID = "plugin.video.umbrella"
+UMBRELLA_ID = "plugin.video.umbrella"
+SERVICE_ID = "service.subtitles.opensubtitles-com"
+LEGACY_ID = "service.subtitles.opensubtitles"
 EXPECTED_BASE_URL = "https://api.opensubtitles.com/api/v1"
-SETTINGS = ("opensubsusername", "opensubspassword", "opensubstoken")
+UMBRELLA_SETTINGS = ("opensubsusername", "opensubspassword", "opensubstoken")
+SERVICE_SETTINGS = ("OSuser", "OSpass")
 TEST_IMDB_ID = "1104001"  # Sintel
 
 
@@ -33,19 +37,50 @@ def _api_identity(addon):
         xbmcvfs.translatePath(addon.getAddonInfo("path")),
         "resources",
         "lib",
-        "modules",
-        "opensubs.py",
+        "osclient",
+        "provider.py",
     )
     with open(module, encoding="utf-8") as source:
         text = source.read()
-    base = re.search(r"^base_url = '([^']+)'$", text, re.MULTILINE)
-    key = re.search(r"^api_key = '([^']+)'$", text, re.MULTILINE)
-    if not base or base.group(1) != EXPECTED_BASE_URL or not key:
-        raise RuntimeError("unknown Umbrella OpenSubtitles API identity")
-    api_key = key.group(1)
+    base = re.search(r'^API_URL = "([^"]+)/"$', text, re.MULTILINE)
+    api_key = addon.getSetting("APIKey")
+    if not base or base.group(1) != EXPECTED_BASE_URL:
+        raise RuntimeError("unknown OpenSubtitles.com service API identity")
     if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", api_key):
-        raise RuntimeError("invalid Umbrella OpenSubtitles API key")
+        raise RuntimeError("invalid OpenSubtitles.com service API key")
     return api_key
+
+
+def _rpc(method, params=None):
+    request_payload = {"jsonrpc": "2.0", "id": 1, "method": method}
+    if params is not None:
+        request_payload["params"] = params
+    response = json.loads(xbmc.executeJSONRPC(json.dumps(request_payload)))
+    if "error" in response:
+        raise RuntimeError("Kodi JSON-RPC operation failed")
+    return response.get("result")
+
+
+def _get_setting(setting_id):
+    result = _rpc("Settings.GetSettingValue", {"setting": setting_id})
+    return result.get("value") if isinstance(result, dict) else None
+
+
+def _set_setting(setting_id, value):
+    result = _rpc(
+        "Settings.SetSettingValue", {"setting": setting_id, "value": value}
+    )
+    if result is not True:
+        raise RuntimeError("Kodi rejected default subtitle service")
+
+
+def _addon_enabled(addon_id):
+    result = _rpc(
+        "Addons.GetAddonDetails",
+        {"addonid": addon_id, "properties": ["enabled", "version"]},
+    )
+    addon = result.get("addon") if isinstance(result, dict) else None
+    return bool(addon and addon.get("enabled"))
 
 
 def _json_request(method, url, api_key, token=None, payload=None):
@@ -53,8 +88,8 @@ def _json_request(method, url, api_key, token=None, payload=None):
         "Accept": "application/json",
         "Api-Key": api_key,
         "Content-Type": "application/json",
-        "User-Agent": "Umbrella v{}".format(
-            xbmcaddon.Addon(ADDON_ID).getAddonInfo("version")
+        "User-Agent": "OpenSubtitles.com Kodi plugin v{}".format(
+            xbmcaddon.Addon(SERVICE_ID).getAddonInfo("version")
         ),
     }
     if token:
@@ -143,8 +178,8 @@ def _probe(api_key, token, download):
             link,
             headers={
                 "Accept": "application/octet-stream,text/plain,*/*",
-                "User-Agent": "Umbrella v{}".format(
-                    xbmcaddon.Addon(ADDON_ID).getAddonInfo("version")
+                "User-Agent": "OpenSubtitles.com Kodi plugin v{}".format(
+                    xbmcaddon.Addon(SERVICE_ID).getAddonInfo("version")
                 ),
             },
         ),
@@ -160,8 +195,11 @@ def _probe(api_key, token, download):
 def main():
     config_path, report_path = sys.argv[1:3]
     report = {"ok": False, "schema": 1, "stage": "load"}
-    addon = None
-    previous = {}
+    umbrella = None
+    service = None
+    previous_umbrella = {}
+    previous_service = {}
+    previous_kodi = {}
     try:
         with open(config_path, encoding="utf-8") as source:
             config = json.load(source)
@@ -189,16 +227,29 @@ def main():
         if not isinstance(config.get("probe_download"), bool):
             raise TypeError("invalid OpenSubtitles.com probe mode")
 
-        addon = xbmcaddon.Addon(ADDON_ID)
-        api_key = _api_identity(addon)
-        previous = {setting: addon.getSetting(setting) for setting in SETTINGS}
+        umbrella = xbmcaddon.Addon(UMBRELLA_ID)
+        service = xbmcaddon.Addon(SERVICE_ID)
+        xbmcaddon.Addon(LEGACY_ID)
+        if not _addon_enabled(SERVICE_ID) or not _addon_enabled(LEGACY_ID):
+            raise RuntimeError("OpenSubtitles services are not both enabled")
+        api_key = _api_identity(service)
+        previous_umbrella = {
+            setting: umbrella.getSetting(setting) for setting in UMBRELLA_SETTINGS
+        }
+        previous_service = {
+            setting: service.getSetting(setting) for setting in SERVICE_SETTINGS
+        }
+        previous_kodi = {
+            setting: _get_setting(setting)
+            for setting in ("subtitles.movie", "subtitles.tv")
+        }
         report["stage"] = "auth"
         selected_token = None
         user = {}
         token_source = None
         seen_tokens = set()
         candidates = (
-            ("installed", previous["opensubstoken"]),
+            ("installed", previous_umbrella["opensubstoken"]),
             ("bootstrap", bootstrap_token),
         )
         for source, candidate in candidates:
@@ -221,29 +272,55 @@ def main():
                 raise RuntimeError("OpenSubtitles.com authentication failed")
 
         report["stage"] = "settings"
-        desired = {
+        desired_umbrella = {
             "opensubsusername": username,
             "opensubspassword": password,
             "opensubstoken": selected_token,
         }
-        for setting, value in desired.items():
-            addon.setSetting(setting, value)
-        if any(addon.getSetting(key) != value for key, value in desired.items()):
+        desired_service = {"OSuser": username, "OSpass": password}
+        for setting, value in desired_umbrella.items():
+            umbrella.setSetting(setting, value)
+        for setting, value in desired_service.items():
+            service.setSetting(setting, value)
+        for setting in ("subtitles.movie", "subtitles.tv"):
+            _set_setting(setting, SERVICE_ID)
+        if any(
+            umbrella.getSetting(key) != value
+            for key, value in desired_umbrella.items()
+        ):
             raise RuntimeError("Umbrella rejected OpenSubtitles.com settings")
+        if any(
+            service.getSetting(key) != value
+            for key, value in desired_service.items()
+        ):
+            raise RuntimeError("OpenSubtitles.com service rejected credentials")
+        if any(
+            _get_setting(setting) != SERVICE_ID
+            for setting in ("subtitles.movie", "subtitles.tv")
+        ):
+            raise RuntimeError("OpenSubtitles.com is not the default Kodi service")
 
         report["stage"] = "probe"
         probe = _probe(api_key, selected_token, config["probe_download"])
         report.update(
             {
-                "addon_id": ADDON_ID,
-                "addon_version": addon.getAddonInfo("version"),
+                "addon_id": SERVICE_ID,
+                "addon_version": service.getAddonInfo("version"),
                 "allowed_downloads": user.get("allowed_downloads"),
-                "changed": previous != desired,
+                "changed": previous_umbrella != desired_umbrella
+                or previous_service != desired_service
+                or any(
+                    value != SERVICE_ID for value in previous_kodi.values()
+                ),
                 "credentials_stored": True,
+                "default_movie_service": True,
+                "default_tv_service": True,
+                "legacy_service_visible": True,
                 "ok": True,
                 "remaining_downloads": user.get("remaining_downloads"),
                 "stage": "complete",
                 "token_source": token_source,
+                "umbrella_addon_version": umbrella.getAddonInfo("version"),
                 "vip": bool(user.get("vip")),
                 **probe,
             }
@@ -253,10 +330,14 @@ def main():
         status = getattr(error, "code", None)
         if isinstance(status, int):
             report["http_status"] = status
-        if addon is not None and previous:
+        if umbrella is not None and service is not None and previous_umbrella:
             try:
-                for setting, value in previous.items():
-                    addon.setSetting(setting, value)
+                for setting, value in previous_umbrella.items():
+                    umbrella.setSetting(setting, value)
+                for setting, value in previous_service.items():
+                    service.setSetting(setting, value)
+                for setting, value in previous_kodi.items():
+                    _set_setting(setting, value)
                 report["rolled_back"] = True
             except Exception:  # noqa: BLE001 - best-effort rollback at Kodi boundary
                 report["rolled_back"] = False
