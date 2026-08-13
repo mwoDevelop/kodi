@@ -70,11 +70,15 @@ jobs:
           python tools/kodi_android_stable_rollout.py \
             --device bluestacks1 \
             --adb "$KODI_ADB" \
-            --channel testing
+            --channel testing \
+            --devices "$KODI_DEVICES_FILE" \
+            --references "$KODI_REFERENCES_FILE"
           python tools/kodi_android_stable_rollout.py \
             --device "$ANDROID_TV" \
             --adb "$KODI_ADB" \
-            --channel testing
+            --channel testing \
+            --devices "$KODI_DEVICES_FILE" \
+            --references "$KODI_REFERENCES_FILE"
           python tools/certify_device_matrix.py \
             --snapshot snapshot.tar \
             --adb "$KODI_ADB" \

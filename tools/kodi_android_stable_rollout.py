@@ -173,10 +173,19 @@ def ensure_kodi_ready(adb, port, serial):
         return "restarted"
 
 
-def reconcile(device_id, adb, port, channel="stable"):
-    references = load_private_references(ROOT / ".env")
+def reconcile(
+    device_id,
+    adb,
+    port,
+    channel="stable",
+    devices_file=None,
+    references_file=None,
+):
+    devices_file = Path(devices_file) if devices_file else ROOT / ".kodi-private/devices.json"
+    references_file = Path(references_file) if references_file else ROOT / ".env"
+    references = load_private_references(references_file)
     device = resolve_private_endpoint(
-        resolve_device(load_registry(ROOT / ".kodi-private/devices.json"), device_id),
+        resolve_device(load_registry(devices_file), device_id),
         references,
         required=True,
     )
@@ -268,6 +277,8 @@ def main():
     parser.add_argument(
         "--channel", choices=("stable", "testing"), default="stable"
     )
+    parser.add_argument("--devices", help="private device registry path")
+    parser.add_argument("--references", help="private endpoint references path")
     args = parser.parse_args()
     print(
         json.dumps(
@@ -276,6 +287,8 @@ def main():
                 args.adb,
                 args.adb_server_port,
                 args.channel,
+                devices_file=args.devices,
+                references_file=args.references,
             ),
             indent=2,
             sort_keys=True,
