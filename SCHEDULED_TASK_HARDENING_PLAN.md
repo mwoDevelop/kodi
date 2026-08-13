@@ -1,6 +1,6 @@
 # Plan domknięcia audytu cyklicznego i enrollmentów Profile Sync
 
-Status: w realizacji
+Status: ukończony 13 sierpnia 2026 r.
 
 ## Cel
 
@@ -69,3 +69,22 @@ naruszona, urządzenie otrzyma nowy enrollment kontrolowanym mechanizmem parowan
 
 Kryterium końcowe: kod, CI, ręczny przebieg cykliczny, artefakt skanera, QNAP oraz
 stan enrollmentów dają zgodny, powtarzalny wynik bez aktywnych starych tokenów.
+
+## Wynik realizacji
+
+- mwoScrapers PR `#26` i korekta praw dostępu skanerów PR `#27` zostały scalone;
+- kontrolowany workflow `31713645062` przeszedł na `main`: 2 archiwa, 174 członków,
+  177 plików, 5 044 782 bajty, `skipped=0`, brak znalezisk, wszystkie cztery kontrole
+  `pass`;
+- główne repozytorium PR `#169` przeszło dwa niezależne E2E, a lokalnie uzyskano
+  `492 passed` zarówno dla pełnego pytest, jak i `tests/e2e/run.sh`;
+- przed zmianą produkcji utworzono i zaszyfrowano spójną kopię online
+  `scheduled-hardening-20260813`; SQLite zwrócił `integrity_check=ok`;
+- unieważniono 8 starszych enrollmentów: BlueStacks zachował wyłącznie generację 2,
+  X88 wyłącznie generację 10. Obie aktywne generacje zachowały udany raport bieżącej
+  rewizji `home-stable`;
+- Profile Sync i provider relay na QNAP są zdrowe, a watchdog widzi dokładnie sześć
+  workflow i pustą listę `workflow_failures`.
+
+Nie utworzono nowej wersji dodatku Kodi: instalowany kod mwoScrapers 0.2.0 nie został
+zmieniony; poprawka dotyczy wyłącznie narzędzi audytu, workflow i operacji hosta.
