@@ -8,7 +8,30 @@ from tools.kodi_android_stable_rollout import (
     ensure_kodi_ready,
     origin_transition,
     reconcile,
+    reconcile_origins,
 )
+
+
+def test_empty_testing_origin_map_is_an_idempotent_no_op(monkeypatch):
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.desired_origins",
+        lambda _prepared, _channel: {},
+    )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.installed_addon_origins_in_kodi",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("unexpected read")),
+    )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.assign_addon_origins_in_kodi",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("unexpected write")
+        ),
+    )
+
+    assert reconcile_origins("adb", 5038, "device", {}, "testing") == {
+        "status": "NO_CHANGE",
+        "origins": 0,
+    }
 
 
 def test_android_stable_preflight_restarts_a_stale_kodi_process(monkeypatch):
@@ -26,12 +49,8 @@ def test_android_stable_preflight_restarts_a_stale_kodi_process(monkeypatch):
         if len(waits) == 1:
             raise TimeoutError("stale")
 
-    monkeypatch.setattr(
-        "tools.kodi_android_stable_rollout.adb_command", adb_command
-    )
-    monkeypatch.setattr(
-        "tools.kodi_android_stable_rollout._wait_for_kodi_ready", wait
-    )
+    monkeypatch.setattr("tools.kodi_android_stable_rollout.adb_command", adb_command)
+    monkeypatch.setattr("tools.kodi_android_stable_rollout._wait_for_kodi_ready", wait)
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.time.sleep", lambda _seconds: None
     )
@@ -145,9 +164,7 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
         {
             "serial": "device",
             "addon_origins": {ADDON_ORDER[0]: repository_id},
-            "addon_previous_origins": {
-                ADDON_ORDER[0]: "repository.mwodevelop"
-            },
+            "addon_previous_origins": {ADDON_ORDER[0]: "repository.mwodevelop"},
             "addon_version_transitions": {
                 ADDON_ORDER[0]: {"from": "1.0.0", "to": "2.0.0"}
             },
@@ -188,9 +205,7 @@ def test_testing_origin_transition_allows_the_pinned_version_change():
     )
 
     assert previous == {"candidate": "repository.mwodevelop"}
-    assert transitions == {
-        "candidate": {"from": "1.0.0", "to": "2.0.0"}
-    }
+    assert transitions == {"candidate": {"from": "1.0.0", "to": "2.0.0"}}
 
 
 def test_stable_transition_ignores_addons_already_owned_by_stable():
@@ -220,6 +235,4 @@ def test_stable_transition_ignores_addons_already_owned_by_stable():
     )
 
     assert previous == {"candidate": "repository.mwodevelop.testing"}
-    assert transitions == {
-        "candidate": {"from": "1.0.0", "to": "2.0.0"}
-    }
+    assert transitions == {"candidate": {"from": "1.0.0", "to": "2.0.0"}}
