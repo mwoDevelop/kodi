@@ -136,6 +136,11 @@ canary otrzymuje `DEFERRED`, a kolejne cele i E2E są nadal wykonywane; cały ru
 kończy się wtedy jako `PARTIAL`. W scoped rollout każdy wskazany cel jest
 wymagany, ale wynik pozostaje jawnie zapisany w raporcie.
 
+Jeżeli taki rollout jest ostatnim krokiem release, krok `release:rollout`
+zachowuje przyczynę wyniku częściowego: raportuje `DEFERRED` dla samych
+niedostępnych urządzeń, a `DIAGNOSTIC_FAILED` wyłącznie wtedy, gdy podrzędny
+raport zawiera rzeczywisty błąd diagnostyczny.
+
 ## Release
 
 Przejrzyj read-only plan:

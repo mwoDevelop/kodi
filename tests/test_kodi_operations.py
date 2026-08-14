@@ -13,6 +13,7 @@ from tools.kodi_operations.runner import (
     OperationRunner,
     ProductionExecutor,
     StepOutcome,
+    release_rollout_result,
 )
 from tools.kodi_operations.store import RunStore, StoreError
 
@@ -343,6 +344,29 @@ def test_unavailable_non_canary_is_deferred_and_later_steps_continue(
     assert report["status"] == "PARTIAL"
     assert report["steps"]["device:sony-tv"]["result"] == "DEFERRED"
     assert report["steps"]["e2e"]["result"] == "NO_CHANGE"
+
+
+def test_release_rollout_preserves_deferred_partial_reason():
+    report = {
+        "steps": {
+            "device:online": {"result": "NO_CHANGE"},
+            "device:offline": {"result": "DEFERRED"},
+            "e2e": {"result": "PASS"},
+        }
+    }
+
+    assert release_rollout_result(report, 2) == StepResult.DEFERRED
+
+
+def test_release_rollout_preserves_diagnostic_failure_over_deferred():
+    report = {
+        "steps": {
+            "device:offline": {"result": "DEFERRED"},
+            "device:failed": {"result": "DIAGNOSTIC_FAILED"},
+        }
+    }
+
+    assert release_rollout_result(report, 2) == StepResult.DIAGNOSTIC_FAILED
 
 
 def test_unavailable_canary_stops_later_waves(monkeypatch, tmp_path):
