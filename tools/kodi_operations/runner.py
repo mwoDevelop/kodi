@@ -86,6 +86,22 @@ class OperationAdapterError(RuntimeError):
         self.adapter = adapter
 
 
+def release_rollout_result(child_report: dict[str, Any], child_code: int) -> StepResult:
+    """Preserve the reason why a post-release fleet rollout is partial."""
+    if child_code == 0:
+        return StepResult.PASS
+    if child_code != EXIT_CODES[RunStatus.PARTIAL]:
+        raise RuntimeError("post-release rollout failed")
+    results = {
+        step.get("result") for step in child_report.get("steps", {}).values()
+    }
+    if StepResult.DIAGNOSTIC_FAILED.value in results:
+        return StepResult.DIAGNOSTIC_FAILED
+    if StepResult.DEFERRED.value in results:
+        return StepResult.DEFERRED
+    raise RuntimeError("partial post-release rollout has no classified cause")
+
+
 class OperationLock:
     def __init__(self, repository: Path, run_id: str):
         self.path = repository / ".kodi-private/kodi-ops/operation.lock"
@@ -1009,9 +1025,7 @@ class ProductionExecutor:
             child_report, child_code = OperationRunner(
                 self.repository, self
             ).run(child_plan, acquire_lock=False)
-            if child_code not in {0, 2}:
-                raise RuntimeError("post-release rollout failed")
-            result = StepResult.PASS if child_code == 0 else StepResult.DIAGNOSTIC_FAILED
+            result = release_rollout_result(child_report, child_code)
             return StepOutcome(
                 result,
                 {"child_run_id": child_report["run_id"], "status": child_report["status"]},
