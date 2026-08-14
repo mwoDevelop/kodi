@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-08
 
+- [QNAP Control Plane — faza 2 i release stable](2026-08-14-control-plane-phase2-release.md)
 - [OpenSubtitles.com jako domyślna usługa Kodi](2026-08-13-opensubtitles-com-service-1.0.13.1.md)
 - [Wspólne konto OpenSubtitles.org i OpenSubtitles.com w Umbrella](2026-08-13-opensubtitles-com-rollout.md)
 - [Kwalifikacja sześciu providerów MwoScrapers 0.2.0](2026-08-12-mwoscrapers-provider-expansion.md)

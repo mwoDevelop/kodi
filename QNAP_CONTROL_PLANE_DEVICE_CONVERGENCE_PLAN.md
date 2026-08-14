@@ -1,6 +1,6 @@
 # Plan przeniesienia administracji na QNAP i autonomicznej konwergencji Kodi
 
-Status: w realizacji etapowej; faza 1 wydana, faza 2 rozpoczęta
+Status: w realizacji etapowej; faza 1 wydana, faza 2 częściowo wdrożona
 
 Data: 2026-08-13
 
@@ -10,10 +10,18 @@ Aktualizacja 2026-08-14:
   mTLS, zredagowany cache, audit, backup/restore i monitoring QNAP;
 - wydano `convergence_bundle_v1`: content addressing, exact-artifact evidence,
   stany `PREPARING/READY`, CAS head oraz kompatybilny restore schematu bazy 1;
+- wydano `kodi-control-plane` 0.2.0 i `kodi-profile-sync-server` 0.5.0;
+  kontrakty offline release intent, delegowanego assignmentu i raportu urządzenia
+  są zaimplementowane i testowane, ale nie są jeszcze podłączone do trwałego
+  magazynu ani sieciowego writer API;
+- certyfikowany snapshot stable przeszedł canary BlueStacks/X88, publikację
+  56 plików, rollout na trzy dostępne urządzenia Android i wdrożenie czterech
+  zdrowych obrazów QNAP przypiętych digestem;
 - sieciowe API pozostaje read-only, a writer bundle działa wyłącznie lokalnym CLI
   QNAP;
-- w toku pozostają release intent/delegowany assignment, magazyn sekretów,
-  Device Agent, autonomiczne dodatki, kontroler fal/UI i clean bootstrap.
+- w toku pozostają utrwalenie i egzekwowanie release intent/delegowanego
+  assignmentu, magazyn sekretów, Device Agent, autonomiczne dodatki, kontroler
+  fal/UI i clean bootstrap.
 
 Repo nadrzędne: `mwoDevelop/kodi`
 
