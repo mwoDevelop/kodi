@@ -39,6 +39,35 @@ ADDON_ORDER = (
 )
 
 
+def reconcile_origins(adb, port, serial, prepared, channel):
+    origins = desired_origins(prepared, channel)
+    if not origins:
+        return {"status": "NO_CHANGE", "origins": 0}
+    current_origins = installed_addon_origins_in_kodi(
+        adb,
+        port,
+        serial,
+        origins,
+        ROOT / "tools/kodi_profile_origin_device.py",
+    )
+    previous_origins, version_transitions = origin_transition(
+        prepared, channel, origins, current_origins
+    )
+    assign_addon_origins_in_kodi(
+        adb,
+        port,
+        {
+            "serial": serial,
+            "addon_origins": origins,
+            "addon_previous_origins": previous_origins,
+            "addon_version_transitions": version_transitions,
+        },
+        ROOT / "tools/kodi_profile_origin_device.py",
+        timeout=180,
+    )
+    return {"status": "UPDATED", "origins": len(origins)}
+
+
 def desired_origins(prepared, channel, stable_components=None):
     """Return only origins that the selected channel must own.
 
@@ -48,10 +77,7 @@ def desired_origins(prepared, channel, stable_components=None):
     stable lock are owned by the testing repository.
     """
     if channel == "stable":
-        return {
-            addon_id: prepared["repository_id"]
-            for addon_id in prepared["addons"]
-        }
+        return {addon_id: prepared["repository_id"] for addon_id in prepared["addons"]}
     if stable_components is None:
         stable_lock = json.loads(
             (ROOT / "manifests/locks/stable.json").read_text(encoding="utf-8")
@@ -95,9 +121,7 @@ def origin_transition(
         if current_origin in (None, "", prepared["repository_id"]):
             continue
         if current_origin != opposite_repository:
-            raise RuntimeError(
-                "%s has an unexpected repository origin" % addon_id
-            )
+            raise RuntimeError("%s has an unexpected repository origin" % addon_id)
         previous[addon_id] = current_origin
         previous_version = opposite_components.get(addon_id, {}).get("version")
         target_version = prepared["addons"][addon_id]["version"]
@@ -181,7 +205,9 @@ def reconcile(
     devices_file=None,
     references_file=None,
 ):
-    devices_file = Path(devices_file) if devices_file else ROOT / ".kodi-private/devices.json"
+    devices_file = (
+        Path(devices_file) if devices_file else ROOT / ".kodi-private/devices.json"
+    )
     references_file = Path(references_file) if references_file else ROOT / ".env"
     references = load_private_references(references_file)
     device = resolve_private_endpoint(
@@ -204,8 +230,18 @@ def reconcile(
     for addon_id in (repository_id, *managed):
         artifact = available[addon_id]
         current = addon_details(adb, port, serial, addon_id)
-        if current and current.get("enabled") and str(current.get("version")) == artifact["version"]:
-            actions.append({"addon": addon_id, "action": "unchanged", "version": artifact["version"]})
+        if (
+            current
+            and current.get("enabled")
+            and str(current.get("version")) == artifact["version"]
+        ):
+            actions.append(
+                {
+                    "addon": addon_id,
+                    "action": "unchanged",
+                    "version": artifact["version"],
+                }
+            )
             continue
         try:
             applied = rollout(
@@ -234,30 +270,15 @@ def reconcile(
                 240,
                 repair_orphan=True,
             )
-        actions.append({"addon": addon_id, "action": "installed", "version": artifact["version"], "repaired_orphan": bool(applied.get("repaired_orphan"))})
-    origins = desired_origins(prepared, channel)
-    current_origins = installed_addon_origins_in_kodi(
-        adb,
-        port,
-        serial,
-        origins,
-        ROOT / "tools/kodi_profile_origin_device.py",
-    )
-    previous_origins, version_transitions = origin_transition(
-        prepared, channel, origins, current_origins
-    )
-    assign_addon_origins_in_kodi(
-        adb,
-        port,
-        {
-            "serial": serial,
-            "addon_origins": origins,
-            "addon_previous_origins": previous_origins,
-            "addon_version_transitions": version_transitions,
-        },
-        ROOT / "tools/kodi_profile_origin_device.py",
-        timeout=180,
-    )
+        actions.append(
+            {
+                "addon": addon_id,
+                "action": "installed",
+                "version": artifact["version"],
+                "repaired_orphan": bool(applied.get("repaired_orphan")),
+            }
+        )
+    origin_result = reconcile_origins(adb, port, serial, prepared, channel)
     return {
         "schema": 1,
         "device": device_id,
@@ -266,6 +287,7 @@ def reconcile(
         "lock_sha256": prepared["lock_sha256"],
         "kodi_preflight": kodi_preflight,
         "actions": actions,
+        "origins": origin_result,
     }
 
 
@@ -274,9 +296,7 @@ def main():
     parser.add_argument("--device", required=True)
     parser.add_argument("--adb", default="/home/mwo/android-sdk/platform-tools/adb")
     parser.add_argument("--adb-server-port", type=int, default=5038)
-    parser.add_argument(
-        "--channel", choices=("stable", "testing"), default="stable"
-    )
+    parser.add_argument("--channel", choices=("stable", "testing"), default="stable")
     parser.add_argument("--devices", help="private device registry path")
     parser.add_argument("--references", help="private endpoint references path")
     args = parser.parse_args()
