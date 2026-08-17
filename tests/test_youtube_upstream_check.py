@@ -102,6 +102,7 @@ def test_materialize_noop_keeps_zip_and_expanded_tree(tmp_path):
     assert candidate["action"] == "noop"
     assert candidate["candidate_id"] == hashlib.sha256(payload).hexdigest()
     assert candidate["expanded"]["files"] == 2
+    assert (tmp_path / "candidate").stat().st_mode & 0o777 == 0o755
     assert (tmp_path / "candidate/artifact/plugin.video.youtube-7.4.4.zip").is_file()
     assert (tmp_path / "candidate/expanded/plugin.video.youtube/addon.xml").is_file()
 

@@ -180,7 +180,10 @@ def materialize(manifest_path, output_dir, opener=urllib.request.urlopen):
     output_dir = Path(output_dir)
     if output_dir.exists():
         raise UpstreamError("candidate output already exists")
-    output_dir.mkdir(parents=True, mode=0o700)
+    # Candidate bytes are public upstream material. The common scanner runs in
+    # isolated containers under a different UID and therefore needs traverse
+    # permission on the bind-mounted root.
+    output_dir.mkdir(parents=True, mode=0o755)
     archive_path = output_dir / "artifact" / (f"{ADDON_ID}-{latest}.zip")
     archive_path.parent.mkdir()
     archive_path.write_bytes(payload)
