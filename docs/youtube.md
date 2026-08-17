@@ -111,3 +111,10 @@ ClamAV/Semgrep/Gitleaks. Zmiana tworzy PR do przeglądu manifestu. Nie ma automa
 merge ani promocji; wymagane pozostają testy BlueStacks, X88 i regresja starej
 funkcjonalności. QNAP watchdog monitoruje ten workflow niezależnie od ogólnego
 `reconcile-upstreams.yml`.
+
+Oficjalny dodatek zawiera własne publiczne identyfikatory klientów/API, które Gitleaks
+poprawnie wskazuje jako potencjalne sekrety. Po ręcznym przeglądzie przypiętej wersji
+zaakceptowano wyłącznie cztery pary ścieżka+reguła w
+`security/youtube-7.4.4-baseline.json`; każda pozycja jest dodatkowo związana z SHA-256
+całego pliku. Baseline nie przechowuje ani nie drukuje wykrytej wartości. Nowa wersja,
+zmieniony plik, nowa ścieżka lub inna reguła pozostają aktywnym błędem bezpieczeństwa.

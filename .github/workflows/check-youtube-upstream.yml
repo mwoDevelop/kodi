@@ -63,12 +63,14 @@ jobs:
         with:
           candidate-path: youtube-upstream-candidate
           candidate-id: ${{ steps.candidate.outputs.candidate_id }}
+          baseline: security/youtube-7.4.4-baseline.json
           output: youtube-upstream-security.json
       - name: Verify exact scan binding and coverage
         run: >-
           python tools/upstream_security_scan.py verify
           --candidate youtube-upstream-candidate
           --candidate-id '${{ steps.candidate.outputs.candidate_id }}'
+          --baseline security/youtube-7.4.4-baseline.json
           --report youtube-upstream-security.json
           --policy manifests/upstream-security.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -105,6 +107,7 @@ jobs:
           python tools/upstream_security_scan.py verify
           --candidate youtube-upstream-candidate
           --candidate-id '${{ needs.qualify.outputs.candidate_id }}'
+          --baseline security/youtube-7.4.4-baseline.json
           --report youtube-upstream-security.json
           --policy manifests/upstream-security.json
       - name: Apply candidate manifest only

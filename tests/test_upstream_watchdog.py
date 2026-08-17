@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 import re
 from pathlib import Path
 
@@ -148,6 +149,7 @@ def test_youtube_upstream_scans_zip_and_expanded_tree_before_review_pr():
         ".github/workflows/check-youtube-upstream.yml"
     ).read_text(encoding="utf-8")
     assert "candidate-path: youtube-upstream-candidate" in workflow
+    assert "baseline: security/youtube-7.4.4-baseline.json" in workflow
     assert "tools/upstream_security_scan.py verify" in workflow
     assert workflow.count("tools/upstream_security_scan.py verify") == 2
     assert "tools/youtube_upstream_check.py apply" in workflow
@@ -156,3 +158,20 @@ def test_youtube_upstream_scans_zip_and_expanded_tree_before_review_pr():
     assert "gh pr merge" not in workflow
     assert "pull_request:" in workflow
     assert "github.event_name != 'pull_request'" in workflow
+
+
+def test_youtube_security_baseline_is_exact_file_bound():
+    baseline = json.loads(
+        Path("security/youtube-7.4.4-baseline.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert baseline["schema"] == 1
+    assert len(baseline["findings"]) == 4
+    assert all(
+        set(item) == {"engine", "path", "rule", "sha256"}
+        and item["engine"] == "gitleaks"
+        and item["path"].startswith("expanded/plugin.video.youtube/")
+        and len(item["sha256"]) == 64
+        for item in baseline["findings"]
+    )
