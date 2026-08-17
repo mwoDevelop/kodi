@@ -13,6 +13,7 @@ from tools.kodi_operations.runner import (
     OperationRunner,
     ProductionExecutor,
     StepOutcome,
+    qnap_service_is_operational,
     release_rollout_result,
 )
 from tools.kodi_operations.store import RunStore, StoreError
@@ -241,6 +242,27 @@ def test_qnap_reconcile_deploys_before_health_evaluation(monkeypatch, tmp_path):
         "--lock",
         "manifests/locks/qnap-stable.json",
     ]
+
+
+def test_watchdog_security_alert_is_operational_but_remains_visible():
+    assert qnap_service_is_operational(
+        "upstream-watchdog",
+        {
+            "status": "running",
+            "health": "unhealthy",
+            "checked_at": "2026-08-18T00:00:00+00:00",
+            "runtime_healthy": False,
+            "workflow_failures": ["example/reconcile.yml"],
+        },
+    )
+    assert not qnap_service_is_operational(
+        "upstream-watchdog",
+        {
+            "status": "running",
+            "health": "unhealthy",
+            "runtime_status": "not-ready",
+        },
+    )
 
 
 def test_resume_reprobes_completed_steps(monkeypatch, tmp_path):

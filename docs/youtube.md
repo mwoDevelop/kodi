@@ -64,9 +64,22 @@ wiąże opcjonalny serwer HTTP dodatku z loopback i wykonuje publiczną sondę Y
 API. Prywatny plik tymczasowy i raport na pamięci współdzielonej Androida są usuwane w
 bloku `finally`. Raport nie zawiera wartości kluczy ani wskazówki konta.
 
+`inputstream.adaptive` jest obowiązkową zależnością binarną. Oficjalne repo Kodi dla
+Androida publikuje ją dla ARM64 i ARMv7, dlatego Kodi działające jako pakiet `x86` w
+emulatorze nie jest kwalifikowanym canary. Instancja BlueStacks używana przez projekt
+ma oficjalny Kodi 21.3 ARM64 uruchamiany przez native bridge; adapter odrzuca wariant
+`x86` przed pokazaniem dialogu instalacji. Natywna instalacja z repo może otworzyć
+modalne potwierdzenie. Automatyzacja akceptuje wyłącznie dialog, który pojawił się
+bezpośrednio po jej własnym `InstallAddon`, i odmawia działania przy wcześniej
+otwartym oknie potwierdzenia.
+
 Brak kompletu `YOUTUBE_API_KEY`, `YOUTUBE_CLIENT_ID` i `YOUTUBE_CLIENT_SECRET` daje
 jawny stan `API_CONFIG_REQUIRED`; instalacja kodu może się udać, ale konto nie jest
 gotowe. Częściowy zestaw referencji jest błędem i nie powoduje mutacji.
+Przy pierwszym ręcznym otwarciu dodatku Kodi może wtedy nadal pokazać kreator
+konfiguracji. Rollout celowo go nie akceptuje ani nie oznacza jako ukończony bez
+kluczy API; operator może zamknąć okno, a po uzupełnieniu referencji ponownie
+uruchomić adapter i wykonać device flow.
 
 ## Interaktywny OAuth
 

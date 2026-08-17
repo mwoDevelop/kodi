@@ -474,9 +474,12 @@ odniesienia do prywatnych wartości `.env`, ale nigdy same dane uwierzytelniają
 Zastosuj i zweryfikuj politykę X88 Pro 20 za pomocą:
 
 ```bash
+set -a
+. ./.env
+set +a
 .venv/bin/python tools/android_device_profile.py \
   --profile manifests/device-profiles/x88pro20.json \
-  --serial 192.168.1.8:5555 \
+  --serial "$KODI_DEVICE_X88PRO20_ADB" \
   --adb /home/mwo/android-sdk/platform-tools/adb \
   --adb-server-port 5038 \
   --env-file .env \

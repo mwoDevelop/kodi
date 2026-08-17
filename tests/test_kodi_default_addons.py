@@ -7,7 +7,6 @@ import pytest
 
 from tools import kodi_default_addons as defaults
 
-
 MANIFEST = Path("manifests/kodi-default-addons.json")
 
 
@@ -37,6 +36,7 @@ def test_versioned_default_manifest_is_valid():
     assert youtube["dependency_requirements"]["inputstream.adaptive"] == {
         "minimum_version": "19.0.0",
         "type": "platform",
+        "supported_android_abis": ["arm64-v8a", "armeabi-v7a"],
     }
 
 
@@ -49,9 +49,7 @@ def test_versioned_default_manifest_is_valid():
         ("2.26.9", "2.27.1", False),
     ],
 )
-def test_version_at_least_uses_kodi_numeric_release_prefix(
-    actual, minimum, expected
-):
+def test_version_at_least_uses_kodi_numeric_release_prefix(actual, minimum, expected):
     assert defaults.version_at_least(actual, minimum) is expected
 
 
@@ -106,13 +104,20 @@ def test_native_official_addon_is_installed_by_kodi_and_origin_is_audited(
                 }
 
     monkeypatch.setattr(defaults, "AdbEventClient", Events)
+    def install_official(*args, **_kwargs):
+        addon_id = args[3]
+        commands.append("InstallAddon(%s)" % addon_id)
+        installed[addon_id] = {
+            "enabled": True,
+            "version": "21.5.9" if addon_id == "inputstream.adaptive" else "7.4.4",
+        }
+
+    monkeypatch.setattr(defaults, "install_official_addon", install_official)
     monkeypatch.setattr(defaults.time, "sleep", lambda *_args: None)
     monkeypatch.setattr(
         defaults,
         "installed_addon_origins_in_kodi",
-        lambda *_args, **_kwargs: {
-            "plugin.video.youtube": "repository.xbmc.org"
-        },
+        lambda *_args, **_kwargs: {"plugin.video.youtube": "repository.xbmc.org"},
     )
 
     result = defaults.reconcile_android(
@@ -130,9 +135,216 @@ def test_native_official_addon_is_installed_by_kodi_and_origin_is_audited(
     assert result["actions"][-1]["install_mode"] == "kodi-native-official"
 
 
-def test_native_official_addon_rejects_non_official_origin(
+def test_official_install_accepts_only_new_kodi_confirmation(monkeypatch):
+    calls = []
+    states = iter(
+        [
+            {"currentwindow": {"id": 10000}},
+            {
+                "currentwindow": {"id": defaults.YES_NO_DIALOG_ID},
+                "currentcontrol": {"label": "No"},
+            },
+        ]
+    )
+
+    class Rpc:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def call(self, method, _params=None):
+            calls.append(method)
+            if method == "GUI.GetProperties":
+                return next(states)
+            return "OK"
+
+    class Events:
+        def __init__(self, *_args):
+            pass
+
+        def execute_builtin(self, command):
+            calls.append(command)
+
+    monkeypatch.setattr(defaults, "AdbJsonRpcClient", Rpc)
+    monkeypatch.setattr(defaults, "AdbEventClient", Events)
+    monkeypatch.setattr(defaults, "addon_details", lambda *_args: None)
+
+    result = defaults.install_official_addon(
+        "adb", 5038, "device", "plugin.video.youtube", timeout=1
+    )
+
+    assert result == "accepted"
+    assert calls == [
+        "GUI.GetProperties",
+        "UpdateAddonRepos",
+        "InstallAddon(plugin.video.youtube)",
+        "GUI.GetProperties",
+        "Input.Left",
+        "Input.Select",
+    ]
+
+
+def test_official_install_does_not_accept_stale_installed_version(monkeypatch):
+    calls = []
+    installed = iter(
+        [
+            {"enabled": True, "version": "7.3.0"},
+            {"enabled": True, "version": "7.4.4"},
+        ]
+    )
+
+    class Rpc:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def call(self, method, _params=None):
+            calls.append(method)
+            return {"currentwindow": {"id": 10000}}
+
+    class Events:
+        def __init__(self, *_args):
+            pass
+
+        def execute_builtin(self, command):
+            calls.append(command)
+
+    monkeypatch.setattr(defaults, "AdbJsonRpcClient", Rpc)
+    monkeypatch.setattr(defaults, "AdbEventClient", Events)
+    monkeypatch.setattr(defaults, "addon_details", lambda *_args: next(installed))
+    monkeypatch.setattr(defaults.time, "sleep", lambda *_args: None)
+
+    result = defaults.install_official_addon(
+        "adb",
+        5038,
+        "device",
+        "plugin.video.youtube",
+        minimum_version="7.4.4",
+        timeout=1,
+    )
+
+    assert result == "completed"
+    assert "UpdateAddonRepos" in calls
+    assert "InstallAddon(plugin.video.youtube)" in calls
+
+
+def test_official_install_reenables_existing_addon_before_update(monkeypatch):
+    calls = []
+
+    class Rpc:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def call(self, method, params=None):
+            calls.append((method, params))
+            if method == "GUI.GetProperties":
+                return {"currentwindow": {"id": 10000}}
+            return "OK"
+
+    class Events:
+        def __init__(self, *_args):
+            pass
+
+        def execute_builtin(self, command):
+            calls.append((command, None))
+
+    observed = iter(
+        [
+            {"enabled": False, "version": "7.0.9.2"},
+            {"enabled": True, "version": "7.4.4"},
+        ]
+    )
+    monkeypatch.setattr(defaults, "AdbJsonRpcClient", Rpc)
+    monkeypatch.setattr(defaults, "AdbEventClient", Events)
+    monkeypatch.setattr(defaults, "addon_details", lambda *_args: next(observed))
+    monkeypatch.setattr(defaults.time, "sleep", lambda *_args: None)
+
+    result = defaults.install_official_addon(
+        "adb",
+        5038,
+        "device",
+        "plugin.video.youtube",
+        minimum_version="7.4.4",
+    )
+
+    assert result == "completed"
+    assert (
+        "Addons.SetAddonEnabled",
+        {"addonid": "plugin.video.youtube", "enabled": True},
+    ) in calls
+
+
+def test_official_install_refuses_preexisting_confirmation(monkeypatch):
+    class Rpc:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def call(self, _method, _params=None):
+            return {"currentwindow": {"id": defaults.YES_NO_DIALOG_ID}}
+
+    monkeypatch.setattr(defaults, "AdbJsonRpcClient", Rpc)
+
+    with pytest.raises(RuntimeError, match="already has a confirmation"):
+        defaults.install_official_addon("adb", 5038, "device", "plugin.video.youtube")
+
+
+def test_platform_dependency_rejects_unsupported_kodi_package_abi(
     monkeypatch, tmp_path
 ):
+    addon = {
+        "id": "plugin.video.youtube",
+        "version": "7.4.4",
+        "kind": "plugin",
+        "url": "https://example.invalid/youtube.zip",
+        "sha256": "0" * 64,
+        "source": "https://example.invalid/source",
+        "license": "GPL-2.0-only",
+        "origin": "repository.xbmc.org",
+        "install_mode": "kodi-native-official",
+        "dependencies": ["inputstream.adaptive"],
+        "dependency_requirements": {
+            "inputstream.adaptive": {
+                "minimum_version": "19.0.0",
+                "type": "platform",
+                "supported_android_abis": ["arm64-v8a", "armeabi-v7a"],
+            }
+        },
+    }
+    monkeypatch.setattr(
+        defaults, "fetch_artifact", lambda *_args: tmp_path / "youtube.zip"
+    )
+    monkeypatch.setattr(defaults, "addon_details", lambda *_args: None)
+    monkeypatch.setattr(defaults, "android_package_abi", lambda *_args: "x86")
+
+    with pytest.raises(RuntimeError, match="Kodi package ABI x86"):
+        defaults.reconcile_android(
+            "adb", 5038, "device", {"addons": [addon]}, tmp_path
+        )
+
+
+def test_native_official_addon_rejects_non_official_origin(monkeypatch, tmp_path):
     addon = {
         "id": "plugin.video.youtube",
         "version": "7.4.4",
@@ -159,9 +371,7 @@ def test_native_official_addon_rejects_non_official_origin(
     )
 
     with pytest.raises(RuntimeError, match="origin differs"):
-        defaults.reconcile_android(
-            "adb", 5038, "device", {"addons": [addon]}, tmp_path
-        )
+        defaults.reconcile_android("adb", 5038, "device", {"addons": [addon]}, tmp_path)
 
 
 def test_fetch_artifact_verifies_digest_and_identity(tmp_path):
@@ -253,9 +463,7 @@ def test_official_dependency_repair_checks_archive_bytes(monkeypatch, tmp_path):
     ]
 
 
-def test_reconcile_repairs_only_a_database_absent_orphan(
-    monkeypatch, tmp_path
-):
+def test_reconcile_repairs_only_a_database_absent_orphan(monkeypatch, tmp_path):
     addon = {
         "id": "repository.rapideo_pl",
         "version": "1.0.4",
@@ -282,8 +490,7 @@ def test_reconcile_repairs_only_a_database_absent_orphan(
         repair_flags.append(repair)
         if not repair:
             raise RuntimeError(
-                "Kodi candidate apply failed: PermissionError at "
-                "backup-installed-addon"
+                "Kodi candidate apply failed: PermissionError at backup-installed-addon"
             )
         current[addon["id"]] = {
             "enabled": True,
@@ -295,9 +502,7 @@ def test_reconcile_repairs_only_a_database_absent_orphan(
     monkeypatch.setattr(
         defaults,
         "AdbEventClient",
-        lambda *_args: type(
-            "Events", (), {"execute_builtin": lambda *_args: None}
-        )(),
+        lambda *_args: type("Events", (), {"execute_builtin": lambda *_args: None})(),
     )
     monkeypatch.setattr(defaults.time, "sleep", lambda *_args: None)
 

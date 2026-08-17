@@ -70,26 +70,46 @@ def validate_profile(profile):
 def resolve_credentials(profile, references):
     profile = validate_profile(profile)
     values = []
-    for field in (
-        "api_key_ref",
-        "client_id_ref",
-        "client_secret_ref",
-        "account_hint_ref",
-    ):
+    for field in ("api_key_ref", "client_id_ref", "client_secret_ref"):
         reference = profile[field]
         value = references.get(reference)
-        if not isinstance(value, str) or not value or len(value) > 2048:
-            raise ValueError(f"missing private reference: {reference}")
+        if value is None:
+            values.append("")
+            continue
+        if not isinstance(value, str) or len(value) > 2048:
+            raise ValueError(f"invalid private reference: {reference}")
         values.append(value.strip())
-    api_key, client_id, client_secret, account_hint = values
+    if any(values) and not all(values):
+        missing = next(
+            profile[field]
+            for field, value in zip(
+                ("api_key_ref", "client_id_ref", "client_secret_ref"),
+                values,
+            )
+            if not value
+        )
+        raise ValueError(f"missing private reference: {missing}")
+    account_hint = references.get(profile["account_hint_ref"], "")
+    if not isinstance(account_hint, str) or len(account_hint) > 2048:
+        raise ValueError("invalid YouTube account hint reference")
+    account_hint = account_hint.strip()
+    api_key, client_id, client_secret = values
+    if not any(values):
+        if account_hint and (
+            "@" not in account_hint
+            or any(character.isspace() for character in account_hint)
+        ):
+            raise ValueError("invalid YouTube account hint reference")
+        return None, None, None, account_hint
     if not API_KEY.fullmatch(api_key):
         raise ValueError("invalid YouTube API key reference")
     if not CLIENT_ID.fullmatch(client_id):
         raise ValueError("invalid YouTube OAuth client ID reference")
     if not client_secret or any(character.isspace() for character in client_secret):
         raise ValueError("invalid YouTube OAuth client secret reference")
-    if "@" not in account_hint or any(
-        character.isspace() for character in account_hint
+    if account_hint and (
+        "@" not in account_hint
+        or any(character.isspace() for character in account_hint)
     ):
         raise ValueError("invalid YouTube account hint reference")
     return api_key, client_id, client_secret, account_hint
@@ -148,6 +168,18 @@ def configure(
     api_key, client_id, client_secret, account_hint = resolve_credentials(
         profile, references
     )
+    if api_key is None:
+        return {
+            "adapter": ADAPTER,
+            "serial": serial,
+            "schema": 1,
+            "ok": True,
+            "status": "API_CONFIG_REQUIRED",
+            "authorization": "API_CONFIG_REQUIRED",
+            "changed": False,
+            "personal_api_configured": False,
+            "account_hint_configured": bool(account_hint),
+        }
     payload = {
         "schema": 1,
         "addon_version": EXPECTED_ADDON_VERSION,

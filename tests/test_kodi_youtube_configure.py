@@ -105,3 +105,41 @@ def test_invalid_api_key_is_rejected_before_transport():
         youtube.resolve_credentials(
             PROFILE, {**REFERENCES, "YOUTUBE_API_KEY": "not-a-key"}
         )
+
+
+def test_absent_api_profile_returns_explicit_non_mutating_status(tmp_path):
+    result = youtube.configure(
+        "adb",
+        5038,
+        "serial",
+        PROFILE,
+        {"YOUTUBE_USER": "youtube@example.invalid"},
+        tmp_path / "unused.py",
+    )
+
+    assert result == {
+        "account_hint_configured": True,
+        "adapter": "youtube-oauth-v1",
+        "authorization": "API_CONFIG_REQUIRED",
+        "changed": False,
+        "ok": True,
+        "personal_api_configured": False,
+        "schema": 1,
+        "serial": "serial",
+        "status": "API_CONFIG_REQUIRED",
+    }
+
+
+def test_partial_api_profile_is_rejected_before_transport(tmp_path):
+    with pytest.raises(ValueError, match="YOUTUBE_CLIENT_ID"):
+        youtube.configure(
+            "adb",
+            5038,
+            "serial",
+            PROFILE,
+            {
+                "YOUTUBE_API_KEY": REFERENCES["YOUTUBE_API_KEY"],
+                "YOUTUBE_USER": REFERENCES["YOUTUBE_USER"],
+            },
+            tmp_path / "unused.py",
+        )

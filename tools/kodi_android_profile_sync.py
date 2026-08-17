@@ -21,7 +21,11 @@ from tools.kodi_portable_state_rollout import _cleanup, _profile_sync_probe
 from tools.kodi_profile import AdbEventClient, AdbJsonRpcClient, adb_command
 from tools.kodi_sync_inventory import load_sync_inventory
 from tools.profile_sync_portable_release import bootstrap_active
-from tools.qnap_profile_sync import connect, create_production_pairing
+from tools.qnap_profile_sync import (
+    connect,
+    create_production_pairing,
+    revoke_production_enrollment,
+)
 
 REMOTE_SCRIPT = "/sdcard/Download/.mwo-profile-sync-converge.py"
 REMOTE_CONFIG = "/sdcard/Download/.mwo-profile-sync-converge.json"
@@ -99,6 +103,35 @@ def _pairing(repository, device_id, channel, tags):
         path.unlink(missing_ok=True)
 
 
+def _requires_reenrollment(result):
+    return bool(
+        result
+        and not result.get("ok")
+        and result.get("error_type") == "ApiError"
+        and result.get("error_code") == "invalid report signature"
+        and result.get("http_status") == 400
+    )
+
+
+def _replace_config(path, config):
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("w", encoding="utf-8") as handle:
+        json.dump(config, handle, sort_keys=True)
+        handle.flush()
+        os.fsync(handle.fileno())
+    temporary.chmod(0o600)
+    temporary.replace(path)
+    path.chmod(0o600)
+
+
+def _revoke(repository, enrollment_id):
+    session = connect(repository, ".env")
+    try:
+        revoke_production_enrollment(session, enrollment_id)
+    finally:
+        session.close()
+
+
 def converge(repository, device_id, adb, port):
     inventory = load_sync_inventory(repository)
     if device_id not in inventory["devices"]:
@@ -111,6 +144,7 @@ def converge(repository, device_id, adb, port):
     if observed.get("paired") and not observed.get("identity_consistent"):
         raise RuntimeError("Profile Sync enrollment has a foreign identity")
     policy = inventory["profile_sync"]
+    previous_enrollment_id = observed.get("enrollment_id")
     pairing = None
     if not observed.get("paired"):
         pairing = _pairing(
@@ -163,8 +197,50 @@ def converge(repository, device_id, adb, port):
             REMOTE_MARKER,
         )
         result = _run_until_marker(adb, port, serial, command)
+        if _requires_reenrollment(result):
+            pairing = _pairing(
+                repository,
+                device_id,
+                policy["channel"],
+                _target_tags(device, adb, port, serial),
+            )
+            config.update(
+                {
+                    "pairing_code": pairing["code"],
+                    "replace_enrollment": True,
+                }
+            )
+            _replace_config(local, config)
+            adb_command(adb, port, serial, "push", str(local), REMOTE_CONFIG)
+            adb_command(
+                adb,
+                port,
+                serial,
+                "shell",
+                "rm -f '%s'" % REMOTE_MARKER,
+                check=False,
+            )
+            result = _run_until_marker(adb, port, serial, command)
+            if result and result.get("ok"):
+                # Pairing codes are single-use. The next pass may be needed to
+                # pick up a freshly assigned revision, but it must operate on
+                # the new enrollment instead of deleting it and replaying the
+                # consumed code.
+                config.pop("replace_enrollment", None)
+                config.pop("pairing_code", None)
+                _replace_config(local, config)
+                adb_command(
+                    adb, port, serial, "push", str(local), REMOTE_CONFIG
+                )
         if not result or not result.get("ok"):
-            raise RuntimeError("Profile Sync Android convergence failed")
+            raise RuntimeError(
+                "Profile Sync Android convergence failed: %s/%s/%s"
+                % (
+                    (result or {}).get("error_type", "missing-marker"),
+                    (result or {}).get("error_code", "none"),
+                    (result or {}).get("http_status", "none"),
+                )
+            )
         verified = _profile_sync_probe(adb, port, serial)
         assignment = bootstrap_active(repository, device_id)
         if (
@@ -182,7 +258,14 @@ def converge(repository, device_id, adb, port):
             )
             result = _run_until_marker(adb, port, serial, command)
             if not result or not result.get("ok"):
-                raise RuntimeError("Profile Sync active assignment failed")
+                raise RuntimeError(
+                    "Profile Sync active assignment failed: %s/%s/%s"
+                    % (
+                        (result or {}).get("error_type", "missing-marker"),
+                        (result or {}).get("error_code", "none"),
+                        (result or {}).get("http_status", "none"),
+                    )
+                )
             verified = _profile_sync_probe(adb, port, serial)
         if not (
             verified.get("paired")
@@ -196,6 +279,8 @@ def converge(repository, device_id, adb, port):
             and verified.get("status") in {"APPLIED", "NO_CHANGE"}
         ):
             raise RuntimeError("Profile Sync Android verification failed")
+        if pairing is not None and previous_enrollment_id:
+            _revoke(repository, previous_enrollment_id)
         return {
             "schema": 1,
             "device": device_id,

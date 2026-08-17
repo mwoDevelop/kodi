@@ -60,6 +60,9 @@ subskrypcje, odtwarzanie, restart Kodi i urządzenia oraz drugi przebieg bez zmi
 Test wykonuje się najpierw na BlueStacks, następnie na X88 z aktywnym VPN. Wartości
 kluczy, kod urządzenia, tokeny i wskazówka konta nie mogą trafić do raportu. Szczegółowy
 runbook znajduje się w [dokumentacji YouTube](../../docs/youtube.md).
+BlueStacks musi używać oficjalnego APK Kodi 21.3 ARM64; pakiet Kodi `x86` nie może
+załadować oficjalnej binarnej zależności `inputstream.adaptive` i test ma wtedy
+zakończyć się jawnym błędem ABI.
 
 ## BlueStacks1 / Kodi 21.3
 

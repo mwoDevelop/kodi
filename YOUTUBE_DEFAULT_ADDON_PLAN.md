@@ -1,8 +1,22 @@
 # Plan domyślnej instalacji i konfiguracji YouTube w Kodi
 
-Status: propozycja po niezależnym review; gotowy do akceptacji zakresu release 1
+Status: release 1 zaimplementowany i zakwalifikowany technicznie na Androidzie;
+autoryzacja konta pozostaje zablokowana do czasu dostarczenia kompletnego zestawu
+`YOUTUBE_API_KEY`, `YOUTUBE_CLIENT_ID` i `YOUTUBE_CLIENT_SECRET`
 
 Data: 2026-08-17
+
+Aktualizacja realizacji: 2026-08-18
+
+- oficjalny `plugin.video.youtube` 7.4.4 oraz natywna zależność
+  `inputstream.adaptive` przechodzą instalację, kontrolę originu i drugi przebieg
+  `NO_CHANGE` na BlueStacks ARM64 oraz X88 ARMv7;
+- adapter nie odczytuje `YOUTUBE_PASS` i przy braku kompletnego personal API kończy
+  się bez mutacji stanem `API_CONFIG_REQUIRED`;
+- pełne oznaczenie `ACCOUNT_READY`, interaktywny Google device flow i release
+  polityki konta pozostają otwarte do czasu skonfigurowania klienta OAuth typu TV;
+- kwalifikacja Flatpak i opcjonalny release 2 recovery sesji nie wchodzą do
+  ukończonej części Android release 1.
 
 Plan jest rozszerzeniem
 [`QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN.md`](QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN.md).

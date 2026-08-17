@@ -102,6 +102,24 @@ def release_rollout_result(child_report: dict[str, Any], child_code: int) -> Ste
     raise RuntimeError("partial post-release rollout has no classified cause")
 
 
+def qnap_service_is_operational(name: str, item: dict[str, Any]) -> bool:
+    if qnap_service_is_healthy(item):
+        return True
+    if name != "upstream-watchdog":
+        return False
+    # A fail-closed upstream finding is an alert produced by a functioning
+    # watchdog, not an outage of Profile Sync or the control plane. Keep it in
+    # the rollout evidence without allowing an unrelated candidate review to
+    # block convergence of already approved immutable artifacts.
+    return (
+        item.get("status") == "running"
+        and item.get("runtime_healthy") is False
+        and isinstance(item.get("checked_at"), str)
+        and bool(item["checked_at"])
+        and isinstance(item.get("workflow_failures"), list)
+    )
+
+
 class OperationLock:
     def __init__(self, repository: Path, run_id: str):
         self.path = repository / ".kodi-private/kodi-ops/operation.lock"
@@ -1112,11 +1130,17 @@ class ProductionExecutor:
             unhealthy = sorted(
                 name
                 for name, value in rows.items()
-                if not qnap_service_is_healthy(value)
+                if not qnap_service_is_operational(name, value)
+            )
+            alerts = sorted(
+                value
+                for item in rows.values()
+                for value in item.get("workflow_failures", [])
             )
             summary = {
                 "services": len(rows),
                 "unhealthy": unhealthy,
+                "alerts": alerts,
                 "mode": "health" if dry_run or verify_only else step.action,
             }
             if unhealthy:

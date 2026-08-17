@@ -47,6 +47,12 @@ urządzeń, deployu QNAP, workflow GitHub ani lokalnego zestawu E2E:
 .venv/bin/python tools/kodi_ops.py rollout --dry-run
 ```
 
+Watchdog upstream jest bramą alarmową, ale nie jest zależnością danych urządzeń.
+Wykrycie złośliwego lub wymagającego review kandydata pozostaje widoczne w polu
+`alerts`, natomiast nie blokuje rolloutu wcześniej zatwierdzonych, immutable locków.
+Brak procesu/statusu watchdog, niedostępny Profile Sync, control plane lub provider
+relay nadal daje `DIAGNOSTIC_FAILED`.
+
 Pełny rollout wykonuje następujące fazy:
 
 1. przypina commit planu oraz SHA locków stable i QNAP;

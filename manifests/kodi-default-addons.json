@@ -67,7 +67,11 @@
         },
         "inputstream.adaptive": {
           "minimum_version": "19.0.0",
-          "type": "platform"
+          "type": "platform",
+          "supported_android_abis": [
+            "arm64-v8a",
+            "armeabi-v7a"
+          ]
         }
       }
     }
