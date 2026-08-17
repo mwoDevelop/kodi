@@ -154,3 +154,5 @@ def test_youtube_upstream_scans_zip_and_expanded_tree_before_review_pr():
     assert "automation/youtube-upstream" in workflow
     assert "gh pr create" in workflow
     assert "gh pr merge" not in workflow
+    assert "pull_request:" in workflow
+    assert "github.event_name != 'pull_request'" in workflow

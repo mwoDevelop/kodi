@@ -2,6 +2,15 @@ name: check official YouTube upstream
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/actions/upstream-malware-scan/**"
+      - ".github/workflows/check-youtube-upstream.yml"
+      - "manifests/kodi-default-addons.json"
+      - "manifests/upstream-security.json"
+      - "security/**"
+      - "tools/kodi_default_addons.py"
+      - "tools/youtube_upstream_check.py"
   schedule:
     - cron: "29 4 * * *"
 
@@ -75,7 +84,9 @@ jobs:
 
   propose:
     needs: qualify
-    if: needs.qualify.outputs.action == 'review'
+    if: >-
+      github.event_name != 'pull_request' &&
+      needs.qualify.outputs.action == 'review'
     runs-on: ubuntu-latest
     permissions:
       actions: read
