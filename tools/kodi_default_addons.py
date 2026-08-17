@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reconcile pinned, externally published default Kodi add-ons on Android."""
+"""Reconcile externally published default Kodi add-ons on Android."""
 
 from __future__ import annotations
 
@@ -18,17 +18,25 @@ from zipfile import ZipFile
 try:
     from kodi_addon_candidate_rollout import rollout
     from kodi_profile import AdbEventClient, AdbJsonRpcClient, adb_command
-    from kodi_reinstall import assign_addon_origins_in_kodi
+    from kodi_reinstall import (
+        assign_addon_origins_in_kodi,
+        installed_addon_origins_in_kodi,
+    )
 except ModuleNotFoundError:
     from tools.kodi_addon_candidate_rollout import rollout
     from tools.kodi_profile import AdbEventClient, AdbJsonRpcClient, adb_command
-    from tools.kodi_reinstall import assign_addon_origins_in_kodi
+    from tools.kodi_reinstall import (
+        assign_addon_origins_in_kodi,
+        installed_addon_origins_in_kodi,
+    )
 
 
 SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 KINDS = {"repository", "module", "plugin", "subtitle"}
 LICENSES = {"GPL-2.0-only", "GPL-3.0-only", "not-declared"}
+INSTALL_MODES = {"managed-pinned-zip", "kodi-native-official"}
+DEPENDENCY_TYPES = {"python", "platform"}
 OFFICIAL_PREFIX = "https://mirrors.kodi.tv/addons/omega/"
 REMOTE_ADDONS = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi/addons"
 
@@ -54,7 +62,12 @@ def load_manifest(path):
     repositories = {"repository.xbmc.org"}
     for index, addon in enumerate(addons):
         required = {"id", "version", "kind", "url", "sha256", "source", "license"}
-        optional = {"origin", "dependencies"}
+        optional = {
+            "origin",
+            "dependencies",
+            "dependency_requirements",
+            "install_mode",
+        }
         if not isinstance(addon, dict) or not required.issubset(addon) or not set(addon).issubset(required | optional):
             raise ValueError("invalid default add-on entry at index %s" % index)
         addon_id = addon["id"]
@@ -76,15 +89,62 @@ def load_manifest(path):
         dependencies = addon.get("dependencies", [])
         if not isinstance(dependencies, list) or len(dependencies) != len(set(dependencies)) or any(not isinstance(item, str) or not SAFE_ID.fullmatch(item) for item in dependencies):
             raise ValueError("invalid default add-on dependencies")
+        install_mode = addon.get("install_mode", "managed-pinned-zip")
+        if install_mode not in INSTALL_MODES:
+            raise ValueError("invalid default add-on install mode")
+        requirements = addon.get("dependency_requirements", {})
+        if not isinstance(requirements, dict) or set(requirements) != set(
+            dependencies
+        ):
+            if requirements:
+                raise ValueError("dependency requirements differ from dependencies")
+        for dependency_id, requirement in requirements.items():
+            if (
+                not SAFE_ID.fullmatch(dependency_id)
+                or not isinstance(requirement, dict)
+                or set(requirement) != {"minimum_version", "type"}
+                or not isinstance(requirement["minimum_version"], str)
+                or not requirement["minimum_version"]
+                or len(requirement["minimum_version"]) > 64
+                or requirement["type"] not in DEPENDENCY_TYPES
+            ):
+                raise ValueError("invalid default add-on dependency requirement")
         if addon["kind"] == "repository":
-            if "origin" in addon or dependencies:
+            if (
+                "origin" in addon
+                or dependencies
+                or requirements
+                or install_mode != "managed-pinned-zip"
+            ):
                 raise ValueError("repository entry cannot have origin or dependencies")
             repositories.add(addon_id)
         else:
             origin = addon.get("origin")
             if not isinstance(origin, str) or origin not in repositories:
                 raise ValueError("add-on origin must be an available repository")
+            if install_mode == "kodi-native-official" and origin != "repository.xbmc.org":
+                raise ValueError("native official add-on must use Kodi origin")
     return document
+
+
+def _version_tuple(value):
+    """Return the numeric release prefix used by Kodi dependency constraints."""
+
+    if not isinstance(value, str) or not value or len(value) > 128:
+        raise ValueError("invalid Kodi add-on version")
+    match = re.match(r"^(\d+(?:\.\d+)*)", value)
+    if not match:
+        raise ValueError("unsupported Kodi add-on version")
+    return tuple(int(part) for part in match.group(1).split("."))
+
+
+def version_at_least(actual, minimum):
+    actual_parts = _version_tuple(actual)
+    minimum_parts = _version_tuple(minimum)
+    width = max(len(actual_parts), len(minimum_parts))
+    return actual_parts + (0,) * (width - len(actual_parts)) >= (
+        minimum_parts + (0,) * (width - len(minimum_parts))
+    )
 
 
 def load_official_dependencies(path):
@@ -278,6 +338,26 @@ def _wait_addon(adb, port, serial, addon_id, timeout=60):
     raise TimeoutError("Kodi dependency stayed unavailable: %s" % addon_id)
 
 
+def _wait_addon_version(
+    adb, port, serial, addon_id, minimum_version, timeout=60
+):
+    started = time.monotonic()
+    last = None
+    while time.monotonic() - started < timeout:
+        last = addon_details(adb, port, serial, addon_id)
+        if (
+            last
+            and last.get("enabled")
+            and version_at_least(str(last.get("version")), minimum_version)
+        ):
+            return last
+        time.sleep(2)
+    raise TimeoutError(
+        "Kodi add-on stayed below required version: %s (observed %s)"
+        % (addon_id, (last or {}).get("version", "absent"))
+    )
+
+
 def reconcile_android(
     adb,
     port,
@@ -296,17 +376,59 @@ def reconcile_android(
         cache_dir,
         timeout,
     ) if official_dependencies else []
-    prepared = [(addon, fetch_artifact(addon, cache_dir)) for addon in manifest["addons"]]
+    prepared = [
+        (addon, fetch_artifact(addon, cache_dir))
+        for addon in manifest["addons"]
+    ]
     results = []
     events = AdbEventClient(adb, port, serial)
     for addon, artifact in prepared:
+        requirements = addon.get("dependency_requirements", {})
         for dependency in addon.get("dependencies", []):
-            if addon_details(adb, port, serial, dependency) is None:
+            details = addon_details(adb, port, serial, dependency)
+            minimum = requirements.get(dependency, {}).get("minimum_version")
+            if details is None or (
+                minimum
+                and not version_at_least(str(details.get("version")), minimum)
+            ):
                 events.execute_builtin("InstallAddon(%s)" % dependency)
-                _wait_addon(adb, port, serial, dependency)
+                if minimum:
+                    _wait_addon_version(
+                        adb, port, serial, dependency, minimum, timeout
+                    )
+                else:
+                    _wait_addon(adb, port, serial, dependency, timeout)
         current = addon_details(adb, port, serial, addon["id"])
         if current and str(current.get("version")) == addon["version"] and current.get("enabled"):
             results.append({"addon": addon["id"], "action": "unchanged", "version": addon["version"]})
+            continue
+        install_mode = addon.get("install_mode", "managed-pinned-zip")
+        if install_mode == "kodi-native-official":
+            if current and version_at_least(
+                str(current.get("version")), addon["version"]
+            ):
+                raise RuntimeError(
+                    "default add-on has unqualified upstream version: %s=%s"
+                    % (addon["id"], current.get("version"))
+                )
+            events.execute_builtin("UpdateAddonRepos")
+            time.sleep(3)
+            events.execute_builtin("InstallAddon(%s)" % addon["id"])
+            installed = _wait_addon_version(
+                adb, port, serial, addon["id"], addon["version"], timeout
+            )
+            if str(installed.get("version")) != addon["version"]:
+                raise RuntimeError(
+                    "Kodi installed an unqualified official add-on version"
+                )
+            results.append(
+                {
+                    "addon": addon["id"],
+                    "action": "installed" if current is None else "updated",
+                    "install_mode": install_mode,
+                    "version": addon["version"],
+                }
+            )
             continue
         try:
             applied = rollout(adb, port, serial, artifact, addon["id"], addon["version"], timeout)
@@ -336,6 +458,8 @@ def reconcile_android(
             addon["id"]: addon["origin"]
             for addon in manifest["addons"]
             if "origin" in addon
+            and addon.get("install_mode", "managed-pinned-zip")
+            == "managed-pinned-zip"
         },
     }
     if origins and assign_origins:
@@ -346,6 +470,30 @@ def reconcile_android(
             Path(__file__).with_name("kodi_profile_origin_device.py"),
             timeout=timeout,
         )
+    native = [
+        addon["id"]
+        for addon in manifest["addons"]
+        if addon.get("install_mode") == "kodi-native-official"
+    ]
+    if native:
+        observed = installed_addon_origins_in_kodi(
+            adb,
+            port,
+            serial,
+            native,
+            Path(__file__).with_name("kodi_profile_origin_device.py"),
+            timeout=timeout,
+        )
+        invalid = {
+            addon_id: observed.get(addon_id)
+            for addon_id in native
+            if observed.get(addon_id) != "repository.xbmc.org"
+        }
+        if invalid:
+            raise RuntimeError(
+                "native official add-on origin differs: %s"
+                % ",".join(sorted(invalid))
+            )
     verified = {}
     for addon in manifest["addons"]:
         details = addon_details(adb, port, serial, addon["id"])

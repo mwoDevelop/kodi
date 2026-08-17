@@ -1,0 +1,134 @@
+name: check official YouTube upstream
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "29 4 * * *"
+
+concurrency:
+  group: youtube-upstream-qualification
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      action: ${{ steps.candidate.outputs.action }}
+      base_commit: ${{ steps.candidate.outputs.base_commit }}
+      candidate_id: ${{ steps.candidate.outputs.candidate_id }}
+      candidate_version: ${{ steps.candidate.outputs.candidate_version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Materialize exact official ZIP and expanded tree
+        run: >-
+          python tools/youtube_upstream_check.py discover
+          --output youtube-upstream-candidate
+          --report youtube-upstream.json
+          --markdown youtube-upstream.md
+      - name: Export immutable candidate identity
+        id: candidate
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          value = json.loads(Path("youtube-upstream.json").read_text())
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+              output.write("action=%s\n" % value["action"])
+              output.write("base_commit=%s\n" % os.environ["GITHUB_SHA"])
+              output.write("candidate_id=%s\n" % value["candidate_id"])
+              output.write("candidate_version=%s\n" % value["candidate_version"])
+          PY
+      - name: Scan exact ZIP and materialized source tree
+        uses: ./.github/actions/upstream-malware-scan
+        with:
+          candidate-path: youtube-upstream-candidate
+          candidate-id: ${{ steps.candidate.outputs.candidate_id }}
+          output: youtube-upstream-security.json
+      - name: Verify exact scan binding and coverage
+        run: >-
+          python tools/upstream_security_scan.py verify
+          --candidate youtube-upstream-candidate
+          --candidate-id '${{ steps.candidate.outputs.candidate_id }}'
+          --report youtube-upstream-security.json
+          --policy manifests/upstream-security.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: youtube-upstream-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            youtube-upstream-candidate
+            youtube-upstream.json
+            youtube-upstream.md
+            youtube-upstream-security.json
+          retention-days: 14
+
+  propose:
+    needs: qualify
+    if: needs.qualify.outputs.action == 'review'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.qualify.outputs.base_commit }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: youtube-upstream-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Re-verify exact clean candidate
+        run: >-
+          python tools/upstream_security_scan.py verify
+          --candidate youtube-upstream-candidate
+          --candidate-id '${{ needs.qualify.outputs.candidate_id }}'
+          --report youtube-upstream-security.json
+          --policy manifests/upstream-security.json
+      - name: Apply candidate manifest only
+        run: >-
+          python tools/youtube_upstream_check.py apply
+          --candidate youtube-upstream-candidate/candidate.json
+      - name: Open or update review PR
+        env:
+          BRANCH: automation/youtube-upstream
+          CANDIDATE_ID: ${{ needs.qualify.outputs.candidate_id }}
+          CANDIDATE_VERSION: ${{ needs.qualify.outputs.candidate_version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = '${{ needs.qualify.outputs.base_commit }}'
+          git config user.name "mwoDevelop update bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add manifests/kodi-default-addons.json
+          git diff --cached --quiet && { echo "Candidate produced no manifest change"; exit 1; }
+          git commit -m "Qualify YouTube $CANDIDATE_VERSION upstream candidate" \
+            -m "Candidate-ID: $CANDIDATE_ID"
+          git fetch origin "$BRANCH:refs/remotes/origin/$BRANCH" || true
+          remote_sha="$(git show-ref --hash "refs/remotes/origin/$BRANCH" 2>/dev/null || true)"
+          if [ -n "$remote_sha" ]; then
+            git push origin "HEAD:refs/heads/$BRANCH" \
+              "--force-with-lease=refs/heads/$BRANCH:$remote_sha"
+          else
+            git push origin "HEAD:refs/heads/$BRANCH"
+          fi
+          body="Official Kodi YouTube candidate \`$CANDIDATE_VERSION\` passed the common malware gate. Candidate-ID: \`$CANDIDATE_ID\`. Merge still requires review and BlueStacks/X88 qualification; this PR does not republish the upstream ZIP."
+          number="$(gh pr list --state open --head "$BRANCH" --base main --json number --jq '.[0].number // empty')"
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --title "Qualify YouTube $CANDIDATE_VERSION upstream" --body "$body"
+          else
+            gh pr create --base main --head "$BRANCH" \
+              --title "Qualify YouTube $CANDIDATE_VERSION upstream" --body "$body"
+          fi

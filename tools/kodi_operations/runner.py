@@ -331,6 +331,36 @@ class ProductionExecutor:
         )
         return probe(self.adb, self.adb_server_port, serial, 75)
 
+    def _youtube_configuration(self, serial: str) -> dict[str, Any]:
+        required = {
+            "YOUTUBE_API_KEY",
+            "YOUTUBE_CLIENT_ID",
+            "YOUTUBE_CLIENT_SECRET",
+            "YOUTUBE_USER",
+        }
+        references = self.fleet.get("references", {})
+        if any(not references.get(name) for name in required):
+            return {
+                "ok": True,
+                "status": "API_CONFIG_REQUIRED",
+                "changed": False,
+            }
+        return self._run_json(
+            [
+                sys.executable,
+                "tools/kodi_youtube_configure.py",
+                "--serial",
+                serial,
+                "--references",
+                ".env",
+                "--adb",
+                self.adb,
+                "--adb-server-port",
+                str(self.adb_server_port),
+            ],
+            adapter="youtube",
+        )
+
     def _android_converge(self, device_id: str) -> StepOutcome:
         serial = self.fleet["devices"][device_id]["endpoints"]["adb"]
         stable = self._run_json(
@@ -409,6 +439,7 @@ class ProductionExecutor:
             adapter="opensubtitles-com",
             attempts=3,
         )
+        youtube = self._youtube_configuration(serial)
         providers = self._run_json(
             self._provider_configuration_argv(device_id, serial),
             adapter="mwoscrapers",
@@ -458,6 +489,7 @@ class ProductionExecutor:
             rapideo.get("changed")
             or opensubtitles.get("changed")
             or opensubtitles_com.get("changed")
+            or youtube.get("changed")
             or providers.get("changed")
         )
         attempts = int(getattr(self, "external_attempts", 3))
@@ -513,6 +545,14 @@ class ProductionExecutor:
                     if opensubtitles_com.get("ok")
                     else opensubtitles_com.get(
                         "result", opensubtitles_com.get("status")
+                    )
+                ),
+                "youtube": (
+                    "pass"
+                    if youtube.get("ok")
+                    and youtube.get("status") != "API_CONFIG_REQUIRED"
+                    else youtube.get(
+                        "status", youtube.get("result", "failed")
                     )
                 ),
                 "providers": (
@@ -1188,6 +1228,10 @@ class ProductionExecutor:
                     "sync_status": result.get("sync_status"),
                     "opensubtitles_com": (
                         result.get("opensubtitles_com", {}).get("login")
+                    ),
+                    "youtube": result.get("youtube", {}).get(
+                        "authorization",
+                        result.get("youtube", {}).get("status"),
                     ),
                 },
             )

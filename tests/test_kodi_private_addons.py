@@ -19,11 +19,23 @@ OPENSUBTITLES_COM_PROFILE = {
     "password_ref": "OPENSUBTITLES_PASS",
     "token_ref": "OPENSUBTITLES_TOKEN",
 }
+YOUTUBE_PROFILE = {
+    "adapter": "youtube-oauth-v1",
+    "api_key_ref": "YOUTUBE_API_KEY",
+    "client_id_ref": "YOUTUBE_CLIENT_ID",
+    "client_secret_ref": "YOUTUBE_CLIENT_SECRET",
+    "account_hint_ref": "YOUTUBE_USER",
+}
 
 
 def test_registry_validates_allow_listed_profile_and_references():
     profiles = private_addons.validate_profiles(
-        [PROFILE, OPENSUBTITLES_PROFILE, OPENSUBTITLES_COM_PROFILE]
+        [
+            PROFILE,
+            OPENSUBTITLES_PROFILE,
+            OPENSUBTITLES_COM_PROFILE,
+            YOUTUBE_PROFILE,
+        ]
     )
     private_addons.validate_references(
         profiles,
@@ -33,9 +45,20 @@ def test_registry_validates_allow_listed_profile_and_references():
             "OPENSUBTITLES_USER": "subtitle-user",
             "OPENSUBTITLES_PASS": "subtitle-pass",
             "OPENSUBTITLES_TOKEN": "subtitle-token",
+            "YOUTUBE_API_KEY": "AIza" + "a" * 35,
+            "YOUTUBE_CLIENT_ID": (
+                "123456789-example.apps.googleusercontent.com"
+            ),
+            "YOUTUBE_CLIENT_SECRET": "GOCSPX-private",
+            "YOUTUBE_USER": "youtube@example.invalid",
         },
     )
-    assert profiles == [PROFILE, OPENSUBTITLES_PROFILE, OPENSUBTITLES_COM_PROFILE]
+    assert profiles == [
+        PROFILE,
+        OPENSUBTITLES_PROFILE,
+        OPENSUBTITLES_COM_PROFILE,
+        YOUTUBE_PROFILE,
+    ]
 
 
 def test_registry_rejects_unknown_adapter():

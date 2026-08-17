@@ -41,6 +41,26 @@ Opakowanie kontenera wymaga działającego demona Docker. CI używa natywnego sk
 nowym programie uruchamiającym GitHub, który zapewnia tę samą właściwość czystego
 systemu plików bez konieczności stosowania Docker-in-Docker.
 
+## Oficjalny dodatek YouTube
+
+Pełny rollout instaluje przypiętą, zakwalifikowaną wersję z
+`repository.xbmc.org`, sprawdza origin oraz zależności i uruchamia wspólny adapter
+konfiguracji wewnątrz Kodi. Sam adapter na Androidzie można zweryfikować poleceniem:
+
+```bash
+.venv/bin/python tools/kodi_youtube_configure.py \
+  --serial 127.0.0.1:5555 \
+  --references .env
+```
+
+Raport musi wskazywać `personal_api_configured: true` i poprawną publiczną sondę API.
+`AUTHORIZATION_REQUIRED` jest oczekiwane przed ręcznym device flow, lecz nie jest
+dowodem gotowości konta. Po logowaniu w GUI wymagane są: `ACCOUNT_READY`, wyszukiwanie,
+subskrypcje, odtwarzanie, restart Kodi i urządzenia oraz drugi przebieg bez zmian.
+Test wykonuje się najpierw na BlueStacks, następnie na X88 z aktywnym VPN. Wartości
+kluczy, kod urządzenia, tokeny i wskazówka konta nie mogą trafić do raportu. Szczegółowy
+runbook znajduje się w [dokumentacji YouTube](../../docs/youtube.md).
+
 ## BlueStacks1 / Kodi 21.3
 
 Zbuduj `dist`, podłącz ADB do instancji `BlueStacks1`, a następnie przygotuj test

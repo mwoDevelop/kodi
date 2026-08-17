@@ -233,10 +233,23 @@ odniesienia do wartości w ignorowanym pliku mode-`0600` `.env`:
       "username_ref": "OPENSUBTITLES_USER",
       "password_ref": "OPENSUBTITLES_PASS",
       "token_ref": "OPENSUBTITLES_TOKEN"
+    },
+    {
+      "adapter": "youtube-oauth-v1",
+      "api_key_ref": "YOUTUBE_API_KEY",
+      "client_id_ref": "YOUTUBE_CLIENT_ID",
+      "client_secret_ref": "YOUTUBE_CLIENT_SECRET",
+      "account_hint_ref": "YOUTUBE_USER"
     }
   ]
 }
 ```
+
+Profil YouTube nie przyjmuje `YOUTUBE_PASS`. Wspólne klucze API są stosowane przez
+allowlistowany adapter, natomiast bearer token w `access_manager.json` pozostaje
+lokalny i nie wchodzi do rutynowej synchronizacji Profile Sync ani backupu release 1.
+Po czystej reinstalacji wymagany jest nowy interaktywny device flow. Szczegóły opisuje
+[runbook YouTube](youtube.md).
 
 Adapter Rapideo działa po oficjalnym uzgodnieniu dodatku i przed ostatecznym
 sprawdzeniem przywracania. Pełny rollout najpierw eksportuje zweryfikowany token z

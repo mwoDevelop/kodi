@@ -775,3 +775,47 @@ def test_android_rollout_retries_sanitized_provider_network_error(monkeypatch):
         "provider": True,
         "real_debrid": True,
     }
+
+
+def test_youtube_configuration_is_explicitly_deferred_without_api_references():
+    executor = object.__new__(ProductionExecutor)
+    executor.fleet = {"references": {"YOUTUBE_USER": "user@example.invalid"}}
+
+    assert executor._youtube_configuration("device") == {
+        "ok": True,
+        "status": "API_CONFIG_REQUIRED",
+        "changed": False,
+    }
+
+
+def test_youtube_configuration_uses_private_adapter_when_references_exist(
+    monkeypatch,
+):
+    executor = object.__new__(ProductionExecutor)
+    executor.adb = "adb"
+    executor.adb_server_port = 5038
+    executor.fleet = {
+        "references": {
+            "YOUTUBE_API_KEY": "private",
+            "YOUTUBE_CLIENT_ID": "private",
+            "YOUTUBE_CLIENT_SECRET": "private",
+            "YOUTUBE_USER": "private",
+        }
+    }
+    calls = []
+    monkeypatch.setattr(
+        executor,
+        "_run_json",
+        lambda argv, adapter=None: calls.append((argv, adapter))
+        or {"ok": True, "authorization": "AUTHORIZATION_REQUIRED"},
+    )
+
+    result = executor._youtube_configuration("192.0.2.8:5555")
+
+    assert result["authorization"] == "AUTHORIZATION_REQUIRED"
+    assert calls[0][1] == "youtube"
+    assert calls[0][0][1:4] == [
+        "tools/kodi_youtube_configure.py",
+        "--serial",
+        "192.0.2.8:5555",
+    ]

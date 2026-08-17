@@ -28,6 +28,7 @@ Repo nadrzędne: `mwoDevelop/kodi`
 Powiązane źródła prawdy:
 
 - `PROFILE_SYNC_PLAN.md`;
+- `YOUTUBE_DEFAULT_ADDON_PLAN.md`;
 - `docs/kodi-operations.md`;
 - `docs/kodi-private-profile.md`;
 - `docs/scheduled-processes.md`;
@@ -38,6 +39,8 @@ Powiązane źródła prawdy:
 Niezależny review:
 
 - `docs/QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN_REVIEW.md`.
+- `docs/YOUTUBE_DEFAULT_ADDON_PLAN_REVIEW.md` — review rozszerzenia YouTube,
+  modelu OAuth i granicy release 1/release 2.
 
 Decyzja po review:
 
@@ -270,11 +273,12 @@ Minimalny model:
 
 Zakresy sekretów:
 
-- `global-user`: np. konto OpenSubtitles, jeżeli jest wspólne;
+- `global-user`: np. konto OpenSubtitles lub wspólne klucze API YouTube, jeżeli
+  są wspólne;
 - `service`: GitHub App, klucze backupu i integracje administracyjne;
 - `device-class`: tylko gdy jawnie uzasadnione;
-- `device`: token Rapideo/Real-Debrid lub enrollment przeznaczony dla konkretnego
-  urządzenia.
+- `device`: token Rapideo/Real-Debrid, sesja OAuth YouTube lub enrollment
+  przeznaczony dla konkretnego urządzenia.
 
 Sekret dla Kodi jest wydawany jako zaszyfrowana koperta per enrollment. Podczas
 parowania urządzenie generuje lokalną parę/klucz koperty i przekazuje wyłącznie
@@ -583,6 +587,9 @@ Negatywny wynik zmienia projekt przed importem sekretów, a nie po wdrożeniu.
 1. Wydać Device Agent z obsługą desired state bez zarządzania kodem dodatków.
 2. Przetestować ustawienia niesekretne na BlueStacks i X88.
 3. Dodać koperty sekretów oraz adaptery Rapideo, OpenSubtitles i Umbrella/RD.
+   Kontrakt adaptera YouTube można przygotować na ręcznie zainstalowanym canary,
+   ale produkcyjny apply nie może go uruchamiać przed instalacją i weryfikacją
+   dodatku w etapie E. Hasło Google nie jest obsługiwanym credentialem.
 4. Wykazać, że każde urządzenie odszyfrowuje tylko własny payload.
 5. Wykazać `NO_CHANGE` dla tego samego bundle, retry po braku sieci, rollback po
    błędnym sekrecie i brak wycieku do logów.
@@ -593,9 +600,14 @@ Negatywny wynik zmienia projekt przed importem sekretów, a nie po wdrożeniu.
 2. Najpierw tryb `audit`: raport driftu bez instalacji.
 3. Opublikować dokładnego kandydata testing i wykonać `apply` najpierw na
    BlueStacks, potem X88, pojedynczo dla repo, Profile Sync, MwoScrapers, Umbrella,
-   WatchNixtoons2, Rapideo i usług napisów.
+   WatchNixtoons2, Rapideo, YouTube i usług napisów.
+   Dla oficjalnego YouTube kandydatem jest rewizja manifestu kwalifikacji i
+   oficjalny artefakt, a nie kopia opublikowana w testing mwoDevelop.
 4. Sprawdzić instalację zależności, origin, aktualizację nowszej wersji, restart
    Kodi, manifest plików oraz idempotentny drugi przebieg.
+   Kolejność dla YouTube jest obowiązkowa: instalacja -> restart -> sprawdzenie
+   schematu -> ustawienia API -> restart -> device flow albo
+   `AUTHORIZATION_REQUIRED` -> health.
 5. Dopiero po pełnym canary wykonać review i publikację stable. Stable jest
    globalną aktualizacją; QNAP obserwuje i raportuje pozostałą flotę.
 
@@ -654,7 +666,8 @@ Na każdym canary sprawdzić:
 - zastosowanie skóry, favourites i artwork;
 - Umbrella + MwoScrapers na kilku filmach i odcinkach;
 - zgodność wyników resolvera w granicach zmienności providerów;
-- Real-Debrid, Rapideo, OpenSubtitles.com i alternatywę `.org`;
+- Real-Debrid, Rapideo, OpenSubtitles.com, alternatywę `.org` oraz YouTube z
+  device-code OAuth i tokenem właściwym dla urządzenia;
 - VPN oraz fallback Torrentio/QNAP;
 - `NO_CHANGE` dla tego samego bundle przy drugim przebiegu;
 - urządzenie offline, restart Kodi w połowie apply, brak QNAP i rollback błędnych
@@ -771,7 +784,8 @@ Utworzyć `docs/control-plane/README.md`, prowadzący co najmniej do:
 - `github-app.md` — instalacja, minimalne uprawnienia, allowlista workflow,
   atestacje i rotacja klucza;
 - `secrets.md` — klasyfikacja, shadow import, envelope, klucz urządzenia, rotacja,
-  revocation, redaction i recovery;
+  revocation, redaction i recovery, w tym globalne klucze API oraz per-device
+  sesje OAuth YouTube;
 - `device-bootstrap.md` — czysty Android/Flatpak, pairing/fingerprint,
   `agent_bootstrap_v1`, N-1/N-2 i przypadki wymagające użytkownika;
 - `rollout.md` — audit/apply, testing canary, stable global, konfiguracja falowa,

@@ -28,8 +28,140 @@ def test_versioned_default_manifest_is_valid():
         "script.module.xbmcswift2",
         "service.subtitles.opensubtitles",
         "plugin.video.rapideo_pl",
+        "plugin.video.youtube",
     ]
     assert all(item["url"].startswith("https://") for item in document["addons"])
+    youtube = document["addons"][-1]
+    assert youtube["install_mode"] == "kodi-native-official"
+    assert youtube["origin"] == "repository.xbmc.org"
+    assert youtube["dependency_requirements"]["inputstream.adaptive"] == {
+        "minimum_version": "19.0.0",
+        "type": "platform",
+    }
+
+
+@pytest.mark.parametrize(
+    ("actual", "minimum", "expected"),
+    [
+        ("19.0.0", "19.0.0", True),
+        ("21.5.9", "19.0.0", True),
+        ("2.27.1+matrix.1", "2.27.1", True),
+        ("2.26.9", "2.27.1", False),
+    ],
+)
+def test_version_at_least_uses_kodi_numeric_release_prefix(
+    actual, minimum, expected
+):
+    assert defaults.version_at_least(actual, minimum) is expected
+
+
+def test_native_official_addon_is_installed_by_kodi_and_origin_is_audited(
+    monkeypatch, tmp_path
+):
+    addon = {
+        "id": "plugin.video.youtube",
+        "version": "7.4.4",
+        "kind": "plugin",
+        "url": "https://example.invalid/youtube.zip",
+        "sha256": "0" * 64,
+        "source": "https://example.invalid/source",
+        "license": "GPL-2.0-only",
+        "origin": "repository.xbmc.org",
+        "install_mode": "kodi-native-official",
+        "dependencies": ["inputstream.adaptive"],
+        "dependency_requirements": {
+            "inputstream.adaptive": {
+                "minimum_version": "19.0.0",
+                "type": "platform",
+            }
+        },
+    }
+    installed = {}
+    commands = []
+
+    monkeypatch.setattr(
+        defaults, "fetch_artifact", lambda *_args: tmp_path / "youtube.zip"
+    )
+    monkeypatch.setattr(
+        defaults,
+        "addon_details",
+        lambda *_args: installed.get(_args[-1]),
+    )
+
+    class Events:
+        def __init__(self, *_args):
+            pass
+
+        def execute_builtin(self, command):
+            commands.append(command)
+            if command == "InstallAddon(inputstream.adaptive)":
+                installed["inputstream.adaptive"] = {
+                    "enabled": True,
+                    "version": "21.5.9",
+                }
+            if command == "InstallAddon(plugin.video.youtube)":
+                installed["plugin.video.youtube"] = {
+                    "enabled": True,
+                    "version": "7.4.4",
+                }
+
+    monkeypatch.setattr(defaults, "AdbEventClient", Events)
+    monkeypatch.setattr(defaults.time, "sleep", lambda *_args: None)
+    monkeypatch.setattr(
+        defaults,
+        "installed_addon_origins_in_kodi",
+        lambda *_args, **_kwargs: {
+            "plugin.video.youtube": "repository.xbmc.org"
+        },
+    )
+
+    result = defaults.reconcile_android(
+        "adb",
+        5038,
+        "device",
+        {"addons": [addon]},
+        tmp_path,
+        official_dependencies=[],
+    )
+
+    assert "InstallAddon(inputstream.adaptive)" in commands
+    assert "InstallAddon(plugin.video.youtube)" in commands
+    assert result["addons"] == {"plugin.video.youtube": "7.4.4"}
+    assert result["actions"][-1]["install_mode"] == "kodi-native-official"
+
+
+def test_native_official_addon_rejects_non_official_origin(
+    monkeypatch, tmp_path
+):
+    addon = {
+        "id": "plugin.video.youtube",
+        "version": "7.4.4",
+        "kind": "plugin",
+        "url": "https://example.invalid/youtube.zip",
+        "sha256": "0" * 64,
+        "source": "https://example.invalid/source",
+        "license": "GPL-2.0-only",
+        "origin": "repository.xbmc.org",
+        "install_mode": "kodi-native-official",
+    }
+    monkeypatch.setattr(
+        defaults, "fetch_artifact", lambda *_args: tmp_path / "youtube.zip"
+    )
+    monkeypatch.setattr(
+        defaults,
+        "addon_details",
+        lambda *_args: {"enabled": True, "version": "7.4.4"},
+    )
+    monkeypatch.setattr(
+        defaults,
+        "installed_addon_origins_in_kodi",
+        lambda *_args, **_kwargs: {"plugin.video.youtube": "repository.third"},
+    )
+
+    with pytest.raises(RuntimeError, match="origin differs"):
+        defaults.reconcile_android(
+            "adb", 5038, "device", {"addons": [addon]}, tmp_path
+        )
 
 
 def test_fetch_artifact_verifies_digest_and_identity(tmp_path):

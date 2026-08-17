@@ -10,6 +10,10 @@ SCHEDULED_WORKFLOWS = {
         Path(".github/workflows/reconcile-upstreams.yml"),
         "20 4 * * *",
     ),
+    ("mwoDevelop/kodi", "check-youtube-upstream.yml"): (
+        Path(".github/workflows/check-youtube-upstream.yml"),
+        "29 4 * * *",
+    ),
     (
         "mwoDevelop/script.module.mwoscrapers",
         "check-provider-upstreams.yml",
@@ -113,7 +117,7 @@ def test_watchdog_rejects_failure_and_stale_success():
 
 def test_versioned_manifest_is_valid():
     loaded = load_manifest("manifests/upstream-watchdog.json")
-    assert len(loaded["workflows"]) == 6
+    assert len(loaded["workflows"]) == 7
     assert {
         (item["repository"], item["workflow"])
         for item in loaded["workflows"]
@@ -137,3 +141,16 @@ def test_scheduled_process_catalog_matches_workflows():
             hour.zfill(2),
             minute.zfill(2),
         ) in catalogue
+
+
+def test_youtube_upstream_scans_zip_and_expanded_tree_before_review_pr():
+    workflow = Path(
+        ".github/workflows/check-youtube-upstream.yml"
+    ).read_text(encoding="utf-8")
+    assert "candidate-path: youtube-upstream-candidate" in workflow
+    assert "tools/upstream_security_scan.py verify" in workflow
+    assert workflow.count("tools/upstream_security_scan.py verify") == 2
+    assert "tools/youtube_upstream_check.py apply" in workflow
+    assert "automation/youtube-upstream" in workflow
+    assert "gh pr create" in workflow
+    assert "gh pr merge" not in workflow

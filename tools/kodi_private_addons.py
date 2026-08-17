@@ -24,6 +24,12 @@ try:
         resolve_credentials as resolve_rapideo_credentials,
         validate_profile as validate_rapideo_profile,
     )
+    from kodi_youtube_configure import (
+        ADAPTER as YOUTUBE_ADAPTER,
+        configure as configure_youtube,
+        resolve_credentials as resolve_youtube_credentials,
+        validate_profile as validate_youtube_profile,
+    )
 except ModuleNotFoundError:
     from tools.kodi_opensubtitles_com_configure import (
         ADAPTER as OPENSUBTITLES_COM_ADAPTER,
@@ -42,6 +48,12 @@ except ModuleNotFoundError:
         configure as configure_rapideo,
         resolve_credentials as resolve_rapideo_credentials,
         validate_profile as validate_rapideo_profile,
+    )
+    from tools.kodi_youtube_configure import (
+        ADAPTER as YOUTUBE_ADAPTER,
+        configure as configure_youtube,
+        resolve_credentials as resolve_youtube_credentials,
+        validate_profile as validate_youtube_profile,
     )
 
 
@@ -63,7 +75,13 @@ ADAPTERS = {
         "device_script": "tests/e2e/kodi_rapideo_configure.py",
         "resolve": resolve_rapideo_credentials,
         "validate": validate_rapideo_profile,
-    }
+    },
+    YOUTUBE_ADAPTER: {
+        "configure": configure_youtube,
+        "device_script": "tests/e2e/kodi_youtube_configure.py",
+        "resolve": resolve_youtube_credentials,
+        "validate": validate_youtube_profile,
+    },
 }
 
 

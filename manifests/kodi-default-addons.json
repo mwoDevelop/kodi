@@ -45,6 +45,31 @@
         "script.module.six",
         "script.module.xbmcswift2"
       ]
+    },
+    {
+      "id": "plugin.video.youtube",
+      "version": "7.4.4",
+      "kind": "plugin",
+      "url": "https://mirrors.kodi.tv/addons/omega/plugin.video.youtube/plugin.video.youtube-7.4.4.zip",
+      "sha256": "d744e5ba2d2b50924a9fa5624f4d209c2be95b97ef1ad1682cafbed160fb428f",
+      "source": "https://github.com/anxdpanic/plugin.video.youtube/tree/v7.4.4",
+      "license": "GPL-2.0-only",
+      "origin": "repository.xbmc.org",
+      "install_mode": "kodi-native-official",
+      "dependencies": [
+        "script.module.requests",
+        "inputstream.adaptive"
+      ],
+      "dependency_requirements": {
+        "script.module.requests": {
+          "minimum_version": "2.27.1",
+          "type": "python"
+        },
+        "inputstream.adaptive": {
+          "minimum_version": "19.0.0",
+          "type": "platform"
+        }
+      }
     }
   ]
 }
