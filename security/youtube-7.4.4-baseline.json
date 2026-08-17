@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "findings": [
+    {
+      "engine": "gitleaks",
+      "path": "expanded/plugin.video.youtube/resources/lib/youtube_authentication.py",
+      "rule": "generic-api-key",
+      "sha256": "54be6e09707c7e5302c7fd223c0c6f031c3861c9704ebc04bc042fed6255a1b1"
+    },
+    {
+      "engine": "gitleaks",
+      "path": "expanded/plugin.video.youtube/resources/lib/youtube_plugin/__init__.py",
+      "rule": "generic-api-key",
+      "sha256": "348b4d39da1940c068cc3c40d2a998c6db6e5f4227465f84918e25dd647aec38"
+    },
+    {
+      "engine": "gitleaks",
+      "path": "expanded/plugin.video.youtube/resources/lib/youtube_plugin/youtube/client/request_client.py",
+      "rule": "gcp-api-key",
+      "sha256": "816df34a46408456e4f3e95a24c6f4d8c3d267dfd737dfba9a2a3194c42aec0e"
+    },
+    {
+      "engine": "gitleaks",
+      "path": "expanded/plugin.video.youtube/resources/lib/youtube_registration.py",
+      "rule": "generic-api-key",
+      "sha256": "daef9fe81cd529354b9a975adbfa7028a0b01779f32dbc92fb23794e85fdb524"
+    }
+  ]
+}

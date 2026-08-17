@@ -233,10 +233,23 @@ odniesienia do wartości w ignorowanym pliku mode-`0600` `.env`:
       "username_ref": "OPENSUBTITLES_USER",
       "password_ref": "OPENSUBTITLES_PASS",
       "token_ref": "OPENSUBTITLES_TOKEN"
+    },
+    {
+      "adapter": "youtube-oauth-v1",
+      "api_key_ref": "YOUTUBE_API_KEY",
+      "client_id_ref": "YOUTUBE_CLIENT_ID",
+      "client_secret_ref": "YOUTUBE_CLIENT_SECRET",
+      "account_hint_ref": "YOUTUBE_USER"
     }
   ]
 }
 ```
+
+Profil YouTube nie przyjmuje `YOUTUBE_PASS`. Wspólne klucze API są stosowane przez
+allowlistowany adapter, natomiast bearer token w `access_manager.json` pozostaje
+lokalny i nie wchodzi do rutynowej synchronizacji Profile Sync ani backupu release 1.
+Po czystej reinstalacji wymagany jest nowy interaktywny device flow. Szczegóły opisuje
+[runbook YouTube](youtube.md).
 
 Adapter Rapideo działa po oficjalnym uzgodnieniu dodatku i przed ostatecznym
 sprawdzeniem przywracania. Pełny rollout najpierw eksportuje zweryfikowany token z
@@ -461,9 +474,12 @@ odniesienia do prywatnych wartości `.env`, ale nigdy same dane uwierzytelniają
 Zastosuj i zweryfikuj politykę X88 Pro 20 za pomocą:
 
 ```bash
+set -a
+. ./.env
+set +a
 .venv/bin/python tools/android_device_profile.py \
   --profile manifests/device-profiles/x88pro20.json \
-  --serial 192.168.1.8:5555 \
+  --serial "$KODI_DEVICE_X88PRO20_ADB" \
   --adb /home/mwo/android-sdk/platform-tools/adb \
   --adb-server-port 5038 \
   --env-file .env \

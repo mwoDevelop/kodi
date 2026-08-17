@@ -47,6 +47,12 @@ urządzeń, deployu QNAP, workflow GitHub ani lokalnego zestawu E2E:
 .venv/bin/python tools/kodi_ops.py rollout --dry-run
 ```
 
+Watchdog upstream jest bramą alarmową, ale nie jest zależnością danych urządzeń.
+Wykrycie złośliwego lub wymagającego review kandydata pozostaje widoczne w polu
+`alerts`, natomiast nie blokuje rolloutu wcześniej zatwierdzonych, immutable locków.
+Brak procesu/statusu watchdog, niedostępny Profile Sync, control plane lub provider
+relay nadal daje `DIAGNOSTIC_FAILED`.
+
 Pełny rollout wykonuje następujące fazy:
 
 1. przypina commit planu oraz SHA locków stable i QNAP;
@@ -81,6 +87,14 @@ zarządzany dodatek OpenSubtitles.com, waliduje login i polskie wyniki przez API
 oraz ustawia go jako domyślną usługę filmów i seriali; błąd zachowuje poprzednie
 pliki ustawień. Ogólne sondy providera i Real-Debrid są obecnie częścią adaptera
 Android, a nie adaptera Flatpak.
+
+Wśród dodatków domyślnych Kodi instaluje również oficjalny
+`plugin.video.youtube` z `repository.xbmc.org`. Jeżeli `.env` zawiera kompletny zestaw
+`YOUTUBE_API_KEY`, `YOUTUBE_CLIENT_ID` i `YOUTUBE_CLIENT_SECRET`, adapter konfiguruje
+osobiste API bez ujawniania wartości. Brak zestawu raportuje `API_CONFIG_REQUIRED`, a
+brak lokalnego OAuth raportuje `AUTHORIZATION_REQUIRED`; instalacja kodu i gotowość
+konta są oceniane osobno. Interaktywną zgodę wykonuje operator zgodnie z
+[runbookiem YouTube](youtube.md). `YOUTUBE_PASS` nie jest używany.
 
 Ogranicz mutacje do jednego urządzenia. QNAP pozostaje wtedy read-only, faza
 publikacji/promocji Profile Sync jest pomijana, a BlueStacks i X88 nie są

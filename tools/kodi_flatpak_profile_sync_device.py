@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import hashlib
+import glob
 import os
 import re
+import runpy
 import shutil
+import sqlite3
 import stat
 import sys
 import time
@@ -314,6 +317,43 @@ def _addon_openable(addon_id):
         return False
 
 
+def _version_tuple(value):
+    if not isinstance(value, str) or not value or len(value) > 128:
+        raise ValueError("invalid Kodi add-on version")
+    match = re.match(r"^(\d+(?:\.\d+)*)", value)
+    if not match:
+        raise ValueError("unsupported Kodi add-on version")
+    return tuple(int(part) for part in match.group(1).split("."))
+
+
+def _version_at_least(actual, minimum):
+    actual_parts = _version_tuple(actual)
+    minimum_parts = _version_tuple(minimum)
+    width = max(len(actual_parts), len(minimum_parts))
+    return actual_parts + (0,) * (width - len(actual_parts)) >= (
+        minimum_parts + (0,) * (width - len(minimum_parts))
+    )
+
+
+def _installed_origin(addon_id):
+    databases = []
+    database_root = xbmcvfs.translatePath("special://database")
+    for path in glob.glob(os.path.join(database_root, "Addons*.db")):
+        match = re.search(r"Addons(\d+)[.]db$", path)
+        if match:
+            databases.append((int(match.group(1)), path))
+    if not databases:
+        raise RuntimeError("Kodi add-on database is unavailable")
+    connection = sqlite3.connect(max(databases)[1])
+    try:
+        row = connection.execute(
+            "SELECT origin FROM installed WHERE addonID=?", (addon_id,)
+        ).fetchone()
+    finally:
+        connection.close()
+    return row[0] if row else None
+
+
 def _reconcile_required_addons(addons, timeout=120, stage=None):
     if (
         not isinstance(addons, dict)
@@ -365,6 +405,159 @@ def _reconcile_required_addons(addons, timeout=120, stage=None):
             if request:
                 request.unlink(missing_ok=True)
     return installed
+
+
+def _reconcile_native_official(addons, timeout=180, stage=None):
+    if not isinstance(addons, dict) or not addons:
+        raise ValueError("invalid native official add-on set")
+    for addon_id, metadata in addons.items():
+        if (
+            not isinstance(addon_id, str)
+            or not SAFE_ADDON_ID.fullmatch(addon_id)
+            or not isinstance(metadata, dict)
+            or set(metadata)
+            != {
+                "dependency_requirements",
+                "origin",
+                "sha256",
+                "version",
+            }
+            or metadata.get("origin") != "repository.xbmc.org"
+            or not isinstance(metadata.get("version"), str)
+            or not metadata["version"]
+            or not re.fullmatch(r"[0-9a-f]{64}", metadata.get("sha256", ""))
+        ):
+            raise ValueError("invalid native official add-on policy")
+        requirements = metadata.get("dependency_requirements")
+        if not isinstance(requirements, dict) or any(
+            not isinstance(dependency_id, str)
+            or not SAFE_ADDON_ID.fullmatch(dependency_id)
+            or not isinstance(requirement, dict)
+            or set(requirement) != {"minimum_version", "type"}
+            or requirement.get("type") not in {"platform", "python"}
+            or not isinstance(requirement.get("minimum_version"), str)
+            or not requirement["minimum_version"]
+            for dependency_id, requirement in requirements.items()
+        ):
+            raise ValueError("invalid native official dependency policy")
+
+    _enable("repository.xbmc.org")
+    xbmc.executebuiltin("UpdateAddonRepos")
+    xbmc.sleep(5000)
+    installed = {}
+    for addon_id, metadata in addons.items():
+        request = stage / "install-request.json" if stage else None
+        try:
+            deadline = time.monotonic() + timeout
+            next_install = 0
+            while time.monotonic() < deadline:
+                details = _addon_details(addon_id)
+                if details:
+                    observed = str(details.get("version"))
+                    expected = metadata["version"]
+                    if _version_at_least(observed, expected) and observed != expected:
+                        raise RuntimeError(
+                            "native official add-on version is unqualified"
+                        )
+                    if not details.get("enabled"):
+                        _enable(addon_id)
+                        details = _addon_details(addon_id)
+                    if (
+                        details
+                        and details.get("enabled")
+                        and str(details.get("version")) == expected
+                        and _addon_openable(addon_id)
+                    ):
+                        break
+                if time.monotonic() >= next_install:
+                    if request:
+                        _write_atomic(
+                            request, {"addon_id": addon_id, "schema": 1}
+                        )
+                    xbmc.executebuiltin("InstallAddon(%s)" % addon_id)
+                    next_install = time.monotonic() + 10
+                xbmc.sleep(2000)
+            else:
+                raise RuntimeError("Kodi could not install native official add-on")
+        finally:
+            if request:
+                request.unlink(missing_ok=True)
+
+        if _installed_origin(addon_id) != "repository.xbmc.org":
+            raise RuntimeError("native official add-on origin differs")
+        for dependency_id, requirement in metadata[
+            "dependency_requirements"
+        ].items():
+            dependency = _addon_details(dependency_id)
+            if (
+                not dependency
+                or not dependency.get("enabled")
+                or not _version_at_least(
+                    str(dependency.get("version")),
+                    requirement["minimum_version"],
+                )
+            ):
+                raise RuntimeError("native official dependency differs")
+        installed[addon_id] = metadata["version"]
+    return installed
+
+
+def _configure_youtube(stage):
+    script = stage / "youtube-configure.py"
+    config = stage / "youtube-config.json"
+    report_path = stage / "youtube-report.json"
+    if not script.is_file() or script.is_symlink():
+        raise ValueError("YouTube Flatpak adapter is missing")
+    if not config.exists():
+        return {
+            "ok": True,
+            "status": "API_CONFIG_REQUIRED",
+            "authorization": "AUTHORIZATION_REQUIRED",
+        }
+    if not config.is_file() or config.is_symlink():
+        raise ValueError("YouTube Flatpak private configuration is unsafe")
+    previous_argv = sys.argv
+    try:
+        sys.argv = [str(script), str(config), str(report_path)]
+        runpy.run_path(str(script), run_name="__main__")
+    finally:
+        sys.argv = previous_argv
+    if not report_path.is_file() or report_path.is_symlink():
+        raise RuntimeError("YouTube Flatpak adapter returned no report")
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    allowed = {
+        "addon_id",
+        "addon_version",
+        "api_status",
+        "authorization",
+        "changed",
+        "error_type",
+        "http_loopback_only",
+        "ok",
+        "personal_api_configured",
+        "rolled_back",
+        "schema",
+        "setup_wizard_disabled",
+        "stage",
+    }
+    if (
+        not isinstance(report, dict)
+        or not set(report).issubset(allowed)
+        or report.get("schema") != 1
+        or not report.get("ok")
+    ):
+        raise RuntimeError(
+            "YouTube Flatpak adapter failed: %s at %s"
+            % (
+                report.get("error_type", "unknown")
+                if isinstance(report, dict)
+                else "invalid_report",
+                report.get("stage", "unknown")
+                if isinstance(report, dict)
+                else "unknown",
+            )
+        )
+    return report
 
 
 def _verify_required_addons(addons, timeout=30):
@@ -515,6 +708,7 @@ def _sync_existing(stage):
         "required_addons",
         "required_artifacts",
         "dependency_artifacts",
+        "official_addons",
     }:
         raise ValueError("invalid Flatpak sync receipt")
     profile_version = _identity(
@@ -532,6 +726,12 @@ def _sync_existing(stage):
     required_addons = _reconcile_required_addons(
         expected["required_addons"]
     )
+    _set_stage("reconcile_native_official")
+    official_addons = _reconcile_native_official(
+        expected["official_addons"]
+    )
+    _set_stage("configure_youtube")
+    youtube = _configure_youtube(stage)
     _set_stage("apply_profile_sync")
     result = _sync(
         profile_root,
@@ -542,6 +742,8 @@ def _sync_existing(stage):
     if result["logical_device_id"] != expected["logical_device_id"]:
         raise ValueError("installed Flatpak enrollment identity differs")
     result["required_addons"] = required_addons
+    result["official_addons"] = official_addons
+    result["youtube"] = youtube
     return result
 
 
@@ -578,6 +780,7 @@ def _transaction(stage):
         "repository_version",
         "required_addons",
         "required_artifacts",
+        "official_addons",
     }:
         raise ValueError("invalid Flatpak installation receipt")
     expected_required = expected.get("required_addons")
@@ -665,6 +868,12 @@ def _transaction(stage):
         required_addons = _verify_required_addons(
             expected["required_addons"]
         )
+        _set_stage("reconcile_native_official")
+        official_addons = _reconcile_native_official(
+            expected["official_addons"], stage=stage
+        )
+        _set_stage("configure_youtube")
+        youtube = _configure_youtube(stage)
         _set_stage("apply_profile_sync")
         result = _sync(
             profile_root,
@@ -680,6 +889,8 @@ def _transaction(stage):
         xbmc.executebuiltin("UpdateLocalAddons")
         raise
     result["required_addons"] = required_addons
+    result["official_addons"] = official_addons
+    result["youtube"] = youtube
     return result
 
 

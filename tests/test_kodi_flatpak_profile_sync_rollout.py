@@ -24,11 +24,13 @@ from tools.kodi_flatpak_profile_sync_rollout import (
     _stage_event_packets,
     build_settings,
     extract_addon,
+    official_default_addons,
     official_dependency_artifacts,
     profile_sync_server_url,
     required_addon_artifacts,
     required_addons,
     stable_profile_sync_zip,
+    youtube_configuration_payload,
 )
 
 
@@ -288,6 +290,83 @@ def test_flatpak_official_dependencies_use_verified_private_cache(tmp_path):
 
     assert artifacts["script.module.one"]["path"] == archive
     assert artifacts["script.module.one"]["sha256"] == digest
+
+
+def test_flatpak_native_official_addon_is_qualified_without_republishing(
+    tmp_path, monkeypatch
+):
+    addon = {
+        "id": "plugin.video.youtube",
+        "version": "7.4.4",
+        "kind": "plugin",
+        "url": "https://mirrors.kodi.tv/addons/omega/plugin.video.youtube.zip",
+        "sha256": "a" * 64,
+        "source": "https://github.com/example/youtube",
+        "license": "GPL-2.0-only",
+        "origin": "repository.xbmc.org",
+        "install_mode": "kodi-native-official",
+        "dependencies": ["inputstream.adaptive"],
+        "dependency_requirements": {
+            "inputstream.adaptive": {
+                "minimum_version": "19.0.0",
+                "type": "platform",
+            }
+        },
+    }
+    fetched = []
+    monkeypatch.setattr(
+        "tools.kodi_flatpak_profile_sync_rollout.load_manifest",
+        lambda _path: {"addons": [addon]},
+    )
+    monkeypatch.setattr(
+        "tools.kodi_flatpak_profile_sync_rollout.fetch_artifact",
+        lambda item, cache: fetched.append((item["id"], cache)),
+    )
+
+    result = official_default_addons(tmp_path)
+
+    assert result == {
+        "plugin.video.youtube": {
+            "version": "7.4.4",
+            "origin": "repository.xbmc.org",
+            "sha256": "a" * 64,
+            "dependency_requirements": addon["dependency_requirements"],
+        }
+    }
+    assert fetched == [
+        (
+            "plugin.video.youtube",
+            tmp_path / ".kodi-private/cache/default-addons",
+        )
+    ]
+
+
+def test_flatpak_youtube_payload_excludes_account_hint_and_password():
+    references = {
+        "YOUTUBE_API_KEY": "AIza" + "a" * 35,
+        "YOUTUBE_CLIENT_ID": "123456789-example.apps.googleusercontent.com",
+        "YOUTUBE_CLIENT_SECRET": "GOCSPX-private",
+        "YOUTUBE_USER": "user@example.invalid",
+        "YOUTUBE_PASS": "must-not-be-read",
+    }
+
+    payload = youtube_configuration_payload(references)
+
+    assert payload == {
+        "schema": 1,
+        "addon_version": "7.4.4",
+        "api_key": references["YOUTUBE_API_KEY"],
+        "client_id": references["YOUTUBE_CLIENT_ID"],
+        "client_secret": references["YOUTUBE_CLIENT_SECRET"],
+    }
+    assert references["YOUTUBE_USER"] not in json.dumps(payload)
+    assert references["YOUTUBE_PASS"] not in json.dumps(payload)
+
+
+def test_flatpak_youtube_payload_is_deferred_when_api_profile_is_absent():
+    assert youtube_configuration_payload(
+        {"YOUTUBE_USER": "user@example.invalid", "YOUTUBE_PASS": "unused"}
+    ) is None
 
 
 def test_cleanup_command_is_valid_shell_and_scopes_all_paths_to_operation():
@@ -587,6 +666,131 @@ def test_in_kodi_reconciles_required_addons_before_profile_apply(
         "plugin.video.one": "1.2.3",
         "script.module.two": "1.2.3",
     }
+
+
+def test_in_kodi_reconciles_native_official_addon_and_platform_dependency(
+    monkeypatch,
+):
+    xbmc = types.ModuleType("xbmc")
+    builtins = []
+    xbmc.executebuiltin = builtins.append
+    xbmc.sleep = lambda _milliseconds: None
+    xbmcaddon = types.ModuleType("xbmcaddon")
+    xbmcaddon.Addon = lambda addon_id: {"addon_id": addon_id}
+    xbmcvfs = types.ModuleType("xbmcvfs")
+    for name, module_object in (
+        ("xbmc", xbmc),
+        ("xbmcaddon", xbmcaddon),
+        ("xbmcvfs", xbmcvfs),
+    ):
+        monkeypatch.setitem(sys.modules, name, module_object)
+    source = "tools/kodi_flatpak_profile_sync_device.py"
+    spec = importlib.util.spec_from_file_location(
+        "flatpak_device_official", source
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    probes = {}
+    enabled = []
+    monkeypatch.setattr(
+        module,
+        "_enable",
+        lambda addon_id, timeout=30: enabled.append(addon_id),
+    )
+
+    def details(addon_id):
+        probes[addon_id] = probes.get(addon_id, 0) + 1
+        if addon_id == "inputstream.adaptive":
+            return {"version": "21.5.9", "enabled": True}
+        if probes[addon_id] == 1:
+            return None
+        return {"version": "7.4.4", "enabled": True}
+
+    monkeypatch.setattr(module, "_addon_details", details)
+    monkeypatch.setattr(
+        module,
+        "_installed_origin",
+        lambda _addon_id: "repository.xbmc.org",
+    )
+
+    result = module._reconcile_native_official(
+        {
+            "plugin.video.youtube": {
+                "version": "7.4.4",
+                "origin": "repository.xbmc.org",
+                "sha256": "a" * 64,
+                "dependency_requirements": {
+                    "inputstream.adaptive": {
+                        "minimum_version": "19.0.0",
+                        "type": "platform",
+                    }
+                },
+            }
+        }
+    )
+
+    assert enabled == ["repository.xbmc.org"]
+    assert builtins == [
+        "UpdateAddonRepos",
+        "InstallAddon(plugin.video.youtube)",
+    ]
+    assert result == {"plugin.video.youtube": "7.4.4"}
+
+
+def test_in_kodi_youtube_adapter_returns_explicit_unconfigured_status(
+    tmp_path, monkeypatch
+):
+    for name in ("xbmc", "xbmcaddon", "xbmcvfs"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    source = "tools/kodi_flatpak_profile_sync_device.py"
+    spec = importlib.util.spec_from_file_location(
+        "flatpak_device_youtube_unconfigured", source
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    (tmp_path / "youtube-configure.py").write_text("pass\n")
+
+    assert module._configure_youtube(tmp_path) == {
+        "ok": True,
+        "status": "API_CONFIG_REQUIRED",
+        "authorization": "AUTHORIZATION_REQUIRED",
+    }
+
+
+def test_in_kodi_youtube_adapter_accepts_only_sanitized_report(
+    tmp_path, monkeypatch
+):
+    for name in ("xbmc", "xbmcaddon", "xbmcvfs"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    source = "tools/kodi_flatpak_profile_sync_device.py"
+    spec = importlib.util.spec_from_file_location(
+        "flatpak_device_youtube_configured", source
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    (tmp_path / "youtube-configure.py").write_text("pass\n")
+    (tmp_path / "youtube-config.json").write_text('{"private":"value"}\n')
+
+    def run(_path, run_name):
+        assert run_name == "__main__"
+        Path(sys.argv[2]).write_text(
+            json.dumps(
+                {
+                    "ok": True,
+                    "schema": 1,
+                    "stage": "complete",
+                    "authorization": "AUTHORIZATION_REQUIRED",
+                    "personal_api_configured": True,
+                }
+            )
+        )
+
+    monkeypatch.setattr(module.runpy, "run_path", run)
+
+    result = module._configure_youtube(tmp_path)
+
+    assert result["personal_api_configured"] is True
+    assert "private" not in json.dumps(result)
 
 
 def test_in_kodi_required_artifacts_are_digest_and_version_pinned(

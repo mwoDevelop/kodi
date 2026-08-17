@@ -323,6 +323,14 @@ def test_scanner_errors_and_incomplete_coverage_are_fail_closed(tmp_path, policy
         )
 
 
+def test_composite_action_exposes_clamav_infrastructure_diagnostic():
+    action = Path(
+        ".github/actions/upstream-malware-scan/action.yml"
+    ).read_text(encoding="utf-8")
+    assert 'if [ "$status" -gt 1 ]; then' in action
+    assert 'tail -n 80 "$work/clamav.txt"' in action
+
+
 def test_semgrep_and_gitleaks_findings_never_expose_secret(tmp_path, policy):
     candidate = tmp_path / "candidate"
     candidate.mkdir()

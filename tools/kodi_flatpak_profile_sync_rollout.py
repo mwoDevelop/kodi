@@ -35,6 +35,12 @@ from tools.kodi_devices import (
     resolve_private_endpoint,
 )
 from tools.kodi_inventory import load_private_references
+from tools.kodi_default_addons import fetch_artifact, load_manifest
+from tools.kodi_youtube_configure import (
+    ADAPTER as YOUTUBE_ADAPTER,
+    EXPECTED_ADDON_VERSION as YOUTUBE_VERSION,
+    resolve_credentials as resolve_youtube_credentials,
+)
 from tools.kodi_lifecycle import lifecycle_for_device
 from tools.kodi_transports import transport_for_device
 from tools.profile_sync_portable_release import bootstrap_active
@@ -68,7 +74,45 @@ RECEIPT_KEYS = {
     "required_addons",
     "required_artifacts",
     "dependency_artifacts",
+    "official_addons",
 }
+
+
+def _valid_official_addons(addons):
+    if not isinstance(addons, dict) or not addons:
+        return False
+    for addon_id, metadata in addons.items():
+        if (
+            not isinstance(addon_id, str)
+            or not ADDON_ID.fullmatch(addon_id)
+            or not isinstance(metadata, dict)
+            or set(metadata)
+            != {
+                "dependency_requirements",
+                "origin",
+                "sha256",
+                "version",
+            }
+            or metadata.get("origin") != "repository.xbmc.org"
+            or not isinstance(metadata.get("version"), str)
+            or not ADDON_VERSION.fullmatch(metadata["version"])
+            or not isinstance(metadata.get("sha256"), str)
+            or not SHA256.fullmatch(metadata["sha256"])
+        ):
+            return False
+        requirements = metadata.get("dependency_requirements")
+        if not isinstance(requirements, dict) or any(
+            not isinstance(dependency_id, str)
+            or not ADDON_ID.fullmatch(dependency_id)
+            or not isinstance(requirement, dict)
+            or set(requirement) != {"minimum_version", "type"}
+            or not isinstance(requirement.get("minimum_version"), str)
+            or not ADDON_VERSION.fullmatch(requirement["minimum_version"])
+            or requirement.get("type") not in {"platform", "python"}
+            for dependency_id, requirement in requirements.items()
+        ):
+            return False
+    return True
 
 
 def _valid_artifact_receipts(artifacts):
@@ -102,8 +146,13 @@ def _valid_installation_receipt(receipt, logical_device_id):
     """Validate receipt shape without treating old stable versions as authority."""
     if not isinstance(receipt, dict):
         return False
-    keys = set(receipt)
-    if keys != RECEIPT_KEYS and keys != RECEIPT_KEYS - {"dependency_artifacts"}:
+    keys = frozenset(receipt)
+    legacy_keys = RECEIPT_KEYS - {"dependency_artifacts", "official_addons"}
+    if keys not in {
+        frozenset(RECEIPT_KEYS),
+        frozenset(RECEIPT_KEYS - {"official_addons"}),
+        frozenset(legacy_keys),
+    }:
         return False
     if receipt.get("logical_device_id") != logical_device_id:
         return False
@@ -128,8 +177,12 @@ def _valid_installation_receipt(receipt, logical_device_id):
         for addon_id, version in required.items()
     ):
         return False
-    return "dependency_artifacts" not in receipt or _valid_artifact_receipts(
+    if "dependency_artifacts" in receipt and not _valid_artifact_receipts(
         receipt["dependency_artifacts"]
+    ):
+        return False
+    return "official_addons" not in receipt or _valid_official_addons(
+        receipt["official_addons"]
     )
 
 
@@ -319,6 +372,60 @@ def required_addons(repository, overrides=None):
     ):
         raise ValueError("invalid required Flatpak add-on set")
     return dict(items)
+
+
+def official_default_addons(repository):
+    """Qualify native Kodi add-ons without republishing their archives."""
+
+    repository = Path(repository)
+    document = load_manifest(repository / "manifests/kodi-default-addons.json")
+    result = {}
+    cache = repository / ".kodi-private/cache/default-addons"
+    for addon in document["addons"]:
+        if addon.get("install_mode") != "kodi-native-official":
+            continue
+        fetch_artifact(addon, cache)
+        result[addon["id"]] = {
+            "version": addon["version"],
+            "origin": addon["origin"],
+            "sha256": addon["sha256"],
+            "dependency_requirements": addon.get(
+                "dependency_requirements", {}
+            ),
+        }
+    if not _valid_official_addons(result):
+        raise ValueError("native official Flatpak add-on policy is invalid")
+    return result
+
+
+def youtube_configuration_payload(references):
+    names = (
+        "YOUTUBE_API_KEY",
+        "YOUTUBE_CLIENT_ID",
+        "YOUTUBE_CLIENT_SECRET",
+    )
+    present = [bool(references.get(name)) for name in names]
+    if not any(present):
+        return None
+    if not all(present) or not references.get("YOUTUBE_USER"):
+        raise ValueError("YouTube private API references are incomplete")
+    api_key, client_id, client_secret, _account_hint = resolve_youtube_credentials(
+        {
+            "adapter": YOUTUBE_ADAPTER,
+            "api_key_ref": "YOUTUBE_API_KEY",
+            "client_id_ref": "YOUTUBE_CLIENT_ID",
+            "client_secret_ref": "YOUTUBE_CLIENT_SECRET",
+            "account_hint_ref": "YOUTUBE_USER",
+        },
+        references,
+    )
+    return {
+        "schema": 1,
+        "addon_version": YOUTUBE_VERSION,
+        "api_key": api_key,
+        "client_id": client_id,
+        "client_secret": client_secret,
+    }
 
 
 def required_addon_artifacts(repository, addons):
@@ -1111,6 +1218,8 @@ def rollout(args):
         )
         _replace_private_document(bootstrap_path, serialized_assignment)
         required = required_addons(repository, args.required_addons)
+        official = official_default_addons(repository)
+        youtube_config = youtube_configuration_payload(references)
         required_artifacts = required_addon_artifacts(repository, required)
         dependency_artifacts = official_dependency_artifacts(repository)
         for addon_id, artifact in required_artifacts.items():
@@ -1154,6 +1263,7 @@ def rollout(args):
                 }
                 for addon_id, artifact in dependency_artifacts.items()
             },
+            "official_addons": official,
         }
         receipt = None
         if receipt_path.exists():
@@ -1200,6 +1310,18 @@ def rollout(args):
             repository / "tools/kodi_flatpak_profile_sync_device.py",
             payload / "bootstrap.py",
         )
+        shutil.copy2(
+            repository / "tests/e2e/kodi_youtube_configure.py",
+            payload / "youtube-configure.py",
+        )
+        if youtube_config is not None:
+            youtube_path = payload / "youtube-config.json"
+            youtube_path.write_text(
+                json.dumps(youtube_config, sort_keys=True, separators=(",", ":"))
+                + "\n",
+                encoding="utf-8",
+            )
+            youtube_path.chmod(0o600)
         operation = secrets.token_hex(8)
         data_root = probe["data_root"]
         stage = posixpath.join(
@@ -1279,7 +1401,8 @@ def rollout(args):
                             )
                         if (
                             request.get("schema") != 1
-                            or request.get("addon_id") not in required
+                            or request.get("addon_id")
+                            not in set(required) | set(official)
                         ):
                             raise RuntimeError(
                                 "invalid Flatpak install confirmation request"
@@ -1317,6 +1440,23 @@ def rollout(args):
                 ),
                 "required_addons": bool(
                     result and result.get("required_addons") == required
+                ),
+                "official_addons": bool(
+                    result and result.get("official_addons") == {
+                        addon_id: metadata["version"]
+                        for addon_id, metadata in official.items()
+                    }
+                ),
+                "youtube": bool(
+                    result
+                    and isinstance(result.get("youtube"), dict)
+                    and result["youtube"].get("ok")
+                    and (
+                        result["youtube"].get("personal_api_configured")
+                        if youtube_config is not None
+                        else result["youtube"].get("status")
+                        == "API_CONFIG_REQUIRED"
+                    )
                 ),
             }
             mismatches = [
@@ -1384,6 +1524,8 @@ def rollout(args):
                 "rollout_mode": mode,
                 "favourites": favourite_count,
                 "required_addons": result["required_addons"],
+                "official_addons": result["official_addons"],
+                "youtube": result["youtube"],
                 "opensubtitles_com": opensubtitles_com,
                 "server_url_sha256": hashlib.sha256(
                     server_url.encode("utf-8")

@@ -13,6 +13,7 @@ workflow obsługuje również `workflow_dispatch`, umożliwiający kontrolowane 
 | UTC | Repozytorium | Workflow | Cel | Granica zapisu |
 | --- | --- | --- | --- | --- |
 | 04:20 codziennie | `mwoDevelop/kodi` | `reconcile-upstreams.yml` | Wykrywa stan wszystkich zarządzanych komponentów i przygotowuje dokładnego kandydata na lock kanału testing. | Discovery jest tylko do odczytu. Zmieniony lock jest proponowany na `automation/testing-lock`; nigdy nie jest automatycznie scalany ani promowany. |
+| 04:29 codziennie | `mwoDevelop/kodi` | `check-youtube-upstream.yml` | Pobiera oficjalny ZIP YouTube z mirroru Kodi, materializuje jego drzewo i porównuje wersję, hash oraz zależności z kwalifikacją. | ZIP i rozpakowane pliki przechodzą wspólną bramę malware. Zmiana może utworzyć PR `automation/youtube-upstream`, ale nie jest automatycznie scalana, promowana ani publikowana przez mwoDevelop. |
 | 04:23 codziennie | `mwoDevelop/script.module.mwoscrapers` | `check-provider-upstreams.yml` | Pobiera zaakceptowane niezmienne artefakty Coco i Viper, weryfikuje przypięte digesty, bezpiecznie materializuje zawartość i skanuje dokładne ZIP-y oraz pliki wspólną bramą antymalware. | Tylko do odczytu. Weryfikacja pokrycia wymaga zgodności liczby archiwów, plików i bajtów z raportem skanera. Workflow przesyła artefakt audytu przechowywany przez 14 dni i nigdy nie zmienia gałęzi. Niedostępny artefakt, niezgodność digestu, niepełne pokrycie lub błąd skanowania powodują błąd workflow. |
 | 04:35 codziennie | `mwoDevelop/ch.repo` | `mwodevelop-watchnixtoons2-update.yml` | Wykrywa upstream WatchNixtoons2, materializuje i skanuje izolowanego kandydata, a następnie go testuje. | Zweryfikowana zmiana może zaktualizować `automation/watchnixtoons2-upstream` i otworzyć PR wymagający review. Nie publikuje repozytorium Kodi. |
 | 04:41 codziennie | `mwoDevelop/script.module.mwoscrapers` | `discover-provider-upstreams.yml` | Obserwuje najnowsze źródła providerów i utrzymuje stan review dotyczący wyłącznie pochodzenia. | Zmieniona obserwacja może zaktualizować `automation/provider-provenance` i otworzyć PR wymagający review. Nie importuje ani nie wykonuje kodu providera. |
@@ -91,6 +92,8 @@ wydania:
 ```bash
 gh run list --repo mwoDevelop/kodi \
   --workflow reconcile-upstreams.yml --event schedule --limit 1
+gh run list --repo mwoDevelop/kodi \
+  --workflow check-youtube-upstream.yml --event schedule --limit 1
 gh run list --repo mwoDevelop/script.module.mwoscrapers \
   --workflow check-provider-upstreams.yml --event schedule --limit 1
 gh run list --repo mwoDevelop/script.module.mwoscrapers \

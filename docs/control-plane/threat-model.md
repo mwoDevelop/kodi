@@ -38,3 +38,16 @@
   tego release i żadna mutacja nie może od nich pozornie zależeć;
 - brak dostępności QNAP oznacza brak nowych operacji administracyjnych, lecz nie
   unieważnia ostatniej działającej konfiguracji Kodi.
+
+## YouTube OAuth w release 1
+
+- API key, client ID i client secret są dostarczane wyłącznie przez prywatne
+  referencje; nie trafiają do Git, raportów ani Profile Sync;
+- po zastosowaniu na urządzeniu wartości mogą zostać odczytane przez przejęty system,
+  dlatego klient ma minimalne scope, a API key jest ograniczony do YouTube Data API;
+- bearer token sesji pozostaje lokalny per instalacja wtyczki. Nie jest kopiowany
+  pomiędzy urządzeniami, objęty portable state ani zapisywany na QNAP;
+- `YOUTUBE_USER` jest tylko lokalną wskazówką operatora, a `YOUTUBE_PASS` jest jawnie
+  odrzucany. Device flow nie automatyzuje formularza Google, CAPTCHA ani 2FA;
+- niedostępność QNAP nie unieważnia istniejącej sesji. Czysta reinstalacja kończy się
+  stanem `AUTHORIZATION_REQUIRED` i wymaga nowej jawnej zgody.

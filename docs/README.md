@@ -14,6 +14,7 @@ kompilacji.
 | Repozytorium Kodi | [Główny plik README](../README.md) | Zainstaluj stable/testing, zbuduj repozytorium i uruchom jego odtwarzalne E2E |
 | Release, rollout i restore | [Operacje Kodi](kodi-operations.md) | Jeden wznawialny interfejs, canary, przykłady wywołań, wyniki i kody wyjścia |
 | Profile prywatne | [Prywatne migawki profilu Kodi](kodi-private-profile.md) | Tworzenie kopii zapasowych, przywracanie, tożsamość urządzenia, stan przenośny i granice bezpieczeństwa |
+| YouTube | [Oficjalny dodatek YouTube](youtube.md) | Instalacja, osobiste API, device flow OAuth, statusy i diagnostyka |
 | Automatyzacja cykliczna | [Procesy cykliczne](scheduled-processes.md) | Workflow cron GitHub, watchdog QNAP, częstotliwość Profile Sync i weryfikacja na żywo |
 | Kontenery QNAP | [Cykl życia obrazu QNAP](qnap-images.md) | Twórz, publikuj, wdrażaj i sprawdzaj obrazy Container Station |
 | QNAP Control Plane | [Architektura i ADR-y Control Plane](control-plane/README.md) | Read-only stan floty, mTLS, audyt oraz kolejne fazy autonomicznej konwergencji |
@@ -37,6 +38,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | Rozszerzenie providerów MwoScrapers | [Plan wdrożenia większej liczby providerów](../MWOSCRAPERS_PROVIDER_EXPANSION_PLAN.md) |
 | Synchronizacja profilu i urządzenia | [Plan Profile Sync](../PROFILE_SYNC_PLAN.md) |
 | Control plane QNAP i autonomiczna konwergencja | [Plan administracji QNAP i Device Agenta](../QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN.md) |
+| Domyślny dodatek YouTube | [Plan instalacji, OAuth i rolloutu YouTube](../YOUTUBE_DEFAULT_ADDON_PLAN.md) |
 | Dziennik wdrożenia Profile Sync | [Zapis stanu realizacji](profile-sync-implementation.md) |
 | Synchronizacja upstream | [Plan synchronizacji upstream](../UPSTREAM_SYNC_PLAN.md) |
 | Bramka bezpieczeństwa upstream | [Projekt skanowania w poszukiwaniu złośliwego oprogramowania](UPSTREAM_MALWARE_SCANNING_PLAN.md) |
@@ -48,6 +50,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 
 ## Recenzje i zapisy decyzji
 
+- [Review planu domyślnej instalacji YouTube](YOUTUBE_DEFAULT_ADDON_PLAN_REVIEW.md)
 - [Review planu administracji QNAP i autonomicznej konwergencji](QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN_REVIEW.md)
 - [Review planu usunięcia kodu legacy](LEGACY_REMOVAL_PLAN_REVIEW.md)
 - [Review architektury Profile Sync](PROFILE_SYNC_PLAN_REVIEW.md)
