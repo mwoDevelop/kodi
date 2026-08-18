@@ -8,6 +8,7 @@ import datetime as dt
 import hashlib
 import ipaddress
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -141,7 +142,15 @@ def services(profile_sync_repository=None, control_plane_repository=None):
     }
 
 
-def _run(argv, *, cwd=None, input_text=None, capture=True, check=True):
+def _run(
+    argv,
+    *,
+    cwd=None,
+    input_text=None,
+    capture=True,
+    check=True,
+    env=None,
+):
     return subprocess.run(
         [str(item) for item in argv],
         cwd=cwd,
@@ -149,6 +158,7 @@ def _run(argv, *, cwd=None, input_text=None, capture=True, check=True):
         text=True,
         capture_output=capture,
         check=check,
+        env=env,
     )
 
 
@@ -418,8 +428,32 @@ def _workflow_run(service, commit, ref, started_at):
     raise ImageError("GitHub Actions run did not appear after dispatch")
 
 
+def _imagetools_inspect(reference, raw=False):
+    command = ["docker", "buildx", "imagetools", "inspect", reference]
+    if raw:
+        command.append("--raw")
+    try:
+        return _run(command)
+    except subprocess.CalledProcessError as error:
+        detail = "%s\n%s" % (error.stdout or "", error.stderr or "")
+        if not (
+            "error getting credentials" in detail
+            and "executable file not found" in detail
+        ):
+            raise
+        # Docker Desktop can leave a WSL config that names its Windows
+        # credential helper even when the helper is absent from PATH. Images
+        # published by this project are public, so retry the read-only registry
+        # probe with an isolated anonymous config instead of mutating the
+        # operator's Docker login state.
+        with tempfile.TemporaryDirectory(prefix="kodi-docker-anonymous-") as config:
+            environment = os.environ.copy()
+            environment["DOCKER_CONFIG"] = config
+            return _run(command, env=environment)
+
+
 def _tag_digest(tag):
-    output = _run(("docker", "buildx", "imagetools", "inspect", tag)).stdout
+    output = _imagetools_inspect(tag).stdout
     match = re.search(r"^Digest:\s+(sha256:[a-f0-9]{64})$", output, re.MULTILINE)
     if not match:
         raise ImageError("could not resolve immutable digest for %s" % tag)
@@ -501,9 +535,7 @@ def build_with_actions(service, dry_run=False, stream_progress=True):
 
 
 def verify_platforms(reference, required):
-    raw = _run(
-        ("docker", "buildx", "imagetools", "inspect", reference, "--raw")
-    ).stdout
+    raw = _imagetools_inspect(reference, raw=True).stdout
     document = json.loads(raw)
     observed = {
         "/".join(

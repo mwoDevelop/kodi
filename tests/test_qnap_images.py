@@ -1,4 +1,5 @@
 import json
+import os
 import stat
 import subprocess
 
@@ -237,7 +238,7 @@ def test_actions_build_can_capture_nested_workflow_progress(monkeypatch, tmp_pat
 def test_tag_digest_extracts_manifest_digest(monkeypatch):
     monkeypatch.setattr(
         qnap_images,
-        "_run",
+        "_imagetools_inspect",
         lambda *_args, **_kwargs: type(
             "Result",
             (),
@@ -248,6 +249,55 @@ def test_tag_digest_extracts_manifest_digest(monkeypatch):
     assert qnap_images._tag_digest("example.invalid/image:test") == (
         "sha256:" + "e" * 64
     )
+
+
+def test_imagetools_inspect_retries_missing_desktop_helper_anonymously(
+    monkeypatch,
+):
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append((tuple(argv), kwargs))
+        if len(calls) == 1:
+            raise subprocess.CalledProcessError(
+                1,
+                argv,
+                stderr=(
+                    'error getting credentials - err: exec: '
+                    '"docker-credential-desktop.exe": executable file not found'
+                ),
+            )
+        return type("Result", (), {"stdout": "{}"})()
+
+    monkeypatch.setattr(qnap_images, "_run", run)
+
+    result = qnap_images._imagetools_inspect("ghcr.io/example/image:tag", raw=True)
+
+    assert result.stdout == "{}"
+    assert calls[0][0][-1] == "--raw"
+    assert calls[0][1] == {}
+    assert calls[1][0] == calls[0][0]
+    assert calls[1][1]["env"]["DOCKER_CONFIG"] != os.environ.get(
+        "DOCKER_CONFIG"
+    )
+
+
+def test_imagetools_inspect_preserves_non_credential_failure(monkeypatch):
+    error = subprocess.CalledProcessError(
+        1,
+        ["docker"],
+        stderr="registry unavailable",
+    )
+    monkeypatch.setattr(
+        qnap_images,
+        "_run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(error),
+    )
+
+    with pytest.raises(subprocess.CalledProcessError) as observed:
+        qnap_images._imagetools_inspect("ghcr.io/example/image:tag")
+
+    assert observed.value is error
 
 
 def test_published_reference_retries_registry_propagation(monkeypatch):
