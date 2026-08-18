@@ -49,7 +49,7 @@ from tools.kodi_reinstall import (
 from tools.kodi_sync_inventory import load_sync_inventory
 from tools.kodi_transports import TransportError
 from tools.kodi_umbrella_rd_probe import probe as rd_probe
-from tools.qnap_images import service_is_healthy as qnap_service_is_healthy
+from tools.qnap_images import service_is_operational as qnap_service_is_operational
 from tools.qnap_images import status as qnap_status
 
 from .github import GitHubClient
@@ -100,24 +100,6 @@ def release_rollout_result(child_report: dict[str, Any], child_code: int) -> Ste
     if StepResult.DEFERRED.value in results:
         return StepResult.DEFERRED
     raise RuntimeError("partial post-release rollout has no classified cause")
-
-
-def qnap_service_is_operational(name: str, item: dict[str, Any]) -> bool:
-    if qnap_service_is_healthy(item):
-        return True
-    if name != "upstream-watchdog":
-        return False
-    # A fail-closed upstream finding is an alert produced by a functioning
-    # watchdog, not an outage of Profile Sync or the control plane. Keep it in
-    # the rollout evidence without allowing an unrelated candidate review to
-    # block convergence of already approved immutable artifacts.
-    return (
-        item.get("status") == "running"
-        and item.get("runtime_healthy") is False
-        and isinstance(item.get("checked_at"), str)
-        and bool(item["checked_at"])
-        and isinstance(item.get("workflow_failures"), list)
-    )
 
 
 class OperationLock:

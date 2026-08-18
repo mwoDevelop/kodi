@@ -214,7 +214,7 @@ def deploy(lock_path, references=".env", repository=ROOT, service_names=None):
             for name, image in expected.items():
                 if after[name].get("image") != image:
                     raise RuntimeError("QNAP post-deploy digest mismatch: %s" % name)
-                if not qnap_images.service_is_healthy(after[name]):
+                if not qnap_images.service_is_operational(name, after[name]):
                     pending.append(name)
             if not pending:
                 break
