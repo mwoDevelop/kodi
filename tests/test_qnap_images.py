@@ -490,6 +490,34 @@ def test_service_health_accepts_initial_watchdog_runtime_evidence_only():
     )
 
 
+def test_watchdog_alert_is_operational_but_not_healthy():
+    item = {
+        "status": "running",
+        "health": "starting",
+        "checked_at": "2026-08-18T00:00:00+00:00",
+        "runtime_healthy": False,
+        "workflow_failures": ["example/reconcile.yml"],
+    }
+
+    assert not qnap_images.service_is_healthy(item)
+    assert qnap_images.service_is_operational("upstream-watchdog", item)
+    assert not qnap_images.service_is_operational("profile-sync", item)
+
+
+def test_watchdog_without_a_structured_alert_is_not_operational():
+    base = {
+        "status": "running",
+        "health": "starting",
+        "checked_at": "2026-08-18T00:00:00+00:00",
+        "runtime_healthy": False,
+    }
+
+    assert not qnap_images.service_is_operational("upstream-watchdog", base)
+    assert not qnap_images.service_is_operational(
+        "upstream-watchdog", {**base, "workflow_failures": []}
+    )
+
+
 def test_selected_services_is_ordered_and_strict():
     available = {"profile-sync": object(), "provider-relay": object()}
     assert qnap_images.selected_services(["all"], available) == [

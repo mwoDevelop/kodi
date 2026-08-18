@@ -157,6 +157,48 @@ def test_deploy_can_reconcile_only_selected_stable_service(monkeypatch, tmp_path
     ]
 
 
+def test_deploy_accepts_a_structured_watchdog_alert(monkeypatch, tmp_path):
+    document = lock_document()
+    path = tmp_path / "qnap-stable.json"
+    path.write_text(json.dumps(document))
+    running = {
+        name: {"image": item["image"], "status": "running", "health": "healthy"}
+        for name, item in document["services"].items()
+    }
+    running["upstream-watchdog"].update(
+        {
+            "health": "starting",
+            "runtime_healthy": False,
+            "checked_at": "2026-08-18T00:00:00+00:00",
+            "workflow_failures": ["example/reconcile.yml"],
+        }
+    )
+
+    class Lock:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+    monkeypatch.setattr(qnap_lock, "RemoteLock", Lock)
+    monkeypatch.setattr(
+        qnap_lock.qnap_images,
+        "status",
+        lambda *_args, **_kwargs: {
+            name: dict(item) for name, item in running.items()
+        },
+    )
+
+    result = qnap_lock.deploy(path, service_names=["upstream-watchdog"])
+
+    assert result["result"] == "NO_CHANGE"
+    assert result["services"] == {"upstream-watchdog": "NO_CHANGE"}
+
+
 def test_deploy_rejects_service_outside_stable_lock(tmp_path):
     path = tmp_path / "qnap-stable.json"
     path.write_text(json.dumps(lock_document()))

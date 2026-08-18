@@ -891,6 +891,29 @@ def service_is_healthy(item):
     return health == "starting" and item.get("runtime_healthy") is True
 
 
+def service_is_operational(name, item):
+    """Accept a watchdog security alert as evidence of a running monitor.
+
+    ``healthy`` means that every monitored workflow is healthy.  A watchdog
+    that successfully writes a current, structured list of failing workflows
+    is operational even though Docker correctly marks the business result as
+    unhealthy.  No other service receives this exception.
+    """
+    if service_is_healthy(item):
+        return True
+    if name != "upstream-watchdog":
+        return False
+    failures = item.get("workflow_failures")
+    return (
+        item.get("status") == "running"
+        and item.get("runtime_healthy") is False
+        and isinstance(item.get("checked_at"), str)
+        and bool(item["checked_at"])
+        and isinstance(failures, list)
+        and bool(failures)
+    )
+
+
 def selected_services(values, available):
     values = values or ["all"]
     if "all" in values:
