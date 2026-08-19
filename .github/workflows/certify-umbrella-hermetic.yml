@@ -141,7 +141,12 @@ jobs:
       - name: Execute candidate tests without network, secrets, or host writes
         run: |
           set -euo pipefail
-          sandbox="$RUNNER_TEMP/umbrella-hermetic"
+          # Keep the bind source below a world-traversable parent. GitHub's
+          # RUNNER_TEMP lives below /home/runner/work, whose parent permissions
+          # are intentionally not traversable after bwrap enters its user
+          # namespace, even when bwrap itself was started through sudo.
+          sandbox="$(mktemp -d /tmp/umbrella-hermetic.XXXXXX)"
+          trap 'rm -rf "$sandbox"' EXIT
           mkdir -p "$sandbox/repository" "$sandbox/evidence" "$sandbox/home"
           rsync -a --delete \
             --exclude .git --exclude .venv --exclude .venv-downstream \
