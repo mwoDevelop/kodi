@@ -142,7 +142,7 @@ jobs:
         run: |
           set -euo pipefail
           sandbox="$RUNNER_TEMP/umbrella-hermetic"
-          mkdir -p "$sandbox/repository" "$sandbox/evidence"
+          mkdir -p "$sandbox/repository" "$sandbox/evidence" "$sandbox/home"
           rsync -a --delete \
             --exclude .git --exclude .venv --exclude .venv-downstream \
             ./ "$sandbox/repository/"
@@ -150,20 +150,22 @@ jobs:
             name="$1"
             shift
             python_bin="$(dirname "$(command -v python)")"
-            env -i /usr/bin/bwrap \
-              --die-with-parent --new-session \
-              --unshare-user --unshare-net \
+            runner_uid="$(id -u)"
+            runner_gid="$(id -g)"
+            sudo -n env -i /usr/bin/bwrap \
+              --die-with-parent --new-session --unshare-net \
               --ro-bind /usr /usr --ro-bind /bin /bin \
               --ro-bind /lib /lib --ro-bind /lib64 /lib64 \
               --ro-bind /opt /opt --ro-bind /etc /etc \
               --proc /proc --dev /dev --tmpfs /tmp \
               --dir /home --dir /home/runner \
               --bind "$sandbox" /work --chdir /work/repository \
-              --setenv HOME /tmp/home \
+              --uid "$runner_uid" --gid "$runner_gid" \
+              --setenv HOME /work/home \
               --setenv PATH "$python_bin:/usr/bin:/bin" \
               --setenv PYTHONDONTWRITEBYTECODE 1 \
               --setenv PYTEST_ADDOPTS "-p no:cacheprovider" \
-              /usr/bin/bash -c 'mkdir -p "$HOME"; exec "$@"' bash "$@" \
+              /usr/bin/bash -c 'exec "$@"' bash "$@" \
               2>&1 | tee "$sandbox/evidence/$name.txt"
           }
           run_sandboxed umbrella-tests python -m pytest -q umbrella/tests
