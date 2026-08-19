@@ -78,6 +78,7 @@ def test_umbrella_qualification_is_hermetic_and_component_isolated():
 
     assert "sudo -n env -i /usr/bin/bwrap" in workflow
     assert "--unshare-user --unshare-net" in workflow
+    assert 'chmod 0711 "$sandbox"' in workflow
     assert '--uid "$runner_uid" --gid "$runner_gid"' in workflow
     assert '--ro-bind "$sandbox/repository" /work/repository' in workflow
     assert "--setenv HOME /tmp" in workflow
