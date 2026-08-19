@@ -79,7 +79,8 @@ def test_umbrella_qualification_is_hermetic_and_component_isolated():
     assert "sudo -n env -i /usr/bin/bwrap" in workflow
     assert "--unshare-user --unshare-net" in workflow
     assert '--uid "$runner_uid" --gid "$runner_gid"' in workflow
-    assert "--setenv HOME /work/home" in workflow
+    assert '--ro-bind "$sandbox/repository" /work/repository' in workflow
+    assert "--setenv HOME /tmp" in workflow
     assert "persist-credentials: false" in workflow
     assert "tools/qualify_umbrella_snapshot.py validate" in workflow
     assert "qualification-attestation-$id.json" in workflow
