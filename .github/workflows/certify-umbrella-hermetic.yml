@@ -159,6 +159,8 @@ jobs:
           rsync -a --delete \
             --exclude .git --exclude .venv --exclude .venv-downstream \
             ./ "$sandbox/repository/"
+          python tools/checkout_locked_components.py \
+            --output "$sandbox/components"
           git clone --quiet --no-hardlinks umbrella "$sandbox/umbrella"
           test "$(git -C "$sandbox/umbrella" rev-parse HEAD)" = \
             "$(git -C umbrella rev-parse HEAD)"
@@ -178,10 +180,12 @@ jobs:
               --proc /proc --dev /dev --tmpfs /tmp --tmpfs /work \
               --dir /home --dir /home/runner \
               --ro-bind "$sandbox/repository" /work/repository \
+              --ro-bind "$sandbox/components" /work/components \
               --ro-bind "$sandbox/umbrella" /work/umbrella \
               --chdir "$workdir" \
               --uid "$runner_uid" --gid "$runner_gid" \
               --setenv HOME /tmp \
+              --setenv KODI_COMPONENT_ROOT /work/components \
               --setenv PATH "$python_bin:/usr/bin:/bin" \
               --setenv PYTHONDONTWRITEBYTECODE 1 \
               --setenv PYTEST_ADDOPTS "-p no:cacheprovider" \
