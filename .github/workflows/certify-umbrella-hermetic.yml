@@ -121,6 +121,12 @@ jobs:
           git cat-file -e "$commit^{commit}"
           git checkout --detach "$commit"
           git submodule update --init umbrella
+          candidate_commit="$(python -c 'import json; print(json.load(open("snapshot.json"))["testing_lock"]["components"]["plugin.video.umbrella"]["commit"])')"
+          case "$candidate_commit" in *[!0-9a-f]*|'') exit 1 ;; esac
+          test "${#candidate_commit}" -eq 40
+          git -C umbrella fetch --depth 1 origin \
+            "$candidate_commit:refs/locked/$candidate_commit"
+          git -C umbrella checkout --detach "$candidate_commit"
           python tools/qualify_umbrella_snapshot.py validate \
             --snapshot snapshot.tar \
             --stable-lock manifests/locks/stable.json \

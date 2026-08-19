@@ -551,11 +551,27 @@ def test_testing_and_stable_publication_preserve_scanner_evidence():
     assert "actions/deploy-pages@" in pages
 
 
-def test_testing_publication_checks_out_submodules_before_full_e2e():
-    testing = Path(".github/workflows/publish-testing.yml").read_text(
-        encoding="utf-8"
-    )
-    checkout = testing.split("actions/checkout@", 1)[1].split(
-        "actions/setup-python@", 1
-    )[0]
-    assert "submodules: true" in checkout
+def test_publication_workflows_check_out_submodules_before_full_e2e():
+    for path in (
+        ".github/workflows/publish-testing.yml",
+        ".github/workflows/publish-pages.yml",
+    ):
+        workflow = Path(path).read_text(encoding="utf-8")
+        checkout = workflow.split("actions/checkout@", 1)[1].split(
+            "actions/setup-python@", 1
+        )[0]
+        assert "submodules: true" in checkout, path
+
+
+def test_hermetic_qualification_checks_out_exact_snapshot_component():
+    workflow = Path(
+        ".github/workflows/certify-umbrella-hermetic.yml"
+    ).read_text(encoding="utf-8")
+    identity = workflow.split(
+        "name: Check out the repository and Umbrella commit bound to the snapshot",
+        1,
+    )[1].split("name: Install the trusted test harness", 1)[0]
+    assert '["testing_lock"]["components"]["plugin.video.umbrella"]["commit"]' in identity
+    assert 'test "${#candidate_commit}" -eq 40' in identity
+    assert '"$candidate_commit:refs/locked/$candidate_commit"' in identity
+    assert 'git -C umbrella checkout --detach "$candidate_commit"' in identity
