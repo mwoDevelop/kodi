@@ -81,6 +81,9 @@ def test_umbrella_qualification_is_hermetic_and_component_isolated():
     assert 'chmod 0711 "$sandbox"' in workflow
     assert '--uid "$runner_uid" --gid "$runner_gid"' in workflow
     assert '--ro-bind "$sandbox/repository" /work/repository' in workflow
+    assert '--ro-bind "$sandbox/umbrella" /work/umbrella' in workflow
+    assert "git clone --quiet --no-hardlinks umbrella" in workflow
+    assert "run_sandboxed umbrella-tests /work/umbrella" in workflow
     assert "--setenv HOME /tmp" in workflow
     assert "persist-credentials: false" in workflow
     assert "tools/qualify_umbrella_snapshot.py validate" in workflow

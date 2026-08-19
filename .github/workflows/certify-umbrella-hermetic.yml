@@ -155,9 +155,13 @@ jobs:
           rsync -a --delete \
             --exclude .git --exclude .venv --exclude .venv-downstream \
             ./ "$sandbox/repository/"
+          git clone --quiet --no-hardlinks umbrella "$sandbox/umbrella"
+          test "$(git -C "$sandbox/umbrella" rev-parse HEAD)" = \
+            "$(git -C umbrella rev-parse HEAD)"
           run_sandboxed() {
             name="$1"
-            shift
+            workdir="$2"
+            shift 2
             python_bin="$(dirname "$(command -v python)")"
             runner_uid="$(id -u)"
             runner_gid="$(id -g)"
@@ -170,7 +174,8 @@ jobs:
               --proc /proc --dev /dev --tmpfs /tmp --tmpfs /work \
               --dir /home --dir /home/runner \
               --ro-bind "$sandbox/repository" /work/repository \
-              --chdir /work/repository \
+              --ro-bind "$sandbox/umbrella" /work/umbrella \
+              --chdir "$workdir" \
               --uid "$runner_uid" --gid "$runner_gid" \
               --setenv HOME /tmp \
               --setenv PATH "$python_bin:/usr/bin:/bin" \
@@ -179,8 +184,10 @@ jobs:
               /usr/bin/bash -c 'exec "$@"' bash "$@" \
               2>&1 | tee "$sandbox/evidence/$name.txt"
           }
-          run_sandboxed umbrella-tests python -m pytest -q umbrella/tests
-          run_sandboxed release-contract-tests python -m pytest -q \
+          run_sandboxed umbrella-tests /work/umbrella \
+            python -m pytest -q tests
+          run_sandboxed release-contract-tests /work/repository \
+            python -m pytest -q \
             tests/test_qualification_attestation.py \
             tests/test_qualify_umbrella_snapshot.py \
             tests/test_promote_channel.py \
