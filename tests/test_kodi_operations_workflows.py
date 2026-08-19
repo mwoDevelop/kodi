@@ -77,7 +77,7 @@ def test_umbrella_qualification_is_hermetic_and_component_isolated():
     workflow = text(".github/workflows/certify-umbrella-hermetic.yml")
 
     assert "sudo -n env -i /usr/bin/bwrap" in workflow
-    assert "--unshare-net" in workflow
+    assert "--unshare-user --unshare-net" in workflow
     assert '--uid "$runner_uid" --gid "$runner_gid"' in workflow
     assert "--setenv HOME /work/home" in workflow
     assert "persist-credentials: false" in workflow
