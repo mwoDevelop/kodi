@@ -148,6 +148,10 @@ jobs:
           sandbox="$(mktemp -d /tmp/umbrella-hermetic.XXXXXX)"
           trap 'rm -rf "$sandbox"' EXIT
           mkdir -p "$sandbox/repository" "$sandbox/evidence"
+          # bwrap resolves bind sources after entering its user namespace.
+          # Permit traversal of only this random parent without exposing a
+          # directory listing or granting write access.
+          chmod 0711 "$sandbox"
           rsync -a --delete \
             --exclude .git --exclude .venv --exclude .venv-downstream \
             ./ "$sandbox/repository/"
