@@ -147,7 +147,7 @@ jobs:
           # namespace, even when bwrap itself was started through sudo.
           sandbox="$(mktemp -d /tmp/umbrella-hermetic.XXXXXX)"
           trap 'rm -rf "$sandbox"' EXIT
-          mkdir -p "$sandbox/repository" "$sandbox/evidence" "$sandbox/home"
+          mkdir -p "$sandbox/repository" "$sandbox/evidence"
           rsync -a --delete \
             --exclude .git --exclude .venv --exclude .venv-downstream \
             ./ "$sandbox/repository/"
@@ -163,11 +163,12 @@ jobs:
               --ro-bind /usr /usr --ro-bind /bin /bin \
               --ro-bind /lib /lib --ro-bind /lib64 /lib64 \
               --ro-bind /opt /opt --ro-bind /etc /etc \
-              --proc /proc --dev /dev --tmpfs /tmp \
+              --proc /proc --dev /dev --tmpfs /tmp --tmpfs /work \
               --dir /home --dir /home/runner \
-              --bind "$sandbox" /work --chdir /work/repository \
+              --ro-bind "$sandbox/repository" /work/repository \
+              --chdir /work/repository \
               --uid "$runner_uid" --gid "$runner_gid" \
-              --setenv HOME /work/home \
+              --setenv HOME /tmp \
               --setenv PATH "$python_bin:/usr/bin:/bin" \
               --setenv PYTHONDONTWRITEBYTECODE 1 \
               --setenv PYTEST_ADDOPTS "-p no:cacheprovider" \
