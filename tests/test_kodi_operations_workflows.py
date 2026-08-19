@@ -76,8 +76,10 @@ def test_deploy_requires_both_reviewed_locks():
 def test_umbrella_qualification_is_hermetic_and_component_isolated():
     workflow = text(".github/workflows/certify-umbrella-hermetic.yml")
 
-    assert "--unshare-user --unshare-net" in workflow
+    assert "sudo -n env -i /usr/bin/bwrap" in workflow
     assert "--unshare-net" in workflow
+    assert '--uid "$runner_uid" --gid "$runner_gid"' in workflow
+    assert "--setenv HOME /work/home" in workflow
     assert "persist-credentials: false" in workflow
     assert "tools/qualify_umbrella_snapshot.py validate" in workflow
     assert "qualification-attestation-$id.json" in workflow
