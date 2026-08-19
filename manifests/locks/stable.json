@@ -1,12 +1,13 @@
 {
-  "attestation_id": "0c7df2d454a2877019187511fdc6d01be8ed2087cf8d7d1d9c59ec9900cf3ca8",
-  "attestation_sha256": "6ea33f162fa3aa5828b1b1ef3045889e2ffa2147b60697b34433131d05c29c8a",
+  "attestation_id": "d86fd2149db758eefc536e7980648fdb21965debe8a220a17a7ce507108fc683",
+  "attestation_kind": "hermetic_ci",
+  "attestation_sha256": "1426a367932400f7808cd6a570634727e1f2fb50b155675e2c3bb89c61d69224",
   "channel": "stable",
   "components": {
     "plugin.video.umbrella": {
-      "commit": "3b772adff9de10f1a144522b83c0d8ad698b0348",
-      "version": "6.7.81.20",
-      "zip_sha256": "06c18891e3190f7eb4156ffb9fe7d3179b25316fcdb3c5c591d8ab4b7c9cab8f"
+      "commit": "cc3777176e0e8ab4ebc0d83e2e8c787b6845a2ae",
+      "version": "6.7.81.21",
+      "zip_sha256": "ea6e140f109a85a4af6c38bafe15822f941791b77fc88a7b27f586f016f490c0"
     },
     "plugin.video.watchnixtoons2.mwodevelop": {
       "commit": "df5f3474c1744b7187041acce37958bca50b49c1",
@@ -35,8 +36,9 @@
       "zip_sha256": "29840c090d06376d56520634eac84680e42d5e1f62aa122417046ecc592fc9ca"
     }
   },
+  "promotion_kind": "normal",
   "schema": 2,
-  "source_artifact_manifest_sha256": "2df1253ff76489156370faa85bd8997de54d02b3282e1bf26fcbffaefa70efce",
-  "source_index_sha256": "c178665a4a807acdd4439684eef1d05ad4dec6b370d8d9c53e2f0454206e2c5c",
-  "source_snapshot_id": "7e1f737b55017e226469dd47d57770ec91e4f1a66e2d03978a7e9bdb116ad3f6"
+  "source_artifact_manifest_sha256": "4f4a45a02873b2a935554cb982fd24b90903f6adcf6d40a75df7b5cde31d4038",
+  "source_index_sha256": "d7a09e47242200897f76bbd243ea830232eec2d5e4d432e5ef8b9e55fc97d21e",
+  "source_snapshot_id": "304e2cd163d3e93db654d4f3a137d91069ca03345e5f795a3c7783ec8691684a"
 }
