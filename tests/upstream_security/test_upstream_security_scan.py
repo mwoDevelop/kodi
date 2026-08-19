@@ -551,11 +551,13 @@ def test_testing_and_stable_publication_preserve_scanner_evidence():
     assert "actions/deploy-pages@" in pages
 
 
-def test_testing_publication_checks_out_submodules_before_full_e2e():
-    testing = Path(".github/workflows/publish-testing.yml").read_text(
-        encoding="utf-8"
-    )
-    checkout = testing.split("actions/checkout@", 1)[1].split(
-        "actions/setup-python@", 1
-    )[0]
-    assert "submodules: true" in checkout
+def test_publication_workflows_check_out_submodules_before_full_e2e():
+    for path in (
+        ".github/workflows/publish-testing.yml",
+        ".github/workflows/publish-pages.yml",
+    ):
+        workflow = Path(path).read_text(encoding="utf-8")
+        checkout = workflow.split("actions/checkout@", 1)[1].split(
+            "actions/setup-python@", 1
+        )[0]
+        assert "submodules: true" in checkout, path
