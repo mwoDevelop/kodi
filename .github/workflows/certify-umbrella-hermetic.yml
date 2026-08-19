@@ -151,7 +151,8 @@ jobs:
             shift
             python_bin="$(dirname "$(command -v python)")"
             env -i /usr/bin/bwrap \
-              --die-with-parent --new-session --unshare-net \
+              --die-with-parent --new-session \
+              --unshare-user --unshare-net \
               --ro-bind /usr /usr --ro-bind /bin /bin \
               --ro-bind /lib /lib --ro-bind /lib64 /lib64 \
               --ro-bind /opt /opt --ro-bind /etc /etc \

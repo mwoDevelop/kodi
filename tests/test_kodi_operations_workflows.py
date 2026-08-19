@@ -76,6 +76,7 @@ def test_deploy_requires_both_reviewed_locks():
 def test_umbrella_qualification_is_hermetic_and_component_isolated():
     workflow = text(".github/workflows/certify-umbrella-hermetic.yml")
 
+    assert "--unshare-user --unshare-net" in workflow
     assert "--unshare-net" in workflow
     assert "persist-credentials: false" in workflow
     assert "tools/qualify_umbrella_snapshot.py validate" in workflow
