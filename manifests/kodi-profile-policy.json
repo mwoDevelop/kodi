@@ -57,10 +57,14 @@
       "adapters": [
         {
           "id": "kodi.core",
-          "adapter": "settings_xml",
+          "adapter": "json_rpc",
           "path": "userdata/guisettings.xml",
           "apply_mode": "hot_apply",
           "settings": {
+            "general.addonupdates": {
+              "type": "integer",
+              "class": "portable"
+            },
             "lookandfeel.skin": {
               "type": "string",
               "class": "portable"

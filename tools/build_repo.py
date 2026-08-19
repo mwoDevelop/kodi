@@ -309,7 +309,26 @@ def copy_repository_addon(addon_id, channel_root, output_root):
     return addon
 
 
-def build(output, lock_overrides=None):
+def install_release_status(status, output):
+    """Add a validated informational status to the single Pages payload."""
+    try:
+        from tools.umbrella_release_status import validate
+    except ModuleNotFoundError as error:
+        if error.name != "tools":
+            raise
+        from umbrella_release_status import validate
+
+    document = json.loads(Path(status).read_text(encoding="utf-8"))
+    validate(document)
+    target = Path(output) / "status" / "umbrella.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return target
+
+
+def build(output, lock_overrides=None, release_status=None):
     requested_output = Path(output)
     if requested_output.is_symlink():
         raise ValueError("output directory cannot be a symlink")
@@ -423,6 +442,8 @@ def build(output, lock_overrides=None):
     (source_root / "index.html").write_bytes(
         render_repository_source(stable_repository)
     )
+    if release_status is not None:
+        install_release_status(release_status, output)
     manifest_lines = []
     for path in sorted(output.rglob("*")):
         if path.is_file() and path.name != "artifact-manifest.sha256":
@@ -436,8 +457,9 @@ def build(output, lock_overrides=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default="dist")
+    parser.add_argument("--release-status")
     args = parser.parse_args()
-    print(build(args.output))
+    print(build(args.output, release_status=args.release_status))
 
 
 if __name__ == "__main__":

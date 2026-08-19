@@ -8,6 +8,18 @@
     },
     {
       "repository": "mwoDevelop/kodi",
+      "workflow": "approve-umbrella-update.yml"
+    },
+    {
+      "repository": "mwoDevelop/kodi",
+      "workflow": "approve-umbrella-promotion.yml"
+    },
+    {
+      "repository": "mwoDevelop/kodi",
+      "workflow": "publish-pages.yml"
+    },
+    {
+      "repository": "mwoDevelop/kodi",
       "workflow": "check-youtube-upstream.yml"
     },
     {
@@ -25,6 +37,10 @@
     {
       "repository": "mwoDevelop/umbrellaplug.github.io",
       "workflow": "propose-upstream-update.yml"
+    },
+    {
+      "repository": "mwoDevelop/umbrellaplug.github.io",
+      "workflow": "approve-upstream-update.yml"
     },
     {
       "repository": "mwoDevelop/ch.repo",

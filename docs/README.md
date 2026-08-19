@@ -16,9 +16,11 @@ kompilacji.
 | Profile prywatne | [Prywatne migawki profilu Kodi](kodi-private-profile.md) | Tworzenie kopii zapasowych, przywracanie, tożsamość urządzenia, stan przenośny i granice bezpieczeństwa |
 | YouTube | [Oficjalny dodatek YouTube](youtube.md) | Instalacja, osobiste API, device flow OAuth, statusy i diagnostyka |
 | Automatyzacja cykliczna | [Procesy cykliczne](scheduled-processes.md) | Workflow cron GitHub, watchdog QNAP, częstotliwość Profile Sync i weryfikacja na żywo |
+| Automatyczny release Umbrelli | [Release i status Umbrelli](umbrella-automated-release.md) | Izolowany lock, testy hermetyczne, approval App, promocja stable i komunikaty Kodi |
 | Kontenery QNAP | [Cykl życia obrazu QNAP](qnap-images.md) | Twórz, publikuj, wdrażaj i sprawdzaj obrazy Container Station |
 | QNAP Control Plane | [Architektura i ADR-y Control Plane](control-plane/README.md) | Read-only stan floty, mTLS, audyt oraz kolejne fazy autonomicznej konwergencji |
 | E2E | [Przewodnik po testach E2E](../tests/e2e/README.md) | Testowe punkty wejścia i wymagania środowiskowe |
+| E2E release Umbrelli | [Wynik z 2026-08-19](e2e-results/2026-08-19-umbrella-auto-release.md) | Izolacja, atestacja, status, build i ograniczenia sandboxa |
 | Upstream Sync E2E | [Scenariusze synchronizacji upstream](../tests/e2e/upstream_sync/README.md) | Powtarzalne fixture i scenariusze aktualizacji |
 
 Szczegóły wdrożenia specyficzne dla komponentu:
@@ -41,6 +43,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | Domyślny dodatek YouTube | [Plan instalacji, OAuth i rolloutu YouTube](../YOUTUBE_DEFAULT_ADDON_PLAN.md) |
 | Dziennik wdrożenia Profile Sync | [Zapis stanu realizacji](profile-sync-implementation.md) |
 | Synchronizacja upstream | [Plan synchronizacji upstream](../UPSTREAM_SYNC_PLAN.md) |
+| Automatyczny release Umbrelli | [Plan automatyzacji Umbrelli](../UMBRELLA_AUTOMATED_RELEASE_PLAN.md) |
 | Bramka bezpieczeństwa upstream | [Projekt skanowania w poszukiwaniu złośliwego oprogramowania](UPSTREAM_MALWARE_SCANNING_PLAN.md) |
 | Usunięcie zgodności legacy | [Plan usunięcia kodu legacy](../LEGACY_REMOVAL_PLAN.md) |
 | Orchestrator operacji | [Plan release, rollout i restore](../KODI_OPS_PLAN.md) |
@@ -57,6 +60,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 - [Review Profile Sync na QNAP](PROFILE_SYNC_QNAP_PLAN_REVIEW.md)
 - [Review Profile Sync na NUC/Flatpak](PROFILE_SYNC_NUC_PLAN_REVIEW.md)
 - [Review architektury Upstream Sync](UPSTREAM_SYNC_PLAN_REVIEW.md)
+- [Review automatycznego release Umbrelli](UMBRELLA_AUTOMATED_RELEASE_PLAN_REVIEW.md)
 - [Review pełnego wydania Upstream
   Sync](UPSTREAM_SYNC_FULL_RELEASE_REVIEW_2026-07-29.md)
 - [Review planu release, rollout i restore](KODI_OPS_PLAN_REVIEW.md)

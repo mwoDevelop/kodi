@@ -8,9 +8,16 @@ on:
         required: true
         type: string
       attestation_id:
-        description: Exact immutable device attestation ID
+        description: Exact immutable qualification attestation ID
         required: true
         type: string
+      attestation_kind:
+        description: Qualification kind used for this snapshot
+        required: true
+        type: choice
+        options:
+          - hermetic_ci
+          - device
       attestation_sha256:
         description: SHA-256 of the exact immutable attestation asset
         required: true
@@ -23,6 +30,14 @@ on:
         description: SHA-256 of the exact immutable QNAP candidate asset
         required: true
         type: string
+      promotion_kind:
+        description: Normal release or manually reviewed forward rollback
+        required: false
+        default: normal
+        type: choice
+        options:
+          - normal
+          - forward_rollback
 
 concurrency:
   group: promote-stable-lock
@@ -47,11 +62,12 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - name: Download exact immutable snapshot and device attestation
+      - name: Download exact immutable snapshot and qualification attestation
         env:
           GH_TOKEN: ${{ github.token }}
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
           ATTESTATION_ID: ${{ inputs.attestation_id }}
+          ATTESTATION_KIND: ${{ inputs.attestation_kind }}
           ATTESTATION_SHA256: ${{ inputs.attestation_sha256 }}
           QNAP_CANDIDATE_ID: ${{ inputs.qnap_candidate_id }}
           QNAP_CANDIDATE_SHA256: ${{ inputs.qnap_candidate_sha256 }}
@@ -76,7 +92,11 @@ jobs:
             *[!0-9a-f]*|'') exit 1 ;;
           esac
           test "${#QNAP_CANDIDATE_SHA256}" -eq 64
-          filename="device-attestation-$ATTESTATION_ID.json"
+          case "$ATTESTATION_KIND" in
+            hermetic_ci) filename="qualification-attestation-$ATTESTATION_ID.json" ;;
+            device) filename="device-attestation-$ATTESTATION_ID.json" ;;
+            *) exit 1 ;;
+          esac
           qnap_filename="qnap-candidate-$QNAP_CANDIDATE_ID.json"
           gh release download "testing-snapshot-$SNAPSHOT_ID" \
             --pattern snapshot.tar --pattern "$filename" \
@@ -84,7 +104,7 @@ jobs:
           test "$(sha256sum "$filename" | cut -d' ' -f1)" = "$ATTESTATION_SHA256"
           test "$(sha256sum "$qnap_filename" | cut -d' ' -f1)" = "$QNAP_CANDIDATE_SHA256"
           test "$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["attestation_id"])' "$filename")" = "$ATTESTATION_ID"
-          mv "$filename" device-attestation.json
+          mv "$filename" qualification-attestation.json
           mv "$qnap_filename" qnap-stable-candidate.json
       - name: Verify snapshot is still the current public testing candidate
         env:
@@ -105,9 +125,16 @@ jobs:
           PY
       - name: Prepare content-addressed stable lock candidate
         run: |
+          health="$(python -c 'import json; print(json.load(open("manifests/umbrella-release-health.json"))["health"])')"
+          if [ "$health" != healthy ] && [ "${{ inputs.promotion_kind }}" != forward_rollback ]; then
+            echo "A release incident blocks normal promotion"
+            exit 1
+          fi
           python tools/promote_channel.py snapshot-lock \
             --snapshot snapshot.tar \
-            --attestation device-attestation.json \
+            --attestation qualification-attestation.json \
+            --attestation-kind "${{ inputs.attestation_kind }}" \
+            --promotion-kind "${{ inputs.promotion_kind }}" \
             --stable-lock manifests/locks/stable.json \
             --output stable-candidate
           python tools/qnap_lock.py validate \
@@ -164,6 +191,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SNAPSHOT_ID: ${{ inputs.snapshot_id }}
           ATTESTATION_ID: ${{ inputs.attestation_id }}
+          ATTESTATION_KIND: ${{ inputs.attestation_kind }}
           QNAP_CANDIDATE_ID: ${{ inputs.qnap_candidate_id }}
         run: |
           git fetch origin main
@@ -179,7 +207,7 @@ jobs:
             -m "Candidate-ID: $CANDIDATE_ID"
           git push --force-with-lease origin "$branch"
           existing="$(gh pr list --head "$branch" --base main --state open --json number --jq '.[0].number // empty')"
-          body="Manual exact-snapshot promotion. Snapshot: \`$SNAPSHOT_ID\`. Attestation: \`$ATTESTATION_ID\`. QNAP candidate: \`$QNAP_CANDIDATE_ID\`. Candidate-ID: \`$CANDIDATE_ID\`. Deployment copies the prepared payload without rebuilding component ZIPs or images."
+          body="Exact-snapshot promotion. Snapshot: \`$SNAPSHOT_ID\`. Qualification: \`$ATTESTATION_KIND/$ATTESTATION_ID\`. QNAP candidate: \`$QNAP_CANDIDATE_ID\`. Candidate-ID: \`$CANDIDATE_ID\`. Deployment copies the prepared payload without rebuilding component ZIPs or images."
           if [ -n "$existing" ]; then
             gh pr edit "$existing" --title "Promote certified snapshot to stable" --body "$body"
           else

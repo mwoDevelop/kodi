@@ -60,7 +60,7 @@ def load_routine_policy(path):
         ):
             raise ValueError("routine adapter has invalid or duplicate id")
         seen.add(adapter_id)
-        if adapter.get("adapter") != "settings_xml":
+        if adapter.get("adapter") not in {"settings_xml", "json_rpc"}:
             raise ValueError("%s uses an unsupported adapter" % adapter_id)
         relative = PurePosixPath(str(adapter.get("path", "")))
         if (

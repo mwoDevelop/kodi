@@ -20,8 +20,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: kodi-pages
@@ -77,9 +75,10 @@ jobs:
             echo "publish=false" >> "$GITHUB_OUTPUT"
             echo "snapshot=false" >> "$GITHUB_OUTPUT"
           elif curl --fail --silent --show-error \
-            https://mwodevelop.github.io/kodi/artifact-manifest.sha256 \
-            --output public-artifact-manifest.sha256 &&
-            cmp -s public-artifact-manifest.sha256 dist/artifact-manifest.sha256; then
+            https://mwodevelop.github.io/kodi/testing/omega/addons.xml.sha256 \
+            --output public-testing-index.sha256 &&
+            cmp -s public-testing-index.sha256 \
+              dist/testing/omega/addons.xml.sha256; then
             echo "publish=false" >> "$GITHUB_OUTPUT"
             if [ "$FORCE_SNAPSHOT" = "true" ]; then
               echo "snapshot=true" >> "$GITHUB_OUTPUT"
@@ -111,10 +110,6 @@ jobs:
             snapshot.tar
             security-report.json
           retention-days: 90
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        if: steps.delta.outputs.publish == 'true'
-        with:
-          path: dist
 
   snapshot-writer:
     if: needs.build.outputs.snapshot == 'true'
@@ -164,15 +159,3 @@ jobs:
               --title "Kodi testing snapshot $SNAPSHOT_ID" \
               --notes "Immutable testing snapshot with content-bound malware-scan evidence. Promotion requires a separate reviewed workflow."
           fi
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    if: needs.build.outputs.publish == 'true'
-    needs: [build, snapshot-writer]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

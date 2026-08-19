@@ -531,6 +531,9 @@ def test_testing_and_stable_publication_preserve_scanner_evidence():
     stable = Path(".github/workflows/deploy-stable.yml").read_text(
         encoding="utf-8"
     )
+    pages = Path(".github/workflows/publish-pages.yml").read_text(
+        encoding="utf-8"
+    )
     assert testing.index(
         "Scan exact testing and promotion bytes before publication"
     ) < testing.index("Create immutable snapshot bundle")
@@ -542,7 +545,10 @@ def test_testing_and_stable_publication_preserve_scanner_evidence():
     assert "cmp security-report.json existing/security-report.json" not in testing
     assert "--pattern security-report.json" in stable
     assert stable.count("upstream_security_scan.py verify") == 1
-    assert "needs.materialize.outputs.deploy == 'true'" in stable
+    assert "Compose current testing with exact prebuilt stable" in stable
+    assert "actions/deploy-pages@" not in stable
+    assert "Scan the exact publication payload" in pages
+    assert "actions/deploy-pages@" in pages
 
 
 def test_testing_publication_checks_out_submodules_before_full_e2e():

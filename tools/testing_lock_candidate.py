@@ -79,12 +79,14 @@ def component_repository_targets(root, components, upstreams):
     return targets
 
 
-def prepare(output, root=ROOT):
+def prepare(output, root=ROOT, component_id=None):
     root = Path(root).resolve()
     output = Path(output)
     if output.exists():
         raise ValueError("candidate output already exists")
     components = load(root / "manifests/components.json")["components"]
+    if component_id is not None and component_id not in components:
+        raise ValueError("unknown requested component: %s" % component_id)
     upstreams = load(root / "manifests/upstreams.json")["components"]
     testing = load(root / TESTING_LOCK)
     stable = load(root / STABLE_LOCK)
@@ -92,6 +94,11 @@ def prepare(output, root=ROOT):
     repository_targets = component_repository_targets(
         root, components, upstreams
     )
+    if component_id is not None:
+        selected_repository = components[component_id]["repository"]
+        repository_targets = {
+            selected_repository: repository_targets[selected_repository]
+        }
     changed = []
     target_heads = {}
     with tempfile.TemporaryDirectory(prefix="testing-lock-") as temporary:
@@ -106,6 +113,7 @@ def prepare(output, root=ROOT):
                 (addon_id, component)
                 for addon_id, component in components.items()
                 if component["repository"] == repository
+                and (component_id is None or addon_id == component_id)
             ]
             artifacts = {}
             for addon_id, component in repository_components:
@@ -133,6 +141,7 @@ def prepare(output, root=ROOT):
         "schema": SCHEMA,
         "action": action,
         "mutation_kind": "testing_lock_candidate",
+        "requested_component": component_id,
         "base_commit": base_commit,
         "current_lock_sha256": digest(testing),
         "proposed_lock_sha256": digest(proposed),
@@ -159,6 +168,7 @@ def apply(bundle, checkout):
             "schema",
             "action",
             "mutation_kind",
+            "requested_component",
             "base_commit",
             "current_lock_sha256",
             "proposed_lock_sha256",
@@ -190,12 +200,13 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     prepare_parser = commands.add_parser("prepare")
     prepare_parser.add_argument("--output", required=True)
+    prepare_parser.add_argument("--component")
     apply_parser = commands.add_parser("apply")
     apply_parser.add_argument("--bundle", required=True)
     apply_parser.add_argument("--checkout", default=".")
     args = parser.parse_args()
     result = (
-        prepare(args.output)
+        prepare(args.output, component_id=args.component)
         if args.command == "prepare"
         else apply(args.bundle, args.checkout)
     )

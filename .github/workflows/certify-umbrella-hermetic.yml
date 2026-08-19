@@ -1,0 +1,309 @@
+name: certify Umbrella hermetically
+
+on:
+  workflow_run:
+    workflows: ["publish testing"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      snapshot_id:
+        description: Exact immutable testing snapshot ID
+        required: true
+        type: string
+
+concurrency:
+  group: certify-umbrella-${{ inputs.snapshot_id || github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  snapshot-available:
+    runs-on: ubuntu-latest
+    outputs:
+      available: ${{ steps.resolve.outputs.available }}
+      snapshot_id: ${{ steps.resolve.outputs.snapshot_id }}
+      candidate_id: ${{ steps.resolve.outputs.candidate_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require a snapshot from this exact publication run
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            gh release download "testing-snapshot-${{ inputs.snapshot_id }}" \
+              --pattern snapshot.tar
+          else
+            count="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts?per_page=100" \
+              --jq '[.artifacts[] | select(.name == "testing-snapshot" and (.expired | not))] | length')"
+            test "$count" -le 1
+            if [ "$count" -eq 0 ]; then
+              echo "available=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            gh run download "$SOURCE_RUN_ID" --name testing-snapshot
+          fi
+          python tools/snapshot_bundle.py verify snapshot.tar > snapshot.json
+          if python - <<'PY'
+          import json
+          stable = json.load(open("manifests/locks/stable.json"))["components"]
+          testing = json.load(open("snapshot.json"))["testing_lock"]["components"]
+          changed = sorted(key for key in testing if testing.get(key) != stable.get(key))
+          if set(testing) != set(stable) or changed != ["plugin.video.umbrella"]:
+              raise SystemExit(1)
+          PY
+          then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "snapshot_id=$(python -c 'import json; print(json.load(open("snapshot.json"))["snapshot_id"])')" >> "$GITHUB_OUTPUT"
+            echo "candidate_id=$(python -c 'import json; print(json.load(open("snapshot.json"))["testing_lock"]["components"]["plugin.video.umbrella"]["zip_sha256"])')" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  qualify:
+    needs: snapshot-available
+    if: >-
+      github.repository == 'mwoDevelop/kodi' &&
+      needs.snapshot-available.outputs.available == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main'))
+    runs-on: ubuntu-latest
+    outputs:
+      snapshot_id: ${{ steps.identity.outputs.snapshot_id }}
+      attestation_id: ${{ steps.attestation.outputs.attestation_id }}
+      attestation_sha256: ${{ steps.attestation.outputs.attestation_sha256 }}
+      attestation_filename: ${{ steps.attestation.outputs.attestation_filename }}
+      qnap_candidate_id: ${{ steps.qnap.outputs.qnap_candidate_id }}
+      qnap_candidate_sha256: ${{ steps.qnap.outputs.qnap_candidate_sha256 }}
+      qnap_candidate_filename: ${{ steps.qnap.outputs.qnap_candidate_filename }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Download the exact completed snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_SNAPSHOT: ${{ inputs.snapshot_id }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            case "$REQUESTED_SNAPSHOT" in *[!0-9a-f]*|'') exit 1 ;; esac
+            test "${#REQUESTED_SNAPSHOT}" -eq 64
+            gh release download "testing-snapshot-$REQUESTED_SNAPSHOT" \
+              --pattern snapshot.tar
+          else
+            gh run download "$SOURCE_RUN_ID" --name testing-snapshot
+          fi
+          python tools/snapshot_bundle.py verify snapshot.tar > snapshot.json
+      - name: Check out the repository and Umbrella commit bound to the snapshot
+        id: identity
+        run: |
+          set -euo pipefail
+          snapshot_id="$(python -c 'import json; print(json.load(open("snapshot.json"))["snapshot_id"])')"
+          requested="${{ inputs.snapshot_id }}"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            test "$snapshot_id" = "$requested"
+          fi
+          commit="$(python -c 'import json; print(json.load(open("snapshot.json"))["repository_commit"])')"
+          git cat-file -e "$commit^{commit}"
+          git checkout --detach "$commit"
+          git submodule update --init umbrella
+          python tools/qualify_umbrella_snapshot.py validate \
+            --snapshot snapshot.tar \
+            --stable-lock manifests/locks/stable.json \
+            --umbrella-checkout umbrella \
+            --output qualification-context.json
+          echo "snapshot_id=$snapshot_id" >> "$GITHUB_OUTPUT"
+      - name: Install the trusted test harness and network sandbox
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends bubblewrap
+          python -m pip install --require-hashes -r requirements-ci.txt
+      - name: Execute candidate tests without network, secrets, or host writes
+        run: |
+          set -euo pipefail
+          sandbox="$RUNNER_TEMP/umbrella-hermetic"
+          mkdir -p "$sandbox/repository" "$sandbox/evidence"
+          rsync -a --delete \
+            --exclude .git --exclude .venv --exclude .venv-downstream \
+            ./ "$sandbox/repository/"
+          run_sandboxed() {
+            name="$1"
+            shift
+            python_bin="$(dirname "$(command -v python)")"
+            env -i /usr/bin/bwrap \
+              --die-with-parent --new-session --unshare-net \
+              --ro-bind /usr /usr --ro-bind /bin /bin \
+              --ro-bind /lib /lib --ro-bind /lib64 /lib64 \
+              --ro-bind /opt /opt --ro-bind /etc /etc \
+              --proc /proc --dev /dev --tmpfs /tmp \
+              --dir /home --dir /home/runner \
+              --bind "$sandbox" /work --chdir /work/repository \
+              --setenv HOME /tmp/home \
+              --setenv PATH "$python_bin:/usr/bin:/bin" \
+              --setenv PYTHONDONTWRITEBYTECODE 1 \
+              --setenv PYTEST_ADDOPTS "-p no:cacheprovider" \
+              /usr/bin/bash -c 'mkdir -p "$HOME"; exec "$@"' bash "$@" \
+              2>&1 | tee "$sandbox/evidence/$name.txt"
+          }
+          run_sandboxed umbrella-tests python -m pytest -q umbrella/tests
+          run_sandboxed release-contract-tests python -m pytest -q \
+            tests/test_qualification_attestation.py \
+            tests/test_qualify_umbrella_snapshot.py \
+            tests/test_promote_channel.py \
+            tests/test_build_repo.py \
+            tests/test_umbrella_release_status.py \
+            tests/test_testing_lock_candidate.py
+          cp "$sandbox/evidence/"*.txt .
+      - name: Create a short-lived content-bound qualification attestation
+        id: attestation
+        run: |
+          set -euo pipefail
+          python tools/qualify_umbrella_snapshot.py report \
+            --context qualification-context.json \
+            --check umbrella-tests=umbrella-tests.txt \
+            --check release-contract-tests=release-contract-tests.txt \
+            --output qualification-report.json
+          nonce="$(openssl rand -hex 32)"
+          issued_at="$(date --utc +%Y-%m-%dT%H:%M:%SZ)"
+          expires_at="$(date --utc --date='+7 days' +%Y-%m-%dT%H:%M:%SZ)"
+          commit="$(python -c 'import json; print(json.load(open("snapshot.json"))["repository_commit"])')"
+          python tools/qualification_attestation.py create \
+            --snapshot snapshot.tar \
+            --report qualification-report.json \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-commit "$commit" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
+            --workflow-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --nonce "$nonce" --issued-at "$issued_at" --expires-at "$expires_at" \
+            --output qualification-attestation.json
+          python tools/qualification_attestation.py verify \
+            --snapshot snapshot.tar \
+            --attestation qualification-attestation.json > /dev/null
+          id="$(python -c 'import json; print(json.load(open("qualification-attestation.json"))["attestation_id"])')"
+          filename="qualification-attestation-$id.json"
+          mv qualification-attestation.json "$filename"
+          echo "attestation_id=$id" >> "$GITHUB_OUTPUT"
+          echo "attestation_sha256=$(sha256sum "$filename" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "attestation_filename=$filename" >> "$GITHUB_OUTPUT"
+      - name: Reuse the exact unchanged stable QNAP lock
+        id: qnap
+        run: |
+          set -euo pipefail
+          python tools/qnap_lock.py validate --lock manifests/locks/qnap-stable.json > /dev/null
+          id="$(python -c 'import json; print(json.load(open("manifests/locks/qnap-stable.json"))["candidate_id"])')"
+          filename="qnap-candidate-$id.json"
+          cp manifests/locks/qnap-stable.json "$filename"
+          echo "qnap_candidate_id=$id" >> "$GITHUB_OUTPUT"
+          echo "qnap_candidate_sha256=$(sha256sum "$filename" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "qnap_candidate_filename=$filename" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: umbrella-qualification-${{ steps.identity.outputs.snapshot_id }}
+          path: |
+            ${{ steps.attestation.outputs.attestation_filename }}
+            ${{ steps.qnap.outputs.qnap_candidate_filename }}
+          retention-days: 90
+
+  publish-and-promote:
+    needs: qualify
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: umbrella-qualification-${{ needs.qualify.outputs.snapshot_id }}
+      - name: Attach immutable evidence and request exact promotion
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_ID: ${{ needs.qualify.outputs.snapshot_id }}
+          ATTESTATION_ID: ${{ needs.qualify.outputs.attestation_id }}
+          ATTESTATION_SHA256: ${{ needs.qualify.outputs.attestation_sha256 }}
+          ATTESTATION_FILENAME: ${{ needs.qualify.outputs.attestation_filename }}
+          QNAP_CANDIDATE_ID: ${{ needs.qualify.outputs.qnap_candidate_id }}
+          QNAP_CANDIDATE_SHA256: ${{ needs.qualify.outputs.qnap_candidate_sha256 }}
+          QNAP_CANDIDATE_FILENAME: ${{ needs.qualify.outputs.qnap_candidate_filename }}
+        run: |
+          set -euo pipefail
+          tag="testing-snapshot-$SNAPSHOT_ID"
+          mkdir existing
+          for filename in "$ATTESTATION_FILENAME" "$QNAP_CANDIDATE_FILENAME"; do
+            if gh release download "$tag" --pattern "$filename" --dir existing 2>/dev/null; then
+              cmp "$filename" "existing/$filename"
+            else
+              gh release upload "$tag" "$filename"
+            fi
+          done
+          gh workflow run promote-stable.yml --ref main \
+            -f snapshot_id="$SNAPSHOT_ID" \
+            -f attestation_id="$ATTESTATION_ID" \
+            -f attestation_kind=hermetic_ci \
+            -f attestation_sha256="$ATTESTATION_SHA256" \
+            -f qnap_candidate_id="$QNAP_CANDIDATE_ID" \
+            -f qnap_candidate_sha256="$QNAP_CANDIDATE_SHA256"
+
+  record-qualification-state:
+    needs: [snapshot-available, qualify]
+    if: >-
+      always() &&
+      github.repository == 'mwoDevelop/kodi' &&
+      needs.snapshot-available.outputs.available == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main'))
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Persist the exact candidate qualification result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_ID: ${{ needs.snapshot-available.outputs.candidate_id }}
+          SNAPSHOT_ID: ${{ needs.snapshot-available.outputs.snapshot_id }}
+          QUALIFY_RESULT: ${{ needs.qualify.result }}
+        run: |
+          set -euo pipefail
+          case "$CANDIDATE_ID" in *[!0-9a-f]*|'') exit 1 ;; esac
+          case "$SNAPSHOT_ID" in *[!0-9a-f]*|'') exit 1 ;; esac
+          test "${#CANDIDATE_ID}" -eq 64
+          test "${#SNAPSHOT_ID}" -eq 64
+          title="Umbrella qualification blocked: ${CANDIDATE_ID:0:12}"
+          number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --limit 100 --json number,title \
+            --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)"
+          if [ "$QUALIFY_RESULT" = success ]; then
+            [ -z "$number" ] || gh issue close "$number" \
+              --repo "$GITHUB_REPOSITORY" --reason completed
+            exit 0
+          fi
+          body="$(printf '%s\n' \
+            '<!-- umbrella-qualification-state-v1 -->' \
+            "candidate_id=$CANDIDATE_ID" \
+            "snapshot_id=$SNAPSHOT_ID" \
+            'failure_code=qualification_failed')"
+          if [ -z "$number" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --body "$body"
+          else
+            gh issue edit "$number" --repo "$GITHUB_REPOSITORY" \
+              --body "$body"
+          fi

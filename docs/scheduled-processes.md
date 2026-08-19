@@ -12,12 +12,17 @@ workflow obsługuje również `workflow_dispatch`, umożliwiający kontrolowane 
 
 | UTC | Repozytorium | Workflow | Cel | Granica zapisu |
 | --- | --- | --- | --- | --- |
-| 04:20 codziennie | `mwoDevelop/kodi` | `reconcile-upstreams.yml` | Wykrywa stan wszystkich zarządzanych komponentów i przygotowuje dokładnego kandydata na lock kanału testing. | Discovery jest tylko do odczytu. Zmieniony lock jest proponowany na `automation/testing-lock`; nigdy nie jest automatycznie scalany ani promowany. |
+| 03:10 codziennie | `mwoDevelop/kodi` | `publish-pages.yml` | Odświeża jeden atomowy payload stable, testing i publicznego statusu Umbrelli. | To jedyny writer GitHub Pages; dokładne komponenty pochodzą z locków i cały payload przechodzi wspólną bramę malware. |
+| co 15 minut | `mwoDevelop/kodi` | `approve-umbrella-update.yml` | Sprawdza ścisłą allowlistę PR aktualizującego wyłącznie lock Umbrelli. | Domyślnie obserwacyjny. Mutacja wymaga `UMBRELLA_AUTO_MERGE_ENABLED=true` i osobnej App bez bypassu rulesetów. |
+| co 30 minut | `mwoDevelop/kodi` | `approve-umbrella-promotion.yml` | Sprawdza PR stable związany z dokładnym snapshotem, hermetyczną atestacją i niezmienionym lockiem QNAP. | Forward rollback nigdy nie kwalifikuje się do automatycznego approval; normalna promocja używa tej samej chronionej App i native auto-merge. |
+| 04:20 codziennie | `mwoDevelop/kodi` | `reconcile-upstreams.yml` | Wykrywa stan wszystkich zarządzanych komponentów i przygotowuje dokładnego kandydata na lock kanału testing. | Ogólny kandydat trafia na `automation/testing-lock` i wymaga review. |
+| 04:35 codziennie | `mwoDevelop/kodi` | `reconcile-upstreams.yml` w trybie komponentowym | Przygotowuje lock zmieniający wyłącznie `plugin.video.umbrella`. | PR `automation/testing-lock-plugin-video-umbrella` może otrzymać automatyczne approval dopiero po pełnej weryfikacji allowlisty i CI. |
 | 04:29 codziennie | `mwoDevelop/kodi` | `check-youtube-upstream.yml` | Pobiera oficjalny ZIP YouTube z mirroru Kodi, materializuje jego drzewo i porównuje wersję, hash oraz zależności z kwalifikacją. | ZIP i rozpakowane pliki przechodzą wspólną bramę malware. Zmiana może utworzyć PR `automation/youtube-upstream`, ale nie jest automatycznie scalana, promowana ani publikowana przez mwoDevelop. |
 | 04:23 codziennie | `mwoDevelop/script.module.mwoscrapers` | `check-provider-upstreams.yml` | Pobiera zaakceptowane niezmienne artefakty Coco i Viper, weryfikuje przypięte digesty, bezpiecznie materializuje zawartość i skanuje dokładne ZIP-y oraz pliki wspólną bramą antymalware. | Tylko do odczytu. Weryfikacja pokrycia wymaga zgodności liczby archiwów, plików i bajtów z raportem skanera. Workflow przesyła artefakt audytu przechowywany przez 14 dni i nigdy nie zmienia gałęzi. Niedostępny artefakt, niezgodność digestu, niepełne pokrycie lub błąd skanowania powodują błąd workflow. |
 | 04:35 codziennie | `mwoDevelop/ch.repo` | `mwodevelop-watchnixtoons2-update.yml` | Wykrywa upstream WatchNixtoons2, materializuje i skanuje izolowanego kandydata, a następnie go testuje. | Zweryfikowana zmiana może zaktualizować `automation/watchnixtoons2-upstream` i otworzyć PR wymagający review. Nie publikuje repozytorium Kodi. |
 | 04:41 codziennie | `mwoDevelop/script.module.mwoscrapers` | `discover-provider-upstreams.yml` | Obserwuje najnowsze źródła providerów i utrzymuje stan review dotyczący wyłącznie pochodzenia. | Zmieniona obserwacja może zaktualizować `automation/provider-provenance` i otworzyć PR wymagający review. Nie importuje ani nie wykonuje kodu providera. |
 | 04:50 codziennie | `mwoDevelop/umbrellaplug.github.io` | `propose-upstream-update.yml` | Odtwarza stos poprawek downstream Umbrella na dokładnym commitcie upstream, skanuje kandydata i go testuje. | Zweryfikowana zmiana może zaktualizować `automation/umbrella-upstream` i otworzyć PR wymagający review. Chronione ścieżki muszą pozostać niezmienione. |
+| co 15 minut | `mwoDevelop/umbrellaplug.github.io` | `approve-upstream-update.yml` | Sprawdza dokładny PR odtwarzający fork Umbrelli, jego Candidate-ID, stos patchy i zielone checki. | Domyślnie obserwacyjny. Mutacja wymaga chronionego Environment, dedykowanej App i `UMBRELLA_AUTO_MERGE_ENABLED=true` również w repozytorium forka. |
 | 05:03 codziennie | `mwoDevelop/script.module.mwoscrapers` | `probe-provider-health.yml` | Sprawdza publiczne kontrakty wszystkich kwalifikowanych providerów na kontrolowanym filmie i odcinku. | Tylko do odczytu. Artefakt przechowuje wyłącznie status, czas i liczbę wyników; nie zapisuje nazw źródeł, magnetów, hashy ani URL-i treści. |
 
 Audyt providerów i ich discovery są celowo rozdzielone:
@@ -33,8 +38,10 @@ rekord historyczny w `.upstream/retired-observations.json` repozytorium mwoScrap
 Poprzednie błędy pobrania Magneto były prawidłowym zachowaniem fail-closed, a nie
 awarią skanera; aktywny cykl obejmuje obecnie dokładnie Coco i Viper.
 
-Żaden cykliczny workflow nie scala PR, nie promuje `testing` do `stable`, nie zmienia
-poświadczeń Real-Debrid ani nie zapisuje konfiguracji użytkownika Kodi.
+Żaden cykliczny workflow poza ściśle ograniczoną ścieżką Umbrelli nie scala PR ani
+nie promuje `testing` do `stable`. Automatyka nigdy nie zmienia poświadczeń
+Real-Debrid ani konfiguracji użytkownika Kodi. Szczegółowy kontrakt wyjątku opisuje
+[automatyczny release Umbrelli](umbrella-automated-release.md).
 
 ## Monitorowanie na QNAP
 
@@ -79,10 +86,11 @@ harmonogram są monitorowane niezależnie od synchronizacji upstream.
 
 ## Procesy ręczne i sterowane zdarzeniami
 
-Buildy, CI, testy antymalware, publikacja testing, certyfikacja, promocja stable i
-workflow wdrożeniowe celowo nie są cykliczne. Uruchamiają się po pushu, przez pull
-request lub jawne `workflow_dispatch` i zachowują własne bramy review oraz kontrolę
-dokładnego head SHA.
+Buildy, CI, testy antymalware, publikacja testing, kwalifikacja hermetyczna i promocja
+stable są przede wszystkim sterowane zdarzeniami. Cykl Umbrelli może przejść te etapy
+automatycznie, ale każdy etap zachowuje kontrolę dokładnego SHA, snapshotu i atestacji.
+Pozostałe komponenty wymagają dotychczasowego ręcznego review lub jawnego
+`workflow_dispatch`.
 
 ## Weryfikacja operacyjna
 
@@ -92,6 +100,10 @@ wydania:
 ```bash
 gh run list --repo mwoDevelop/kodi \
   --workflow reconcile-upstreams.yml --event schedule --limit 1
+gh run list --repo mwoDevelop/kodi \
+  --workflow approve-umbrella-update.yml --event schedule --limit 1
+gh run list --repo mwoDevelop/kodi \
+  --workflow publish-pages.yml --event schedule --limit 1
 gh run list --repo mwoDevelop/kodi \
   --workflow check-youtube-upstream.yml --event schedule --limit 1
 gh run list --repo mwoDevelop/script.module.mwoscrapers \
@@ -104,6 +116,8 @@ gh run list --repo mwoDevelop/ch.repo \
   --workflow mwodevelop-watchnixtoons2-update.yml --event schedule --limit 1
 gh run list --repo mwoDevelop/umbrellaplug.github.io \
   --workflow propose-upstream-update.yml --event schedule --limit 1
+gh run list --repo mwoDevelop/umbrellaplug.github.io \
+  --workflow approve-upstream-update.yml --event schedule --limit 1
 ```
 
 W przypadku wdrożonego watchdoga sprawdź `/run/watchdog/status.json` wewnątrz kontenera

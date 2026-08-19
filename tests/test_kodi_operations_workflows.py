@@ -71,3 +71,48 @@ def test_deploy_requires_both_reviewed_locks():
     assert '"manifests/locks/stable.json"' in workflow
     assert '"manifests/locks/qnap-stable.json"' in workflow
     assert "tools/qnap_lock.py validate" in workflow
+
+
+def test_umbrella_qualification_is_hermetic_and_component_isolated():
+    workflow = text(".github/workflows/certify-umbrella-hermetic.yml")
+
+    assert "--unshare-net" in workflow
+    assert "persist-credentials: false" in workflow
+    assert "tools/qualify_umbrella_snapshot.py validate" in workflow
+    assert "qualification-attestation-$id.json" in workflow
+    assert "qnap-stable.json" in workflow
+
+
+def test_only_one_workflow_owns_pages_deployment():
+    owners = []
+    for path in Path(".github/workflows").glob("*.yml"):
+        if "actions/deploy-pages@" in text(path):
+            owners.append(path.name)
+
+    assert owners == ["publish-pages.yml"]
+
+
+def test_auto_approval_is_observe_only_until_explicitly_enabled():
+    workflows = [
+        text(".github/workflows/approve-umbrella-update.yml"),
+        text(".github/workflows/approve-umbrella-promotion.yml"),
+    ]
+
+    assert "tools/umbrella_auto_approval.py" in workflows[0]
+    assert "tools/umbrella_promotion_approval.py" in workflows[1]
+    for workflow in workflows:
+        assert "UMBRELLA_AUTO_MERGE_ENABLED == 'true'" in workflow
+        assert "--match-head-commit" in workflow
+        assert "environment: umbrella-auto-release" in workflow
+
+
+def test_umbrella_qualification_failure_is_candidate_bound_and_persistent():
+    certify = text(".github/workflows/certify-umbrella-hermetic.yml")
+    pages = text(".github/workflows/publish-pages.yml")
+
+    marker = "Umbrella qualification blocked: ${CANDIDATE_ID:0:12}"
+    assert "record-qualification-state:" in certify
+    assert marker in certify
+    assert "candidate_id=$CANDIDATE_ID" in certify
+    assert marker in pages
+    assert "failure_code=qualification_failed" in pages
