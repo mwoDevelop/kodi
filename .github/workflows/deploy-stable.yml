@@ -104,7 +104,7 @@ jobs:
             --pattern "$filename"
           test "$(sha256sum "$filename" | cut -d' ' -f1)" = "$attestation_sha256"
           if [ "$attestation_kind" = "hermetic_ci" ]; then
-            python tools/qualification_attestation.py verify \
+            python -m tools.qualification_attestation verify \
               --snapshot promoted-snapshot.tar \
               --attestation "$filename" > /dev/null
           else

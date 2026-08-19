@@ -70,7 +70,7 @@ jobs:
           gh release download "testing-snapshot-$snapshot_id" \
             --pattern snapshot.tar --pattern "$filename"
           test "$(sha256sum "$filename" | cut -d' ' -f1)" = "$attestation_sha"
-          python tools/qualification_attestation.py verify \
+          python -m tools.qualification_attestation verify \
             --snapshot snapshot.tar --attestation "$filename" > /dev/null
           echo "eligible=true" >> "$GITHUB_OUTPUT"
           echo "number=$number" >> "$GITHUB_OUTPUT"

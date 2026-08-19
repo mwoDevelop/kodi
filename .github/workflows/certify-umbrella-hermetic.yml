@@ -216,7 +216,7 @@ jobs:
           issued_at="$(date --utc +%Y-%m-%dT%H:%M:%SZ)"
           expires_at="$(date --utc --date='+7 days' +%Y-%m-%dT%H:%M:%SZ)"
           commit="$(python -c 'import json; print(json.load(open("snapshot.json"))["repository_commit"])')"
-          python tools/qualification_attestation.py create \
+          python -m tools.qualification_attestation create \
             --snapshot snapshot.tar \
             --report qualification-report.json \
             --repository "$GITHUB_REPOSITORY" \
@@ -225,7 +225,7 @@ jobs:
             --workflow-run-attempt "$GITHUB_RUN_ATTEMPT" \
             --nonce "$nonce" --issued-at "$issued_at" --expires-at "$expires_at" \
             --output qualification-attestation.json
-          python tools/qualification_attestation.py verify \
+          python -m tools.qualification_attestation verify \
             --snapshot snapshot.tar \
             --attestation qualification-attestation.json > /dev/null
           id="$(python -c 'import json; print(json.load(open("qualification-attestation.json"))["attestation_id"])')"

@@ -89,10 +89,23 @@ def test_umbrella_qualification_is_hermetic_and_component_isolated():
     assert "git -C umbrella fetch --quiet --unshallow --no-tags origin" in workflow
     assert "run_sandboxed umbrella-tests /work/umbrella" in workflow
     assert "--setenv HOME /tmp" in workflow
+    assert "python -m tools.qualification_attestation create" in workflow
+    assert "python -m tools.qualification_attestation verify" in workflow
     assert "persist-credentials: false" in workflow
     assert "tools/qualify_umbrella_snapshot.py validate" in workflow
     assert "qualification-attestation-$id.json" in workflow
     assert "qnap-stable.json" in workflow
+
+
+def test_attestation_cli_uses_package_safe_entrypoint_in_release_workflows():
+    for path in (
+        ".github/workflows/certify-umbrella-hermetic.yml",
+        ".github/workflows/approve-umbrella-promotion.yml",
+        ".github/workflows/deploy-stable.yml",
+    ):
+        workflow = text(path)
+        assert "python tools/qualification_attestation.py" not in workflow
+        assert "python -m tools.qualification_attestation" in workflow
 
 
 def test_only_one_workflow_owns_pages_deployment():
