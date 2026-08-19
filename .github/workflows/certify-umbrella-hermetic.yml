@@ -127,6 +127,10 @@ jobs:
           git -C umbrella fetch --depth 1 origin \
             "$candidate_commit:refs/locked/$candidate_commit"
           git -C umbrella checkout --detach "$candidate_commit"
+          if test "$(git -C umbrella rev-parse --is-shallow-repository)" = true; then
+            git -C umbrella fetch --quiet --unshallow --no-tags origin
+          fi
+          test "$(git -C umbrella rev-parse HEAD)" = "$candidate_commit"
           python tools/qualify_umbrella_snapshot.py validate \
             --snapshot snapshot.tar \
             --stable-lock manifests/locks/stable.json \

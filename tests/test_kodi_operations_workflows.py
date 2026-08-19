@@ -83,6 +83,7 @@ def test_umbrella_qualification_is_hermetic_and_component_isolated():
     assert '--ro-bind "$sandbox/repository" /work/repository' in workflow
     assert '--ro-bind "$sandbox/umbrella" /work/umbrella' in workflow
     assert "git clone --quiet --no-hardlinks umbrella" in workflow
+    assert "git -C umbrella fetch --quiet --unshallow --no-tags origin" in workflow
     assert "run_sandboxed umbrella-tests /work/umbrella" in workflow
     assert "--setenv HOME /tmp" in workflow
     assert "persist-credentials: false" in workflow
