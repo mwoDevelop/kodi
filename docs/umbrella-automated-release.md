@@ -1,0 +1,131 @@
+# Automatyczne wydawanie Umbrelli
+
+Ten dokument opisuje bieżący, wykonywalny kontrakt automatycznej aktualizacji
+`plugin.video.umbrella`. Źródłami prawdy są workflow w `.github/workflows`, locki
+w `manifests/locks` oraz publiczny status
+`https://mwodevelop.github.io/kodi/status/umbrella.json`.
+
+## Przepływ
+
+1. Fork Umbrelli odtwarza downstreamowy stos poprawek na dokładnym commitcie
+   upstream i otwiera własny PR.
+2. `reconcile-upstreams.yml` o 04:35 UTC uruchamia komponentowy wariant dla
+   `plugin.video.umbrella`. Kandydat nie może zmienić żadnego innego pinu.
+3. `approve-umbrella-update.yml` co 15 minut sprawdza autora, branch, dokładny
+   head SHA, jedyny dozwolony plik, zmianę wersji do przodu i zielony check
+   `e2e`. W trybie obserwacyjnym tylko zapisuje decyzję jako artefakt.
+4. Po scaleniu `publish-testing.yml` buduje, testuje i skanuje dokładne bajty,
+   a następnie publikuje niezmienny snapshot testing. Odświeżenie samego statusu
+   nie tworzy snapshotu.
+5. `certify-umbrella-hermetic.yml` akceptuje wyłącznie snapshot, którego różnica
+   względem stable zawiera samą Umbrellę. Testy działają w Bubblewrap bez sieci,
+   sekretów i zapisu do hosta. Wynik wiąże snapshot, commit repozytorium, dowody
+   testów i krótki okres ważności w atestacji `hermetic_ci`.
+6. Atestacja oraz niezmieniony, ponownie zweryfikowany lock QNAP są dołączane do
+   release snapshotu. `promote-stable.yml` otwiera PR stable, nie przebudowując
+   ZIP-ów ani obrazów QNAP. `approve-umbrella-promotion.yml` ponownie sprawdza
+   snapshot i atestację przed approval normalnej promocji.
+7. `publish-pages.yml` jest jedynym writerem GitHub Pages. Składa stable,
+   testing i status w jeden przeskanowany artefakt, po czym publikuje go atomowo.
+8. Kodi ze stable origin i `general.addonupdates=0` pobiera nową wersję natywnym
+   mechanizmem repozytoriów. Urządzenia nie są obowiązkową bramą pre-release;
+   test urządzenia po wydaniu jest dodatkowym smoke testem.
+
+## Konfiguracja GitHub App
+
+Auto-approver nie ma bypassu rulesetów i nie jest niezależnym ludzkim review.
+Jest automatyczną kontrolą polityki dla jednego, ściśle określonego typu PR.
+
+W chronionym Environment `umbrella-auto-release` ustaw:
+
+- variable `UMBRELLA_RELEASE_APP_CLIENT_ID`;
+- secret `UMBRELLA_RELEASE_APP_PRIVATE_KEY`.
+
+GitHub App potrzebuje wyłącznie `Pull requests: write` i `Contents: write` oraz
+instalacji ograniczonej do repozytoriów `mwoDevelop/kodi` i
+`mwoDevelop/umbrellaplug.github.io`. Chronione Environment z tym samym kontraktem
+sekretów trzeba skonfigurować osobno w obu repozytoriach. Oba repozytoria muszą
+zezwalać na native auto-merge, ale App nie może omijać wymaganych checków ani
+approval rulesetu.
+
+Domyślnie część mutująca jest wyłączona. Po udanym teście obserwacyjnym, teście
+negatywnym allowlisty i potwierdzonym no-op ustaw repozytoryjną variable:
+
+```text
+UMBRELLA_AUTO_MERGE_ENABLED=true
+```
+
+Usunięcie albo ustawienie innej wartości natychmiast przywraca tryb
+obserwacyjny; weryfikacja nadal działa i publikuje dowód decyzji.
+
+## Ręczne uruchomienia i diagnostyka
+
+Wymuś izolowane odświeżenie locka Umbrelli:
+
+```bash
+gh workflow run reconcile-upstreams.yml --repo mwoDevelop/kodi \
+  -f component=plugin.video.umbrella
+```
+
+Ponów kwalifikację istniejącego snapshotu:
+
+```bash
+gh workflow run certify-umbrella-hermetic.yml --repo mwoDevelop/kodi \
+  -f snapshot_id=<64-znakowy-snapshot-id>
+```
+
+Odśwież jeden pełny payload Pages i status:
+
+```bash
+gh workflow run publish-pages.yml --repo mwoDevelop/kodi
+```
+
+Przygotuj, bez automatycznego scalenia, forward rollback o wyższej wersji:
+
+```bash
+gh workflow run prepare-umbrella-forward-rollback.yml \
+  --repo mwoDevelop/kodi \
+  -f known_good_commit=<40-znakowy-commit> \
+  -f release_version=<wersja-wyzsza-od-stable>
+```
+
+Wygenerowany artefakt trzeba ręcznie przejrzeć i włączyć do forka. Workflow nie
+zmienia gałęzi, locka stable ani publicznego repozytorium.
+
+Sprawdź ostatnie przebiegi:
+
+```bash
+gh run list --repo mwoDevelop/kodi --workflow reconcile-upstreams.yml --limit 5
+gh run list --repo mwoDevelop/kodi --workflow approve-umbrella-update.yml --limit 5
+gh run list --repo mwoDevelop/kodi --workflow approve-umbrella-promotion.yml --limit 5
+gh run list --repo mwoDevelop/kodi --workflow certify-umbrella-hermetic.yml --limit 5
+gh run list --repo mwoDevelop/kodi --workflow publish-pages.yml --limit 5
+```
+
+## Status widoczny w Kodi
+
+Manifest ma dwie niezależne osie:
+
+- `pipeline.state`: `in_sync`, `detected`, `qualifying` albo `blocked`;
+- `release.health`: `healthy`, `incident` albo `unknown`.
+
+Zawiera też wersję upstream, wersję stable, rzeczywistą wersję i commit bazy
+upstream stable, dokładny commit bieżącego upstream, czas wygenerowania i termin
+ważności. Nie steruje instalacją. Błąd lub wygaśnięcie statusu uruchamia
+ograniczony fallback do oficjalnego indeksu Omega i nie blokuje Umbrelli.
+
+## Incydent i cofnięcie do przodu
+
+`manifests/umbrella-release-health.json` jest wersjonowanym źródłem ręcznie
+potwierdzonego stanu wydania. Stan `incident` blokuje zwykłą promocję, ale nie
+przygotowanie poprawki. Profile Sync 1.0.6 wysyła w uwierzytelnionym heartbeacie
+wyłącznie ID dodatku, wersję, stan enabled/broken, bezpieczny kod i czas. Backend
+nie utrwala jeszcze tego pola w widoku floty, dlatego automatyczna korelacja i
+zmiana `release.health` pozostają wyłączone do czasu skoordynowanego wydania
+backendu i Control Plane; nie wolno ich symulować na podstawie logów.
+
+Kodi nie zainstaluje automatycznie starszej wersji. Naprawa awaryjna musi więc
+użyć znanych dobrych źródeł, ponownie przejść skanowanie i testy oraz otrzymać
+wersję ściśle wyższą od wadliwej. Rzeczywisty commit i wersja bazy upstream są
+przechowywane niezależnie od czteroczłonowej wersji downstream. Scalenie takiego
+forward rollbacku pozostaje ręczne.

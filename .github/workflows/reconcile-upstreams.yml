@@ -2,8 +2,18 @@ name: reconcile upstreams
 
 on:
   workflow_dispatch:
+    inputs:
+      component:
+        description: Restrict the lock candidate to one component
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - plugin.video.umbrella
   schedule:
     - cron: "20 4 * * *"
+    - cron: "35 4 * * *"
 
 concurrency:
   group: upstream-reconciliation
@@ -91,7 +101,20 @@ jobs:
         with:
           python-version: "3.12"
       - name: Prepare typed testing-lock candidate
-        run: python tools/testing_lock_candidate.py prepare --output candidate
+        env:
+          REQUESTED_COMPONENT: ${{ inputs.component || 'all' }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          COMPONENT="$REQUESTED_COMPONENT"
+          if [ "$GITHUB_EVENT_NAME" = schedule ] && [ "$SCHEDULE" = "35 4 * * *" ]; then
+            COMPONENT=plugin.video.umbrella
+          fi
+          if [ "$COMPONENT" = all ]; then
+            python tools/testing_lock_candidate.py prepare --output candidate
+          else
+            python tools/testing_lock_candidate.py prepare \
+              --component "$COMPONENT" --output candidate
+          fi
       - name: Export candidate
         id: candidate
         run: |
@@ -135,7 +158,8 @@ jobs:
       - name: Open or update testing-lock PR and ensure E2E
         env:
           BASE_COMMIT: ${{ needs.prepare-testing-lock.outputs.base_commit }}
-          BRANCH: automation/testing-lock
+          REQUESTED_COMPONENT: ${{ inputs.component || 'all' }}
+          SCHEDULE: ${{ github.event.schedule }}
           CANDIDATE_ID: ${{ needs.prepare-testing-lock.outputs.candidate_id }}
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -143,6 +167,17 @@ jobs:
           test "$(git rev-parse origin/main)" = "$BASE_COMMIT"
           git config user.name "mwoDevelop update bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          COMPONENT="$REQUESTED_COMPONENT"
+          if [ "$GITHUB_EVENT_NAME" = schedule ] && [ "$SCHEDULE" = "35 4 * * *" ]; then
+            COMPONENT=plugin.video.umbrella
+          fi
+          if [ "$COMPONENT" = all ]; then
+            BRANCH="automation/testing-lock"
+          else
+            safe_component="${COMPONENT//./-}"
+            BRANCH="automation/testing-lock-$safe_component"
+          fi
+          export BRANCH
           git checkout -B "$BRANCH"
           git add manifests/locks/testing.json
           git diff --cached --quiet && { echo "Candidate produced no lock change"; exit 1; }
@@ -156,7 +191,7 @@ jobs:
           else
             git push origin "HEAD:refs/heads/$BRANCH"
           fi
-          body="Automated exact testing-lock update. Candidate-ID: \`$CANDIDATE_ID\`. Component code was already merged to protected product branches."
+          body="Automated exact testing-lock update. Component scope: \`$COMPONENT\`. Candidate-ID: \`$CANDIDATE_ID\`. Component code was already merged to protected product branches."
           number="$(gh pr list --state open --head "$BRANCH" --base main --json number --jq '.[0].number // empty')"
           if [ -n "$number" ]; then
             gh pr edit "$number" --title "Update exact testing component lock" --body "$body"

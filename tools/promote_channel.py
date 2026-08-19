@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 
 from tools.snapshot_bundle import canonical_json, verify_bundle
 from tools.device_attestation import verify as verify_device_attestation
+from tools.qualification_attestation import verify as verify_qualification_attestation
 
 def sha256_bytes(payload):
     return hashlib.sha256(payload).hexdigest()
@@ -119,9 +120,24 @@ def inject_candidate(dist, candidate_dir):
         shutil.copyfile(source, target)
 
 
-def prepare_snapshot_lock(snapshot, attestation_path, current_stable, output):
+def prepare_snapshot_lock(
+    snapshot,
+    attestation_path,
+    current_stable,
+    output,
+    attestation_kind="device",
+    promotion_kind="normal",
+):
     metadata = verify_bundle(snapshot)
-    attestation = verify_device_attestation(attestation_path, snapshot)
+    verifiers = {
+        "device": verify_device_attestation,
+        "hermetic_ci": verify_qualification_attestation,
+    }
+    if attestation_kind not in verifiers:
+        raise ValueError("unsupported qualification attestation kind")
+    if promotion_kind not in {"normal", "forward_rollback"}:
+        raise ValueError("unsupported promotion kind")
+    attestation = verifiers[attestation_kind](attestation_path, snapshot)
     # Stable deployment downloads this exact release asset and verifies its
     # byte digest before validating the signed document. Preserve that digest
     # here; a canonical JSON digest would identify different bytes.
@@ -139,6 +155,8 @@ def prepare_snapshot_lock(snapshot, attestation_path, current_stable, output):
             ],
             "attestation_sha256": attestation_digest,
             "attestation_id": attestation["attestation_id"],
+            "attestation_kind": attestation_kind,
+            "promotion_kind": promotion_kind,
         }
     )
     current = json.loads(Path(current_stable).read_text(encoding="utf-8"))
@@ -149,6 +167,8 @@ def prepare_snapshot_lock(snapshot, attestation_path, current_stable, output):
         "snapshot_id": metadata["snapshot_id"],
         "attestation_id": attestation["attestation_id"],
         "attestation_sha256": attestation_digest,
+        "attestation_kind": attestation_kind,
+        "promotion_kind": promotion_kind,
     }
     candidate = {**identity, "candidate_id": sha256_bytes(canonical_json(identity))}
     output = Path(output)
@@ -175,6 +195,8 @@ def apply_snapshot_lock_candidate(bundle, stable_lock):
             "snapshot_id",
             "attestation_id",
             "attestation_sha256",
+            "attestation_kind",
+            "promotion_kind",
         )
     }
     if candidate.get("candidate_id") != sha256_bytes(canonical_json(identity)):
@@ -188,6 +210,8 @@ def apply_snapshot_lock_candidate(bundle, stable_lock):
         proposed.get("source_snapshot_id") != candidate["snapshot_id"]
         or proposed.get("attestation_id") != candidate["attestation_id"]
         or proposed.get("attestation_sha256") != candidate["attestation_sha256"]
+        or proposed.get("attestation_kind") != candidate["attestation_kind"]
+        or proposed.get("promotion_kind") != candidate["promotion_kind"]
     ):
         raise ValueError("stable lock lost snapshot provenance")
     Path(stable_lock).write_text(
@@ -214,6 +238,12 @@ def main():
     snapshot_lock = subparsers.add_parser("snapshot-lock")
     snapshot_lock.add_argument("--snapshot", required=True)
     snapshot_lock.add_argument("--attestation", required=True)
+    snapshot_lock.add_argument(
+        "--attestation-kind", choices=("device", "hermetic_ci"), default="device"
+    )
+    snapshot_lock.add_argument(
+        "--promotion-kind", choices=("normal", "forward_rollback"), default="normal"
+    )
     snapshot_lock.add_argument("--stable-lock", required=True)
     snapshot_lock.add_argument("--output", required=True)
     apply_lock = subparsers.add_parser("apply-lock-candidate")
@@ -233,7 +263,12 @@ def main():
         inject_candidate(args.dist, args.candidate)
     elif args.command == "snapshot-lock":
         prepare_snapshot_lock(
-            args.snapshot, args.attestation, args.stable_lock, args.output
+            args.snapshot,
+            args.attestation,
+            args.stable_lock,
+            args.output,
+            attestation_kind=args.attestation_kind,
+            promotion_kind=args.promotion_kind,
         )
     else:
         apply_snapshot_lock_candidate(args.bundle, args.stable_lock)

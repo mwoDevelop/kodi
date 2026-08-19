@@ -1,6 +1,8 @@
 import hashlib
 import json
 import re
+import subprocess
+import sys
 from copy import deepcopy
 from pathlib import Path
 from xml.etree import ElementTree
@@ -8,7 +10,7 @@ from zipfile import ZipFile
 
 import pytest
 
-from tools.build_repo import build
+from tools.build_repo import build, install_release_status
 
 
 def tree_digest(root):
@@ -155,3 +157,84 @@ def test_metadata_assets_are_published_next_to_zip(tmp_path):
     opensubtitles = output / "testing/omega/service.subtitles.opensubtitles-com"
     assert (opensubtitles / "resources/media/os_logo_512x512.png").is_file()
     assert (opensubtitles / "resources/media/os_fanart.jpg").is_file()
+
+
+def test_release_status_is_validated_and_included_in_pages_manifest(tmp_path):
+    status = tmp_path / "umbrella.json"
+    status.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "component": "plugin.video.umbrella",
+                "pipeline": {
+                    "state": "qualifying",
+                    "candidate_id": "a" * 64,
+                    "failure_code": None,
+                },
+                "release": {"health": "healthy"},
+                "versions": {
+                    "upstream": "6.7.84",
+                    "stable": "6.7.81.20",
+                    "stable_upstream_base": "6.7.81",
+                },
+                "upstream": {
+                    "commit": "b" * 40,
+                    "stable_base_commit": "c" * 40,
+                },
+                "generated_at": "2099-08-19T10:00:00Z",
+                "expires_at": "2099-08-21T10:00:00Z",
+            }
+        )
+    )
+    output = tmp_path / "dist"
+    output.mkdir()
+
+    target = install_release_status(status, output)
+
+    assert json.loads(target.read_text())["pipeline"]["state"] == "qualifying"
+
+
+def test_build_repo_cli_can_import_release_status_validator(tmp_path):
+    status = tmp_path / "umbrella.json"
+    status.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "component": "plugin.video.umbrella",
+                "pipeline": {
+                    "state": "in_sync",
+                    "candidate_id": None,
+                    "failure_code": None,
+                },
+                "release": {"health": "healthy"},
+                "versions": {
+                    "upstream": "6.7.81",
+                    "stable": "6.7.81.20",
+                    "stable_upstream_base": "6.7.81",
+                },
+                "upstream": {
+                    "commit": "b" * 40,
+                    "stable_base_commit": "b" * 40,
+                },
+                "generated_at": "2099-08-19T10:00:00Z",
+                "expires_at": "2099-08-21T10:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "dist"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "tools/build_repo.py",
+            "--output",
+            str(output),
+            "--release-status",
+            str(status),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+
+    assert (output / "status/umbrella.json").is_file()

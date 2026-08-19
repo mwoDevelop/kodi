@@ -1,0 +1,169 @@
+name: publish Kodi Pages
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "10 3 * * *"
+  workflow_run:
+    workflows:
+      - publish testing
+      - deploy stable
+      - certify Umbrella hermetically
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: kodi-pages
+  cancel-in-progress: false
+
+jobs:
+  compose:
+    if: >-
+      github.repository == 'mwoDevelop/kodi' &&
+      (github.event_name != 'workflow_run' ||
+       github.event.workflow_run.conclusion == 'success' ||
+       github.event.workflow_run.name == 'certify Umbrella hermetically')
+    runs-on: ubuntu-latest
+    env:
+      KODI_COMPONENT_ROOT: ${{ github.workspace }}/locked-components
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --require-hashes -r requirements-ci.txt
+      - name: Resolve every exact component pin
+        run: python tools/checkout_locked_components.py --output "$KODI_COMPONENT_ROOT"
+      - name: Resolve the real stable upstream base and current upstream head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          stable_commit="$(python -c 'import json; print(json.load(open("manifests/locks/stable.json"))["components"]["plugin.video.umbrella"]["commit"])')"
+          base_commit="$(git -C "$KODI_COMPONENT_ROOT/umbrella" show "$stable_commit:downstream-patches.yml" | sed -nE 's/^  base: "([0-9a-f]{40})"$/\1/p')"
+          test "${#base_commit}" -eq 40
+          git -C "$KODI_COMPONENT_ROOT/umbrella" fetch --depth 1 origin \
+            "$base_commit:refs/locked/$base_commit"
+          python tools/umbrella_release_status.py stable-identity \
+            --stable-lock manifests/locks/stable.json \
+            --umbrella-checkout "$KODI_COMPONENT_ROOT/umbrella" \
+            > stable-upstream.json
+          upstream_commit="$(git ls-remote \
+            https://github.com/umbrellaplug/umbrellaplug.github.io.git \
+            refs/heads/master | cut -f1)"
+          test "${#upstream_commit}" -eq 40
+          curl --fail --silent --show-error \
+            "https://raw.githubusercontent.com/umbrellaplug/umbrellaplug.github.io/$upstream_commit/omega/plugin.video.umbrella/addon.xml" \
+            --output upstream-addon.xml
+          UPSTREAM_COMMIT="$upstream_commit" python - <<'PY'
+          import json
+          import os
+          import xml.etree.ElementTree as ET
+          addon = ET.parse("upstream-addon.xml").getroot()
+          if addon.get("id") != "plugin.video.umbrella":
+              raise SystemExit("unexpected upstream add-on identity")
+          version = addon.get("version", "")
+          if not version or any(not part.isdigit() for part in version.split(".")):
+              raise SystemExit("invalid upstream version")
+          json.dump(
+              {"commit": os.environ["UPSTREAM_COMMIT"], "version": version},
+              open("current-upstream.json", "w"),
+              sort_keys=True,
+          )
+          PY
+      - name: Compose independent pipeline and release-health axes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          TRIGGER_NAME: ${{ github.event.workflow_run.name }}
+        run: |
+          set -euo pipefail
+          generated_at="$(date --utc +%Y-%m-%dT%H:%M:%SZ)"
+          expires_at="$(date --utc --date='+36 hours' +%Y-%m-%dT%H:%M:%SZ)"
+          eval "$(python - <<'PY'
+          import json
+          import shlex
+          stable = json.load(open("manifests/locks/stable.json"))
+          testing = json.load(open("manifests/locks/testing.json"))
+          base = json.load(open("stable-upstream.json"))
+          upstream = json.load(open("current-upstream.json"))
+          health = json.load(open("manifests/umbrella-release-health.json"))
+          if set(health) != {"schema", "health", "incident_id"} or health["schema"] != 1:
+              raise SystemExit("invalid release-health manifest")
+          stable_pin = stable["components"]["plugin.video.umbrella"]
+          testing_pin = testing["components"]["plugin.video.umbrella"]
+          if upstream["commit"] == base["commit"]:
+              state, candidate = "in_sync", ""
+          elif testing_pin != stable_pin:
+              state, candidate = "qualifying", testing_pin["zip_sha256"]
+          else:
+              state, candidate = "detected", ""
+          print("PIPELINE_STATE=%s" % shlex.quote(state))
+          print("CANDIDATE_ID=%s" % shlex.quote(candidate))
+          print("RELEASE_HEALTH=%s" % shlex.quote(health["health"]))
+          print("STABLE_BASE_COMMIT=%s" % shlex.quote(base["commit"]))
+          print("STABLE_BASE_VERSION=%s" % shlex.quote(base["version"]))
+          print("UPSTREAM_COMMIT=%s" % shlex.quote(upstream["commit"]))
+          print("UPSTREAM_VERSION=%s" % shlex.quote(upstream["version"]))
+          PY
+          )"
+          failure_code=""
+          if [ "$PIPELINE_STATE" = qualifying ]; then
+            title="Umbrella qualification blocked: ${CANDIDATE_ID:0:12}"
+            blocked="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+              --limit 100 --json title \
+              --jq ".[] | select(.title == \"$title\") | .title" | head -n 1)"
+            if [ -n "$blocked" ] || { \
+              [ "$TRIGGER_NAME" = "certify Umbrella hermetically" ] && \
+              [ "$TRIGGER_CONCLUSION" != success ]; \
+            }; then
+              PIPELINE_STATE=blocked
+              failure_code=qualification_failed
+            fi
+          fi
+          args=(
+            compose --stable-lock manifests/locks/stable.json
+            --upstream-version "$UPSTREAM_VERSION"
+            --upstream-commit "$UPSTREAM_COMMIT"
+            --stable-base-commit "$STABLE_BASE_COMMIT"
+            --stable-upstream-base "$STABLE_BASE_VERSION"
+            --pipeline-state "$PIPELINE_STATE"
+            --release-health "$RELEASE_HEALTH"
+            --generated-at "$generated_at" --expires-at "$expires_at"
+            --output umbrella-status.json
+          )
+          [ -z "$CANDIDATE_ID" ] || args+=(--candidate-id "$CANDIDATE_ID")
+          [ -z "$failure_code" ] || args+=(--failure-code "$failure_code")
+          python tools/umbrella_release_status.py "${args[@]}"
+      - name: Build and test the one complete Pages payload
+        run: |
+          tests/e2e/run.sh
+          python tools/build_repo.py --output dist \
+            --release-status umbrella-status.json
+      - name: Scan the exact publication payload
+        uses: ./.github/actions/upstream-malware-scan
+        with:
+          candidate-path: dist
+          output: pages-security-report.json
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: dist
+
+  deploy:
+    needs: compose
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy the atomic payload
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

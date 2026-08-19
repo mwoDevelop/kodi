@@ -31,6 +31,7 @@ def profile(tmp_path):
     write_settings(
         root / "userdata/guisettings.xml",
         {
+            "general.addonupdates": "0",
             "lookandfeel.skin": "skin.estuary",
             "services.webserverpassword": "must-not-export",
         },
@@ -100,7 +101,10 @@ def test_export_is_semantic_typed_and_excludes_secrets(tmp_path):
     assert manifest["revision_id"].startswith("sha256:")
     core = manifest["adapters"]["kodi.core"]
     umbrella = manifest["adapters"]["umbrella.preferences"]
-    assert core["values"] == {"lookandfeel.skin": "skin.estuary"}
+    assert core["values"] == {
+        "general.addonupdates": 0,
+        "lookandfeel.skin": "skin.estuary",
+    }
     assert umbrella["values"] == {
         "cache.providers": 6,
         "rd_cloud.enabled": False,

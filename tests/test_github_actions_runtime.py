@@ -11,6 +11,9 @@ NODE24_ACTIONS = {
         "fc324d3547104276b827a68afc52ff2a11cc49c9"
     ),
     "actions/deploy-pages": "cd2ce8fcbc39b97be8ca5fce6e763baed58fa128",
+    "actions/create-github-app-token": (
+        "bcd2ba49218906704ab6c1aa796996da409d3eb1"
+    ),
     "docker/setup-buildx-action": (
         "bb05f3f5519dd87d3ba754cc423b652a5edd6d2c"
     ),

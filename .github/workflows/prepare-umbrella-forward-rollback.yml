@@ -1,0 +1,56 @@
+name: prepare Umbrella forward rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      safe_commit:
+        description: Exact previously known-good downstream Umbrella commit
+        required: true
+        type: string
+      new_version:
+        description: Strictly higher downstream release version
+        required: true
+        type: string
+      incident_id:
+        description: Safe public incident identifier
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    environment: umbrella-forward-rollback
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: true
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Materialize known-good code under a forward-only version
+        run: |
+          current="$(python -c 'import json; print(json.load(open("manifests/locks/stable.json"))["components"]["plugin.video.umbrella"]["commit"])')"
+          python tools/umbrella_forward_rollback.py \
+            --checkout umbrella \
+            --safe-commit "${{ inputs.safe_commit }}" \
+            --current-commit "$current" \
+            --new-version "${{ inputs.new_version }}" \
+            --incident-id "${{ inputs.incident_id }}" \
+            --output forward-rollback
+      - name: Scan exact known-good candidate again
+        uses: ./.github/actions/upstream-malware-scan
+        with:
+          candidate-path: forward-rollback
+          output: forward-rollback-security.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: umbrella-forward-rollback-${{ inputs.incident_id }}-${{ inputs.new_version }}
+          path: |
+            forward-rollback/
+            forward-rollback-security.json
+          retention-days: 30

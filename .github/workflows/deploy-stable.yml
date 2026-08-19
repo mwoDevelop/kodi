@@ -17,8 +17,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: kodi-pages
@@ -92,17 +90,28 @@ jobs:
           snapshot_id="$(python -c 'import json; print(json.load(open("manifests/locks/stable.json"))["source_snapshot_id"])')"
           attestation_id="$(python -c 'import json; print(json.load(open("manifests/locks/stable.json"))["attestation_id"])')"
           attestation_sha256="$(python -c 'import json; print(json.load(open("manifests/locks/stable.json"))["attestation_sha256"])')"
+          attestation_kind="$(python -c 'import json; print(json.load(open("manifests/locks/stable.json")).get("attestation_kind", "device"))')"
           case "$attestation_id" in
             *[!0-9a-f]*|'') exit 1 ;;
           esac
           test "${#attestation_id}" -eq 64
-          filename="device-attestation-$attestation_id.json"
+          case "$attestation_kind" in
+            hermetic_ci) filename="qualification-attestation-$attestation_id.json" ;;
+            device) filename="device-attestation-$attestation_id.json" ;;
+            *) exit 1 ;;
+          esac
           gh release download "testing-snapshot-$snapshot_id" \
             --pattern "$filename"
           test "$(sha256sum "$filename" | cut -d' ' -f1)" = "$attestation_sha256"
-          python tools/device_attestation.py verify \
-            --snapshot promoted-snapshot.tar \
-            --attestation "$filename" > /dev/null
+          if [ "$attestation_kind" = "hermetic_ci" ]; then
+            python tools/qualification_attestation.py verify \
+              --snapshot promoted-snapshot.tar \
+              --attestation "$filename" > /dev/null
+          else
+            python tools/device_attestation.py verify \
+              --snapshot promoted-snapshot.tar \
+              --attestation "$filename" > /dev/null
+          fi
           snapshot_commit="$(
             python -c 'import json; print(json.load(open("promoted-snapshot.json"))["repository_commit"])'
           )"
@@ -202,19 +211,3 @@ jobs:
           if public_testing != composed_testing:
               raise SystemExit("composer did not preserve current testing")
           PY
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        if: steps.lock.outputs.deploy == 'true'
-        with:
-          path: dist
-
-  deploy:
-    needs: materialize
-    if: needs.materialize.outputs.deploy == 'true'
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

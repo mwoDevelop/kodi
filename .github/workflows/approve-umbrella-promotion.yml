@@ -1,0 +1,115 @@
+name: approve exact Umbrella stable promotion
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "7,37 * * * *"
+
+concurrency:
+  group: approve-exact-umbrella-promotion
+  cancel-in-progress: false
+
+permissions:
+  checks: read
+  contents: read
+  pull-requests: read
+
+jobs:
+  verify:
+    if: github.repository == 'mwoDevelop/kodi' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      eligible: ${{ steps.verify.outputs.eligible }}
+      number: ${{ steps.verify.outputs.number }}
+      head_sha: ${{ steps.verify.outputs.head_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Resolve and verify one exact stable-promotion PR
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mapfile -t numbers < <(gh pr list --state open --base main \
+            --json number,headRefName \
+            --jq '.[] | select(.headRefName | startswith("automation/promote-stable-")) | .number')
+          if [ "${#numbers[@]}" -eq 0 ]; then
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          test "${#numbers[@]}" -eq 1
+          number="${numbers[0]}"
+          gh pr view "$number" --json number,author,baseRefName,headRefName,headRefOid,isDraft,files \
+            --jq '{number,author:.author.login,base:.baseRefName,head:.headRefName,head_sha:.headRefOid,draft:.isDraft,files:[.files[].path]}' > pr.json
+          head_sha="$(python -c 'import json; print(json.load(open("pr.json"))["head_sha"])')"
+          git show origin/main:manifests/locks/stable.json > base-stable.json
+          git show origin/main:manifests/locks/qnap-stable.json > base-qnap.json
+          for pair in "stable:head-stable.json" "qnap-stable:head-qnap.json"; do
+            name="${pair%%:*}"
+            output="${pair#*:}"
+            gh api "repos/$GITHUB_REPOSITORY/contents/manifests/locks/$name.json?ref=$head_sha" \
+              --jq .content | tr -d '\n' | base64 --decode > "$output"
+          done
+          gh api "repos/$GITHUB_REPOSITORY/commits/$head_sha/check-runs?per_page=100" \
+            --jq '[.check_runs[] | {name,status,conclusion,head_sha}]' > checks.json
+          python tools/umbrella_promotion_approval.py \
+            --base-stable base-stable.json --head-stable head-stable.json \
+            --testing-lock manifests/locks/testing.json \
+            --base-qnap base-qnap.json --head-qnap head-qnap.json \
+            --pr pr.json --checks checks.json --output decision.json
+          snapshot_id="$(python -c 'import json; print(json.load(open("decision.json"))["snapshot_id"])')"
+          attestation_id="$(python -c 'import json; print(json.load(open("decision.json"))["attestation_id"])')"
+          attestation_sha="$(python -c 'import json; print(json.load(open("decision.json"))["attestation_sha256"])')"
+          filename="qualification-attestation-$attestation_id.json"
+          gh release download "testing-snapshot-$snapshot_id" \
+            --pattern snapshot.tar --pattern "$filename"
+          test "$(sha256sum "$filename" | cut -d' ' -f1)" = "$attestation_sha"
+          python tools/qualification_attestation.py verify \
+            --snapshot snapshot.tar --attestation "$filename" > /dev/null
+          echo "eligible=true" >> "$GITHUB_OUTPUT"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: steps.verify.outputs.eligible == 'true'
+        with:
+          name: umbrella-promotion-approval-${{ steps.verify.outputs.head_sha }}
+          path: decision.json
+          retention-days: 90
+
+  approve:
+    needs: verify
+    if: >-
+      needs.verify.outputs.eligible == 'true' &&
+      vars.UMBRELLA_AUTO_MERGE_ENABLED == 'true'
+    environment: umbrella-auto-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint a narrowly scoped, short-lived GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.UMBRELLA_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.UMBRELLA_RELEASE_APP_PRIVATE_KEY }}
+          owner: mwoDevelop
+          repositories: kodi
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Recheck head identity, approve, and enable native auto-merge
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          NUMBER: ${{ needs.verify.outputs.number }}
+          VERIFIED_HEAD: ${{ needs.verify.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          current="$(gh pr view "$NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)"
+          test "$current" = "$VERIFIED_HEAD"
+          gh pr review "$NUMBER" --repo "$GITHUB_REPOSITORY" --approve \
+            --body "Automatyczna aprobata: dokładny snapshot, hermetyczna atestacja i niezmieniony lock QNAP."
+          gh pr merge "$NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge \
+            --match-head-commit "$VERIFIED_HEAD"

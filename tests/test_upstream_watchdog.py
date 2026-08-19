@@ -10,10 +10,27 @@ SCHEDULED_WORKFLOWS = {
     ("mwoDevelop/kodi", "reconcile-upstreams.yml"): (
         Path(".github/workflows/reconcile-upstreams.yml"),
         "20 4 * * *",
+        "04:20 codziennie",
+    ),
+    ("mwoDevelop/kodi", "approve-umbrella-update.yml"): (
+        Path(".github/workflows/approve-umbrella-update.yml"),
+        "*/15 * * * *",
+        "co 15 minut",
+    ),
+    ("mwoDevelop/kodi", "approve-umbrella-promotion.yml"): (
+        Path(".github/workflows/approve-umbrella-promotion.yml"),
+        "7,37 * * * *",
+        "co 30 minut",
+    ),
+    ("mwoDevelop/kodi", "publish-pages.yml"): (
+        Path(".github/workflows/publish-pages.yml"),
+        "10 3 * * *",
+        "03:10 codziennie",
     ),
     ("mwoDevelop/kodi", "check-youtube-upstream.yml"): (
         Path(".github/workflows/check-youtube-upstream.yml"),
         "29 4 * * *",
+        "04:29 codziennie",
     ),
     (
         "mwoDevelop/script.module.mwoscrapers",
@@ -21,6 +38,7 @@ SCHEDULED_WORKFLOWS = {
     ): (
         Path("mwoscrapers/.github/workflows/check-provider-upstreams.yml"),
         "23 4 * * *",
+        "04:23 codziennie",
     ),
     (
         "mwoDevelop/script.module.mwoscrapers",
@@ -28,6 +46,7 @@ SCHEDULED_WORKFLOWS = {
     ): (
         Path("mwoscrapers/.github/workflows/discover-provider-upstreams.yml"),
         "41 4 * * *",
+        "04:41 codziennie",
     ),
     (
         "mwoDevelop/script.module.mwoscrapers",
@@ -35,10 +54,17 @@ SCHEDULED_WORKFLOWS = {
     ): (
         Path("mwoscrapers/.github/workflows/probe-provider-health.yml"),
         "3 5 * * *",
+        "05:03 codziennie",
     ),
     ("mwoDevelop/umbrellaplug.github.io", "propose-upstream-update.yml"): (
         Path("umbrella/.github/workflows/propose-upstream-update.yml"),
         "50 4 * * *",
+        "04:50 codziennie",
+    ),
+    ("mwoDevelop/umbrellaplug.github.io", "approve-upstream-update.yml"): (
+        Path("umbrella/.github/workflows/approve-upstream-update.yml"),
+        "2,17,32,47 * * * *",
+        "co 15 minut",
     ),
     (
         "mwoDevelop/ch.repo",
@@ -49,6 +75,7 @@ SCHEDULED_WORKFLOWS = {
             "mwodevelop-watchnixtoons2-update.yml"
         ),
         "35 4 * * *",
+        "04:35 codziennie",
     ),
 }
 
@@ -118,7 +145,7 @@ def test_watchdog_rejects_failure_and_stale_success():
 
 def test_versioned_manifest_is_valid():
     loaded = load_manifest("manifests/upstream-watchdog.json")
-    assert len(loaded["workflows"]) == 7
+    assert len(loaded["workflows"]) == 11
     assert {
         (item["repository"], item["workflow"])
         for item in loaded["workflows"]
@@ -129,19 +156,15 @@ def test_scheduled_process_catalog_matches_workflows():
     catalogue = Path("docs/scheduled-processes.md").read_text(
         encoding="utf-8"
     )
-    for (_repository, workflow), (path, cron) in SCHEDULED_WORKFLOWS.items():
+    for (_repository, workflow), (path, cron, marker) in SCHEDULED_WORKFLOWS.items():
         source = path.read_text(encoding="utf-8")
         assert re.search(
             r'^\s*-\s+cron:\s*["\']%s["\']\s*$' % re.escape(cron),
             source,
             flags=re.MULTILINE,
         )
-        minute, hour, _day, _month, _weekday = cron.split()
         assert workflow in catalogue
-        assert "%s:%s codziennie" % (
-            hour.zfill(2),
-            minute.zfill(2),
-        ) in catalogue
+        assert marker in catalogue
 
 
 def test_youtube_upstream_scans_zip_and_expanded_tree_before_review_pr():
