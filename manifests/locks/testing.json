@@ -2,9 +2,9 @@
   "channel": "testing",
   "components": {
     "plugin.video.umbrella": {
-      "commit": "cc3777176e0e8ab4ebc0d83e2e8c787b6845a2ae",
-      "version": "6.7.81.21",
-      "zip_sha256": "ea6e140f109a85a4af6c38bafe15822f941791b77fc88a7b27f586f016f490c0"
+      "commit": "72f4da1a109cb522b9390de068b4545fb1e39303",
+      "version": "6.7.85.1",
+      "zip_sha256": "3eda5c1cbb8f04386ea9f8ddf869dad75a4842c7a6ee1d0b51e5dc3b56ebbcc9"
     },
     "plugin.video.watchnixtoons2.mwodevelop": {
       "commit": "df5f3474c1744b7187041acce37958bca50b49c1",
