@@ -58,6 +58,13 @@ UMBRELLA_AUTO_MERGE_ENABLED=true
 Usunięcie albo ustawienie innej wartości natychmiast przywraca tryb
 obserwacyjny; weryfikacja nadal działa i publikuje dowód decyzji.
 
+Na dzień 20.08.2026 oba weryfikatory przeszły próbę obserwacyjną i końcowy
+no-op, lecz część mutująca pozostaje celowo wyłączona: chronione Environment nie
+ma jeszcze poświadczeń dedykowanej App, a `UMBRELLA_AUTO_MERGE_ENABLED` nie jest
+ustawione na `true`. W tym stanie wykrycie, budowa, skanowanie, atestacja,
+publikacja i przygotowanie PR są automatyczne, natomiast dokładnie zweryfikowany
+PR nadal wymaga approval i scalenia przez inną tożsamość.
+
 ## Ręczne uruchomienia i diagnostyka
 
 Wymuś izolowane odświeżenie locka Umbrelli:
@@ -129,3 +136,12 @@ użyć znanych dobrych źródeł, ponownie przejść skanowanie i testy oraz otr
 wersję ściśle wyższą od wadliwej. Rzeczywisty commit i wersja bazy upstream są
 przechowywane niezależnie od czteroczłonowej wersji downstream. Scalenie takiego
 forward rollbacku pozostaje ręczne.
+
+## Ostatnia kwalifikacja
+
+Umbrella `6.7.85.1` została wydana z upstream
+`653190cd64c37eadae537568518238b3f8e5a27d`. Publiczny ZIP ma SHA-256
+`3eda5c1cbb8f04386ea9f8ddf869dad75a4842c7a6ee1d0b51e5dc3b56ebbcc9`,
+a status raportuje `in_sync` i `healthy`. Hermetyczna atestacja, stable deploy,
+atomowy Pages deploy, końcowy no-op oraz test X88 są zapisane w
+[raporcie E2E](e2e-results/2026-08-19-umbrella-auto-release.md).

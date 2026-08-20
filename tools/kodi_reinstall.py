@@ -918,7 +918,6 @@ def installed_addon_origins_in_kodi(
         )
         adb_command(adb, port, serial, "push", mapping.name, ORIGIN_MAPPING)
     try:
-        events = AdbEventClient(adb, port, serial)
         started = time.monotonic()
         while time.monotonic() - started < timeout:
             adb_command(
@@ -929,7 +928,10 @@ def installed_addon_origins_in_kodi(
                 "rm -f '%s'" % ORIGIN_MARKER,
                 check=False,
             )
-            events.execute_builtin(
+            execute_kodi_builtin(
+                adb,
+                port,
+                serial,
                 "RunScript(%s,%s,%s,read)"
                 % (ORIGIN_SCRIPT, ORIGIN_MAPPING, ORIGIN_MARKER)
             )

@@ -190,16 +190,13 @@ def test_origin_read_falls_back_to_in_kodi_for_scoped_storage(monkeypatch):
     ) == {"plugin.video.umbrella": "repository.mwodevelop"}
 
 
-def test_in_kodi_origin_read_retries_dropped_eventserver_command(monkeypatch):
+def test_in_kodi_origin_read_retries_dropped_builtin_command(monkeypatch):
     clock = [0]
     executions = []
 
-    class Events:
-        def __init__(self, *_args):
-            pass
-
-        def execute_builtin(self, command):
-            executions.append(command)
+    def execute(_adb, _port, _serial, command):
+        executions.append(command)
+        return "jsonrpc"
 
     def command(*args, **_kwargs):
         remote = args[4] if len(args) > 4 else ""
@@ -214,7 +211,7 @@ def test_in_kodi_origin_read_retries_dropped_eventserver_command(monkeypatch):
         return SimpleNamespace(returncode=1, stdout="")
 
     monkeypatch.setattr("tools.kodi_reinstall.adb_command", command)
-    monkeypatch.setattr("tools.kodi_reinstall.AdbEventClient", Events)
+    monkeypatch.setattr("tools.kodi_reinstall.execute_kodi_builtin", execute)
     monkeypatch.setattr(
         "tools.kodi_reinstall.time.monotonic",
         lambda: clock[0],

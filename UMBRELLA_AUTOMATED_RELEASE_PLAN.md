@@ -1,7 +1,8 @@
 # Plan automatycznego wydawania i monitorowania Umbrelli
 
-Status: zaimplementowany lokalnie; aktywacja automatycznego merge pozostaje
-obserwacyjna do przejścia CI i no-op na GitHub
+Status: zaimplementowany i wydany; automatyczne approval/merge pozostaje
+obserwacyjne do czasu skonfigurowania dedykowanej GitHub App i jawnego
+wlaczenia `UMBRELLA_AUTO_MERGE_ENABLED`
 
 Data bazowa: 2026-08-19
 
@@ -104,8 +105,12 @@ ludzkim review.
 Zaimplementowano izolowany lock Umbrelli, hermetyczna atestacje, dwa
 auto-approvery w trybie obserwacyjnym, pojedynczy writer Pages, publiczny status,
 powiadomienia Kodi, trwale raportowanie `blocked` powiazane z Candidate-ID,
-forward rollback oraz natywne auto-update Kodi. Przygotowana wersja Umbrelli to
-`6.7.81.21`.
+forward rollback oraz natywne auto-update Kodi. Umbrella `6.7.85.1` zostala
+zbudowana z przypietego upstream
+`653190cd64c37eadae537568518238b3f8e5a27d`, wydana do stable i potwierdzona
+na X88. Koncowy reconcile zakonczyl sie idempotentnym no-op. BlueStacks byl
+niedostepny podczas koncowego smoke testu i zostal jawnie oznaczony jako
+`DEFERRED`, bez zastepowania go innym emulatorem.
 
 Profile Sync `1.0.6` stosuje `general.addonupdates=0` przez JSON-RPC i emituje
 minimalny heartbeat zdrowia Umbrelli. Automatyczna korelacja `release.health`
