@@ -87,6 +87,12 @@ def test_umbrella_qualification_is_hermetic_and_component_isolated():
     assert '--ro-bind "$sandbox/umbrella" /work/umbrella' in workflow
     assert "git clone --quiet --no-hardlinks umbrella" in workflow
     assert "git -C umbrella fetch --quiet --unshallow --no-tags origin" in workflow
+    assert "https://github.com/umbrellaplug/umbrellaplug.github.io.git" in workflow
+    assert '"$upstream_base:refs/upstream-base/$upstream_base"' in workflow
+    assert '"refs/upstream-base/$upstream_base:refs/upstream-base/$upstream_base"' in workflow
+    assert workflow.index('git -C "$sandbox/umbrella" cat-file -e') < workflow.index(
+        "run_sandboxed umbrella-tests /work/umbrella"
+    )
     assert "run_sandboxed umbrella-tests /work/umbrella" in workflow
     assert "--setenv HOME /tmp" in workflow
     assert "python -m tools.qualification_attestation create" in workflow
