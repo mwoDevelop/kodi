@@ -131,6 +131,13 @@ jobs:
             git -C umbrella fetch --quiet --unshallow --no-tags origin
           fi
           test "$(git -C umbrella rev-parse HEAD)" = "$candidate_commit"
+          upstream_base="$(sed -nE 's/^  base: "([0-9a-f]{40})"$/\1/p' umbrella/downstream-patches.yml)"
+          case "$upstream_base" in *[!0-9a-f]*|'') exit 1 ;; esac
+          test "${#upstream_base}" -eq 40
+          git -C umbrella fetch --quiet --no-tags --depth 1 \
+            https://github.com/umbrellaplug/umbrellaplug.github.io.git \
+            "$upstream_base:refs/upstream-base/$upstream_base"
+          git -C umbrella cat-file -e "$upstream_base^{commit}"
           python tools/qualify_umbrella_snapshot.py validate \
             --snapshot snapshot.tar \
             --stable-lock manifests/locks/stable.json \
@@ -164,6 +171,11 @@ jobs:
           git clone --quiet --no-hardlinks umbrella "$sandbox/umbrella"
           test "$(git -C "$sandbox/umbrella" rev-parse HEAD)" = \
             "$(git -C umbrella rev-parse HEAD)"
+          upstream_base="$(sed -nE 's/^  base: "([0-9a-f]{40})"$/\1/p' "$sandbox/umbrella/downstream-patches.yml")"
+          git -C "$sandbox/umbrella" fetch --quiet --no-tags \
+            "$GITHUB_WORKSPACE/umbrella" \
+            "refs/upstream-base/$upstream_base:refs/upstream-base/$upstream_base"
+          git -C "$sandbox/umbrella" cat-file -e "$upstream_base^{commit}"
           run_sandboxed() {
             name="$1"
             workdir="$2"
