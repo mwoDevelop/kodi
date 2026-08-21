@@ -168,6 +168,20 @@ def run_boringssl(crypto, library_name):
             )
             == 0
         ),
+        "hpke_primitives": {
+            name: hasattr(crypto, name)
+            for name in (
+                "X25519",
+                "X25519_public_from_private",
+                "HKDF_extract",
+                "HKDF_expand",
+                "EVP_aead_chacha20_poly1305",
+                "EVP_AEAD_CTX_init",
+                "EVP_AEAD_CTX_open",
+                "EVP_AEAD_CTX_new",
+                "EVP_AEAD_CTX_free",
+            )
+        },
     }
     result["ok"] = all(
         result[key]
@@ -311,6 +325,17 @@ def run_openssl():
         "tampered_signature_rejected": not verify(
             crypto, nid, public_key, b"", bytes(tampered)
         ),
+        "hpke_primitives": {
+            "X25519": crypto.OBJ_sn2nid(b"X25519") > 0,
+            "X25519_public_from_private": False,
+            "HKDF_extract": hasattr(crypto, "EVP_PKEY_CTX_new_id"),
+            "HKDF_expand": hasattr(crypto, "EVP_PKEY_CTX_new_id"),
+            "EVP_aead_chacha20_poly1305": hasattr(
+                crypto, "EVP_chacha20_poly1305"
+            ),
+            "EVP_AEAD_CTX_init": hasattr(crypto, "EVP_DecryptInit_ex"),
+            "EVP_AEAD_CTX_open": hasattr(crypto, "EVP_DecryptFinal_ex"),
+        },
     }
     result["ok"] = all(
         result[key]
@@ -465,6 +490,7 @@ def verify_device(repository, logical_device_id, adb, port):
         "kodi_primary_abi": primary_abi,
         "rfc8032_vector": "pass",
         "tamper_rejection": "pass",
+        "hpke_native_primitives": result.get("hpke_primitives", {}),
         "cleanup": "pass",
         "result": "pass",
     }

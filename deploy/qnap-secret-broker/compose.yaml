@@ -1,0 +1,89 @@
+services:
+  secret-broker:
+    image: ${SECRET_BROKER_IMAGE:?set immutable image digest}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "10002:10002"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - --database
+      - /data/secrets.db
+      - --master-key
+      - /run/secrets/broker-master-key
+      - serve
+      - --host
+      - 0.0.0.0
+      - --port
+      - "9444"
+      - --certificate
+      - /run/tls/server.crt
+      - --private-key
+      - /run/tls/server.key
+      - --client-ca
+      - /run/tls/clients-ca.crt
+    volumes:
+      - type: bind
+        source: ${SECRET_BROKER_DATA:?set data directory}
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SECRET_BROKER_MASTER_KEY:?set master key}
+        target: /run/secrets/broker-master-key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SECRET_BROKER_TLS_CERT:?set server certificate}
+        target: /run/tls/server.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SECRET_BROKER_TLS_KEY:?set server key}
+        target: /run/tls/server.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SECRET_BROKER_CLIENT_CA:?set client CA}
+        target: /run/tls/clients-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SECRET_BROKER_HEALTH_CERT:?set health client certificate}
+        target: /run/tls/health.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SECRET_BROKER_HEALTH_KEY:?set health client key}
+        target: /run/tls/health.key
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    mem_limit: 128m
+    pids_limit: 64
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,ssl,urllib.request;c=ssl.create_default_context(cafile='/run/tls/clients-ca.crt');c.load_cert_chain('/run/tls/health.crt','/run/tls/health.key');assert json.load(urllib.request.urlopen('https://secret-broker:9444/ready',context=c,timeout=3))['status']=='ready'"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - control-plane
+
+networks:
+  control-plane:
+    name: mwodevelop-control
+    external: true

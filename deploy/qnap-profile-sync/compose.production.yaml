@@ -20,10 +20,36 @@ services:
       - "8767"
       - --integration-client-ca
       - /run/profile-sync/integration/clients-ca.crt
+      - --secret-broker-url
+      - https://secret-broker:9444
+      - --secret-broker-ca
+      - /run/profile-sync/secret-broker/ca.crt
+      - --secret-broker-cert
+      - /run/profile-sync/secret-broker/client.crt
+      - --secret-broker-key
+      - /run/profile-sync/secret-broker/client.key
     volumes:
       - type: bind
         source: ${PROFILE_SYNC_INTEGRATION_CLIENT_CA:?set integration client CA}
         target: /run/profile-sync/integration/clients-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${PROFILE_SYNC_SECRET_BROKER_CA:?set Secret Broker CA}
+        target: /run/profile-sync/secret-broker/ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${PROFILE_SYNC_SECRET_BROKER_CLIENT_CERT:?set Secret Broker client certificate}
+        target: /run/profile-sync/secret-broker/client.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${PROFILE_SYNC_SECRET_BROKER_CLIENT_KEY:?set Secret Broker client key}
+        target: /run/profile-sync/secret-broker/client.key
         read_only: true
         bind:
           create_host_path: false

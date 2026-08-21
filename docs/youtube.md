@@ -5,10 +5,10 @@ Projekt instaluje oficjalny `plugin.video.youtube` natywnie z
 mwoDevelop. `manifests/kodi-default-addons.json` przypina wersję i SHA-256 użyte do
 kwalifikacji, a Kodi zachowuje oficjalny origin i mechanizm aktualizacji.
 
-Funkcja obejmuje instalację, osobiste klucze API i prywatny, przenośny profil sesji
-OAuth. Rollout z zaufanego hosta stosuje ten profil na zarządzanych urządzeniach i
-weryfikuje oczekiwany kanał. Profil nie jest wersjonowany, nie wchodzi do Profile Sync
-i nie jest jeszcze przechowywany na QNAP.
+Funkcja obejmuje instalację, osobiste klucze API i wspólny dla floty profil sesji
+OAuth. Docelową ścieżką runtime jest zaszyfrowany Secret Broker na QNAP oraz koperta
+HPKE per enrollment; hostowy rollout pozostaje rollbackiem do chwili zakończenia
+cutoveru. Sekret nie wchodzi do zwykłej rewizji Profile Sync i nie jest wersjonowany.
 
 ## Prywatne referencje
 
@@ -48,6 +48,27 @@ Kanoniczna sesja znajduje się w ignorowanym pliku
 identyfikator kanału oraz trzy refresh tokeny wymagane przez wersję 7.4.4: TV,
 użytkownika i VR. Wartości są przekazywane do urządzenia tylko w krótkotrwałym pliku,
 a raport zawiera wyłącznie statusy logiczne.
+
+Import do Brokera przygotowuje również ignorowany dokument o prawach `0600`:
+
+```bash
+.venv/bin/python tools/youtube_secret_set.py
+.venv/bin/python tools/qnap_secret_broker.py import \
+  --input .kodi-private/secret-broker/youtube-generation-1.json
+```
+
+Import zaczyna od `PREPARED`. Liniowe przejścia wykonuje się jawnie, na przykład:
+
+```bash
+.venv/bin/python tools/qnap_secret_broker.py transition youtube-home 1 \
+  --from PREPARED --to CANARY_VERIFIED
+```
+
+Profile Sync ma tryby `shadow`, `canary` i `active`. Domyślny `shadow` tylko
+weryfikuje kopertę. Canary stosuje zestaw po `CANARY_VERIFIED`, a flota w trybie
+`active` wyłącznie zestaw `ACTIVE`. Agent nie zachowuje kopii plaintextu w swoim
+stanie; oficjalny dodatek musi jednak zapisać refresh tokeny w swoim prywatnym
+`addon_data`, aby sesja działała po restarcie.
 
 ## Instalacja i konfiguracja
 
@@ -98,6 +119,12 @@ Narzędzie pokaże kolejno trzy publiczne kody: YouTube TV, osobistego klienta i
 VR. Każdy kod zatwierdź na wskazanej stronie Google dla konta z `YOUTUBE_USER`.
 Narzędzie nie czyta ani nie wysyła `YOUTUBE_PASS`; po sukcesie weryfikuje kanał i
 atomowo zastępuje prywatną sesję. Następny rollout propaguje ją na urządzenia.
+
+Kwalifikowana wersja 7.4.4 żąda dla wszystkich trzech klientów pełnego scope
+`https://www.googleapis.com/auth/youtube`. Bieżące tokeny potwierdzono przez endpoint
+Google `tokeninfo`. Nie można zawęzić już wydanego refresh tokenu; przejście na
+`youtube.readonly` wymagałoby nowej zgody i osobnej kwalifikacji zmodyfikowanego
+klienta. Projekt pozostawia oficjalny dodatek bez forka i używa dedykowanego konta.
 
 Stan adaptera oznacza:
 

@@ -9,6 +9,7 @@ publikację head przez CAS. Nie jest to jeszcze assignment dla urządzenia.
 
 ## Nawigacja
 
+- [Architektura całego rozwiązania Kodi](../architecture.md)
 - [Architektura i przepływ danych](architecture.md)
 - [Model zagrożeń](threat-model.md)
 - [Instalacja pierwszego przyrostu na QNAP](qnap-install.md)

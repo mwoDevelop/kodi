@@ -4,6 +4,7 @@ import pytest
 
 from tools.control_plane_credentials import CredentialError, generate
 from tools.qnap_control_plane import ControlPlaneError, validate_private_files
+from tools.secret_broker_credentials import initialize as initialize_broker
 
 
 def test_generates_isolated_server_operator_and_profile_sync_credentials(tmp_path):
@@ -96,11 +97,13 @@ def test_generates_isolated_server_operator_and_profile_sync_credentials(tmp_pat
         text=True,
     )
     assert rejected.returncode != 0
-    validate_private_files(output)
+    broker = tmp_path / "secret-broker"
+    initialize_broker(broker)
+    validate_private_files(output, broker / "control-plane")
     (output / "tls/clients-ca.crt").write_bytes(
         (output / "profile-sync/ca.crt").read_bytes()
     )
     with pytest.raises(ControlPlaneError, match="trust chain"):
-        validate_private_files(output)
+        validate_private_files(output, broker / "control-plane")
     with pytest.raises(CredentialError, match="already exists"):
         generate(profile, output, "192.168.1.39")

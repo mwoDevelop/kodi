@@ -69,6 +69,7 @@ harmonogramów aktualizacji:
 | Read-only Control Plane | 30 sekund | loopback `/ready`; stan może być `degraded`, gdy zredagowany ostatni poprawny odczyt nadal jest dostępny |
 | Przekaźnik providerów mwoScrapers | 30 sekund | lokalny endpoint `/health` wewnątrz kontenera |
 | Watchdog upstream | 5 minut | ostatnia utrwalona ocena workflow GitHub |
+| Secret Broker | 30 sekund | mTLS `/ready`, klucz główny i integralność SQLite |
 
 Control Plane odświeża co 60 sekund read-only widoki Profile Sync i zbiorczy stan
 GitHub, a szczegóły 11 harmonogramów co 15 minut. Błąd źródła nie usuwa ostatniego
@@ -89,6 +90,11 @@ są wyłączone z payloadu synchronizowanego profilu.
 Profile Sync nie instaluje kodu dodatku, nie uruchamia GitHub workflow, nie promuje
 kanału repozytorium ani nie używa przekaźnika providerów. Dlatego jego backend i
 harmonogram są monitorowane niezależnie od synchronizacji upstream.
+
+W tym samym cyklu Agent może pobrać krótkotrwałą kopertę HPKE z Profile Sync.
+Profile Sync uzyskuje ją z Secret Brokera przez prywatne mTLS; Control Plane sprawdza
+gotowość Brokera co 60 sekund. Nie jest to zadanie GitHub ani automatyczna rotacja
+credentiali: lifecycle secret setu wymaga jawnej operacji administracyjnej.
 
 ## Procesy ręczne i sterowane zdarzeniami
 

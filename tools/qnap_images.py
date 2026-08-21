@@ -28,6 +28,7 @@ try:
     )
     from qnap_provider_relay import deploy as deploy_relay
     from qnap_control_plane import deploy as deploy_control_plane
+    from qnap_secret_broker import deploy as deploy_secret_broker
 except ModuleNotFoundError:
     from tools.qnap_profile_sync import (
         QnapError,
@@ -39,6 +40,7 @@ except ModuleNotFoundError:
     )
     from tools.qnap_provider_relay import deploy as deploy_relay
     from tools.qnap_control_plane import deploy as deploy_control_plane
+    from tools.qnap_secret_broker import deploy as deploy_secret_broker
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -111,6 +113,22 @@ def services(profile_sync_repository=None, control_plane_repository=None):
             "sha-{commit}",
             (("publish_rc", "true"),),
             ("Dockerfile", "pyproject.toml", "README.md", "src"),
+        ),
+        "secret-broker": Service(
+            "secret-broker",
+            "ghcr.io/mwodevelop/kodi-secret-broker",
+            ROOT,
+            Path("secret-broker/Dockerfile"),
+            ("linux/amd64", "linux/arm/v7"),
+            False,
+            "mwoDevelop/kodi",
+            "build-secret-broker.yml",
+            "{commit}",
+            input_paths=(
+                "secret-broker/Dockerfile",
+                "secret-broker/pyproject.toml",
+                "secret-broker/src",
+            ),
         ),
         "provider-relay": Service(
             "provider-relay",
@@ -773,6 +791,8 @@ def deploy(service_name, image, references, repository=ROOT):
                 private / "tls/server.crt",
                 private / "tls/server.key",
                 private / "tls/ca.crt",
+                Path(repository)
+                / ".kodi-private/secret-broker/profile-sync",
             )
         elif service_name == "provider-relay":
             result = deploy_relay(
@@ -791,6 +811,14 @@ def deploy(service_name, image, references, repository=ROOT):
                 image,
                 host_ip,
                 Path(repository) / ".kodi-private/control-plane",
+                Path(repository) / ".kodi-private/secret-broker/control-plane",
+            )
+        elif service_name == "secret-broker":
+            result = deploy_secret_broker(
+                session,
+                repository,
+                image,
+                Path(repository) / ".kodi-private/secret-broker",
             )
         else:
             raise ImageError("unknown service: %s" % service_name)
@@ -807,6 +835,7 @@ def status(references, repository=ROOT):
         for name, container in (
             ("control-plane", "qnap-control-plane-control-plane-1"),
             ("profile-sync", "qnap-profile-sync-profile-sync-1"),
+            ("secret-broker", "qnap-secret-broker-secret-broker-1"),
             ("provider-relay", "qnap-provider-relay-provider-relay-1"),
             (
                 "upstream-watchdog",
