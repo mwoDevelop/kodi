@@ -41,6 +41,9 @@ def profile(tmp_path):
         / "userdata/addon_data/plugin.video.umbrella/settings.xml",
         {
             "realdebrid.filter.filename": "true",
+            "provider.external.enabled": "true",
+            "external_provider.name": "mwoscrapers",
+            "external_provider.module": "script.module.mwoscrapers",
             "sources.useonlyone": "true",
             "rd_cloud.enabled": "false",
             "cache.providers": "6",
@@ -107,6 +110,9 @@ def test_export_is_semantic_typed_and_excludes_secrets(tmp_path):
     }
     assert umbrella["values"] == {
         "cache.providers": 6,
+        "external_provider.module": "script.module.mwoscrapers",
+        "external_provider.name": "mwoscrapers",
+        "provider.external.enabled": True,
         "rd_cloud.enabled": False,
         "realdebrid.filter.filename": True,
         "scrapers.timeout": 30,

@@ -34,6 +34,9 @@ def load_remove(monkeypatch, tmp_path):
             return str(home / "addons")
         if path == "special://database":
             return str(database)
+        if path.startswith("special://profile/addon_data/"):
+            addon_id = path.rsplit("/", 1)[-1]
+            return str(home / "userdata/addon_data" / addon_id)
         raise AssertionError("unexpected Kodi path")
 
     monkeypatch.setitem(
@@ -115,6 +118,9 @@ def test_remove_addon_cleans_directory_database_and_package(
     target = home / "addons" / addon
     target.mkdir(parents=True)
     (target / "addon.xml").write_text("<addon/>", encoding="utf-8")
+    addon_data = home / "userdata/addon_data" / addon
+    addon_data.mkdir(parents=True)
+    (addon_data / "settings.xml").write_text("<settings/>", encoding="utf-8")
     packages = home / "addons" / "packages"
     packages.mkdir()
     (packages / (addon + "-1.0.0.zip")).write_bytes(b"zip")
@@ -124,11 +130,13 @@ def test_remove_addon_cleans_directory_database_and_package(
     result = module._remove(addon)
 
     assert result == {
+        "addon_data_removed": True,
         "directory_removed": True,
         "packages_removed": 1,
         "repository_rows": 1,
     }
     assert not target.exists()
+    assert not addon_data.exists()
     assert not (packages / (addon + "-1.0.0.zip")).exists()
     connection = sqlite3.connect(db)
     assert connection.execute("SELECT * FROM installed").fetchall() == []

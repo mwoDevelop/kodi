@@ -23,6 +23,7 @@ if str(ROOT) not in sys.path:
 from tools.kodi_portable_state import validate_bundle
 from tools.kodi_portable_state_rollout import _cleanup, _profile_sync_probe
 from tools.kodi_profile import AdbEventClient, _wait_for_kodi_ready
+from tools.kodi_routine_profile import export_routine_profile
 from tools.kodi_sync_inventory import load_sync_inventory
 from tools.profile_portable_favourites import export_portable_favourites
 from tools.profile_revision_compose import compose
@@ -83,6 +84,36 @@ def _portable_export(bundle: Path) -> dict:
                     raise RuntimeError("portable-state payload differs from manifest")
                 target.write_bytes(payload)
         return export_portable_favourites(profile)
+
+
+def _routine_export(repository: Path, settings: Path, schema: int) -> dict:
+    """Export the managed Umbrella subset without copying private XML."""
+    settings = settings.resolve()
+    private = (repository / ".kodi-private").resolve()
+    if private not in settings.parents or not settings.is_file() or settings.is_symlink():
+        raise ValueError("routine settings authority must be a private regular file")
+    with tempfile.TemporaryDirectory(prefix="profile-sync-routine-") as value:
+        profile = Path(value)
+        target = (
+            profile
+            / "userdata/addon_data/plugin.video.umbrella/settings.xml"
+        )
+        target.parent.mkdir(parents=True)
+        target.write_bytes(settings.read_bytes())
+        return export_routine_profile(
+            profile,
+            repository / "manifests/kodi-profile-policy.json",
+            21,
+            revision_schema=schema,
+        )
+
+
+def _revision_adapters(document: dict) -> dict:
+    return (
+        document["adapters"]
+        if document["schema"] == 2
+        else document["base"]["adapters"]
+    )
 
 
 def _backup(session, repository: Path, label: str) -> tuple[Path, dict]:
@@ -389,7 +420,13 @@ def bootstrap_active(repository: Path, logical_id: str) -> dict:
         session.close()
 
 
-def converge(repository: Path, adb: str, port: int, canaries: list[str]) -> dict:
+def converge(
+    repository: Path,
+    adb: str,
+    port: int,
+    canaries: list[str],
+    routine_settings: Path | None = None,
+) -> dict:
     inventory = load_sync_inventory(repository)
     unknown = sorted(set(canaries).difference(inventory["devices"]))
     if unknown:
@@ -408,12 +445,25 @@ def converge(repository: Path, adb: str, port: int, canaries: list[str]) -> dict
             backup, evidence = _backup(session, repository, "before")
             backups.append(evidence["backup_id"])
             state = _database_state(backup)
-            active_adapters = (
-                state["manifest"]["adapters"]
-                if state["manifest"]["schema"] == 2
-                else state["manifest"]["base"]["adapters"]
+            active_adapters = _revision_adapters(state["manifest"])
+            routine = (
+                _routine_export(
+                    repository,
+                    routine_settings,
+                    state["manifest"]["schema"],
+                )
+                if routine_settings is not None
+                else state["manifest"]
             )
-            if active_adapters.get("kodi.favourites") == exported["adapter"]:
+            routine_adapters = _revision_adapters(routine)
+            routine_matches = all(
+                active_adapters.get(adapter_id) == adapter
+                for adapter_id, adapter in routine_adapters.items()
+            )
+            if (
+                active_adapters.get("kodi.favourites") == exported["adapter"]
+                and routine_matches
+            ):
                 return {
                     "schema": 1,
                     "status": "NO_CHANGE",
@@ -422,7 +472,7 @@ def converge(repository: Path, adb: str, port: int, canaries: list[str]) -> dict
                     "backups": backups,
                     "canaries": [],
                 }
-            unsigned = compose(state["manifest"], state["manifest"], exported["adapter"])
+            unsigned = compose(state["manifest"], routine, exported["adapter"])
             revision = sign_with_registry(
                 "revision",
                 unsigned,
@@ -524,9 +574,20 @@ def main() -> int:
     parser.add_argument("--adb", default="/home/mwo/android-sdk/platform-tools/adb")
     parser.add_argument("--adb-server-port", type=int, default=5038)
     parser.add_argument("--canary", action="append", default=[])
+    parser.add_argument(
+        "--routine-settings",
+        type=Path,
+        help="private authoritative Umbrella settings used for routine adapters",
+    )
     args = parser.parse_args()
     canaries = args.canary or ["bluestacks1", "x88pro20"]
-    result = converge(ROOT, args.adb, args.adb_server_port, canaries)
+    result = converge(
+        ROOT,
+        args.adb,
+        args.adb_server_port,
+        canaries,
+        routine_settings=args.routine_settings,
+    )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 

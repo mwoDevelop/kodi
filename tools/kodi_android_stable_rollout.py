@@ -14,9 +14,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools.kodi_addon_candidate_rollout import rollout
+from tools.kodi_advancedsettings_policy import reconcile_android_advancedsettings
 from tools.kodi_default_addons import addon_details
 from tools.kodi_devices import load_registry, resolve_device, resolve_private_endpoint
 from tools.kodi_inventory import load_private_references
+from tools.kodi_retired_addons import reconcile_retired_addons
 from tools.kodi_profile import (
     KODI_PACKAGE,
     _wait_for_kodi_ready,
@@ -218,7 +220,18 @@ def reconcile(
     if device["platform"] not in {"android", "android-emulator"}:
         raise ValueError("Android stable rollout requires an Android device")
     serial = device["endpoints"]["adb"]
+    advancedsettings = reconcile_android_advancedsettings(adb, port, serial)
+    if advancedsettings["status"] == "UPDATED":
+        adb_command(
+            adb,
+            port,
+            serial,
+            "shell",
+            "am force-stop %s" % KODI_PACKAGE,
+        )
+        time.sleep(2)
     kodi_preflight = ensure_kodi_ready(adb, port, serial)
+    retired_addons = reconcile_retired_addons(adb, port, serial)
     prepared = prepare(ROOT, channel=channel)
     repository_id = prepared["repository_id"]
     available = {
@@ -286,6 +299,8 @@ def reconcile(
         "result": "pass",
         "lock_sha256": prepared["lock_sha256"],
         "kodi_preflight": kodi_preflight,
+        "advancedsettings": advancedsettings,
+        "retired_addons": retired_addons,
         "actions": actions,
         "origins": origin_result,
     }
