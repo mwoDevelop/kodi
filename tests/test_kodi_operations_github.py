@@ -24,6 +24,34 @@ def test_verify_run_requires_exact_successful_head(tmp_path):
         client.verify_run("not-a-run", "a" * 40)
 
 
+def test_publication_dispatch_waits_for_stable_idle_queue(monkeypatch, tmp_path):
+    client = GitHubClient(tmp_path)
+    polls = iter(
+        [
+            [{"databaseId": 1, "status": "in_progress"}],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+        ]
+    )
+    sleeps = []
+
+    client.gh_json = lambda *_args: next(polls)
+    monkeypatch.setattr("tools.kodi_operations.github.time.sleep", sleeps.append)
+
+    client.wait_publication_queue_idle(quiet_polls=3, poll_seconds=2)
+
+    assert sleeps == [2, 2, 2]
+
+
 def test_promotion_content_is_bound_to_exact_pr_head(tmp_path):
     client = GitHubClient(tmp_path)
     stable = json.dumps(
@@ -69,9 +97,12 @@ def test_promotion_content_is_bound_to_exact_pr_head(tmp_path):
         "qnap_candidate_sha256": hashlib.sha256(qnap).hexdigest(),
     }
 
-    assert client.validate_promotion_content(
-        pr, snapshot, attestation, candidate
-    )["head_commit"] == "a" * 40
+    assert (
+        client.validate_promotion_content(pr, snapshot, attestation, candidate)[
+            "head_commit"
+        ]
+        == "a" * 40
+    )
     candidate["qnap_candidate_sha256"] = "f" * 64
     with pytest.raises(GitHubError, match="QNAP lock differs"):
         client.validate_promotion_content(pr, snapshot, attestation, candidate)
@@ -120,6 +151,4 @@ def test_wait_deploy_redispatches_once_when_pending_run_was_replaced(
     result = client.wait_deploy(commit)
 
     assert result["run_id"] == "11"
-    assert dispatched == [
-        ("deploy-stable.yml", commit, {"dry_run": "false"})
-    ]
+    assert dispatched == [("deploy-stable.yml", commit, {"dry_run": "false"})]
