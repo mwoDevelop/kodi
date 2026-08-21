@@ -40,6 +40,7 @@ def test_main_readme_exposes_documentation_entry_points():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for target in (
         "docs/README.md",
+        "docs/architecture.md",
         "docs/kodi-private-profile.md",
         "docs/qnap-images.md",
         "docs/scheduled-processes.md",
@@ -47,6 +48,23 @@ def test_main_readme_exposes_documentation_entry_points():
         "docs/e2e-results/README.md",
     ):
         assert f"]({target})" in readme
+
+
+def test_solution_architecture_documents_runtime_and_mermaid_views():
+    architecture = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
+    required_terms = (
+        "GitHub Pages",
+        "Container Station",
+        "Profile Sync",
+        "Provider Relay",
+        "Upstream Watchdog",
+        "Real-Debrid",
+        "BlueStacks",
+        "Kodi Flatpak",
+        "tylko do odczytu",
+    )
+    assert all(term in architecture for term in required_terms)
+    assert architecture.count("```mermaid") >= 4
 
 
 def test_every_project_document_is_reachable_from_main_readme():

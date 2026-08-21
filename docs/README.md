@@ -11,6 +11,7 @@ kompilacji.
 
 | Obszar | Dokument | Cel |
 |---|---|---|
+| Architektura całego rozwiązania | [Architektura mwoDevelop Kodi](architecture.md) | Komponenty, miejsca uruchomienia, przepływy release, synchronizacji i odtwarzania oraz diagramy Mermaid |
 | Repozytorium Kodi | [Główny plik README](../README.md) | Zainstaluj stable/testing, zbuduj repozytorium i uruchom jego odtwarzalne E2E |
 | Release, rollout i restore | [Operacje Kodi](kodi-operations.md) | Jeden wznawialny interfejs, canary, przykłady wywołań, wyniki i kody wyjścia |
 | Profile prywatne | [Prywatne migawki profilu Kodi](kodi-private-profile.md) | Tworzenie kopii zapasowych, przywracanie, tożsamość urządzenia, stan przenośny i granice bezpieczeństwa |
@@ -41,6 +42,8 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | Synchronizacja profilu i urządzenia | [Plan Profile Sync](../PROFILE_SYNC_PLAN.md) |
 | Control plane QNAP i autonomiczna konwergencja | [Plan administracji QNAP i Device Agenta](../QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN.md) |
 | Domyślny dodatek YouTube | [Plan instalacji, OAuth i rolloutu YouTube](../YOUTUBE_DEFAULT_ADDON_PLAN.md) |
+| Domknięcie credentiali YouTube | [Plan migracji OAuth na QNAP](../YOUTUBE_CREDENTIAL_ROLLOUT_COMPLETION_PLAN.md) |
+| QNAP Secret Broker | [Wdrożenie prywatnego brokera](../deploy/qnap-secret-broker/README.md) |
 | Dziennik wdrożenia Profile Sync | [Zapis stanu realizacji](profile-sync-implementation.md) |
 | Synchronizacja upstream | [Plan synchronizacji upstream](../UPSTREAM_SYNC_PLAN.md) |
 | Automatyczny release Umbrelli | [Plan automatyzacji Umbrelli](../UMBRELLA_AUTOMATED_RELEASE_PLAN.md) |

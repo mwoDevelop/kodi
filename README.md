@@ -10,6 +10,7 @@ od planów architektury, zapisów przeglądów i historycznych dowodów E2E.
 
 | Zadanie | Dokument |
 |---|---|
+| Zrozum całą architekturę, komponenty i ich komunikację | [Architektura rozwiązania](docs/architecture.md) |
 | Zainstaluj, zbuduj lub uruchom repozytorium E2E | Ten plik README |
 | Przywróć lub zsynchronizuj konfigurację użytkownika Kodi | [Prywatne profile Kodi](docs/kodi-private-profile.md) |
 | Skonfiguruj oficjalny dodatek YouTube | [YouTube w Kodi](docs/youtube.md) |
