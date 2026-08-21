@@ -17,6 +17,7 @@ on:
     branches: [main]
     paths-ignore:
       - "manifests/locks/stable.json"
+      - "manifests/locks/qnap-stable.json"
 
 permissions:
   contents: read
