@@ -9,7 +9,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .crypto import seal
-from .model import ENVELOPE_TYPE, SECRET_TYPE
+from .model import ENVELOPE_TYPE, SECRET_TYPE, validate_envelope_request
 
 
 MAX_REQUEST = 16 * 1024
@@ -47,8 +47,19 @@ class BrokerHandler(BaseHTTPRequestHandler):
             self._send(400, {"error": "invalid_request"})
             return
         try:
-            request = json.loads(self.rfile.read(length))
+            request = validate_envelope_request(json.loads(self.rfile.read(length)))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            self._send(400, {"error": "invalid_request"})
+            return
+        try:
             secret_set = self.server.store.deliver(request["delivery_mode"])
+        except KeyError:
+            self._send(404, {"error": "secret_not_available"})
+            return
+        except Exception:
+            self._send(503, {"error": "broker_unavailable"})
+            return
+        try:
             now = int(time.time())
             metadata = {
                 "schema": 1,
@@ -73,9 +84,6 @@ class BrokerHandler(BaseHTTPRequestHandler):
                 request["encryption_public_key"],
                 secret_set["secret"],
             )
-        except KeyError:
-            self._send(404, {"error": "secret_not_available"})
-            return
         except (TypeError, ValueError):
             self._send(400, {"error": "invalid_request"})
             return

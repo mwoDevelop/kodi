@@ -20,6 +20,7 @@ LIFECYCLE = {
 ADDON_ID = "plugin.video.youtube"
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 ENROLLMENT = re.compile(r"^enr:[A-Za-z0-9_-]{16,64}$")
+DELIVERY_MODES = {"shadow", "canary", "active"}
 
 
 def canonical_json(value):
@@ -93,6 +94,33 @@ def validate_secret_set(document):
     for name in ("created_utc", "verified_utc"):
         if not isinstance(document.get(name), str) or not document[name].endswith("Z"):
             raise ValueError("invalid secret-set timestamp")
+    return document
+
+
+def validate_envelope_request(document):
+    required = {
+        "delivery_mode",
+        "logical_device_id",
+        "enrollment_id",
+        "enrollment_generation",
+        "encryption_key_id",
+        "encryption_public_key",
+    }
+    if not isinstance(document, dict) or set(document) != required:
+        raise ValueError("invalid envelope request fields")
+    if document["delivery_mode"] not in DELIVERY_MODES:
+        raise ValueError("invalid secret delivery mode")
+    if not ENROLLMENT.fullmatch(str(document["enrollment_id"])):
+        raise ValueError("invalid envelope enrollment")
+    if (
+        not isinstance(document["enrollment_generation"], int)
+        or document["enrollment_generation"] < 1
+    ):
+        raise ValueError("invalid envelope enrollment generation")
+    for name in ("logical_device_id", "encryption_key_id"):
+        if not IDENTIFIER.fullmatch(str(document[name])):
+            raise ValueError("invalid envelope request identifier")
+    b64url_decode(document["encryption_public_key"], expected_size=32)
     return document
 
 
