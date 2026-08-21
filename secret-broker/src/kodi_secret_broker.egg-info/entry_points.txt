@@ -1,2 +1,0 @@
-[console_scripts]
-kodi-secret-broker = kodi_secret_broker.cli:main
