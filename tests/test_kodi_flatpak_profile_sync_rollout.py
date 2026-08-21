@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import sqlite3
 import stat
 import subprocess
 import sys
@@ -310,6 +311,7 @@ def test_flatpak_native_official_addon_is_qualified_without_republishing(
             "inputstream.adaptive": {
                 "minimum_version": "19.0.0",
                 "type": "platform",
+                "supported_android_abis": ["arm64-v8a", "armeabi-v7a"],
             }
         },
     }
@@ -762,6 +764,10 @@ def test_in_kodi_reconciles_native_official_addon_and_platform_dependency(
                     "inputstream.adaptive": {
                         "minimum_version": "19.0.0",
                         "type": "platform",
+                        "supported_android_abis": [
+                            "arm64-v8a",
+                            "armeabi-v7a",
+                        ],
                     }
                 },
             }
@@ -774,6 +780,58 @@ def test_in_kodi_reconciles_native_official_addon_and_platform_dependency(
         "InstallAddon(plugin.video.youtube)",
     ]
     assert result == {"plugin.video.youtube": "7.4.4"}
+
+
+def test_in_kodi_forgets_and_reassigns_native_official_origin(
+    tmp_path, monkeypatch
+):
+    for name in ("xbmc", "xbmcaddon", "xbmcvfs"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    source = "tools/kodi_flatpak_profile_sync_device.py"
+    spec = importlib.util.spec_from_file_location(
+        "flatpak_device_official_database", source
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    database = tmp_path / "Addons33.db"
+    connection = sqlite3.connect(database)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE installed (addonID TEXT PRIMARY KEY, origin TEXT);
+            CREATE TABLE update_rules (addonID TEXT);
+            CREATE TABLE package (addonID TEXT);
+            INSERT INTO installed VALUES ('plugin.video.youtube', 'repository.beta');
+            INSERT INTO update_rules VALUES ('plugin.video.youtube');
+            INSERT INTO package VALUES ('plugin.video.youtube');
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    monkeypatch.setattr(module, "_addon_database", lambda: str(database))
+
+    module._forget_native_official("plugin.video.youtube")
+    connection = sqlite3.connect(database)
+    try:
+        assert connection.execute("SELECT * FROM installed").fetchall() == []
+        assert connection.execute("SELECT * FROM update_rules").fetchall() == []
+        assert connection.execute("SELECT * FROM package").fetchall() == []
+        connection.execute(
+            "INSERT INTO installed VALUES (?, ?)",
+            ("plugin.video.youtube", ""),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    module._set_installed_origin(
+        "plugin.video.youtube", "repository.xbmc.org"
+    )
+
+    assert module._installed_origin("plugin.video.youtube") == (
+        "repository.xbmc.org"
+    )
 
 
 def test_in_kodi_youtube_adapter_returns_explicit_unconfigured_status(

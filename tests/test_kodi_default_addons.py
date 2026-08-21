@@ -344,7 +344,7 @@ def test_platform_dependency_rejects_unsupported_kodi_package_abi(
         )
 
 
-def test_native_official_addon_rejects_non_official_origin(monkeypatch, tmp_path):
+def test_native_official_addon_reinstalls_non_official_origin(monkeypatch, tmp_path):
     addon = {
         "id": "plugin.video.youtube",
         "version": "7.4.4",
@@ -359,19 +359,31 @@ def test_native_official_addon_rejects_non_official_origin(monkeypatch, tmp_path
     monkeypatch.setattr(
         defaults, "fetch_artifact", lambda *_args: tmp_path / "youtube.zip"
     )
-    monkeypatch.setattr(
-        defaults,
-        "addon_details",
-        lambda *_args: {"enabled": True, "version": "7.4.4"},
-    )
+    current = {"enabled": True, "version": "7.4.4"}
+    monkeypatch.setattr(defaults, "addon_details", lambda *_args: current)
+    removed = []
     monkeypatch.setattr(
         defaults,
         "installed_addon_origins_in_kodi",
-        lambda *_args, **_kwargs: {"plugin.video.youtube": "repository.third"},
+        lambda *_args, **_kwargs: {
+            "plugin.video.youtube": (
+                "repository.xbmc.org" if removed else "repository.third"
+            )
+        },
+    )
+    monkeypatch.setattr(
+        defaults,
+        "remove_addon",
+        lambda *_args, **_kwargs: removed.append(_args[3]),
+    )
+    monkeypatch.setattr(defaults, "install_official_addon", lambda *_args, **_kwargs: None)
+
+    result = defaults.reconcile_android(
+        "adb", 5038, "device", {"addons": [addon]}, tmp_path
     )
 
-    with pytest.raises(RuntimeError, match="origin differs"):
-        defaults.reconcile_android("adb", 5038, "device", {"addons": [addon]}, tmp_path)
+    assert removed == ["plugin.video.youtube"]
+    assert result["actions"][-1]["action"] == "reinstalled"
 
 
 def test_native_official_addon_repairs_same_version_byte_drift(

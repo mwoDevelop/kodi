@@ -76,6 +76,7 @@ RECEIPT_KEYS = {
     "required_artifacts",
     "dependency_artifacts",
     "official_addons",
+    "official_artifacts",
 }
 
 
@@ -106,10 +107,28 @@ def _valid_official_addons(addons):
             not isinstance(dependency_id, str)
             or not ADDON_ID.fullmatch(dependency_id)
             or not isinstance(requirement, dict)
-            or set(requirement) != {"minimum_version", "type"}
+            or not {"minimum_version", "type"}.issubset(requirement)
+            or not set(requirement).issubset(
+                {"minimum_version", "type", "supported_android_abis"}
+            )
             or not isinstance(requirement.get("minimum_version"), str)
             or not ADDON_VERSION.fullmatch(requirement["minimum_version"])
             or requirement.get("type") not in {"platform", "python"}
+            or (
+                "supported_android_abis" in requirement
+                and (
+                    requirement.get("type") != "platform"
+                    or not isinstance(requirement["supported_android_abis"], list)
+                    or not requirement["supported_android_abis"]
+                    or len(requirement["supported_android_abis"])
+                    != len(set(requirement["supported_android_abis"]))
+                    or any(
+                        not isinstance(abi, str)
+                        or not ADDON_ID.fullmatch(abi)
+                        for abi in requirement["supported_android_abis"]
+                    )
+                )
+            )
             for dependency_id, requirement in requirements.items()
         ):
             return False
@@ -148,9 +167,17 @@ def _valid_installation_receipt(receipt, logical_device_id):
     if not isinstance(receipt, dict):
         return False
     keys = frozenset(receipt)
-    legacy_keys = RECEIPT_KEYS - {"dependency_artifacts", "official_addons"}
+    legacy_keys = RECEIPT_KEYS - {
+        "dependency_artifacts",
+        "official_addons",
+        "official_artifacts",
+    }
     if keys not in {
         frozenset(RECEIPT_KEYS),
+        frozenset(RECEIPT_KEYS - {"official_artifacts"}),
+        frozenset(
+            RECEIPT_KEYS - {"official_addons", "official_artifacts"}
+        ),
         frozenset(RECEIPT_KEYS - {"official_addons"}),
         frozenset(legacy_keys),
     }:
@@ -182,8 +209,15 @@ def _valid_installation_receipt(receipt, logical_device_id):
         receipt["dependency_artifacts"]
     ):
         return False
-    return "official_addons" not in receipt or _valid_official_addons(
+    if "official_addons" in receipt and not _valid_official_addons(
         receipt["official_addons"]
+    ):
+        return False
+    return (
+        "official_artifacts" not in receipt
+        or _valid_artifact_receipts(receipt["official_artifacts"])
+        and set(receipt["official_artifacts"])
+        == set(receipt.get("official_addons", {}))
     )
 
 
@@ -396,6 +430,31 @@ def official_default_addons(repository):
         }
     if not _valid_official_addons(result):
         raise ValueError("native official Flatpak add-on policy is invalid")
+    return result
+
+
+def official_addon_artifacts(repository, addons):
+    repository = Path(repository)
+    document = load_manifest(repository / "manifests/kodi-default-addons.json")
+    configured = {addon["id"]: addon for addon in document["addons"]}
+    cache = repository / ".kodi-private/cache/default-addons"
+    result = {}
+    for addon_id, metadata in addons.items():
+        addon = configured.get(addon_id)
+        if (
+            not addon
+            or addon.get("install_mode") != "kodi-native-official"
+            or addon.get("version") != metadata.get("version")
+            or addon.get("sha256") != metadata.get("sha256")
+        ):
+            raise ValueError("native official artifact policy differs")
+        archive = fetch_artifact(addon, cache)
+        result[addon_id] = {
+            "filename": addon_id + ".zip",
+            "path": archive,
+            "sha256": addon["sha256"],
+            "version": addon["version"],
+        }
     return result
 
 
@@ -1252,6 +1311,7 @@ def rollout(args):
         _replace_private_document(bootstrap_path, serialized_assignment)
         required = required_addons(repository, args.required_addons)
         official = official_default_addons(repository)
+        official_artifacts = official_addon_artifacts(repository, official)
         youtube_config = youtube_configuration_payload(references, repository)
         required_artifacts = required_addon_artifacts(repository, required)
         dependency_artifacts = official_dependency_artifacts(repository)
@@ -1275,6 +1335,15 @@ def rollout(args):
             )
             if artifact_version != artifact["version"]:
                 raise ValueError("Kodi official dependency version differs")
+        for addon_id, artifact in official_artifacts.items():
+            _root, artifact_version = extract_addon(
+                artifact["path"],
+                addon_id,
+                artifact["sha256"],
+                temporary / "official-check" / addon_id,
+            )
+            if artifact_version != artifact["version"]:
+                raise ValueError("Kodi official add-on version differs")
         expected = {
             "logical_device_id": args.device,
             "profile_sync_version": profile_version,
@@ -1297,6 +1366,14 @@ def rollout(args):
                 for addon_id, artifact in dependency_artifacts.items()
             },
             "official_addons": official,
+            "official_artifacts": {
+                addon_id: {
+                    key: value
+                    for key, value in artifact.items()
+                    if key != "path"
+                }
+                for addon_id, artifact in official_artifacts.items()
+            },
         }
         receipt = None
         if receipt_path.exists():
@@ -1317,6 +1394,13 @@ def rollout(args):
             shutil.copy2(
                 artifact["path"],
                 dependency_payload / artifact["filename"],
+            )
+        official_payload = payload / "official"
+        official_payload.mkdir()
+        for artifact in official_artifacts.values():
+            shutil.copy2(
+                artifact["path"],
+                official_payload / artifact["filename"],
             )
         (payload / "expected.json").write_text(
             json.dumps(expected, sort_keys=True, separators=(",", ":"))
