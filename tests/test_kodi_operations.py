@@ -872,3 +872,71 @@ def test_youtube_configuration_uses_private_adapter_when_references_exist(
         "--serial",
         "192.0.2.8:5555",
     ]
+
+
+def test_release_promotion_declares_device_attestation_kind(tmp_path):
+    root = repository(tmp_path)
+    commit = subprocess.run(
+        ("git", "-C", str(root), "rev-parse", "HEAD"),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    dispatches = []
+
+    class FakeGitHub:
+        def snapshot_for_commit(self, selected_commit):
+            assert selected_commit == commit
+            return {"snapshot_id": "a" * 64}
+
+        def attestation_for_snapshot(self, snapshot):
+            assert snapshot["snapshot_id"] == "a" * 64
+            return {
+                "attestation_id": "b" * 64,
+                "attestation_sha256": "c" * 64,
+            }
+
+        def dispatch(self, workflow, selected_commit, fields):
+            dispatches.append((workflow, selected_commit, fields))
+            return {"databaseId": 1}
+
+        def watch(self, run):
+            assert run == {"databaseId": 1}
+
+        def promotion_pr(self, snapshot_id):
+            assert snapshot_id == "a" * 64
+            return {"number": 1, "url": "https://example.invalid/pr/1"}
+
+        def validate_promotion_content(self, pr, snapshot, attestation, qnap):
+            return {"head_commit": "d" * 40, "files": ["stable.json"]}
+
+    executor = object.__new__(ProductionExecutor)
+    executor.repository = root
+    executor.github = FakeGitHub()
+    executor.plan_repository_commit = commit
+    executor.qnap_candidate = {
+        "candidate_id": "e" * 64,
+        "qnap_candidate_sha256": "f" * 64,
+    }
+
+    outcome = executor._release_execute(
+        PlanStep("release:promote", "release", "promote", mutation=True),
+        dry_run=False,
+        verify_only=False,
+    )
+
+    assert outcome.result is StepResult.PASS
+    assert dispatches == [
+        (
+            "promote-stable.yml",
+            commit,
+            {
+                "snapshot_id": "a" * 64,
+                "attestation_id": "b" * 64,
+                "attestation_kind": "device",
+                "attestation_sha256": "c" * 64,
+                "qnap_candidate_id": "e" * 64,
+                "qnap_candidate_sha256": "f" * 64,
+            },
+        )
+    ]

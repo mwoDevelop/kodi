@@ -38,7 +38,22 @@ def evaluate(manifest, fetcher=fetch_runs, now=None, token=None):
     now = now or dt.datetime.now(dt.timezone.utc)
     results = []
     for config in manifest["workflows"]:
-        runs = fetcher(config["repository"], config["workflow"], token=token)
+        try:
+            runs = fetcher(
+                config["repository"], config["workflow"], token=token
+            )
+        except (OSError, ValueError):
+            # Availability of the monitoring API is itself observable health.
+            # Preserve the complete configured workflow set and fail closed
+            # without persisting response bodies, URLs, or credentials.
+            results.append(
+                {
+                    **config,
+                    "status": "api_error",
+                    "healthy": False,
+                }
+            )
+            continue
         if not runs:
             result = {
                 **config,

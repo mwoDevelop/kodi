@@ -41,6 +41,14 @@ def test_promotion_binds_exact_attestation_and_qnap_candidate():
         assert required in workflow
 
 
+def test_pure_stable_lock_promotion_does_not_rebuild_testing():
+    workflow = text(".github/workflows/publish-testing.yml")
+    trigger = workflow.split("permissions:", 1)[0]
+
+    assert '"manifests/locks/stable.json"' in trigger
+    assert '"manifests/locks/qnap-stable.json"' in trigger
+
+
 def test_all_qnap_builds_publish_scanned_immutable_approvals():
     workflows = (
         ".github/workflows/build-upstream-watchdog.yml",
