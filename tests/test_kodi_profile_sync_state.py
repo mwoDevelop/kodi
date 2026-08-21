@@ -2,7 +2,12 @@ import json
 
 import pytest
 
-from tools.kodi_profile_sync_state import configure, configure_identity, probe
+from tools.kodi_profile_sync_state import (
+    configure,
+    configure_identity,
+    configure_secret_mode,
+    probe,
+)
 
 
 class Addon:
@@ -198,3 +203,34 @@ def test_identity_profile_does_not_invent_server_or_enrollment(tmp_path):
     assert result["server_url_configured"] is False
     assert result["paired"] is False
     assert result["status"] == "UNPAIRED"
+
+
+def test_secret_mode_requires_enrolled_encryption_key_and_persists(tmp_path):
+    addon = Addon()
+    (tmp_path / "state.json").write_text(
+        json.dumps(
+            {
+                "schema": 2,
+                "status": "NO_CHANGE",
+                "enrollment": {
+                    "logical_device_id": "x88pro20",
+                    "channel": "home-stable",
+                    "encryption_key_id": "encryption-public-id",
+                },
+                "encryption_private_key": "private-value",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = configure_secret_mode(addon, tmp_path, "canary")
+
+    assert result["secret_mode"] == "canary"
+    assert addon.getSetting("secret_mode") == "canary"
+
+
+def test_secret_mode_rejects_unpaired_or_unknown_mode(tmp_path):
+    with pytest.raises(ValueError, match="not enrolled"):
+        configure_secret_mode(Addon(), tmp_path, "canary")
+    with pytest.raises(ValueError, match="invalid"):
+        configure_secret_mode(Addon(), tmp_path, "unsupported")

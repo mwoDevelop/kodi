@@ -232,6 +232,21 @@ def configure_identity(
     return probe(addon, profile)
 
 
+def configure_secret_mode(addon, profile, mode):
+    if mode not in {"shadow", "canary", "active"}:
+        raise ValueError("Profile Sync secret mode is invalid")
+    state = _state_document(profile)
+    enrollment = state.get("enrollment")
+    if not enrollment or not state.get("encryption_private_key") or not enrollment.get(
+        "encryption_key_id"
+    ):
+        raise ValueError("Profile Sync secret capability is not enrolled")
+    addon.setSetting("secret_mode", mode)
+    if addon.getSetting("secret_mode") != mode:
+        raise RuntimeError("Profile Sync secret mode did not persist")
+    return {**probe(addon, profile), "secret_mode": mode}
+
+
 def _write_marker(path, document):
     _atomic_write(path, canonical_json(document) + b"\n")
 
@@ -270,6 +285,8 @@ def main():
                 sys.argv[6],
                 sys.argv[7],
             )
+        elif sys.argv[1] == "configure-secret-mode" and len(sys.argv) == 4:
+            result = configure_secret_mode(addon, profile, sys.argv[3])
         else:
             raise ValueError("invalid Profile Sync state command")
         _write_marker(marker, {"ok": True, **result})
