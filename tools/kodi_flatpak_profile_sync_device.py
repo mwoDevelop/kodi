@@ -51,6 +51,16 @@ def _safe_error_code(error):
             return code
     message = " ".join(str(item).lower() for item in chain)
     classifications = (
+        (
+            "native official add-on version is unqualified",
+            "official_version_unqualified",
+        ),
+        (
+            "could not install native official add-on",
+            "official_install_failed",
+        ),
+        ("native official add-on origin differs", "official_origin_differs"),
+        ("native official dependency differs", "official_dependency_differs"),
         ("unknown addon id", "unknown_addon_id"),
         ("timed out", "timeout"),
         ("connection refused", "connection_refused"),
@@ -208,6 +218,23 @@ def _extract_dependency_candidates(stage, expected, output):
     )
 
 
+def _extract_official_candidates(stage, expected, output):
+    official = expected.get("official_addons")
+    artifacts = expected.get("official_artifacts")
+    addons = (
+        {
+            addon_id: metadata.get("version")
+            for addon_id, metadata in official.items()
+        }
+        if isinstance(official, dict)
+        and all(isinstance(metadata, dict) for metadata in official.values())
+        else None
+    )
+    return _extract_artifact_candidates(
+        stage, addons, artifacts, "official", output
+    )
+
+
 def _rpc(method, params):
     response = json.loads(
         xbmc.executeJSONRPC(
@@ -335,7 +362,7 @@ def _version_at_least(actual, minimum):
     )
 
 
-def _installed_origin(addon_id):
+def _addon_database():
     databases = []
     database_root = xbmcvfs.translatePath("special://database")
     for path in glob.glob(os.path.join(database_root, "Addons*.db")):
@@ -344,7 +371,11 @@ def _installed_origin(addon_id):
             databases.append((int(match.group(1)), path))
     if not databases:
         raise RuntimeError("Kodi add-on database is unavailable")
-    connection = sqlite3.connect(max(databases)[1])
+    return max(databases)[1]
+
+
+def _installed_origin(addon_id):
+    connection = sqlite3.connect(_addon_database())
     try:
         row = connection.execute(
             "SELECT origin FROM installed WHERE addonID=?", (addon_id,)
@@ -352,6 +383,46 @@ def _installed_origin(addon_id):
     finally:
         connection.close()
     return row[0] if row else None
+
+
+def _forget_native_official(addon_id):
+    """Forget one qualified official add-on before an exact reinstall."""
+    if not SAFE_ADDON_ID.fullmatch(addon_id):
+        raise ValueError("invalid native official add-on identity")
+    connection = sqlite3.connect(_addon_database())
+    try:
+        with connection:
+            connection.execute(
+                "DELETE FROM installed WHERE addonID=?", (addon_id,)
+            )
+            connection.execute(
+                "DELETE FROM update_rules WHERE addonID=?", (addon_id,)
+            )
+            connection.execute(
+                "DELETE FROM package WHERE addonID=?", (addon_id,)
+            )
+    finally:
+        connection.close()
+
+
+def _set_installed_origin(addon_id, origin):
+    if (
+        not SAFE_ADDON_ID.fullmatch(addon_id)
+        or not isinstance(origin, str)
+        or (origin and not SAFE_ADDON_ID.fullmatch(origin))
+    ):
+        raise ValueError("invalid native official origin assignment")
+    connection = sqlite3.connect(_addon_database())
+    try:
+        with connection:
+            cursor = connection.execute(
+                "UPDATE installed SET origin=? WHERE addonID=?",
+                (origin, addon_id),
+            )
+            if cursor.rowcount != 1:
+                raise RuntimeError("native official add-on is not registered")
+    finally:
+        connection.close()
 
 
 def _reconcile_required_addons(addons, timeout=120, stage=None):
@@ -433,10 +504,28 @@ def _reconcile_native_official(addons, timeout=180, stage=None):
             not isinstance(dependency_id, str)
             or not SAFE_ADDON_ID.fullmatch(dependency_id)
             or not isinstance(requirement, dict)
-            or set(requirement) != {"minimum_version", "type"}
+            or not {"minimum_version", "type"}.issubset(requirement)
+            or not set(requirement).issubset(
+                {"minimum_version", "type", "supported_android_abis"}
+            )
             or requirement.get("type") not in {"platform", "python"}
             or not isinstance(requirement.get("minimum_version"), str)
             or not requirement["minimum_version"]
+            or (
+                "supported_android_abis" in requirement
+                and (
+                    requirement.get("type") != "platform"
+                    or not isinstance(requirement["supported_android_abis"], list)
+                    or not requirement["supported_android_abis"]
+                    or len(requirement["supported_android_abis"])
+                    != len(set(requirement["supported_android_abis"]))
+                    or any(
+                        not isinstance(abi, str)
+                        or not SAFE_ADDON_ID.fullmatch(abi)
+                        for abi in requirement["supported_android_abis"]
+                    )
+                )
+            )
             for dependency_id, requirement in requirements.items()
         ):
             raise ValueError("invalid native official dependency policy")
@@ -712,6 +801,7 @@ def _sync_existing(stage):
         "required_artifacts",
         "dependency_artifacts",
         "official_addons",
+        "official_artifacts",
     }:
         raise ValueError("invalid Flatpak sync receipt")
     profile_version = _identity(
@@ -784,10 +874,12 @@ def _transaction(stage):
         "required_addons",
         "required_artifacts",
         "official_addons",
+        "official_artifacts",
     }:
         raise ValueError("invalid Flatpak installation receipt")
     expected_required = expected.get("required_addons")
     expected_dependencies = expected.get("dependency_artifacts")
+    expected_official = expected.get("official_addons")
     if (
         not isinstance(expected_required, dict)
         or not expected_required
@@ -810,6 +902,13 @@ def _transaction(stage):
         raise ValueError("invalid Flatpak dependency artifact set")
     if set(expected_required) & set(expected_dependencies):
         raise ValueError("Flatpak dependency artifacts overlap managed add-ons")
+    if (
+        not isinstance(expected_official, dict)
+        or not expected_official
+        or set(expected_official)
+        & (set(expected_required) | set(expected_dependencies))
+    ):
+        raise ValueError("invalid native official Flatpak add-on set")
     targets.update(
         {
             "required-" + addon_id: addon_root / addon_id
@@ -820,6 +919,12 @@ def _transaction(stage):
         {
             "dependency-" + addon_id: addon_root / addon_id
             for addon_id in expected_dependencies
+        }
+    )
+    targets.update(
+        {
+            "official-" + addon_id: addon_root / addon_id
+            for addon_id in expected_official
         }
     )
     for target in targets.values():
@@ -842,9 +947,41 @@ def _transaction(stage):
     dependency_candidates = _extract_dependency_candidates(
         stage, expected, work / "dependencies"
     )
-    all_candidates = {**required_candidates, **dependency_candidates}
-    if _candidate_dependencies(all_candidates):
+    official_candidates = _extract_official_candidates(
+        stage, expected, work / "official"
+    )
+    all_candidates = {
+        **required_candidates,
+        **dependency_candidates,
+        **official_candidates,
+    }
+    platform_dependencies = {
+        dependency_id
+        for metadata in expected_official.values()
+        for dependency_id, requirement in metadata[
+            "dependency_requirements"
+        ].items()
+        if requirement.get("type") == "platform"
+    }
+    if set(_candidate_dependencies(all_candidates)) - platform_dependencies:
         raise ValueError("Flatpak dependency artifact closure is incomplete")
+    official_previous_origins = {
+        addon_id: _installed_origin(addon_id)
+        for addon_id in expected_official
+        if _addon_details(addon_id) is not None
+    }
+    official_reinstalls = {
+        addon_id
+        for addon_id, metadata in expected_official.items()
+        if (
+            (details := _addon_details(addon_id)) is not None
+            and (
+                str(details.get("version")) != metadata["version"]
+                or official_previous_origins.get(addon_id)
+                != "repository.xbmc.org"
+            )
+        )
+    }
     existing = [name for name, target in targets.items() if target.exists()]
     backup.mkdir(mode=0o700)
     _write_atomic(journal, {"schema": 1, "existing": existing})
@@ -861,8 +998,14 @@ def _transaction(stage):
             os.replace(candidate, targets["required-" + addon_id])
         for addon_id, candidate in dependency_candidates.items():
             os.replace(candidate, targets["dependency-" + addon_id])
+        for addon_id, candidate in official_candidates.items():
+            os.replace(candidate, targets["official-" + addon_id])
+        for addon_id in official_reinstalls:
+            _forget_native_official(addon_id)
         xbmc.executebuiltin("UpdateLocalAddons")
         xbmc.sleep(3000)
+        for addon_id in expected_official:
+            _set_installed_origin(addon_id, "repository.xbmc.org")
         _set_stage("reconcile_required_addons")
         _reconcile_required_addons(
             expected["required_addons"], stage=stage
@@ -890,6 +1033,12 @@ def _transaction(stage):
     except BaseException:
         _recover(journal, targets, backup)
         xbmc.executebuiltin("UpdateLocalAddons")
+        xbmc.sleep(3000)
+        for addon_id, origin in official_previous_origins.items():
+            try:
+                _set_installed_origin(addon_id, origin or "")
+            except BaseException:
+                pass
         raise
     result["required_addons"] = required_addons
     result["official_addons"] = official_addons

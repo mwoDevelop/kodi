@@ -18,6 +18,7 @@ from zipfile import ZipFile
 
 try:
     from kodi_addon_candidate_rollout import rollout
+    from kodi_addon_remove import remove_addon
     from kodi_profile import AdbEventClient, AdbJsonRpcClient, adb_command
     from kodi_reinstall import (
         assign_addon_origins_in_kodi,
@@ -25,6 +26,7 @@ try:
     )
 except ModuleNotFoundError:
     from tools.kodi_addon_candidate_rollout import rollout
+    from tools.kodi_addon_remove import remove_addon
     from tools.kodi_profile import AdbEventClient, AdbJsonRpcClient, adb_command
     from tools.kodi_reinstall import (
         assign_addon_origins_in_kodi,
@@ -559,8 +561,8 @@ def reconcile_android(
                 timeout=timeout,
             ).get(addon["id"])
             if origin != "repository.xbmc.org":
-                raise RuntimeError("native official add-on origin differs")
-            if not installed_archive_matches(
+                current_is_candidate = False
+            elif not installed_archive_matches(
                 adb, port, serial, artifact, addon["id"]
             ):
                 rollout(
@@ -591,25 +593,15 @@ def reconcile_android(
             )
             continue
         if install_mode == "kodi-native-official":
-            if current:
-                origin = installed_addon_origins_in_kodi(
-                    adb,
-                    port,
-                    serial,
-                    [addon["id"]],
-                    Path(__file__).with_name("kodi_profile_origin_device.py"),
-                    timeout=timeout,
-                ).get(addon["id"])
-                if origin != "repository.xbmc.org":
-                    raise RuntimeError("native official add-on origin differs")
-            if (
-                current
-                and str(current.get("version")) != addon["version"]
-                and version_at_least(str(current.get("version")), addon["version"])
-            ):
-                raise RuntimeError(
-                    "default add-on has unqualified upstream version: %s=%s"
-                    % (addon["id"], current.get("version"))
+            reinstalled = current is not None
+            if reinstalled:
+                # A native Kodi install cannot downgrade an already installed
+                # beta/newer build. Remove the known add-on identity first, then
+                # let the official repository install the pinned qualification.
+                # The removal helper updates scoped storage and Addons*.db
+                # transactionally and verifies absence after Kodi restarts.
+                remove_addon(
+                    adb, port, serial, addon["id"], timeout=timeout
                 )
             install_official_addon(
                 adb,
@@ -629,7 +621,7 @@ def reconcile_android(
             results.append(
                 {
                     "addon": addon["id"],
-                    "action": "installed" if current is None else "updated",
+                    "action": "reinstalled" if reinstalled else "installed",
                     "install_mode": install_mode,
                     "version": addon["version"],
                 }
