@@ -176,6 +176,34 @@ def test_watchdog_rejects_failure_and_stale_success():
     assert [item["healthy"] for item in report["workflows"]] == [False, False]
 
 
+def test_watchdog_publishes_complete_fail_closed_report_on_api_error():
+    manifest = _manifest()
+    manifest["workflows"].append(
+        {
+            "repository": "owner/other",
+            "workflow": "other.yml",
+            "max_age_seconds": 129600,
+        }
+    )
+
+    def fetch(repository, _workflow, token=None):
+        if repository == "owner/repo":
+            raise OSError("rate limited response with sensitive detail")
+        return []
+
+    report = evaluate(manifest, fetcher=fetch)
+
+    assert report["healthy"] is False
+    assert len(report["workflows"]) == 2
+    assert report["workflows"][0] == {
+        **manifest["workflows"][0],
+        "status": "api_error",
+        "healthy": False,
+    }
+    assert report["workflows"][1]["status"] == "missing"
+    assert "sensitive" not in json.dumps(report)
+
+
 def test_versioned_manifest_is_valid():
     loaded = load_manifest("manifests/upstream-watchdog.json")
     assert len(loaded["workflows"]) == 11
