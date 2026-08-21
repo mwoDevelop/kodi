@@ -4,6 +4,7 @@ import pytest
 
 from tools.certify_device_matrix import (
     TESTING_ORIGIN,
+    UMBRELLA_PLAYBACK_CASE,
     _addon_state,
     _allowed_origins,
     _forwarded_port,
@@ -11,6 +12,10 @@ from tools.certify_device_matrix import (
     _redacted_diagnostic,
     _run_functional_check,
 )
+
+
+def test_resolver_certification_uses_qualified_open_fixture():
+    assert UMBRELLA_PLAYBACK_CASE == "big_buck_bunny"
 
 
 def test_changed_bytes_require_testing_but_identical_bytes_accept_stable():
