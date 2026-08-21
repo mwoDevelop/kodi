@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "sources": [
+    {
+      "id": "profile-sync-fleet",
+      "owner": "profile-sync",
+      "adapter": "profile_sync_integration_mtls",
+      "auth": "mtls_read_only",
+      "stale_after_seconds": 900,
+      "trust_level": "authenticated_observation",
+      "fallback": "last_success",
+      "reason_codes": ["PROFILE_SYNC_TRANSPORT_ERROR", "STALE", "UNAVAILABLE"]
+    },
+    {
+      "id": "profile-sync-rollouts",
+      "owner": "profile-sync",
+      "adapter": "profile_sync_integration_mtls",
+      "auth": "mtls_read_only",
+      "stale_after_seconds": 900,
+      "trust_level": "authenticated_observation",
+      "fallback": "last_success",
+      "reason_codes": ["PROFILE_SYNC_TRANSPORT_ERROR", "STALE", "UNAVAILABLE"]
+    },
+    {
+      "id": "github-workflows",
+      "owner": "github",
+      "adapter": "github_actions_api",
+      "auth": "optional_read_token",
+      "stale_after_seconds": 1800,
+      "trust_level": "external_observation",
+      "fallback": "last_success",
+      "reason_codes": ["GITHUB_TRANSPORT_ERROR", "GITHUB_RATE_LIMITED", "STALE", "UNAVAILABLE"]
+    },
+    {
+      "id": "github-schedules",
+      "owner": "github",
+      "adapter": "github_actions_workflow_runs_api",
+      "auth": "optional_read_token",
+      "stale_after_seconds": 1800,
+      "trust_level": "external_observation",
+      "fallback": "last_success",
+      "reason_codes": ["GITHUB_TRANSPORT_ERROR", "GITHUB_RATE_LIMITED", "STALE", "UNAVAILABLE"]
+    }
+  ]
+}

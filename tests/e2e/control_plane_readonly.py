@@ -15,7 +15,6 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 PROFILE_SERVER = ROOT.parent / "kodi-profile-sync-server"
 CONTROL_PLANE = ROOT.parent / "kodi-control-plane"
@@ -257,6 +256,41 @@ def publish_fixture_bundle(temporary, checkpoint):
     return bundle
 
 
+def seed_schedule_fixture(database):
+    sys.path.insert(0, str(CONTROL_PLANE / "src"))
+    try:
+        from kodi_control_plane.store import ControlPlaneStore
+    finally:
+        sys.path.pop(0)
+    catalog = json.loads(
+        (ROOT / "manifests/control-plane-schedules.json").read_text(encoding="utf-8")
+    )
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    jobs = []
+    for job in catalog["jobs"]:
+        if job["kind"] != "github_actions":
+            continue
+        jobs.append(
+            {
+                "job_id": job["id"],
+                "repository": job["repository"],
+                "workflow": job["workflow"],
+                "latest_run": {
+                    "id": len(jobs) + 1,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "created_at": now,
+                    "run_started_at": now,
+                    "updated_at": now,
+                    "html_url": "https://example.invalid/e2e",
+                },
+            }
+        )
+    ControlPlaneStore(database).cache_snapshot(
+        "github-schedules", {"schema": 1, "jobs": jobs}
+    )
+
+
 def main():
     for repository in (PROFILE_SERVER, CONTROL_PLANE):
         if not (repository / "src").is_dir():
@@ -283,6 +317,7 @@ def main():
             free_port(),
         )
         api_port, health_port = free_port(), free_port()
+        seed_schedule_fixture(temporary / "control.sqlite")
         profile = subprocess.Popen(
             (
                 sys.executable,
@@ -350,6 +385,12 @@ def main():
                 str(profile_tls / "client.key"),
                 "--refresh-seconds",
                 "15",
+                "--schedule-refresh-seconds",
+                "3600",
+                "--schedule-catalog",
+                str(ROOT / "manifests/control-plane-schedules.json"),
+                "--status-source-catalog",
+                str(ROOT / "manifests/control-plane-status-sources.json"),
             ),
             cwd=CONTROL_PLANE,
             env={**os.environ, "PYTHONPATH": str(CONTROL_PLANE / "src")},
@@ -392,6 +433,15 @@ def main():
             ):
                 raise RuntimeError("published convergence bundle is unavailable")
             _status, services = request(endpoint + "/v1/services", context)
+            _status, dashboard = request(endpoint + "/api/v1/dashboard", context)
+            if dashboard["schema"] != 1 or len(dashboard["schedules"]["jobs"]) != 13:
+                raise RuntimeError("dashboard schedule catalog is unavailable")
+            with urllib.request.urlopen(
+                endpoint + "/", context=context, timeout=2
+            ) as response:
+                html = response.read().decode("utf-8")
+                if "Kodi Control Plane" not in html:
+                    raise RuntimeError("dashboard static UI is unavailable")
             print(
                 json.dumps(
                     {
@@ -403,7 +453,9 @@ def main():
                         "mutation": "REJECTED",
                         "bundle_lifecycle": "PREPARING_READY_PUBLISHED",
                         "bundle_generation": desired["head"]["generation"],
-                        "services": [item["source"] for item in services["services"]],
+                        "services": [item["id"] for item in services["services"]],
+                        "dashboard": "READ_ONLY_RENDERABLE",
+                        "scheduled_jobs": len(dashboard["schedules"]["jobs"]),
                     },
                     indent=2,
                     sort_keys=True,

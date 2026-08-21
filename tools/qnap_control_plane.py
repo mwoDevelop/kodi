@@ -156,6 +156,8 @@ def environment(image, host_ip):
             f"CONTROL_PLANE_PROFILE_SYNC_CA={config / 'profile-sync/ca.crt'}",
             f"CONTROL_PLANE_PROFILE_SYNC_CLIENT_CERT={config / 'profile-sync/client.crt'}",
             f"CONTROL_PLANE_PROFILE_SYNC_CLIENT_KEY={config / 'profile-sync/client.key'}",
+            f"CONTROL_PLANE_SCHEDULE_CATALOG={config / 'catalogs/control-plane-schedules.json'}",
+            f"CONTROL_PLANE_STATUS_SOURCE_CATALOG={config / 'catalogs/control-plane-status-sources.json'}",
             "CONTROL_PLANE_UID=10001",
             "CONTROL_PLANE_GID=10001",
             "",
@@ -235,6 +237,8 @@ def validate_policy(document):
         "/run/control-plane/profile-sync/ca.crt",
         "/run/control-plane/profile-sync/client.crt",
         "/run/control-plane/profile-sync/client.key",
+        "/run/control-plane/catalogs/schedules.json",
+        "/run/control-plane/catalogs/status-sources.json",
     }
     volumes = service.get("volumes", [])
     by_target = {item.get("target"): item for item in volumes}
@@ -267,6 +271,8 @@ def validate_policy(document):
         "--checkpoint-key /run/control-plane/audit-checkpoint.key",
         "--profile-sync-host profile-sync",
         "--profile-sync-port 8767",
+        "--schedule-catalog /run/control-plane/catalogs/schedules.json",
+        "--status-source-catalog /run/control-plane/catalogs/status-sources.json",
     ):
         if required not in command:
             raise ControlPlaneError("Control Plane command policy differs")
@@ -297,6 +303,7 @@ def verify_api(host_ip, ca, client_certificate, client_key, attempts=30):
             if (
                 document.get("schema") == 1
                 and isinstance(document.get("healthy"), bool)
+                and document.get("schema") in {1, 2}
                 and isinstance(document.get("services"), list)
                 and isinstance(document.get("audit_sequence"), int)
             ):
@@ -314,7 +321,8 @@ def deploy(session, repository, image, host_ip, private):
     files = validate_private_files(private)
     env = environment(image, host_ip)
     _install, docker = container_station(session)
-    deployment = Path(repository) / "deploy/qnap-control-plane"
+    repository = Path(repository)
+    deployment = repository / "deploy/qnap-control-plane"
     compose_source = (deployment / "compose.yaml").read_text(encoding="utf-8")
     app = ROOT / "app"
     data = ROOT / "data"
@@ -334,12 +342,15 @@ def deploy(session, repository, image, host_ip, private):
         "mkdir -p "
         + " ".join(
             shlex.quote(str(path))
-            for path in (app, data, ROOT / "backups", config / "tls", config / "profile-sync")
+            for path in (
+                app, data, ROOT / "backups", config / "tls",
+                config / "profile-sync", config / "catalogs",
+            )
         )
     )
     session.upload_text(str(app / "compose.yaml"), compose_source, 0o600)
     session.upload_text(str(app / "control-plane.env"), env, 0o600)
-    session.upload_text(str(marker), "kodi-control-plane-readonly-v1\n", 0o600)
+    session.upload_text(str(marker), "kodi-control-plane-readonly-v2\n", 0o600)
     uploads = {
         config / "tls/server.crt": (files["tls_certificate"], 0o400),
         config / "tls/server.key": (files["tls_key"], 0o400),
@@ -350,6 +361,14 @@ def deploy(session, repository, image, host_ip, private):
             files["profile_client_certificate"], 0o400
         ),
         config / "profile-sync/client.key": (files["profile_client_key"], 0o400),
+        config / "catalogs/control-plane-schedules.json": (
+            repository / "manifests/control-plane-schedules.json",
+            0o400,
+        ),
+        config / "catalogs/control-plane-status-sources.json": (
+            repository / "manifests/control-plane-status-sources.json",
+            0o400,
+        ),
     }
     for destination, (source, mode) in uploads.items():
         session.upload_text(
