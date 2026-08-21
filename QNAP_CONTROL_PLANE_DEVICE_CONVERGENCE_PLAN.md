@@ -1,9 +1,25 @@
 # Plan przeniesienia administracji na QNAP i autonomicznej konwergencji Kodi
 
-Status: w realizacji etapowej; read-only Control Plane i bundle v1 wydane,
-administracyjne GUI, trwała kolejka akcji i magazyn sekretów zaplanowane
+Status: w realizacji etapowej; read-only Control Plane, dashboard mTLS i bundle
+v1 wydane, przeglądarkowe uwierzytelnianie administratora, trwała kolejka akcji
+i magazyn sekretów zaplanowane
 
 Data: 2026-08-21
+
+Aktualizacja 2026-08-21 — wydanie przyrostu 3A1:
+
+- wydano `kodi-control-plane` 0.3.0 ze statycznym dashboardem read-only,
+  wersjonowanymi endpointami statusu, katalogiem 13 harmonogramów, czterema
+  źródłami statusu, provenance, freshness i alertami;
+- obraz ARMv7/AMD64 przypięto digestem, promowano przez certyfikowany QNAP lock i
+  wdrożono w Container Station; API oraz UI pozostają za mTLS, bez endpointów
+  mutujących;
+- cross-repo E2E potwierdził lifecycle bundle, odmowę klienta bez certyfikatu i
+  odmowę mutacji, a Chrome przez CDP 9222 poprawnie wyrenderował stan `DEGRADED`;
+- certyfikacja BlueStacks1/X88 przeszła z trwałym otwartym fixture resolvera,
+  a proces promocji otrzymał testowany kontrakt `attestation_kind=device`;
+- watchdog zapisuje kompletny, niezdrowy raport również przy błędzie GitHub API,
+  zamiast kończyć proces przed publikacją statusu.
 
 Aktualizacja 2026-08-21 — moduł administracyjny:
 
@@ -1343,7 +1359,7 @@ Release jest gotowy dopiero, gdy:
 | 0 | ADR, threat model i spiki go/no-go Kodi/crypto/WebAuthn | częściowo | 2–5 dni |
 | 1 | Read-only API mTLS, audit, backup i QNAP Compose | wydane | 0 dni |
 | 2 | Bundle, delegowany signer, lifecycle schematów i mixed-version | bundle wydany, delegacja offline | 3–7 dni |
-| 3A1 | Read-only status API, katalog harmonogramów, freshness i UI mTLS | do wykonania | 4–7 dni |
+| 3A1 | Read-only status API, katalog harmonogramów, freshness i UI mTLS | wydane i wdrożone | 0 dni |
 | 3A2 | DNS/QTS proxy, WebAuthn/authz, bootstrap/recovery i browser E2E | do wykonania | 4–8 dni |
 | 3B | Trwała kolejka akcji niskiego ryzyka, outbox/fencing i rekonsyliacja | do wykonania | 5–10 dni |
 | 4 | Magazyn sekretów, import shadow, koperty i off-box recovery | do wykonania | 6–12 dni |
@@ -1429,7 +1445,7 @@ jest skrótem MVP i nie może wyprzedzić recovery drill.
 7. Po zielonych E2E, CI, security review i ARMv7 wydać tylko te obrazy/dodatki,
    których bajty faktycznie się zmieniły.
 
-Pierwszą następną implementacją jest 3A. Daje użyteczny panel statusu bez
-rozszerzania powierzchni mutacji lub przenoszenia sekretów przed gotowym auth i
-recovery. Każdy kolejny przyrost ma osobny rollback do poprzedniego, nadal
-działającego read-only obrazu.
+Pierwszą następną implementacją jest 3A2. Dodaje uwierzytelnienie przeglądarkowe i
+recovery administratora bez rozszerzania powierzchni mutacji lub przedwczesnego
+przenoszenia sekretów. Każdy kolejny przyrost ma osobny rollback do poprzedniego,
+nadal działającego read-only obrazu.
