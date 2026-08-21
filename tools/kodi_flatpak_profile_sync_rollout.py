@@ -39,6 +39,7 @@ from tools.kodi_default_addons import fetch_artifact, load_manifest
 from tools.kodi_youtube_configure import (
     ADAPTER as YOUTUBE_ADAPTER,
     EXPECTED_ADDON_VERSION as YOUTUBE_VERSION,
+    configuration as resolve_youtube_configuration,
     resolve_credentials as resolve_youtube_credentials,
 )
 from tools.kodi_lifecycle import lifecycle_for_device
@@ -398,7 +399,39 @@ def official_default_addons(repository):
     return result
 
 
-def youtube_configuration_payload(references):
+def youtube_configuration_payload(references, repository=None):
+    if repository is not None:
+        api_key, client_id, client_secret, _account_hint, session = (
+            resolve_youtube_configuration(
+                repository,
+                {
+                    "adapter": YOUTUBE_ADAPTER,
+                    "api_key_ref": "YOUTUBE_API_KEY",
+                    "client_id_ref": "YOUTUBE_CLIENT_ID",
+                    "client_secret_ref": "YOUTUBE_CLIENT_SECRET",
+                    "account_hint_ref": "YOUTUBE_USER",
+                },
+                references,
+            )
+        )
+        if api_key is None:
+            return None
+        payload = {
+            "schema": 2 if session else 1,
+            "addon_version": YOUTUBE_VERSION,
+            "api_key": api_key,
+            "client_id": client_id,
+            "client_secret": client_secret,
+        }
+        if session:
+            payload["session"] = {
+                "account_hint": session["account_hint"],
+                "expected_channel_id": session["expected_channel_id"],
+                "tv_refresh_token": session["tv_refresh_token"],
+                "personal_refresh_token": session["personal_refresh_token"],
+                "vr_refresh_token": session["vr_refresh_token"],
+            }
+        return payload
     names = (
         "YOUTUBE_API_KEY",
         "YOUTUBE_CLIENT_ID",
@@ -1219,7 +1252,7 @@ def rollout(args):
         _replace_private_document(bootstrap_path, serialized_assignment)
         required = required_addons(repository, args.required_addons)
         official = official_default_addons(repository)
-        youtube_config = youtube_configuration_payload(references)
+        youtube_config = youtube_configuration_payload(references, repository)
         required_artifacts = required_addon_artifacts(repository, required)
         dependency_artifacts = official_dependency_artifacts(repository)
         for addon_id, artifact in required_artifacts.items():

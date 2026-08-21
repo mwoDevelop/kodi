@@ -13,11 +13,12 @@ publikację head przez CAS. Nie jest to jeszcze assignment dla urządzenia.
 - [Model zagrożeń](threat-model.md)
 - [Instalacja pierwszego przyrostu na QNAP](qnap-install.md)
 - [ADR](adr/README.md)
+- [Review planu panelu administracyjnego z 2026-08-21](../QNAP_ADMIN_MODULE_PLAN_REVIEW_2026-08-21.md)
 
 Plan całości znajduje się w
 [`QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN.md`](../../QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN.md).
 
-## Aktualna granica release
+## Aktualna granica release 3A1
 
 Control Plane udostępnia przez mTLS wyłącznie:
 
@@ -26,6 +27,13 @@ Control Plane udostępnia przez mTLS wyłącznie:
 - `GET /v1/services`;
 - `GET /v1/audit/checkpoint`.
 - `GET /v1/desired-state/<channel>`.
+- `GET /v1/dashboard`, `/v1/schedules`, `/v1/alerts`;
+- `GET /api/v1/{dashboard,schedules,services,alerts}` oraz statyczny panel `/`.
+
+Panel jest nadal chroniony istniejącym mTLS i nie ma logowania przeglądarkowego
+WebAuthn ani żadnych akcji mutujących. Każdy status zawiera osobne pochodzenie i
+świeżość; proces cykliczny rozdziela obecność schedulera, wynik runu i stale dane.
+Kanoniczne katalogi są w `manifests/control-plane-{schedules,status-sources}.json`.
 
 Profile Sync udostępnia mu osobny kontrakt mTLS
 `/v1/integration/{fleet,rollouts}` w prywatnej sieci Compose. Consumer API nadal

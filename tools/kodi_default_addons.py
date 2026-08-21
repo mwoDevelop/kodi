@@ -543,11 +543,45 @@ def reconcile_android(
                 else:
                     _wait_addon(adb, port, serial, dependency, timeout)
         current = addon_details(adb, port, serial, addon["id"])
-        if (
+        install_mode = addon.get("install_mode", "managed-pinned-zip")
+        current_is_candidate = (
             current
             and str(current.get("version")) == addon["version"]
             and current.get("enabled")
-        ):
+        )
+        if current_is_candidate and install_mode == "kodi-native-official":
+            origin = installed_addon_origins_in_kodi(
+                adb,
+                port,
+                serial,
+                [addon["id"]],
+                Path(__file__).with_name("kodi_profile_origin_device.py"),
+                timeout=timeout,
+            ).get(addon["id"])
+            if origin != "repository.xbmc.org":
+                raise RuntimeError("native official add-on origin differs")
+            if not installed_archive_matches(
+                adb, port, serial, artifact, addon["id"]
+            ):
+                rollout(
+                    adb,
+                    port,
+                    serial,
+                    artifact,
+                    addon["id"],
+                    addon["version"],
+                    timeout,
+                )
+                results.append(
+                    {
+                        "addon": addon["id"],
+                        "action": "repaired",
+                        "install_mode": install_mode,
+                        "version": addon["version"],
+                    }
+                )
+                continue
+        if current_is_candidate:
             results.append(
                 {
                     "addon": addon["id"],
@@ -556,7 +590,6 @@ def reconcile_android(
                 }
             )
             continue
-        install_mode = addon.get("install_mode", "managed-pinned-zip")
         if install_mode == "kodi-native-official":
             if current:
                 origin = installed_addon_origins_in_kodi(

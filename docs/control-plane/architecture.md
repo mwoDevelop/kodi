@@ -1,12 +1,12 @@
 # Architektura QNAP Control Plane
 
-## Aktualny przyrost: read-only API i lokalny writer bundle
+## Aktualny przyrost: read-only dashboard, API i lokalny writer bundle
 
 ```text
 GitHub Actions (publiczny read)
              |
              v
-      kodi-control-plane -- mTLS API operatora --> klient w LAN
+      kodi-control-plane -- mTLS API + statyczne GUI --> klient w LAN
              |
              | mTLS, prywatna sieć mwodevelop-control
              v
@@ -29,6 +29,9 @@ osobnego, ograniczonego assignmentu.
 
 Tożsamość wywołującego API jest zapisywana jako fingerprint SHA-256 certyfikatu
 klienta. W audycie nie jest zapisywany certyfikat, subject ani credential.
+Odczyty dashboardu trafiają wyłącznie do zwykłego access logu (obecnie
+wyciszonego), nie do łańcucha audytu, dzięki czemu polling nie powoduje
+nieograniczonego wzrostu bazy.
 
 ## Źródła prawdy
 
@@ -37,6 +40,7 @@ klienta. W audycie nie jest zapisywany certyfikat, subject ani credential.
 | kod i artefakty dodatków | GitHub/stable Kodi repo | Control Plane tylko obserwuje |
 | enrollment, rewizja, assignment, raport | Profile Sync | odczyt przez wersjonowany kontrakt |
 | snapshot, bundle desired state i audit | Control Plane | bez wartości sekretów i assignmentów |
+| harmonogramy i pochodzenie statusów | manifesty w `mwoDevelop/kodi` | mount read-only, weryfikowany względem workflow i watchdoga |
 | prywatny inventory i sekrety | nadal localhost | migracja dopiero po bramie secret-envelope |
 
 ## Degraded mode

@@ -1,8 +1,10 @@
 # Procesy cykliczne
 
-To jest katalog operacyjny automatyzacji cyklicznej projektu mwoDevelop Kodi. Pliki
-workflow i manifesty Compose pozostają wykonywalnymi źródłami prawdy; ten dokument
-opisuje w jednym miejscu ich właścicieli, skutki, granice awarii i monitoring.
+To jest katalog operacyjny automatyzacji cyklicznej projektu mwoDevelop Kodi.
+Kanoniczny katalog obserwacyjny znajduje się w
+`manifests/control-plane-schedules.json`; CI porównuje go z cronami workflow i
+`manifests/upstream-watchdog.json`. Ten dokument opisuje ich właścicieli, skutki,
+granice awarii i monitoring.
 
 Wszystkie wyrażenia cron GitHub używają czasu UTC. GitHub może rozpocząć zaplanowane
 workflow później niż wskazana minuta, dlatego harmonogram nie stanowi SLA. Każdy
@@ -47,9 +49,11 @@ Real-Debrid ani konfiguracji użytkownika Kodi. Szczegółowy kontrakt wyjątku 
 
 `qnap-upstream-watchdog` działa w Container Station i odpytuje GitHub co sześć godzin.
 Monitorowana lista workflow jest wersjonowana w `manifests/upstream-watchdog.json`.
-Workflow jest niezdrowy, gdy brakuje ostatniego uruchomienia, zakończyło się ono błędem
-lub jest starsze niż 36 godzin. Healthcheck kontenera odczytuje wynik co pięć minut, a
-QTS/Container Station odpowiada za powiadomienie zewnętrzne.
+Workflow jest niezdrowy, gdy brakuje ostatniego uruchomienia, zakończyło się ono
+błędem lub przekracza indywidualny próg `stale_after_seconds`. Dla procesów co
+15 minut jest to 1 godzina, co 30 minut — 2 godziny, a dla dziennych — 36 godzin.
+Healthcheck kontenera odczytuje wynik co pięć minut, a QTS/Container Station
+odpowiada za powiadomienie zewnętrzne.
 
 Watchdog ma wyłącznie publiczny dostęp GitHub do odczytu. Nie może ponowić workflow,
 zmienić gałęzi ani naprawić artefaktu upstream. Pomyślne odkrycie nie maskuje
@@ -66,11 +70,13 @@ harmonogramów aktualizacji:
 | Przekaźnik providerów mwoScrapers | 30 sekund | lokalny endpoint `/health` wewnątrz kontenera |
 | Watchdog upstream | 5 minut | ostatnia utrwalona ocena workflow GitHub |
 
-Control Plane odświeża co 60 sekund read-only widoki Profile Sync przez prywatne
-mTLS oraz publiczny stan workflow GitHub. Błąd źródła nie usuwa ostatniego
+Control Plane odświeża co 60 sekund read-only widoki Profile Sync i zbiorczy stan
+GitHub, a szczegóły 11 harmonogramów co 15 minut. Błąd źródła nie usuwa ostatniego
 poprawnego payloadu: zapisuje kod błędu, przechodzi w `degraded` i dopisuje
 zdarzenie do łańcucha audytu. Ten collector nie jest procesem aktualizacji i nie
 ma endpointu mutującego, klucza assignmentów ani dostępu do socketa Dockera.
+Dashboard mTLS rozdziela `scheduler_status`, `run_result` i `freshness`; jego
+cykliczne odczyty nie powiększają tamper-evident audit chain.
 
 ## Klienci Kodi Profile Sync
 
@@ -128,9 +134,10 @@ Dodając lub usuwając zaplanowane upstream workflow, zaktualizuj razem:
 
 1. jego plik workflow i cron;
 2. ten dokument katalogowy;
-3. `manifests/upstream-watchdog.json`;
-4. testy watchdoga i niezmienny obraz watchdoga QNAP;
-5. aktywne wdrożenie QNAP, a następnie funkcjonalną kontrolę stanu.
+3. `manifests/control-plane-schedules.json`;
+4. `manifests/upstream-watchdog.json` (progi per workflow muszą być identyczne);
+5. testy katalogu/watchdoga i niezmienne obrazy QNAP;
+6. aktywne wdrożenie QNAP, a następnie funkcjonalną kontrolę stanu.
 
 Raporty historyczne poniżej `docs/e2e-results/` opisują podaną datę certyfikacji i nie
 mogą być traktowane jako bieżący stan operacyjny.

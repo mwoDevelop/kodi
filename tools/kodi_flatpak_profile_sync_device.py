@@ -528,6 +528,7 @@ def _configure_youtube(stage):
     allowed = {
         "addon_id",
         "addon_version",
+        "account_verified",
         "api_status",
         "authorization",
         "changed",
@@ -537,6 +538,8 @@ def _configure_youtube(stage):
         "personal_api_configured",
         "rolled_back",
         "schema",
+        "session_configured",
+        "session_rolled_back",
         "setup_wizard_disabled",
         "stage",
     }

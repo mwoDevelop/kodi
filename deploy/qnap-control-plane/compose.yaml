@@ -40,6 +40,12 @@ services:
       - mwoDevelop/kodi
       - --refresh-seconds
       - "60"
+      - --schedule-refresh-seconds
+      - "900"
+      - --schedule-catalog
+      - /run/control-plane/catalogs/schedules.json
+      - --status-source-catalog
+      - /run/control-plane/catalogs/status-sources.json
     ports:
       - name: control-plane-api
         target: 9443
@@ -91,6 +97,18 @@ services:
       - type: bind
         source: ${CONTROL_PLANE_PROFILE_SYNC_CLIENT_KEY:?set Profile Sync client key}
         target: /run/control-plane/profile-sync/client.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_SCHEDULE_CATALOG:?set schedule catalog}
+        target: /run/control-plane/catalogs/schedules.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_STATUS_SOURCE_CATALOG:?set status-source catalog}
+        target: /run/control-plane/catalogs/status-sources.json
         read_only: true
         bind:
           create_host_path: false

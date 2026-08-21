@@ -10,7 +10,6 @@ from pathlib import Path
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-
 API = "https://api.github.com"
 
 
@@ -21,10 +20,8 @@ def _timestamp(value):
 
 
 def fetch_runs(repository, workflow, token=None):
-    url = "%s/repos/%s/actions/workflows/%s/runs?per_page=1" % (
-        API,
-        quote(repository, safe="/"),
-        quote(workflow, safe=""),
+    url = "{}/repos/{}/actions/workflows/{}/runs?event=schedule&per_page=1".format(
+        API, quote(repository, safe="/"), quote(workflow, safe="")
     )
     headers = {
         "Accept": "application/vnd.github+json",
@@ -39,7 +36,6 @@ def fetch_runs(repository, workflow, token=None):
 
 def evaluate(manifest, fetcher=fetch_runs, now=None, token=None):
     now = now or dt.datetime.now(dt.timezone.utc)
-    max_age = dt.timedelta(hours=manifest["max_age_hours"])
     results = []
     for config in manifest["workflows"]:
         runs = fetcher(config["repository"], config["workflow"], token=token)
@@ -55,7 +51,7 @@ def evaluate(manifest, fetcher=fetch_runs, now=None, token=None):
             age = now - updated
             conclusion = run.get("conclusion")
             active = run.get("status") in {"queued", "in_progress", "waiting"}
-            healthy = age <= max_age and (
+            healthy = age.total_seconds() <= config["max_age_seconds"] and (
                 active or conclusion == "success"
             )
             result = {
@@ -69,7 +65,7 @@ def evaluate(manifest, fetcher=fetch_runs, now=None, token=None):
             }
         results.append(result)
     return {
-        "schema": 1,
+        "schema": 2,
         "checked_at": now.isoformat(),
         "healthy": all(item["healthy"] for item in results),
         "workflows": results,
@@ -79,20 +75,21 @@ def evaluate(manifest, fetcher=fetch_runs, now=None, token=None):
 def load_manifest(path):
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if (
-        payload.get("schema") != 1
-        or not isinstance(payload.get("max_age_hours"), int)
-        or not 1 <= payload["max_age_hours"] <= 168
+        payload.get("schema") != 2
         or not isinstance(payload.get("workflows"), list)
         or not payload["workflows"]
     ):
         raise ValueError("invalid watchdog manifest")
     seen = set()
     for item in payload["workflows"]:
-        if set(item) != {"repository", "workflow"}:
+        if set(item) != {"repository", "workflow", "max_age_seconds"}:
             raise ValueError("invalid watchdog workflow entry")
         identity = (item["repository"], item["workflow"])
-        if identity in seen or not all(
-            isinstance(value, str) and value for value in identity
+        if (
+            identity in seen
+            or not all(isinstance(value, str) and value for value in identity)
+            or not isinstance(item["max_age_seconds"], int)
+            or not 900 <= item["max_age_seconds"] <= 604800
         ):
             raise ValueError("invalid or duplicate watchdog workflow")
         seen.add(identity)
@@ -114,9 +111,7 @@ def main():
     parser.add_argument(
         "command", choices=("check", "watch"), nargs="?", default="check"
     )
-    parser.add_argument(
-        "--manifest", default="manifests/upstream-watchdog.json"
-    )
+    parser.add_argument("--manifest", default="manifests/upstream-watchdog.json")
     parser.add_argument("--status")
     parser.add_argument("--interval-seconds", type=int, default=21600)
     args = parser.parse_args()

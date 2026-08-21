@@ -1,8 +1,31 @@
 # Plan przeniesienia administracji na QNAP i autonomicznej konwergencji Kodi
 
-Status: w realizacji etapowej; faza 1 wydana, faza 2 częściowo wdrożona
+Status: w realizacji etapowej; read-only Control Plane i bundle v1 wydane,
+administracyjne GUI, trwała kolejka akcji i magazyn sekretów zaplanowane
 
-Data: 2026-08-13
+Data: 2026-08-21
+
+Aktualizacja 2026-08-21 — moduł administracyjny:
+
+- nie tworzymy drugiego, konkurencyjnego panelu. Rozszerzamy istniejący
+  `kodi-control-plane`, zachowując obecne read-only API mTLS jako kontrakt
+  maszynowy i dodając osobny interfejs przeglądarkowy administratora;
+- GUI pokazuje niezależne statusy floty, konfiguracji, dodatków, sekretów,
+  rolloutów, usług QNAP, procesów cyklicznych, backupów, bezpieczeństwa i źródeł
+  zewnętrznych. Status schedulera, ostatniego wykonania i świeżości danych nie są
+  sprowadzane do jednego pola `healthy`;
+- wszystkie rutynowe credentiale mogą docelowo przejść z lokalnego `.env` do
+  szyfrowanego magazynu QNAP. Klucz recovery, offline root/promoter i materiały
+  break-glass pozostają poza QNAP, aby przejęcie NAS nie dawało pełnej władzy;
+- każda mutacja z GUI jest trwałą, idempotentną operacją: najpierw preflight i
+  zredagowany plan, następnie jawne zatwierdzenie, wykonanie przez allowlistowany
+  adapter, audit i weryfikacja wyniku;
+- API/GUI nie otrzymuje Docker socketu, powłoki ani bezpośredniego SQL. W pierwszym
+  release lokalny lifecycle własnego stosu QNAP pozostaje zarządzany przez
+  `tools/qnap_images.py`; panel może go obserwować, ale nie wdrażać samego siebie;
+- pierwszy następny przyrost to read-only dashboard na obecnych endpointach oraz
+  trwały katalog harmonogramów. Import sekretów i akcje mutujące wchodzą dopiero
+  po bramach auth, audit, backup/restore i testach wycieku canary secret.
 
 Aktualizacja 2026-08-14:
 
@@ -39,6 +62,8 @@ Powiązane źródła prawdy:
 Niezależny review:
 
 - `docs/QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN_REVIEW.md`.
+- `docs/QNAP_ADMIN_MODULE_PLAN_REVIEW_2026-08-21.md` — challenge rozszerzenia o
+  GUI, authz, operacje, statusy, harmonogramy, sekrety i recovery.
 - `docs/YOUTUBE_DEFAULT_ADDON_PLAN_REVIEW.md` — review rozszerzenia YouTube,
   modelu OAuth i granicy release 1/release 2.
 
@@ -49,10 +74,15 @@ Decyzja po review:
   saga rollback, pełny secret lifecycle, cold restore, supersession, WebAuthn
   bootstrap, pairing hardening, tamper-evident audit, inventory ownership i ścisłą
   allowlistę GitHub App;
-- warunkowo pozostawiono WebAuthn i osobne repo control plane do rozstrzygnięcia
-  przez spiki/ADR;
+- osobne repo `mwoDevelop/kodi-control-plane` zostało utworzone i pozostaje
+  właściwą granicą modułu; WebAuthn na docelowym QNAP/DNS/TLS nadal wymaga spike
+  i ADR przed włączeniem mutacji w GUI;
 - nie wprowadzamy obowiązkowego enterprise KMS ani HA, drugiego dodatku Kodi,
   rutynowego ADB/SSH, kopiowania `addons/` ani automatycznego merge/promote.
+- review panelu z 2026-08-21 zamknął nowe luki: authz grant niezależny od DB web,
+  późny `CUTOVER_COMMITTED`, remote reconciliation zamiast obietnicy exactly-once,
+  `recovery_bundle_v1`, prywatny writer mTLS Profile Sync, zewnętrzny audit anchor,
+  status provenance i ograniczony QTS deployd przed pełnym cutover.
 
 ## 1. Cel
 
@@ -181,8 +211,10 @@ assignment może wskazać wyłącznie bundle w stanie `READY` opublikowany jedny
 
 ### 5.1 `kodi-control-plane` na QNAP
 
-Nowa aplikacja Compose w Container Station, logicznie rozdzielona od istniejących
-usług. Preferowana struktura:
+Istniejąca aplikacja Compose w Container Station pozostaje jedynym modułem
+administracyjnym. Jej repozytorium `mwoDevelop/kodi-control-plane` należy rozwijać
+modułowo, zamiast umieszczać UI i sekrety w repo serwera Profile Sync. Preferowana
+struktura docelowa:
 
 ```text
 deploy/qnap-control-plane/
@@ -191,23 +223,54 @@ deploy/qnap-control-plane/
   README.md
 
 ../kodi-control-plane/
-  src/control_plane/
-    api/
+  src/kodi_control_plane/
+    api/                 # wersjonowane REST API, bez renderowania UI
+    web/                 # statyczny frontend i backend-for-frontend
     auth/
     audit/
     devices/
     desired_state/
     github/
+    operations/          # plan, approval, kolejka, lease, retry, kompensacje
     rollouts/
+    schedules/           # katalog i obserwacja zadań cyklicznych
     secrets/
-    workers/
+    status/              # normalizacja, freshness i agregaty dashboardu
+    workers/             # allowlistowane adaptery wykonawcze
   migrations/
   tests/
 ```
 
-Pierwsze wdrożenie może używać jednego obrazu z osobnymi procesami `api` i
-`worker`, ale granice modułów muszą umożliwiać późniejsze rozdzielenie bez zmiany
-kontraktu API.
+Jeden przypięty digest obrazu uruchamia osobne procesy/kontenery Compose:
+
+- `control-plane-web` — LAN HTTPS, sesje operatora, GUI i read/write API; nie ma
+  KEK, klucza GitHub App, sekretów urządzeń ani uprawnień wykonawczych;
+- `control-plane-authz` — prywatny verifier WebAuthn/RBAC, właściciel rejestru
+  operatorów i klucza grantów; wystawia krótkotrwały podpisany grant związany z
+  `plan_digest`, aktorem, rolą, nonce, terminem, policy version i preconditions;
+- `control-plane-worker` — pobiera operacje przez trwałą kolejkę i wykonuje tylko
+  zarejestrowane adaptery po niezależnej weryfikacji grantu; nie nasłuchuje w LAN;
+- `control-plane-secrets` — broker kopert i rotacji z dostępem do KEK; przyjmuje
+  wyłącznie uwierzytelnione, schematowane wywołania z prywatnej sieci/Unix socketu
+  i nigdy nie zwraca wartości do GUI;
+- obecny read-only interfejs mTLS może początkowo pozostać w `web`, ale ma osobny
+  listener, politykę i namespace od przeglądarkowego API.
+
+Na słabszym QNAP procesy mogą używać tego samego obrazu, lecz zachowują osobnych
+użytkowników, mounty i powierzchnie sieciowe. `web` i `worker` mogą technicznie
+współdzielić bazę operacyjną SQLite WAL, ale baza nie jest granicą zaufania:
+rekord kolejki bez ważnego grantu `authz` jest niewykonalny, a worker ponownie
+sprawdza preconditions i fencing token. Authz ma osobną bazę operatorów/credentiali
+i klucz podpisujący, których `web` nie montuje. Secret broker ma osobną bazę
+ciphertext/metadata oraz KEK. Komunikacja używa typowanych requestów, workload mTLS
+i opaque `secret_ref`; sama obecność w prywatnej sieci Compose nie jest tożsamością.
+Broker zwraca kopertę urządzenia, krótkotrwały token albo wynik allowlistowanej
+operacji, nie długowieczny plaintext. Rozdzielenie procesów jest granicą
+bezpieczeństwa, nie wymaganiem wielu repozytoriów.
+
+Test bezpieczeństwa musi wykazać, że bezpośrednie dopisanie lub zmiana rekordów
+`approval`/`operation` przez fixture skompromitowanego `web` nie prowadzi do
+wykonania bez poprawnego, niewygasłego grantu związanego z tym samym planem.
 
 Odpowiedzialności:
 
@@ -245,8 +308,18 @@ tabel SQLite:
   granicach wcześniej podpisanego release intentu;
 - administracyjne eventy zapisane w audycie bez treści sekretów.
 
-Admin API Profile Sync nadal nie powinno być wystawione bezpośrednio do LAN. Dostęp
-ma wyłącznie control plane przez prywatną sieć Compose lub unix socket.
+Admin API Profile Sync nadal nie może być wystawione bezpośrednio do LAN. Plan
+wybiera wykonalną ścieżkę: osobny writer listener mTLS w prywatnej sieci
+`mwodevelop-control`, na innym porcie niż read-only integration API i consumer API.
+Certyfikat klienta zawiera minimalne scope per akcja; listener obsługuje wyłącznie
+wersjonowane kontrakty pairing/revoke, publish revision, create/reissue assignment
+oraz report evaluation. Nie udostępnia generycznej mutacji ani SQL. Port nie jest
+publikowany na hoście QNAP, a test Compose odrzuca jego obecność w `ports`.
+
+Obecny loopback admin Profile Sync pozostaje break-glass dla lokalnego CLI i nie
+jest trasą dla osobnego kontenera Control Plane. Unix socket nie jest wariantem
+MVP; jego ewentualne wprowadzenie wymagałoby wspólnego mountu, peer credentials i
+osobnego ADR zamiast niejawnego wyboru w czasie implementacji.
 
 Assignment zachowuje krótki TTL. Gdy urządzenie wraca po jego wygaśnięciu, control
 plane może wystawić świeży nonce i termin wyłącznie dla nadal aktywnego intentu,
@@ -279,6 +352,21 @@ Zakresy sekretów:
 - `device-class`: tylko gdy jawnie uzasadnione;
 - `device`: token Rapideo/Real-Debrid, sesja OAuth YouTube lub enrollment
   przeznaczony dla konkretnego urządzenia.
+
+Po cutover QNAP przechowuje wszystkie **rutynowo używane** credentiale projektu:
+Real-Debrid, Rapideo, OpenSubtitles, sesje OAuth YouTube, credentiale serwisowe VPN,
+GitHub App, certyfikaty integracyjne, online assignment key oraz klucze techniczne
+backupu/alertów. Importer ma mapować istniejące nazwy z `.env` do typowanego
+rejestru, nigdy zapisywać całego `.env` jako blob. Hasło konta Google nie jest
+obsługiwanym mechanizmem logowania dodatku YouTube i nie trafia do magazynu tylko
+dlatego, że istnieje lokalnie.
+
+Poza QNAP pozostają: offline root/promoter, klucz odblokowujący recovery backup,
+co najmniej jedna passkey operatora oraz prywatne klucze urządzeń. Credentiale
+ADB/SSH używane wyłącznie do reinstalacji są zaszyfrowanym zestawem break-glass,
+nie zależnością rutynowych zadań panelu. Jest to celowe ograniczenie sformułowania
+„wszystkie credentiale”: przejęty QNAP nie może jednocześnie odszyfrować backupu,
+podpisać dowolnego stable i przejąć każde urządzenie.
 
 Sekret dla Kodi jest wydawany jako zaszyfrowana koperta per enrollment. Podczas
 parowania urządzenie generuje lokalną parę/klucz koperty i przekazuje wyłącznie
@@ -342,7 +430,246 @@ WebAuthn samo w sobie nie wyprowadza ani nie odblokowuje klucza. Domyślny model
 podpis challenge przez passkey i osobna egzekucja polityki przez signer. Użycie
 WebAuthn PRF wymaga odrębnego spike i nie jest założeniem MVP.
 
-Dozwolone akcje pierwszego wydania:
+#### 5.4.1 Widoki i model statusu
+
+GUI ma być narzędziem operatorskim, a nie tylko wizualizacją surowych JSON-ów.
+Każdy status pokazuje: stan, `observed_at`, `last_success_at`, źródło, próg
+`stale_after`, bezpieczny `reason_code` i link do zredagowanego dowodu. `UNKNOWN`
+oraz `STALE` są osobnymi stanami, nigdy zielonym `OK`. Agregaty nie ukrywają
+częściowego błędu: dashboard może być `DEGRADED`, gdy Kodi działa, ale np. backup
+albo harmonogram jest nieaktualny.
+
+Planowane widoki:
+
+1. **Dashboard** — liczba urządzeń online/offline/stale, aktywny bundle i rewizja,
+   rollouty, krytyczne alerty, świeżość backupu, zdrowie usług QNAP, GitHub/Pages
+   oraz najbliższe i spóźnione zadania cykliczne.
+2. **Urządzenia** — `logical_device_id`, nazwa, platforma, generacja enrollmentu,
+   ostatni heartbeat, wersja Kodi/Device Agenta, capabilities, aktywne repo i
+   dodatki, `bundle_id`, `profile_revision_id`, wersja zestawu sekretów, drift i
+   niezależne wyniki `code/profile/secrets/health`. IP/ADB/SSH jest tylko ulotnym
+   atrybutem diagnostycznym z TTL.
+3. **Rollouty i konfiguracja** — kandydat, zredagowany diff, release intent,
+   exact-artifact evidence, kanał, fale, urządzenia wymagane/deferred, wyniki,
+   blokady, historia pause/resume/cancel i kryterium zakończenia.
+4. **Procesy cykliczne** — wspólny katalog GitHub Actions cron, workerów QNAP,
+   watchdoga, backupów, rotacji oraz lokalnych synchronizacji urządzeń. Dla każdego
+   procesu osobno: `scheduler_seen`, `last_started`, `last_completed`, wynik,
+   czas trwania, `next_expected`, dopuszczalne opóźnienie i liczba kolejnych
+   błędów. Dzięki temu działający scheduler z niesprawnym zadaniem nie jest
+   raportowany tak samo jak zadanie, które w ogóle się nie uruchomiło.
+5. **Usługi i zależności** — Control Plane, worker, secret broker, Profile Sync,
+   provider relay, upstream watchdog, GitHub API, GitHub Pages, publiczne repo
+   Kodi, DNS, NTP/TLS oraz stan przestrzeni/bazy QNAP. Provider relay jest
+   oznaczony jako opcjonalny i nie może obniżać zdrowia wyszukiwania, jeśli działa
+   bezpośredni fallback. Bez osobnego, uwierzytelnionego adaptera QTS panel zna
+   tylko przestrzeń własnego wolumenu aplikacji; nie przedstawia jej jako zdrowia
+   RAID, dysków ani całego NAS.
+6. **Repozytoria i release** — stable/testing, commit i digest locka, wersje
+   dodatków, atestacja, skan malware/SBOM, publikacja Pages, drift działających
+   obrazów QNAP względem `qnap-stable.json` wraz z klasą jakości dowodu oraz
+   dostępność artefaktów rollbacku.
+   Bez Docker socketu panel nie dowodzi faktycznie uruchomionego digestu. Podpisany
+   receipt zapisany atomowo przez `tools/qnap_images.py` (projekt, digest, czas,
+   generation, wynik health) daje status `DEPLOYMENT_RECEIPT_VERIFIED`, a metadane
+   usługi `SERVICE_SELF_REPORTED`; razem nadal nie są `RUNTIME_VERIFIED`. Brak
+   świeżego receiptu daje `UNKNOWN/STALE`. Bieżący runtime potwierdza zewnętrzne
+   `qnap_images.py status`/`docker inspect` albo przyszły ograniczony host collector.
+   Receipt podpisuje deployment identity spoza QNAP, a panel ma tylko klucz
+   publiczny i odrzuca rollback generation.
+7. **Sekrety** — wyłącznie metadane: typ, zakres, wersja, właściciel, urządzenia
+   używające, utworzono/obrócono/wygasa, stan kopert i ostatni bezpieczny probe.
+   Nie ma przycisku „pokaż”, eksportu plaintextu ani wartości w DOM/API.
+8. **Backup i recovery** — ostatni poprawny backup, digest, kopia off-box,
+   weryfikacja, wiek ostatniego izolowanego restore drill, RPO/RTO oraz obecność
+   recovery material bez jego odczytu.
+9. **Bezpieczeństwo i audit** — spójność hash chain, eksport checkpointu, wygasanie
+   certyfikatów/kluczy, stan GitHub App, nieudane logowania/pairing, skany obrazów,
+   otwarte alerty i historia zatwierdzeń.
+10. **Operacje** — trwała kolejka z aktorem, plan digest, stanem, postępem,
+    terminem, retry, wynikiem, kompensacją i możliwością anulowania tylko w
+    zdefiniowanym safe point.
+
+Przed implementacją powstaje wersjonowana macierz pochodzenia:
+
+```text
+status field -> owner -> adapter -> auth -> observed_at -> stale_after
+             -> trust level -> fallback -> reason codes
+```
+
+Macierz odróżnia podpisany raport urządzenia, self-report diagnostyczny,
+obserwację GitHub, deployment receipt, rzeczywisty runtime QTS i cache ostatniego
+sukcesu. Desired state nigdy nie jest przedstawiany jako observed state. Status,
+którego nie dostarcza jeszcze żaden kontrakt, pozostaje `NOT_IMPLEMENTED/UNKNOWN`,
+a nie jest syntetyzowany z nazwy urządzenia lub starego raportu.
+
+Wszystkie terminy manifestu są UTC. Czas ścienny służy do deadline/TTL, a czas
+monotoniczny do lokalnych duration/lease. Niezgodny NTP albo skok czasu ustawia
+`CLOCK_UNTRUSTED`, blokuje nowe granty, pairing, rotacje i publikacje, ale nie
+wyłącza read-only dashboardu ani działającej konfiguracji Kodi.
+
+Katalog procesów cyklicznych jest wersjonowany w repo jako manifest, natomiast
+run history i alerty są danymi runtime QNAP. GitHub cron pozostaje wykonawcą
+zadań supply-chain; QNAP go obserwuje z zewnątrz i może wykryć brak uruchomienia.
+Procesy lokalne QNAP używają trwałego schedulera z blokadą pojedynczego wykonania,
+lease i idempotency key. Urządzenie raportuje swój `last_sync`/`next_sync`, ale
+QNAP nie zakłada, że może je obudzić.
+
+Wpis harmonogramu zawiera repo, workflow, event, cron UTC, grace/jitter, timeout,
+owner, dependency, retry policy i indywidualny próg stale. CI porównuje manifest z
+rzeczywistym `on.schedule` workflow YAML oraz `manifests/upstream-watchdog.json`,
+aby uniknąć trzech rozjechanych źródeł prawdy. Jeden globalny próg 36 godzin nie
+jest poprawny dla procesu uruchamianego co 15 minut. Dla lokalnych zadań QNAP
+manifest jest źródłem schedulera; dla GitHub jest walidowanym katalogiem/monitorem.
+
+Alert ma severity, fingerprint, first/last seen, licznik, stan
+`OPEN/ACKNOWLEDGED/RESOLVED` i link do źródła. Identyczne zdarzenia są deduplikowane;
+powrót do zdrowia zamyka alert, ale nie usuwa historii. Pierwszy release pokazuje
+alerty w GUI, a opcjonalny kolejny adapter może wysłać e-mail/webhook z użyciem
+credentialu z secret store i bez danych wrażliwych.
+
+Panel nie może wiarygodnie monitorować własnej całkowitej awarii. Loopback `/ready`
+pozostaje wyłącznie healthcheckiem kontenera. `qnap-upstream-watchdog` zostaje
+dołączony do `mwodevelop-control` i używa dedykowanego read-only certyfikatu mTLS,
+aby sprawdzać prywatny observer endpoint Control Plane, świeżość schedulera i
+backupów bez czytania jego DB. Compose nie publikuje tego endpointu do LAN.
+Całkowita niedostępność QNAP wymaga opcjonalnego zewnętrznego dead-man checku poza
+NAS; brak takiego checku jest jawnie pokazanym ograniczeniem, nie zielonym statusem
+generowanym przez sam panel.
+
+#### 5.4.2 Akcje administratorskie
+
+Akcje są pogrupowane ryzykiem, a nie prezentowane jako dowolne polecenia:
+
+- **niski poziom ryzyka, operator:** odśwież status, ponów bezpieczny probe,
+  zakolejkuj `Reconcile at next poll` dla jednego urządzenia, przelicz drift,
+  zweryfikuj audit lub backup, ponów bezpieczną rekonsyliację, wygeneruj
+  zredagowany bundle diagnostyczny. Model pull nie obiecuje natychmiastowego
+  `Sync now`: urządzenie odbiera żądanie przy następnym heartbeat/poll i QNAP go
+  nie budzi ani nie otwiera połączenia do Kodi;
+- **średni poziom ryzyka, operator + potwierdzenie planu:** wygeneruj pairing,
+  utwórz kandydata profilu, przypisz canary, rozpocznij/pauzuj/wznów/anuluj falę,
+  uruchom dokładny allowlistowany `workflow_dispatch`, ustaw/obróć sekret i
+  wykonaj izolowany restore drill;
+- **wysoki poziom ryzyka, ponowne WebAuthn i rola approver:** opublikuj aktywną
+  rewizję po spełnieniu bramek, zatwierdź exact bundle/release intent, unieważnij
+  konkretny enrollment lub wersję sekretu, obróć klucz online assignmentu;
+- **break-glass poza zwykłym GUI:** produkcyjny restore, reinstalacja Kodi/systemu,
+  odzyskanie KEK/offline root, zmiana zaufanego DNS/CA i wymuszone cofnięcie kodu.
+
+Lista dozwolonych workflow i parametrów jest wersjonowanym manifestem. UI wybiera
+akcję i pola z tego manifestu; nie przyjmuje nazwy repo, ścieżki workflow, refu,
+komendy ani URL-u podanych dowolnie przez operatora.
+
+#### 5.4.3 Kontrakt trwałej operacji
+
+Plan i operacja mają osobne, niesprzeczne lifecycle:
+
+1. `POST /api/v1/action-plans` tworzy preflight bez skutków ubocznych i zwraca
+   `plan_id`, canonical JSON, digest, wpływ, wymagane bramki, safe points,
+   `expires_at`, policy/manifest version, oczekiwane generacje zasobów oraz
+   przewidywaną kompensację;
+2. plan przechodzi `DRAFT -> PREFLIGHTED -> AWAITING_APPROVAL -> APPROVED` albo
+   `EXPIRED`. Operator zatwierdza dokładny digest, a dla operacji wysokiego ryzyka
+   ponownie uwierzytelnia się WebAuthn; authz wydaje podpisany grant;
+3. dopiero ważny `APPROVED` może utworzyć przez `POST /api/v1/operations` operację
+   `QUEUED` z `Idempotency-Key`, grantem i auditem;
+4. worker weryfikuje grant, fencing token i aktualne preconditions. Drift daje
+   `PLAN_STALE`, a nie próbę wykonania. Następnie przechodzi przez
+   `PREFLIGHT_RECHECK -> DISPATCHING -> RUNNING -> VERIFYING` do `SUCCEEDED`,
+   `FAILED`, `PARTIAL`, `CANCELLED`, `COMPENSATION_REQUIRED` albo
+   `UNKNOWN_REQUIRES_RECONCILIATION`;
+5. wynik zawiera wyłącznie zredagowany output i link do dowodu. Postęp GUI może
+   używać SSE, ale prawdą pozostaje zapis w bazie, nie otwarte połączenie.
+
+Operacje na SQLite używają WAL, krótkich transakcji, unique constraint dla
+idempotency key i CAS dla stanów. Worker nie wykonuje arbitralnych pluginów:
+adaptery są rejestrowane w kodzie, wersjonowane i testowane. Długie operacje mają
+timeout, heartbeat lease i jawne safe points; `cancel` nigdy nie przerywa zapisu
+secret store, publikacji CAS ani migracji bazy w połowie.
+
+System nie obiecuje exactly-once dla skutków zewnętrznych. Adapter deklaruje klasę
+`pure`, `idempotent`, `reconcilable` albo `at_most_once`. Kolejka używa
+transactional outbox i monotonicznego fencing tokenu. Dla `workflow_dispatch`
+deterministyczny `operation_id` jest obowiązkowym inputem, trafia do concurrency
+key oraz wyniku/artefaktu, aby po timeoutcie worker najpierw odnalazł istniejący
+run. Analogiczny connector-specific correlation jest wymagany dla innych API.
+Po crashu między przyjęciem remote a lokalnym commitem stan przechodzi przez
+`REMOTE_ACCEPTED` albo `UNKNOWN_REQUIRES_RECONCILIATION`; nigdy nie następuje ślepy
+retry. Jeżeli zewnętrzny system nie udostępnia korelacji ani bezpiecznego inspect,
+operacja `at_most_once` wymaga ręcznego rozstrzygnięcia przed kolejną próbą.
+
+`cancel` zapisuje `CANCEL_REQUESTED`. Dopiero adapter w safe point może zakończyć
+`CANCELLED`; operacja już zaakceptowana zewnętrznie może pozostać
+`CANCEL_REQUESTED`/`VERIFYING`, jeżeli remote API nie wspiera anulowania.
+
+Bazy SQLite muszą leżeć na lokalnym systemie plików wolumenu QNAP z poprawnym
+POSIX locking; SMB/NFS i katalog synchronizowany sieciowo są zabronione. Bramka
+ARMv7 obejmuje współbieżnych writerów, WAL checkpoint, `fsync`, pełny dysk,
+power-cut/restart oraz odzyskanie lease. Migracje wykonuje jeden migration leader
+w maintenance/read-only mode i strategią expand/contract. Jeżeli kwalifikacja
+filesystemu nie przejdzie, jeden proces staje się wyłącznym właścicielem DB i
+udostępnia prywatne API zamiast współdzielonego pliku.
+
+Każda tabela eventowa ma limit rozmiaru i wersjonowaną retencję. Read-only polling
+dashboardu trafia do metryk/access logu z samplingiem, a nie dopisuje każdego GET
+do tamper-evident audit chain. Audit zachowuje logowania i ich błędy, odczyt
+sekretnej metadata/eksportu, plan/approval/mutację, zmianę polityki, backup/restore
+i akcje break-glass. Dzięki temu odświeżanie GUI nie tworzy contention ani
+nieograniczonego wzrostu bazy.
+
+#### 5.4.4 Endpoint i kontrakt GUI
+
+Docelowy origin to stabilna nazwa LAN, np. `https://kodi-admin.home.arpa`, z
+certyfikatem zaufanym przez urządzenie operatora. QTS reverse proxy może zakończyć
+TLS i kierować ruch na port panelu opublikowany wyłącznie na loopback QNAP; aplikacja
+nadal wykonuje własne WebAuthn, sesje, CSRF i RBAC oraz ufa nagłówkom proxy tylko z
+jednego jawnego adresu. Dostęp po surowym IP nie jest wspieranym originem WebAuthn.
+Obecny port `19443` pozostaje osobnym read-only API mTLS dla CLI/integracji.
+
+MVP wybiera jeden transport: TLS kończy się w QTS, a QTS -> web używa HTTP wyłącznie
+po loopback QNAP. Nie zakładamy jednocześnie drugiego, nieopisanego TLS upstream.
+Spike musi potwierdzić, że Container Station respektuje bind loopback i QTS może
+osiągnąć port. Aplikacja ma ścisłą allowlistę `Host`, `Origin`, RP ID, adresu proxy
+oraz `X-Forwarded-Proto/Host`; żądanie bez zgodnego zestawu jest odrzucane.
+
+Pierwszego operatora nie może zarejestrować pierwszy klient LAN. Lokalny CLI po
+mTLS tworzy jednorazowy bootstrap token w authz, zapisany `0400`, z TTL maksymalnie
+10 minut i przypięty do oczekiwanego originu. Dopiero jego podanie w flow WebAuthn
+pozwala zarejestrować dwie passkeys i wygenerować jednokrotnie recovery codes.
+Po sukcesie token jest atomowo niszczony, bootstrap przechodzi trwale w
+`DISABLED`, a endpoint zwraca 404. Ponowne otwarcie wymaga lokalnego break-glass,
+jest audytowane i nie może nastąpić przez zwykłą sesję GUI.
+
+Minimalne wersjonowane endpointy przeglądarkowego API:
+
+```text
+GET  /api/v1/dashboard
+GET  /api/v1/devices[/<logical_device_id>]
+GET  /api/v1/schedules[/<schedule_id>/runs]
+GET  /api/v1/services
+GET  /api/v1/releases
+GET  /api/v1/rollouts[/<rollout_id>]
+GET  /api/v1/secrets                  # tylko metadane
+GET  /api/v1/operations[/<operation_id>]
+GET  /api/v1/alerts
+GET  /api/v1/audit
+POST /api/v1/action-plans
+POST /api/v1/operations
+POST /api/v1/operations/<id>/cancel
+POST /api/v1/secrets                  # set/rotate bez read-back
+POST /api/v1/pairing-codes
+```
+
+Szczegółowe typy akcji są discriminated union w OpenAPI/JSON Schema; nie istnieje
+generyczny endpoint `exec`. Frontend jest statycznym artefaktem z tego samego
+podpisanego obrazu, bez CDN i kodu third-party. Obowiązują CSP bez `unsafe-inline`,
+cookies `Secure`, `HttpOnly`, `SameSite=Strict`, rotacja session ID, krótki idle
+timeout i blokada cache dla odpowiedzi administracyjnych. UI korzysta wyłącznie z
+API — każda operacja ma odpowiednik CLI mTLS oparty na tym samym kontrakcie i
+polityce, aby automatyzacja nie obchodziła kontroli GUI.
+
+Docelowy zakres pierwszego pełnego release:
 
 - stan usług, floty, heartbeatów i bieżącej rewizji;
 - utworzenie kodu pairing i unieważnienie dokładnego starego enrollmentu;
@@ -359,19 +686,46 @@ Dozwolone akcje pierwszego wydania:
 Poza UI pozostają: dowolne komendy shell, dowolne workflow/repo GitHub, bezpośredni
 SQL, masowe kasowanie enrollmentów, reinstall systemu/Kodi i odczyt sekretów.
 
+Panel pierwszego wydania nie zarządza lifecycle swoich kontenerów i nie montuje
+`/var/run/docker.sock`. Upgrade/deploy czterech aplikacji QNAP pozostaje
+zewnętrzną, przypiętą digestem operacją `tools/qnap_images.py`.
+
+Przed pełnym cutover należy jednak usunąć rutynową zależność od workstation przez
+osobny `mwodevelop-qnap-deployd` działający jako minimalna usługa hosta QTS, nie
+kontener web. Executor ma dostęp do zarządzanego demona Container Station, ale
+przyjmuje wyłącznie podpisany deployment intent dla stałej listy projektów i
+digestu obecnego w zatwierdzonym `qnap-stable.json`; nie przyjmuje polecenia,
+ścieżki Compose, env, URL-u ani argumentów powłoki. Niezależnie weryfikuje grant,
+policy generation, podpis artefaktu, health, rollback i zapisuje antyrollback
+receipt. Socket/API executora jest dostępne tylko workerowi, nie `web`, a executor
+potrafi zakończyć lub cofnąć self-upgrade po zatrzymaniu starego Control Plane.
+`tools/qnap_images.py` pozostaje klientem/biblioteką i ścieżką break-glass.
+
 Pairing ma rate limit per IP i globalnie, backoff, krótki TTL, limit aktywnych
 kodów, jednorazowość oraz audyt prób. Przed zatwierdzeniem UI pokazuje logical ID,
 generację i fingerprint nowego klucza urządzenia. Pairing nigdy nie nadaje roli
 administracyjnej.
 
 Audit jest tamper-evident, nie tamper-proof: monotoniczny sequence, hash chain,
-podpisane checkpointy i wykrywanie braków. Zredagowane checkpointy są cyklicznie
-eksportowane poza QNAP, aby restore starej bazy albo root QTS nie mógł po cichu
-przepisać całej historii.
+checkpointy i wykrywanie braków. Obecny HMAC z kluczem na QNAP chroni głównie
+przed przypadkowym uszkodzeniem; root QTS może odczytać klucz i wygenerować nowy
+HMAC. Dlatego najwyższy `sequence/head_sha256` jest cyklicznie zakotwiczany w
+niezależnym append-only/WORM miejscu poza QNAP, które nie pozwala credentialowi NAS
+usunąć ani przepisać poprzedniego anchora. Restore i każdy nowy anchor muszą
+kontynuować ostatni zewnętrzny head. Dopiero porównanie z tym anchorem wykrywa
+złośliwy rollback QNAP; plan nie przypisuje takiej własności samemu lokalnemu HMAC.
 
 ### 5.5 Integracja GitHub
 
 QNAP używa dedykowanej GitHub App z minimalnymi uprawnieniami zamiast osobistego PAT.
+
+Secret broker przechowuje private key App i podpisuje JWT; worker otrzymuje
+wyłącznie krótkotrwały installation token dla jawnego installation ID/repo i
+minimalnych permissions. Token żyje tylko w pamięci procesu, nie trafia do DB,
+audit, logu ani kolejki, ma ograniczony cache krótszy od TTL i jest odświeżany po
+401/wygaśnięciu bez logowania wartości. Read-only obserwacja oraz dispatch używają
+oddzielnych App/instalacji, chyba że ADR i test uprawnień dowiodą równoważnej
+separacji. Rotacja private key zachowuje okres dwóch kluczy i jawne unieważnienie.
 
 GitHub App może:
 
@@ -384,6 +738,11 @@ branch/ref oraz limit częstotliwości. Sam wynik `success` nie wystarcza. Contr
 plane weryfikuje issuer atestacji, subject/repository, workflow identity, commit,
 artifact SHA-256 i digest bajtów publicznych. Dispatch i odczyt mogą używać
 oddzielnych instalacji/uprawnień, jeżeli pozwala na to GitHub.
+
+Macierz GitHub App zapisuje dla każdej App: installation ID, owner/repo, dokładne
+permissions, dozwolone endpointy, token TTL, limity/rate-limit policy i procedurę
+rotacji. Workflow dostępny z GUI musi przyjmować `operation_id` i walidować go jako
+correlation/concurrency key; bez tego nie kwalifikuje się do automatycznego retry.
 
 Nie może samodzielnie zatwierdzać ani scalać PR. Publikacja stable nadal odbywa się
 po review i zielonych bramkach GitHub. Control plane po publikacji sprawdza dokładny
@@ -564,23 +923,43 @@ Negatywny wynik zmienia projekt przed importem sekretów, a nie po wdrożeniu.
 
 ### Etap B — control plane tylko do odczytu
 
-1. Wdrożyć obraz przypięty digestem w Container Station.
-2. Podłączyć read-only stan Profile Sync, GitHub App i status trzech usług QNAP.
-3. Udostępnić UI statusu bez możliwości mutacji.
-4. Dodać backup, restore do izolowanego katalogu i test utraty procesu.
+1. **Wykonane:** wdrożyć obraz przypięty digestem w Container Station, read-only
+   API mTLS, zredagowany stan Profile Sync/GitHub, audit, backup/restore oraz
+   `convergence_bundle_v1` z lokalnym writerem CLI.
+2. Dodać manifest katalogu procesów cyklicznych i adaptery statusu dla GitHub
+   Actions, watchdog, Profile Sync, pozostałych usług QNAP, backupów i lokalnych
+   heartbeatów urządzeń.
+3. Zaimplementować normalizację `OK/DEGRADED/FAILED/UNKNOWN/STALE` z osobnym
+   scheduler health, run result i freshness; dodać reguły alertów oraz ich
+   deduplikację/acknowledgement.
+4. Udostępnić przeglądarkowy dashboard read-only pod stabilnym HTTPS/WebAuthn,
+   pozostawiając obecne API mTLS bez zmiany kontraktu.
+5. Rozdzielić procesy/mounty `web`, `worker` i `secrets`; worker na tym etapie
+   wykonuje wyłącznie read-only refresh/probe, a secret broker używa fixture bez
+   produkcyjnych wartości.
+6. Dodać backup, restore do izolowanego projektu Compose, restart całego stosu,
+   test ARMv7 i skan, że frontend/API/audit nie zawierają canary secret.
 
 ### Etap C — import sekretów w trybie shadow
 
-1. Wykonać online backup QNAP i zaszyfrowany eksport lokalnych danych recovery.
-2. Importować sekrety jednokierunkowo przez CLI po mTLS; wartości nie mogą wracać w
-   odpowiedzi.
-3. Zweryfikować per rekord digest/HMAC i możliwość użycia przez izolowany adapter,
-   bez ujawnienia plaintextu.
-4. Przez okres przejściowy lokalny host pozostaje źródłem wykonania, ale porównuje
-   tylko obecność/wersję sekretu QNAP.
-5. Po kwalifikacji przełączyć publishera na QNAP, unieważnić stare tokeny
-   administracyjne i usunąć plaintext z localhost. Zachować wyłącznie zaszyfrowany,
-   offline recovery export.
+1. Wykonać typowany inventory nazw z lokalnego `.env`/`.kodi-private`, online
+   backup QNAP i zaszyfrowany eksport lokalnych danych recovery; raport inventory
+   nie zawiera wartości.
+2. Wdrożyć secret broker z envelope encryption, osobnym KEK mountem `0400`, ACL,
+   metadanymi wersji/rotacji i zakazem read-back przez web/worker.
+3. Importować sekrety jednokierunkowo przez CLI po mTLS; wartości są przekazywane
+   przez stdin/plik `0600`, nigdy argument, URL, shell history ani JSON odpowiedzi.
+4. Zweryfikować per rekord digest/HMAC i możliwość użycia przez izolowany adapter,
+   bez ujawnienia plaintextu. Skan canary obejmuje DB, logi, audit, backup,
+   diagnostykę, HTML/JS i historię operacji.
+5. Przez okres przejściowy lokalny host pozostaje źródłem wykonania, ale porównuje
+   tylko obecność/wersję sekretu QNAP. Dwie niezależne, zaszyfrowane kopie i
+   udany cold restore są bramą cutover.
+6. Etap C kończy się stanem `SHADOW_VERIFIED`. Lokalny host nadal wykonuje
+   produkcyjne operacje i zachowuje dotychczasowy plaintext; QNAP nie staje się
+   źródłem prawdy tylko na podstawie poprawnego importu. Obowiązuje dual-read bez
+   dual-write: każda zmiana sekretu ma jednego writer-a i jest ponownie importowana
+   do shadow z nową wersją.
 
 ### Etap D — autonomiczne ustawienia i sekrety
 
@@ -613,12 +992,33 @@ Negatywny wynik zmienia projekt przed importem sekretów, a nie po wdrożeniu.
 
 ### Etap F — rollout QNAP i interfejs administracyjny
 
-1. Zaimplementować niezmienny plan, fale, pause/resume/cancel i timeouts.
-2. Udostępnić allowlistowane akcje operatorskie.
-3. Przenieść publikację profilu, assignmenty i ocenę raportów z hosta.
-4. Zintegrować dozwolone workflow GitHub App.
-5. Po kwalifikacji usunąć rutynową rolę hosta; hostowe komendy mają zostać
+1. Wdrożyć trwały model `action_plan`/`operation`, kolejkę SQLite WAL, worker lease,
+   idempotency, retry, safe points, kompensacje i recovery po restarcie QNAP.
+2. Najpierw udostępnić wyłącznie akcje niskiego ryzyka i wykazać, że ten sam plan
+   przez GUI oraz CLI mTLS daje ten sam audit i wynik `NO_CHANGE` przy powtórzeniu.
+3. Zaimplementować niezmienny rollout plan, fale, pause/resume/cancel, timeouts,
+   supersession i odrębne statusy code/profile/secrets/health.
+4. Udostępnić allowlistowane akcje operatorskie według klas ryzyka, re-auth i
+   dokładnego digestu planu; brak generycznego `exec`/URL/workflow/ref.
+5. Przenieść publikację profilu, assignmenty i ocenę raportów z hosta.
+6. Zintegrować GitHub App jako osobne adaptery read/dispatch z minimalnymi
+   uprawnieniami i weryfikacją atestacji; panel nie merge'uje PR.
+7. W MVP zachować lifecycle własnego stosu QNAP poza GUI i bez Docker socketu.
+   Panel pokazuje receipt/self-report i jawne `RUNTIME_UNVERIFIED`; wiarygodny live
+   drift nadal ustala `tools/qnap_images.py status`.
+8. Przed pełnym cutover wdrożyć i niezależnie zaudytować ograniczony host-side
+   `mwodevelop-qnap-deployd`, w tym self-upgrade, rollback i odmowę dowolnego
+   digestu/projektu/parametru. Docker/QTS socket nigdy nie trafia do web/workera.
+9. Po kwalifikacji usunąć rutynową rolę hosta; hostowe komendy mają zostać
    wrapperem API QNAP albo narzędziem break-glass.
+10. Dopiero gdy wszystkie produkcyjne adaptery działają z QNAP, dostępna flota ma
+   zweryfikowane koperty i `NO_CHANGE`, operacje przechodzą bez localhost, a
+   rollback oraz `recovery_bundle_v1` zostały odtworzone, zapisać audytowalny punkt
+   `CUTOVER_COMMITTED`.
+11. Po `CUTOVER_COMMITTED` unieważnić stare credentiale administracyjne, usunąć
+    rutynowy plaintext z localhost i pozostawić wyłącznie zaszyfrowany offline
+    recovery export. Cofnięcie przed tym punktem wraca do hosta; po nim wymaga
+    kontrolowanego recovery, nie ukrytego dual-write.
 
 ### Etap G — czysta instalacja i bootstrap
 
@@ -646,8 +1046,18 @@ wymagałby zarządzania urządzeniem/MDM i pozostaje poza MVP.
   urządzenia poza zakresem release intentu;
 - utracony/revoked enrollment nie może pobierać desired state;
 - admin API odrzuca brak WebAuthn/mTLS, CSRF, nadmiarowe role i dowolne workflow;
+- IDOR: operator nie może zmienić `logical_device_id`, `secret_id`, `plan_id` ani
+  `operation_id` w URL/payloadzie i uzyskać szerszego zakresu;
+- testy XSS/CSP, session fixation, rate limit, CORS, nagłówków reverse proxy,
+  ponownego WebAuthn oraz timeoutu sesji;
+- secret broker odrzuca wywołania bez workload identity, a proces web nie ma
+  mountu KEK, GitHub App private key ani ciphertext DB do bezpośredniego odczytu;
+- operacja o tym samym idempotency key i digest planu nie wykonuje mutacji drugi
+  raz; ten sam klucz z innym digestem jest odrzucany;
+- żaden test/API nie oferuje generycznej komendy, ścieżki hosta, URL-u ani
+  nieallowlistowanego workflow/ref;
 - skan obrazu i zależności, SBOM, podpis obrazu i przypięty digest;
-- negatywny test uszkodzonego backupu i brakującego KEK.
+- negatywny test uszkodzonego backupu i brakującego KEK;
 - skan canary secret obejmuje logi, audit, backup metadata, artefakty CI i raporty.
 
 ### 7.2 Testy funkcjonalne canary
@@ -691,12 +1101,38 @@ kopiowania profilu urządzenie ma samodzielnie:
 
 - restart kontenera i całego QNAP;
 - odtworzenie kolejki rolloutów po restarcie;
-- backup online i restore do izolowanego projektu Compose;
+- zabicie API i workera w każdej fazie operacji; po restarcie worker używa fencing
+  token/outbox i remote inspection. Test obejmuje `REMOTE_ACCEPTED`, nieznany wynik,
+  ręczną rekonsyliację i dowodzi braku ślepego ponowienia, a nie nierealnego
+  exactly-once zewnętrznego API;
+- bezpośrednia modyfikacja operacyjnej DB przez fixture skompromitowanego `web`
+  nie wykonuje operacji bez ważnego grantu authz; drift preconditions daje
+  `PLAN_STALE`;
+- E2E przeglądarki: login WebAuthn, dashboard, filtrowanie urządzeń, podgląd
+  harmonogramu, preflight, zatwierdzenie, SSE/postęp, wynik i audit; negatywnie
+  CSRF, wygasła sesja, brak roli, zmieniony digest planu i wyścig pierwszego
+  operatora; bootstrap kończy się dopiero po dwóch passkeys i trwałym `DISABLED`;
+- fixture procesów cyklicznych rozróżniający: scheduler nie działa, run failed,
+  run overdue, dane stale i poprawny no-op; alert powstaje raz i może zostać
+  potwierdzony bez kasowania historii;
+- wszystkie ekrany pozostają użyteczne przy niedostępnym GitHub/Profile Sync i
+  pokazują ostatni poprawny snapshot jako `STALE/DEGRADED`, nie `OK`;
+- backup online i restore całego `recovery_bundle_v1` do izolowanego projektu;
+  mieszany backup epoch, brak wrapped KEK albo cofnięty audit anchor są odrzucane;
 - awaria Profile Sync, GitHub i DNS bez utraty planu;
 - odnowienie certyfikatu TLS, rotacja GitHub App i KEK;
+- import shadow oraz rotacja fixture każdego typu sekretu, brak read-back i pełny
+  canary-secret scan bazy, logów, audit, backupu, HTML oraz diagnostyki;
 - test ARMv7 na rzeczywistym QNAP;
 - kontrola widoczności aplikacji w Container Station;
-- watchdog monitorujący również cykliczny backup i zdrowie control plane;
+- watchdog z dedykowanym mTLS na prywatnej sieci monitorujący cykliczny backup i
+  observer endpoint Control Plane; loopback `/ready` pozostaje nieosiągalny z
+  innego kontenera;
+- writer API Profile Sync nie jest opublikowane do LAN i odrzuca certyfikat/scope
+  niewłaściwe dla pairing, revoke, publish albo assignment;
+- `mwodevelop-qnap-deployd` odrzuca nieallowlistowany projekt, digest, manifest,
+  argument i cofniętą generation; przechodzi live inspect, self-upgrade, health i
+  rollback bez montowania demona do kontenera aplikacyjnego;
 - utrata całego QNAP i cold restore na pustym, zastępczym hoście z zachowaniem
   DNS/certyfikatu albo kontrolowaną rotacją zaufania.
 
@@ -707,28 +1143,53 @@ kopiowania profilu urządzenie ma samodzielnie:
 - klient przechowuje lokalny backup zmienianych ustawień i journal;
 - kod dodatku nie jest automatycznie downgrade'owany bez jawnego, dostępnego
   artefaktu i osobnej zgody;
-- control plane ma aplikacyjny backup SQLite/blob/secrets metadata oraz osobny
-  backup KEK;
+- control plane tworzy niemutowalny `recovery_bundle_v1` związany jednym
+  `backup_epoch_id`, a nie zestaw niezależnych kopii o nieznanej zgodności;
 - restore produkcyjny wymaga zatrzymania writerów, integralności, zgodności schematu
   i ponownego health checku;
 - hostowe `tools/kodi_reinstall.py` oraz zaszyfrowany recovery kit pozostają
   ostatnią ścieżką break-glass, dopóki czysta instalacja nie zostanie wielokrotnie
   zakwalifikowana.
 
+`recovery_bundle_v1` zawiera manifest digestów i zgodne epochy:
+
+- Control Plane DB, operational blobs, kolejkę i audit;
+- authz DB: publiczne credentiale WebAuthn, RBAC, zahashowane recovery codes oraz
+  zaszyfrowane TOTP/session bootstrap secrets;
+- Profile Sync DB, bloby, key registry i jego backup epoch;
+- secret DB/ciphertext oraz KEK opakowany kluczem recovery przechowywanym poza
+  QNAP — nie tylko metadata KEK;
+- konfigurację Compose, policy/action/schedule manifests, certyfikaty możliwe do
+  backupu oraz procedurę rotacji tych, których nie eksportujemy;
+- lokalny DNS/RP ID, konfigurację QTS reverse proxy i minimalny runbook bootstrapu;
+- audit checkpoint oraz odwołanie do najwyższego zewnętrznego anchora.
+
+Backup coordinator wprowadza krótki writer barrier albo używa aplikacyjnych
+snapshotów związanych nonce/epoch; mieszane epochy są odrzucane. Dwie zaszyfrowane
+kopie trafiają do jawnie skonfigurowanych, niezależnych lokalizacji poza QNAP, z
+retencją odporną na przypadkowe nadpisanie. Nazwy/owner tych lokalizacji są bramą
+wdrożenia, nie opcjonalną notatką w runbooku. Restore drill odtwarza cały bundle do
+izolowanego projektu i porównuje enrollment, bundle head, secret versions, RBAC,
+audit anchor oraz możliwość wydania testowej koperty.
+
 Docelowe parametry po cutover: RPO maksymalnie 24 godziny i RTO maksymalnie 4
-godziny od dostępności zastępczego hosta Docker. Codzienny zaszyfrowany backup poza
-QNAP zawiera spójny secret DB, Profile Sync epoch, KEK metadata, konfigurację
-Compose i instrukcję restore. Brak QNAP przełącza system w degraded mode: Kodi
-zachowuje lokalne tokeny i odtwarzanie, nie usuwa konfiguracji z powodu TTL, a nowe
-pairing, rotacje i rollouty są jawnie niedostępne.
+godziny od dostępności zastępczego hosta Docker. Brak QNAP przełącza system w
+degraded mode: Kodi zachowuje lokalne tokeny i odtwarzanie, nie usuwa konfiguracji
+z powodu TTL, a nowe pairing, rotacje i rollouty są jawnie niedostępne.
 
 ## 9. Zmiany w repozytoriach
 
 ### `mwoDevelop/kodi`
 
 - manifest desired-state i polityka rolloutów;
+- `manifests/control-plane-schedules.json` z oczekiwanym czasem/freshness oraz
+  `manifests/control-plane-actions.json` ze ścisłą allowlistą akcji/workflow;
 - Compose i cykl życia obrazu control plane;
 - rozszerzenie `tools/qnap_images.py` o nową usługę;
+- host-side `mwodevelop-qnap-deployd` z allowlistą projektów/digestów, podpisanym
+  deployment intent, self-upgrade state machine i break-glass CLI;
+- atomowy, podpisany deployment receipt jako dowód ostatniego wdrożenia, bez
+  nazywania go weryfikacją faktycznie działającego runtime;
 - wrapper CLI do control plane zamiast bezpośrednich mutacji;
 - E2E, dokumentacja operacyjna i schemat lifecycle;
 - aktualizacja watchdoga i `docs/scheduled-processes.md`.
@@ -748,7 +1209,7 @@ pairing, rotacje i rollouty są jawnie niedostępne.
 - health checks, journal, retry i zredagowane raporty;
 - UI statusu lokalnego i ręczne `Sync now`, bez funkcji administracyjnych.
 
-### Nowe `mwoDevelop/kodi-control-plane`
+### Istniejące `mwoDevelop/kodi-control-plane`
 
 - LAN-only API/UI, RBAC i WebAuthn;
 - magazyn sekretów;
@@ -756,9 +1217,9 @@ pairing, rotacje i rollouty są jawnie niedostępne.
 - GitHub App integration;
 - audit, backup i worker.
 
-Jeżeli po prototypie okaże się, że control plane jest mały i silnie związany z
-Profile Sync, może zostać osobnym pakietem w repo serwera, ale nadal jako oddzielny
-proces i powierzchnia uprawnień. Nie należy łączyć admin UI z consumer API Kodi.
+Control Plane pozostaje osobnym repozytorium, procesem i powierzchnią uprawnień.
+Wspólne kontrakty są wersjonowanymi schematami/pakietami, nie współdzielonymi
+tabelami ani kopiowanym kodem. Nie należy łączyć admin UI z consumer API Kodi.
 
 ## 10. Plan uzupełnienia dokumentacji
 
@@ -780,7 +1241,20 @@ Utworzyć `docs/control-plane/README.md`, prowadzący co najmniej do:
 - `qnap-install.md` — Container Station, ARMv7, digest obrazu, UID/GID, ACL,
   wolumeny, DNS/TLS/NTP, firewall i widoczność w GUI;
 - `admin-ui-cli.md` — pierwszy operator, passkeys/TOTP/recovery, role, re-auth,
-  allowlistowane akcje i zredagowane przykłady;
+  allowlistowane akcje, klasy ryzyka, plan/approval/operation oraz zredagowane
+  przykłady GUI i CLI;
+- `status-and-alerts.md` — semantyka `OK/DEGRADED/FAILED/UNKNOWN/STALE`, freshness,
+  agregacja, reason codes, alerty, deduplikacja, acknowledgement oraz macierz
+  owner/adapter/auth/trust/fallback dla każdego pola;
+- `scheduled-jobs.md` — katalog GitHub/QNAP/device, oczekiwane terminy, lease,
+  idempotency, retry oraz rozróżnienie scheduler/run/freshness;
+- `operations.md` — state machine kolejki, safe points, cancel, retry,
+  kompensacje, klasy skutków zewnętrznych, outbox/fencing, rekonsyliacja,
+  idempotency i recovery po restarcie;
+- `auth-bootstrap.md` — lokalne utworzenie jednorazowego tokenu, dwie passkeys,
+  trwałe wyłączenie bootstrapu, recovery, proxy headers i utrata operatora;
+- `qnap-deployd.md` — hostowa granica uprawnień, podpisany deployment intent,
+  allowlista, self-upgrade, receipt/live inspect, rollback i break-glass;
 - `github-app.md` — instalacja, minimalne uprawnienia, allowlista workflow,
   atestacje i rotacja klucza;
 - `secrets.md` — klasyfikacja, shadow import, envelope, klucz urządzenia, rotacja,
@@ -851,40 +1325,111 @@ Release jest gotowy dopiero, gdy:
     rollout, pause/resume, awarię i break-glass;
 11. niezależny review bezpieczeństwa nie ma otwartych uwag P0/P1;
 12. nie wydajemy nowej wersji dodatku lub obrazu, jeżeli jego bajty nie uległy zmianie.
+13. dashboard rozróżnia brak schedulera, błąd runu i stale dane, a test zegara
+    potwierdza alert po przekroczeniu każdego manifestowego deadline;
+14. GUI i CLI wykonują tę samą operację przez ten sam kontrakt, a ponowienie z tym
+    samym idempotency key nie tworzy drugiej lokalnej operacji; niejednoznaczny
+    skutek zewnętrzny przechodzi przez rekonsyliację, nie ślepy retry;
+15. proces web nie ma dostępu do KEK ani credentiali wykonawczych, secret store nie
+    ma read-back, a canary secret scan całego pipeline jest czysty;
+16. upgrade control plane nadal jest możliwy przy niedziałającym panelu przez
+    przypięty digest i niezależny `mwodevelop-qnap-deployd`, a
+    `tools/qnap_images.py` pozostaje zaudytowaną ścieżką break-glass.
 
 ## 12. Kolejność realizacji i przybliżony koszt
 
-| Faza | Rezultat | Szacunek |
-|---|---|---:|
-| 0 | ADR, threat model i spiki go/no-go Kodi/crypto/WebAuthn | 4–8 dni |
-| 1 | Control plane read-only, auth, audit, backup i QNAP Compose | 4–7 dni |
-| 2 | Bundle, delegowany signer, lifecycle schematów i mixed-version | 5–10 dni |
-| 3 | Magazyn sekretów, import shadow, koperty i off-box recovery | 5–10 dni |
-| 4 | Device Agent: bootstrap N-1, ustawienia, sekrety i saga rollback | 5–9 dni |
-| 5 | Testing canary, repo/add-ons i exact-artifact proof | 5–9 dni |
-| 6 | Kontroler fal konfiguracji, UI administracyjne i GitHub App | 5–10 dni |
-| 7 | Czysta instalacja, pełna flota, cold restore i release | 4–8 dni |
+| Faza | Rezultat | Stan 2026-08-21 | Pozostały szacunek |
+|---|---|---|---:|
+| 0 | ADR, threat model i spiki go/no-go Kodi/crypto/WebAuthn | częściowo | 2–5 dni |
+| 1 | Read-only API mTLS, audit, backup i QNAP Compose | wydane | 0 dni |
+| 2 | Bundle, delegowany signer, lifecycle schematów i mixed-version | bundle wydany, delegacja offline | 3–7 dni |
+| 3A1 | Read-only status API, katalog harmonogramów, freshness i UI mTLS | do wykonania | 4–7 dni |
+| 3A2 | DNS/QTS proxy, WebAuthn/authz, bootstrap/recovery i browser E2E | do wykonania | 4–8 dni |
+| 3B | Trwała kolejka akcji niskiego ryzyka, outbox/fencing i rekonsyliacja | do wykonania | 5–10 dni |
+| 4 | Magazyn sekretów, import shadow, koperty i off-box recovery | do wykonania | 6–12 dni |
+| 5A | Device Agent, GitHub App, kontroler fal, canary i exact-artifact proof | częściowo | 10–20 dni |
+| 5B | Ograniczony QTS deployd, czysta instalacja, pełna flota, cold restore i release | do wykonania | 7–14 dni |
 
-Bazowy szacunek wynosi około 37–71 dni roboczych. Z buforem 30–50% na Kodi API,
-WebAuthn ARMv7, realne credentiale i cold restore należy planować około 48–105 dni.
-Po spike'ach fazy 0 estymacja jest aktualizowana. MVP read-only + CLI po mTLS,
-immutable bundle i trzy najważniejsze adaptery, bez pełnego UI, należy szacować na
-około 22–40 dni roboczych.
+Pozostały bazowy szacunek to około 41–83 dni roboczych. Z buforem 30–40% na
+WebAuthn na docelowym originie, kryptografię/ARMv7, realne rotacje credentiali,
+integrację GitHub App, QTS deployd i cold restore należy planować około 55–117 dni.
+Plan daje wartość wcześniej: read-only GUI ze statusami powinno być możliwe po
+4–7 dniach, a pierwsze bezpieczne akcje niskiego ryzyka po kolejnych 9–18 dniach
+obejmujących authz/WebAuthn i początek kolejki. Import produkcyjnych sekretów nie
+jest skrótem MVP i nie może wyprzedzić recovery drill.
 
-## 13. Pierwszy przyrost implementacyjny
+## 13. Następne przyrosty implementacyjne
 
-Pierwszy bezpieczny przyrost powinien być mały i nie zmieniać urządzeń:
+### Przyrost 3A1 — status API i dashboard mTLS bez mutacji
 
-1. dodać threat model oraz ADR-y trust/signing, kanałów dodatków, exact bytes,
-   secret envelope, lifecycle schematów, inventory i granicy repo;
-2. utworzyć skeleton `kodi-control-plane` z endpointami read-only `health`, `fleet`
-   i `rollouts`;
-3. wdrożyć go na QNAP jako czwartą aplikację kontrolowaną przez
-   `tools/qnap_images.py`;
-4. zasilić wyłącznie zredagowanym stanem istniejącego Profile Sync oraz GitHub;
-5. dodać mTLS CLI i tamper-evident audit;
-6. wykonać restart, backup/restore drill i test ARMv7;
-7. dopiero po review bezpieczeństwa rozpocząć import sekretów.
+1. Dodać manifest `scheduled-jobs` opisujący aktualne workflow GitHub, watchdog,
+   zadania QNAP, backup i synchronizację urządzeń wraz z `next_expected` oraz
+   `stale_after`.
+2. Rozszerzyć agregator o statusy usług QNAP, Pages/release, backup/audit,
+   bezpieczeństwo, urządzenia i niezależne freshness; dodać wersjonowane endpointy
+   dashboardu.
+3. Zbudować statyczne GUI bez CDN, dostępne wyłącznie w trybie read-only
+   przez istniejące mTLS, aby zweryfikować model danych bez nowej autoryzacji.
+4. Wdrożyć na QNAP przypięty digest, przejść test ARMv7, restart, degraded mode i
+   potwierdzić, że żaden endpoint mutujący nie istnieje.
 
-Taki przyrost daje widoczny panel stanu i podstawę API, ale nie rozszerza jeszcze
-powierzchni mutacji ani nie naraża sekretów.
+### Przyrost 3A2 — browser auth bez mutacji
+
+1. Dodać stabilny lokalny DNS/TLS, QTS reverse proxy i ścisłą walidację originu.
+2. Uruchomić authz, jednorazowy bootstrap, dwie passkeys, recovery codes, role,
+   signed grants i osobny listener przeglądarkowy.
+3. Wykonać browser E2E, negatywne proxy/WebAuthn/CSRF/session tests oraz restart i
+   recovery operatora, nadal bez endpointów mutujących stan floty.
+
+### Przyrost 3B — kolejka i bezpieczne akcje
+
+1. Dodać schema/migracje `action_plan`, `operation`, `operation_event`,
+   `schedule_run`, `alert` i `approval` wraz z lifecycle N/N-1.
+2. Uruchomić oddzielny `worker` bez portu LAN, z trwałym lease i wyłącznie
+   adapterami `refresh`, `probe`, `enqueue-reconcile`, `verify-backup` oraz
+   `export-diagnostics`.
+3. Udostępnić preflight, digest planu, idempotency, status/postęp i cancel tylko w
+   safe point; potwierdzić wspólny kontrakt GUI/CLI mTLS.
+4. Przetestować restart API/workera/QNAP w każdej fazie, fencing/outbox,
+   retry/no-op, równoległość, odmowę zmienionego planu, remote correlation oraz
+   `UNKNOWN_REQUIRES_RECONCILIATION` bez ślepego retry.
+5. Dopiero potem dołączać pairing, profile candidate/rollout i ścisłą allowlistę
+   GitHub App; promocja stable pozostaje poza pierwszym zestawem akcji.
+
+### Przyrost 4 — secret store shadow
+
+1. Zatwierdzić ADR secret envelope/KEK i wykonać działający cold restore na
+   fixture przed produkcyjnym importem.
+2. Uruchomić osobny secret broker i typowany jednokierunkowy importer wszystkich
+   rutynowych credentiali; GUI widzi tylko metadane.
+3. Wykonać shadow compare obecność/wersja/użycie, rotację fixture oraz pełny
+   canary-secret scan.
+4. Przenieść kolejno adaptery OpenSubtitles/Rapideo, Umbrella/Real-Debrid, YouTube
+   OAuth i VPN, zawsze BlueStacks -> X88 -> pozostała dostępna flota, z rollbackiem
+   i drugim przebiegiem `NO_CHANGE`.
+5. Po dwóch zweryfikowanych backupach i cold restore oznaczyć import jako
+   `SHADOW_VERIFIED`; nie usuwać jeszcze lokalnego plaintextu ani nie unieważniać
+   działających credentiali.
+
+### Przyrost 5 — pełne sterowanie i cutover
+
+1. Podłączyć constrained assignment key, release intent, kontroler fal i ocenę
+   podpisanych raportów.
+2. Włączyć akcje średniego/wysokiego ryzyka z re-auth i polityką approval.
+3. Wdrożyć ograniczony `mwodevelop-qnap-deployd`, potwierdzić live runtime digest,
+   self-upgrade i rollback bez przekazania Docker socketu kontenerom.
+4. Przełączyć hostowe `kodi_ops` na wrapper API QNAP; ADB/SSH pozostawić wyłącznie
+   dla bootstrap/reinstall/break-glass.
+5. Przeprowadzić czysty bootstrap BlueStacks, canary BlueStacks/X88, pełny rollout
+   dostępnej floty, restart QNAP/Kodi, outage GitHub/Profile Sync i finalny cold
+   restore według dokumentacji.
+6. Wykonać pełny przebieg bez localhost, zapisać `CUTOVER_COMMITTED`, następnie
+   unieważnić stare credentiale i usunąć lokalny rutynowy plaintext, pozostawiając
+   tylko zaszyfrowany break-glass recovery.
+7. Po zielonych E2E, CI, security review i ARMv7 wydać tylko te obrazy/dodatki,
+   których bajty faktycznie się zmieniły.
+
+Pierwszą następną implementacją jest 3A. Daje użyteczny panel statusu bez
+rozszerzania powierzchni mutacji lub przenoszenia sekretów przed gotowym auth i
+recovery. Każdy kolejny przyrost ma osobny rollback do poprzedniego, nadal
+działającego read-only obrazu.

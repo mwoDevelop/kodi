@@ -57,10 +57,10 @@ def test_watchdog_workflow_keys_follow_manifest(tmp_path):
     manifest.write_text(
         json.dumps(
             {
-                "schema": 1,
+                "schema": 2,
                 "workflows": [
-                    {"repository": "owner/repo", "workflow": "first.yml"},
-                    {"repository": "owner/repo", "workflow": "second.yml"},
+                    {"repository": "owner/repo", "workflow": "first.yml", "max_age_seconds": 3600},
+                    {"repository": "owner/repo", "workflow": "second.yml", "max_age_seconds": 3600},
                 ],
             }
         ),
@@ -403,7 +403,7 @@ class StatusSession:
             assert timeout == 10
             return json.dumps(
                 {
-                    "schema": 1,
+                    "schema": 2,
                     "checked_at": "2026-08-10T00:01:00Z",
                     "healthy": False,
                     "workflows": [

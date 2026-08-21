@@ -649,7 +649,7 @@ def watchdog_workflow_keys(repository):
     manifest_path = Path(repository) / "manifests/upstream-watchdog.json"
     document = json.loads(manifest_path.read_text(encoding="utf-8"))
     workflows = document.get("workflows")
-    if document.get("schema") != 1 or not isinstance(workflows, list):
+    if document.get("schema") != 2 or not isinstance(workflows, list):
         raise ImageError("watchdog manifest contract is invalid")
     keys = {
         (item.get("repository"), item.get("workflow"))
@@ -713,7 +713,7 @@ def deploy_watchdog(session, repository, image):
                     if isinstance(item, dict)
                 }
                 if (
-                    candidate.get("schema") == 1
+                    candidate.get("schema") == 2
                     and observed_workflows == expected_workflows
                     and len(candidate.get("workflows", []))
                     == len(expected_workflows)
@@ -850,7 +850,7 @@ def status(references, repository=ROOT):
                     watchdog["runtime_status"] = "invalid"
                 else:
                     workflows = document.get("workflows", [])
-                    if document.get("schema") == 1 and isinstance(
+                    if document.get("schema") == 2 and isinstance(
                         workflows, list
                     ):
                         watchdog.update(
