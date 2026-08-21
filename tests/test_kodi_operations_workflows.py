@@ -123,6 +123,15 @@ def test_only_one_workflow_owns_pages_deployment():
     assert owners == ["publish-pages.yml"]
 
 
+def test_pages_publication_waits_for_umbrella_certification():
+    workflow = text(".github/workflows/publish-pages.yml")
+    triggers = workflow.split("permissions:", 1)[0]
+
+    assert "- certify Umbrella hermetically" in triggers
+    assert "- deploy stable" in triggers
+    assert "- publish testing" not in triggers
+
+
 def test_auto_approval_is_observe_only_until_explicitly_enabled():
     workflows = [
         text(".github/workflows/approve-umbrella-update.yml"),
