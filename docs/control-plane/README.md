@@ -13,6 +13,7 @@ publikację head przez CAS. Nie jest to jeszcze assignment dla urządzenia.
 - [Model zagrożeń](threat-model.md)
 - [Instalacja pierwszego przyrostu na QNAP](qnap-install.md)
 - [ADR](adr/README.md)
+- [Review planu panelu administracyjnego z 2026-08-21](../QNAP_ADMIN_MODULE_PLAN_REVIEW_2026-08-21.md)
 
 Plan całości znajduje się w
 [`QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN.md`](../../QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN.md).
