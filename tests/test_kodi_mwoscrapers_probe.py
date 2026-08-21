@@ -109,6 +109,55 @@ def test_provider_probe_dispatches_once_then_waits_for_final_report(monkeypatch)
     ]
 
 
+def test_provider_probe_falls_back_to_host_eventserver_after_silent_drop(
+    monkeypatch,
+):
+    expected = {"schema": 1, "probe": []}
+    waits = iter((None, expected))
+    calls = []
+
+    class Rpc:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def call(self, *_args):
+            raise RuntimeError("method unavailable")
+
+    class Events:
+        def __init__(self, *_args):
+            pass
+
+        def execute_builtin(self, command):
+            calls.append(("device", command))
+
+        def execute_builtin_from_host(self, command):
+            calls.append(("host", command))
+
+    monkeypatch.setattr(kodi_mwoscrapers_probe, "AdbJsonRpcClient", Rpc)
+    monkeypatch.setattr(kodi_mwoscrapers_probe, "AdbEventClient", Events)
+    monkeypatch.setattr(
+        kodi_mwoscrapers_probe,
+        "_wait_report",
+        lambda *_args: next(waits),
+    )
+
+    result = kodi_mwoscrapers_probe._dispatch_and_wait(
+        "adb", 5038, "192.0.2.10:5555", "RunScript(probe.py)", 999.0
+    )
+
+    assert result is expected
+    assert calls == [
+        ("device", "RunScript(probe.py)"),
+        ("host", "RunScript(probe.py)"),
+    ]
+
+
 def test_provider_probe_ignores_partially_written_report(monkeypatch):
     monkeypatch.setattr(
         kodi_mwoscrapers_probe,

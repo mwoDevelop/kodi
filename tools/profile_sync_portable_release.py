@@ -22,7 +22,11 @@ if str(ROOT) not in sys.path:
 
 from tools.kodi_portable_state import validate_bundle
 from tools.kodi_portable_state_rollout import _cleanup, _profile_sync_probe
-from tools.kodi_profile import AdbEventClient, _wait_for_kodi_ready
+from tools.kodi_profile import (
+    AdbEventClient,
+    AdbJsonRpcClient,
+    _wait_for_kodi_ready,
+)
 from tools.kodi_routine_profile import export_routine_profile
 from tools.kodi_sync_inventory import load_sync_inventory
 from tools.profile_portable_favourites import export_portable_favourites
@@ -321,11 +325,18 @@ def _trigger_sync(inventory: dict, logical_id: str, adb: str, port: int, revisio
             raise RuntimeError("Profile Sync canary is not paired")
         _wait_for_kodi_ready(adb, port, serial)
         command = "RunScript(%s,--sync-once)" % ADDON_ENTRYPOINT
-        client = AdbEventClient(adb, port, serial)
         try:
-            client.execute_builtin(command)
-        except RuntimeError:
-            client.execute_builtin_from_host(command)
+            with AdbJsonRpcClient(adb, port, serial) as rpc:
+                rpc.call(
+                    "XBMC.ExecuteBuiltin",
+                    {"command": command, "wait": False},
+                )
+        except (OSError, RuntimeError, TimeoutError, ValueError):
+            client = AdbEventClient(adb, port, serial)
+            try:
+                client.execute_builtin(command)
+            except RuntimeError:
+                client.execute_builtin_from_host(command)
         deadline = time.monotonic() + 180
         while time.monotonic() < deadline:
             time.sleep(3)

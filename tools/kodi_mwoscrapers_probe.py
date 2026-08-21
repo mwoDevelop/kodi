@@ -116,18 +116,33 @@ def _wait_report(adb, port, serial, deadline):
 
 
 def _dispatch_and_wait(adb, port, serial, command, deadline):
+    report = None
     try:
         with AdbJsonRpcClient(adb, port, serial) as rpc:
             rpc.call("XBMC.ExecuteBuiltin", {"command": command, "wait": False})
     except (OSError, RuntimeError, TimeoutError):
-        events = AdbEventClient(adb, port, serial)
-        while time.monotonic() < deadline:
-            try:
-                events.execute_builtin(command)
-            except (OSError, RuntimeError, TimeoutError, subprocess.TimeoutExpired):
-                time.sleep(1)
-                continue
-            return _wait_report(adb, port, serial, deadline)
+        pass
+    else:
+        report = _wait_report(
+            adb, port, serial, min(deadline, time.monotonic() + 20)
+        )
+    if report is not None:
+        return report
+
+    events = AdbEventClient(adb, port, serial)
+    try:
+        events.execute_builtin(command)
+        report = _wait_report(
+            adb, port, serial, min(deadline, time.monotonic() + 20)
+        )
+    except (OSError, RuntimeError, TimeoutError, subprocess.TimeoutExpired):
+        report = None
+    if report is not None:
+        return report
+
+    try:
+        events.execute_builtin_from_host(command)
+    except (OSError, RuntimeError, TimeoutError):
         return None
     return _wait_report(adb, port, serial, deadline)
 
