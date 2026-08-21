@@ -49,6 +49,16 @@ def test_pure_stable_lock_promotion_does_not_rebuild_testing():
     assert '"manifests/locks/qnap-stable.json"' in trigger
 
 
+def test_umbrella_auto_approval_ignores_device_qualified_promotions():
+    workflow = text(".github/workflows/approve-umbrella-promotion.yml")
+
+    assert 'attestation_kind" != "hermetic_ci"' in workflow
+    assert "Non-hermetic stable promotion is outside Umbrella auto-approval" in workflow
+    assert workflow.index('attestation_kind" != "hermetic_ci"') < workflow.index(
+        "tools/umbrella_promotion_approval.py"
+    )
+
+
 def test_all_qnap_builds_publish_scanned_immutable_approvals():
     workflows = (
         ".github/workflows/build-upstream-watchdog.yml",
