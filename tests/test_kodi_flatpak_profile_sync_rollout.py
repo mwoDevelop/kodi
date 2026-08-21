@@ -369,6 +369,45 @@ def test_flatpak_youtube_payload_is_deferred_when_api_profile_is_absent():
     ) is None
 
 
+def test_flatpak_youtube_payload_uses_private_portable_session(tmp_path):
+    session_path = tmp_path / ".kodi-private/youtube/session.json"
+    session_path.parent.mkdir(parents=True)
+    session = {
+        "schema": 1,
+        "addon_id": "plugin.video.youtube",
+        "addon_version": "7.4.4",
+        "account_hint": "user@example.invalid",
+        "expected_channel_id": "UC" + "c" * 22,
+        "api_key": "AIza" + "a" * 35,
+        "client_id": "123456789-example.apps.googleusercontent.com",
+        "client_secret": "GOCSPX-private",
+        "tv_refresh_token": "tv_" + "t" * 30,
+        "personal_refresh_token": "personal_" + "p" * 30,
+        "vr_refresh_token": "vr_" + "v" * 30,
+    }
+    session_path.write_text(json.dumps(session) + "\n", encoding="utf-8")
+    session_path.chmod(0o600)
+
+    payload = youtube_configuration_payload(
+        {"YOUTUBE_USER": session["account_hint"]}, tmp_path
+    )
+
+    assert payload == {
+        "schema": 2,
+        "addon_version": "7.4.4",
+        "api_key": session["api_key"],
+        "client_id": session["client_id"],
+        "client_secret": session["client_secret"],
+        "session": {
+            "account_hint": session["account_hint"],
+            "expected_channel_id": session["expected_channel_id"],
+            "tv_refresh_token": session["tv_refresh_token"],
+            "personal_refresh_token": session["personal_refresh_token"],
+            "vr_refresh_token": session["vr_refresh_token"],
+        },
+    }
+
+
 def test_cleanup_command_is_valid_shell_and_scopes_all_paths_to_operation():
     operation = "0123456789abcdef"
     command = _cleanup_command(operation)

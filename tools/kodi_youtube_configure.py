@@ -34,6 +34,7 @@ REMOTE_CONFIG = "/sdcard/Download/.mwo-youtube-config.json"
 REMOTE_REPORT = "/sdcard/Download/.mwo-youtube-configure.json"
 ADAPTER = "youtube-oauth-v1"
 EXPECTED_ADDON_VERSION = "7.4.4"
+DEFAULT_SESSION_FILE = ".kodi-private/youtube/session.json"
 ENVIRONMENT_NAMES = (
     "YOUTUBE_API_KEY",
     "YOUTUBE_CLIENT_ID",
@@ -42,6 +43,8 @@ ENVIRONMENT_NAMES = (
 )
 API_KEY = re.compile(r"^AIza[A-Za-z0-9_-]{20,80}$")
 CLIENT_ID = re.compile(r"^[0-9]+-[A-Za-z0-9_-]+(?:[.]apps[.]googleusercontent[.]com)?$")
+CHANNEL_ID = re.compile(r"^UC[A-Za-z0-9_-]{20,30}$")
+REFRESH_TOKEN = re.compile(r"^[A-Za-z0-9._/-]{20,4096}$")
 
 
 def validate_profile(profile):
@@ -115,6 +118,87 @@ def resolve_credentials(profile, references):
     return api_key, client_id, client_secret, account_hint
 
 
+def _private_session_path(root, references):
+    configured = references.get("YOUTUBE_SESSION_FILE", DEFAULT_SESSION_FILE)
+    if not isinstance(configured, str) or not configured.strip():
+        raise ValueError("invalid YouTube session file reference")
+    path = Path(configured.strip())
+    if not path.is_absolute():
+        path = Path(root) / path
+    path = path.resolve()
+    private_root = (Path(root) / ".kodi-private").resolve()
+    if path == private_root or private_root not in path.parents:
+        raise ValueError("YouTube session file must remain below .kodi-private")
+    return path
+
+
+def load_session(root, references):
+    path = _private_session_path(root, references)
+    if not path.exists():
+        return None
+    if not path.is_file() or path.is_symlink() or path.stat().st_mode & 0o077:
+        raise ValueError("YouTube session file is unsafe")
+    document = json.loads(path.read_text(encoding="utf-8"))
+    required = {
+        "schema",
+        "addon_id",
+        "addon_version",
+        "account_hint",
+        "expected_channel_id",
+        "api_key",
+        "client_id",
+        "client_secret",
+        "tv_refresh_token",
+        "personal_refresh_token",
+        "vr_refresh_token",
+    }
+    if not isinstance(document, dict) or set(document) != required:
+        raise ValueError("invalid private YouTube session")
+    if (
+        document["schema"] != 1
+        or document["addon_id"] != "plugin.video.youtube"
+        or document["addon_version"] != EXPECTED_ADDON_VERSION
+        or not API_KEY.fullmatch(document["api_key"])
+        or not CLIENT_ID.fullmatch(document["client_id"])
+        or not document["client_secret"]
+        or any(character.isspace() for character in document["client_secret"])
+        or not CHANNEL_ID.fullmatch(document["expected_channel_id"])
+        or not REFRESH_TOKEN.fullmatch(document["tv_refresh_token"])
+        or not REFRESH_TOKEN.fullmatch(document["personal_refresh_token"])
+        or not REFRESH_TOKEN.fullmatch(document["vr_refresh_token"])
+    ):
+        raise ValueError("invalid private YouTube session")
+    hint = document["account_hint"]
+    expected_hint = references.get("YOUTUBE_USER", "")
+    if (
+        not isinstance(hint, str)
+        or "@" not in hint
+        or any(character.isspace() for character in hint)
+        or not isinstance(expected_hint, str)
+        or hint.casefold() != expected_hint.strip().casefold()
+    ):
+        raise ValueError("YouTube session account differs from YOUTUBE_USER")
+    return document
+
+
+def configuration(root, profile, references):
+    session = load_session(root, references)
+    api_key, client_id, client_secret, account_hint = resolve_credentials(
+        profile, references
+    )
+    if session is None:
+        return api_key, client_id, client_secret, account_hint, None
+    session_values = (
+        session["api_key"],
+        session["client_id"],
+        session["client_secret"],
+    )
+    configured_values = (api_key, client_id, client_secret)
+    if api_key is not None and configured_values != session_values:
+        raise ValueError("YouTube API references differ from private session")
+    return (*session_values, session["account_hint"], session)
+
+
 def _read_report(adb, port, serial):
     result = adb_command(
         adb,
@@ -152,7 +236,14 @@ def _dispatch(adb, port, serial, command, deadline):
         with AdbJsonRpcClient(adb, port, serial) as rpc:
             rpc.call("XBMC.ExecuteBuiltin", {"command": command, "wait": False})
     except (OSError, RuntimeError, TimeoutError):
-        AdbEventClient(adb, port, serial).execute_builtin(command)
+        events = AdbEventClient(adb, port, serial)
+        if not serial.startswith(("127.0.0.1:", "[::1]:", "localhost:")):
+            try:
+                events.execute_builtin_from_host(command)
+            except (OSError, RuntimeError):
+                events.execute_builtin(command)
+        else:
+            events.execute_builtin(command)
     return _wait_report(adb, port, serial, deadline)
 
 
@@ -163,10 +254,12 @@ def configure(
     profile,
     references,
     device_script,
+    root=None,
     timeout=120,
 ):
-    api_key, client_id, client_secret, account_hint = resolve_credentials(
-        profile, references
+    root = Path(root or Path(__file__).resolve().parents[1])
+    api_key, client_id, client_secret, account_hint, session = configuration(
+        root, profile, references
     )
     if api_key is None:
         return {
@@ -181,12 +274,20 @@ def configure(
             "account_hint_configured": bool(account_hint),
         }
     payload = {
-        "schema": 1,
+        "schema": 2 if session else 1,
         "addon_version": EXPECTED_ADDON_VERSION,
         "api_key": api_key,
         "client_id": client_id,
         "client_secret": client_secret,
     }
+    if session:
+        payload["session"] = {
+            "account_hint": session["account_hint"],
+            "expected_channel_id": session["expected_channel_id"],
+            "tv_refresh_token": session["tv_refresh_token"],
+            "personal_refresh_token": session["personal_refresh_token"],
+            "vr_refresh_token": session["vr_refresh_token"],
+        }
     try:
         with tempfile.NamedTemporaryFile(
             mode="w", encoding="utf-8", suffix=".json"
@@ -225,6 +326,7 @@ def configure(
             "adapter": ADAPTER,
             "serial": serial,
             "account_hint_configured": bool(account_hint),
+            "session_configured": bool(session),
             **report,
         }
     finally:
@@ -268,6 +370,7 @@ def main():
         },
         load_private_references(references),
         root / "tests/e2e/kodi_youtube_configure.py",
+        root=root,
         timeout=args.timeout,
     )
     print(json.dumps(result, indent=2, sort_keys=True))

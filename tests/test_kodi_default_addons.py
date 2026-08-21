@@ -374,6 +374,55 @@ def test_native_official_addon_rejects_non_official_origin(monkeypatch, tmp_path
         defaults.reconcile_android("adb", 5038, "device", {"addons": [addon]}, tmp_path)
 
 
+def test_native_official_addon_repairs_same_version_byte_drift(
+    monkeypatch, tmp_path
+):
+    addon = {
+        "id": "plugin.video.youtube",
+        "version": "7.4.4",
+        "kind": "plugin",
+        "url": "https://example.invalid/youtube.zip",
+        "sha256": "0" * 64,
+        "source": "https://example.invalid/source",
+        "license": "GPL-2.0-only",
+        "origin": "repository.xbmc.org",
+        "install_mode": "kodi-native-official",
+    }
+    artifact = tmp_path / "youtube.zip"
+    applied = []
+    monkeypatch.setattr(defaults, "fetch_artifact", lambda *_args: artifact)
+    monkeypatch.setattr(
+        defaults,
+        "addon_details",
+        lambda *_args: {"enabled": True, "version": "7.4.4"},
+    )
+    monkeypatch.setattr(
+        defaults,
+        "installed_addon_origins_in_kodi",
+        lambda *_args, **_kwargs: {"plugin.video.youtube": "repository.xbmc.org"},
+    )
+    monkeypatch.setattr(defaults, "installed_archive_matches", lambda *_args: False)
+    monkeypatch.setattr(
+        defaults,
+        "rollout",
+        lambda *_args, **_kwargs: applied.append(_args[4]) or {},
+    )
+
+    result = defaults.reconcile_android(
+        "adb", 5038, "device", {"addons": [addon]}, tmp_path
+    )
+
+    assert applied == ["plugin.video.youtube"]
+    assert result["actions"] == [
+        {
+            "addon": "plugin.video.youtube",
+            "action": "repaired",
+            "install_mode": "kodi-native-official",
+            "version": "7.4.4",
+        }
+    ]
+
+
 def test_fetch_artifact_verifies_digest_and_identity(tmp_path):
     payload = archive("repository.example", "1.2.3")
     addon = {

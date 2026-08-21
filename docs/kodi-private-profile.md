@@ -245,11 +245,11 @@ odniesienia do wartości w ignorowanym pliku mode-`0600` `.env`:
 }
 ```
 
-Profil YouTube nie przyjmuje `YOUTUBE_PASS`. Wspólne klucze API są stosowane przez
-allowlistowany adapter, natomiast bearer token w `access_manager.json` pozostaje
-lokalny i nie wchodzi do rutynowej synchronizacji Profile Sync ani backupu release 1.
-Po czystej reinstalacji wymagany jest nowy interaktywny device flow. Szczegóły opisuje
-[runbook YouTube](youtube.md).
+Profil YouTube nie przyjmuje `YOUTUBE_PASS`. Allowlistowany adapter stosuje prywatną
+sesję z `.kodi-private/youtube/session.json`: osobiste API, oczekiwany kanał i trzy
+refresh tokeny wymagane przez dodatek. Plik pozostaje poza Git i Profile Sync/QNAP,
+ale rollout z zaufanego hosta może dzięki niemu odtworzyć konto po reinstalacji.
+Szczegóły tworzenia, rotacji i testu opisuje [runbook YouTube](youtube.md).
 
 Adapter Rapideo działa po oficjalnym uzgodnieniu dodatku i przed ostatecznym
 sprawdzeniem przywracania. Pełny rollout najpierw eksportuje zweryfikowany token z

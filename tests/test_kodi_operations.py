@@ -799,8 +799,11 @@ def test_android_rollout_retries_sanitized_provider_network_error(monkeypatch):
     }
 
 
-def test_youtube_configuration_is_explicitly_deferred_without_api_references():
+def test_youtube_configuration_is_explicitly_deferred_without_api_references(
+    tmp_path,
+):
     executor = object.__new__(ProductionExecutor)
+    executor.repository = tmp_path
     executor.fleet = {"references": {"YOUTUBE_USER": "user@example.invalid"}}
 
     assert executor._youtube_configuration("device") == {
@@ -808,6 +811,34 @@ def test_youtube_configuration_is_explicitly_deferred_without_api_references():
         "status": "API_CONFIG_REQUIRED",
         "changed": False,
     }
+
+
+def test_youtube_configuration_uses_private_session_without_api_references(
+    monkeypatch, tmp_path
+):
+    session = tmp_path / ".kodi-private/youtube/session.json"
+    session.parent.mkdir(parents=True)
+    session.write_text("{}\n", encoding="utf-8")
+    session.chmod(0o600)
+    executor = object.__new__(ProductionExecutor)
+    executor.repository = tmp_path
+    executor.adb = "adb"
+    executor.adb_server_port = 5038
+    executor.fleet = {
+        "references": {"YOUTUBE_USER": "user@example.invalid"}
+    }
+    calls = []
+    monkeypatch.setattr(
+        executor,
+        "_run_json",
+        lambda argv, adapter=None: calls.append((argv, adapter))
+        or {"ok": True, "authorization": "ACCOUNT_READY"},
+    )
+
+    result = executor._youtube_configuration("192.0.2.9:5555")
+
+    assert result["authorization"] == "ACCOUNT_READY"
+    assert calls[0][1] == "youtube"
 
 
 def test_youtube_configuration_uses_private_adapter_when_references_exist(

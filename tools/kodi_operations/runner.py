@@ -65,6 +65,9 @@ from .planner import rollout_plan
 from .store import RunStore
 
 
+ROOT = Path(__file__).resolve().parents[2]
+
+
 def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat()
 
@@ -339,7 +342,16 @@ class ProductionExecutor:
             "YOUTUBE_USER",
         }
         references = self.fleet.get("references", {})
-        if any(not references.get(name) for name in required):
+        configured_session = references.get(
+            "YOUTUBE_SESSION_FILE", ".kodi-private/youtube/session.json"
+        )
+        repository = getattr(self, "repository", ROOT)
+        session_path = Path(configured_session)
+        if not session_path.is_absolute():
+            session_path = repository / session_path
+        if not session_path.is_file() and any(
+            not references.get(name) for name in required
+        ):
             return {
                 "ok": True,
                 "status": "API_CONFIG_REQUIRED",

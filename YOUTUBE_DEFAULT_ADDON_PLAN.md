@@ -1,20 +1,19 @@
 # Plan domyślnej instalacji i konfiguracji YouTube w Kodi
 
-Status: release 1 zaimplementowany i zakwalifikowany technicznie na Androidzie;
-autoryzacja konta pozostaje zablokowana do czasu dostarczenia kompletnego zestawu
-`YOUTUBE_API_KEY`, `YOUTUBE_CLIENT_ID` i `YOUTUBE_CLIENT_SECRET`
+Status: release 1 oraz prywatne odtwarzanie sesji z hosta zaimplementowane;
+`ACCOUNT_READY` potwierdzone na BlueStacks i X88 dla oficjalnego dodatku 7.4.4
 
 Data: 2026-08-17
 
-Aktualizacja realizacji: 2026-08-18
+Aktualizacja realizacji: 2026-08-21
 
 - oficjalny `plugin.video.youtube` 7.4.4 oraz natywna zależność
   `inputstream.adaptive` przechodzą instalację, kontrolę originu i drugi przebieg
   `NO_CHANGE` na BlueStacks ARM64 oraz X88 ARMv7;
-- adapter nie odczytuje `YOUTUBE_PASS` i przy braku kompletnego personal API kończy
-  się bez mutacji stanem `API_CONFIG_REQUIRED`;
-- pełne oznaczenie `ACCOUNT_READY`, interaktywny Google device flow i release
-  polityki konta pozostają otwarte do czasu skonfigurowania klienta OAuth typu TV;
+- adapter nie odczytuje `YOUTUBE_PASS`; prywatna sesja zawiera osobiste API oraz
+  trzy refresh tokeny TV/użytkownik/VR i pozostaje poza Git/Profile Sync;
+- pełne oznaczenie `ACCOUNT_READY` wymaga odświeżenia wszystkich tokenów oraz
+  zgodności kanału, a kod dodatku raportuje „fully logged in” po restarcie;
 - kwalifikacja Flatpak i opcjonalny release 2 recovery sesji nie wchodzą do
   ukończonej części Android release 1.
 
@@ -39,8 +38,8 @@ Uwagi i sposób ich rozstrzygnięcia zapisano w
 
 Realizacja jest podzielona na dwie niezależnie wydawane części:
 
-- **release 1:** natywna instalacja z oficjalnego repo Kodi, klucze API, lokalna
-  sesja i interaktywny device flow, bez centralnego backupu tokenu;
+- **release 1:** natywna instalacja z oficjalnego repo Kodi, klucze API oraz
+  ignorowana sesja na zaufanym hoście propagowana przez rollout, bez QNAP;
 - **release 2:** QNAP secrets oraz opcjonalne recovery sesji dopiero po akceptacji
   ADR-0005, spike'u bezpieczeństwa i pełnym restore drill.
 
@@ -73,11 +72,11 @@ Przyjmujemy następujący kontrakt:
 - opcjonalny `YOUTUBE_EXPECTED_CHANNEL_ID` jest prywatnym identyfikatorem konta i
   służy do maszynowej weryfikacji wybranego kanału,
   ponieważ sam adres e-mail nie musi być zwracany przez dozwolone scope YouTube;
-- każda instalacja przechodzi jednorazowy Google device flow. Nie automatyzujemy
-  przeglądarki, CAPTCHA, 2FA ani wyboru konta za pomocą hasła z `.env`;
-- token OAuth jest bearer secretem lokalnej sesji. Nie kopiujemy jednego pliku
-  sesji pomiędzy flotą i nie twierdzimy, że Google kryptograficznie wiąże token z
-  urządzeniem;
+- operator wykonuje jeden trzyczęściowy device flow na zaufanym hoście. Nie
+  automatyzujemy CAPTCHA, 2FA ani wyboru konta za pomocą hasła z `.env`;
+- token OAuth jest bearer secretem wspólnej sesji i rollout kopiuje jego minimalny,
+  allowlistowany stan do floty. Google nie wiąże go kryptograficznie z urządzeniem,
+  więc przejęcie dowolnego urządzenia może wymagać rotacji sesji całej floty;
 - koperta per enrollment ogranicza, kto może pobrać i odszyfrować recovery copy,
   ale po odszyfrowaniu root lub przejęte urządzenie może skopiować plaintext tokenu.
 
@@ -120,8 +119,8 @@ nie robi ślepego downgrade'u. Nowa wersja przechodzi przyspieszoną kwalifikacj
 Powstaje allowlistowany adapter `youtube-oauth-v1`. Adapter:
 
 1. wymaga obsługiwanej wersji dodatku i znanego schematu jego plików;
-2. w release 1 tworzy backup tylko zarządzanej konfiguracji, jawnie wykluczając
-   pliki sesji; recovery copy sesji może pojawić się dopiero w release 2;
+2. używa kanonicznej sesji `.kodi-private/youtube/session.json`, ale jawnie
+   wyklucza ją z Git, Profile Sync i publicznych raportów;
 3. po spike'u używa dokładnie jednego kanonicznego mechanizmu konfiguracji API;
    nie modyfikuje równolegle `settings.xml` i `api_keys.json` bez dowodu, że wymaga
    tego przypięta wersja;
@@ -146,15 +145,14 @@ wzorcowego.
 Stan sesji dodatku jest dzielony na:
 
 - wspólny secret set API: API key, client ID i client secret;
-- per-device secret: minimalny, allowlistowany stan niezbędny do recovery sesji;
+- wspólny bearer secret: minimalny, allowlistowany stan potrzebny do odtworzenia;
 - niesekretne ustawienia wspólne: profil preferencji;
 - prywatny inventory: `YOUTUBE_USER` i `YOUTUBE_EXPECTED_CHANNEL_ID`.
 
-W release 1 wspólne klucze są dostarczane przez istniejący prywatny mechanizm, a
-sesja pozostaje wyłącznie lokalna. Klucze API, client ID i client secret są
-chronione w magazynie i transporcie, lecz po dostarczeniu do Kodi mogą zostać
-odczytane z przejętego urządzenia. Dlatego klient używa minimalnych scope, API key
-jest ograniczony do YouTube Data API, obowiązują quota alerts i procedura rotacji.
+W release 1 wspólne klucze i trzy refresh tokeny są przechowywane w ignorowanym
+profilu zaufanego hosta i dostarczane przez rollout. Po dostarczeniu do Kodi mogą
+zostać odczytane z przejętego urządzenia. Dlatego klient używa minimalnych scope,
+API key jest ograniczony do YouTube Data API, a rotacja obejmuje całą flotę.
 
 W release 2 wspólne klucze i recovery copy mogą być przechowywane przez magazyn
 sekretów QNAP. Device Agent dostaje kopertę dla konkretnego enrollmentu. Inny
@@ -163,16 +161,15 @@ plaintext bearer token jest bezużyteczny poza urządzeniem.
 
 Do czasu zaakceptowania ADR-0005 i wydania magazynu sekretów QNAP:
 
-- wspólne klucze API mogą pochodzić z ignorowanego `.env` hosta;
-- sesja pozostaje lokalna na urządzeniu i nie wchodzi do rutynowego backupu;
+- wspólne klucze API mogą pochodzić z sesji lub ignorowanego `.env` hosta;
+- sesja hostowa nie wchodzi do rutynowego backupu Profile Sync;
 - portable state, favourites i wspólna rewizja Profile Sync nie zawierają tokenów;
 - rollout nie może deklarować pełnej autonomii ani usuwać działającej sesji.
 
-Po reinstallu tworzącym nowe enrollment domyślną ścieżką jest ponowny device flow.
-Ewentualny wyjątek recovery wymaga osobnej akceptacji i sagi
-`RECOVERY_PREPARED -> REWRAPPED -> VERIFIED -> OLD_REVOKED`; nie wolno wdrożyć go
-przed restore drill. Brak poprawnego tokenu prowadzi do `AUTHORIZATION_REQUIRED`,
-a nie do użycia `YOUTUBE_PASS`.
+Po reinstallu rollout odtwarza zweryfikowaną sesję z zaufanego hosta. Brak lub
+unieważnienie tego profilu prowadzi do `AUTHORIZATION_REQUIRED` i nowego
+trzyczęściowego device flow, a nie do użycia `YOUTUBE_PASS`. QNAP nadal wymaga
+osobnej koperty i restore drill w release 2.
 
 ## 4. Zmiany implementacyjne
 
@@ -239,16 +236,15 @@ a nie do użycia `YOUTUBE_PASS`.
    tylko jeśli spike potwierdzi, że jest wspierane; wyszukiwanie API nie jest bramą
    przed konfiguracją keys.
 3. Dodać adapter wspólnych kluczy API i test redaction/rollback.
-4. Skonfigurować klienta OAuth typu TV oraz wykonać ręczny device flow na
-   BlueStacks dla konta wskazanego przez `YOUTUBE_USER`.
-5. Powtórzyć od początku na X88, również z aktywnym OpenVPN.
+4. Wykonać trzyczęściowy device flow TV/użytkownik/VR na zaufanym hoście i
+   potwierdzić oczekiwany kanał dla `YOUTUBE_USER`.
+5. Zastosować tę samą sesję najpierw na BlueStacks, potem na X88 z OpenVPN.
 6. Wykonać pełne E2E starych funkcji Kodi oraz review zmian.
 7. Zakwalifikować transport i dependency closure Flatpak na NUC przed objęciem NUC
    statusem wspieranym.
 8. Utworzyć jeden release polityki stable dopiero po sukcesie obu Android canary.
    Promocja kodu/API nie czeka na interaktywną zgodę urządzeń offline.
-9. Zrobić rollout na pozostałe dostępne urządzenia. Każde urządzenie może
-   wymagać osobnego, jawnego zatwierdzenia kodu Google.
+9. Zrobić rollout na pozostałe dostępne urządzenia bez ponownego device flow.
 10. Po teście repo, schematów i runbooków dowodzącym brak odczytu usunąć
     `YOUTUBE_PASS` z `.env`; `YOUTUBE_USER` pozostaje prywatną wskazówką operatora.
 
@@ -353,11 +349,10 @@ Plan jest zrealizowany, gdy:
 1. YouTube jest domyślnie instalowany z oficjalnego repo Kodi na wszystkich
    dostępnych urządzeniach;
 2. BlueStacks i X88 przeszły wszystkie bramy na jednym kandydacie;
-3. wspólne API keys i per-device tokeny nie występują w repo ani logach;
+3. wspólne API keys i tokeny nie występują w repo ani logach;
 4. `YOUTUBE_PASS` nie jest używany i został usunięty po zakończeniu migracji;
-5. każde urządzenie używające konta zostało jawnie autoryzowane device flow;
-6. drugi przebieg release 1 daje `NO_CHANGE`, a reinstall jawnie wymaga ponownej
-   autoryzacji;
+5. każdy rollout weryfikuje zgodność konta z oczekiwanym kanałem;
+6. drugi przebieg release 1 daje `NO_CHANGE`, a reinstall odtwarza sesję hostową;
 7. dla opcjonalnego release 2 inne enrollment nie może pobrać ani odszyfrować
    cudzej koperty, a restore drill tego samego logical device działa;
 8. pełne stare E2E Kodi oraz CI są zielone;

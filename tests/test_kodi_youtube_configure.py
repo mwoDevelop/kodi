@@ -23,6 +23,27 @@ REFERENCES = {
 }
 
 
+def _write_session(root, account="youtube@example.invalid", mode=0o600):
+    path = root / ".kodi-private/youtube/session.json"
+    path.parent.mkdir(parents=True)
+    document = {
+        "schema": 1,
+        "addon_id": "plugin.video.youtube",
+        "addon_version": "7.4.4",
+        "account_hint": account,
+        "expected_channel_id": "UC" + "c" * 22,
+        "api_key": REFERENCES["YOUTUBE_API_KEY"],
+        "client_id": REFERENCES["YOUTUBE_CLIENT_ID"],
+        "client_secret": REFERENCES["YOUTUBE_CLIENT_SECRET"],
+        "tv_refresh_token": "tv_" + "t" * 30,
+        "personal_refresh_token": "personal_" + "p" * 30,
+        "vr_refresh_token": "vr_" + "v" * 30,
+    }
+    path.write_text(json.dumps(document) + "\n", encoding="utf-8")
+    path.chmod(mode)
+    return path, document
+
+
 def test_resolve_credentials_uses_only_allowlisted_references():
     assert youtube.resolve_credentials(PROFILE, REFERENCES) == (
         REFERENCES["YOUTUBE_API_KEY"],
@@ -82,7 +103,9 @@ def test_configure_cleans_remote_secrets_and_returns_redacted_report(
     script = tmp_path / "device.py"
     script.write_text("pass\n", encoding="utf-8")
 
-    result = youtube.configure("adb", 5038, "serial", PROFILE, REFERENCES, script)
+    result = youtube.configure(
+        "adb", 5038, "serial", PROFILE, REFERENCES, script, root=tmp_path
+    )
 
     assert set(pushed_payload) == {
         "schema",
@@ -115,6 +138,7 @@ def test_absent_api_profile_returns_explicit_non_mutating_status(tmp_path):
         PROFILE,
         {"YOUTUBE_USER": "youtube@example.invalid"},
         tmp_path / "unused.py",
+        root=tmp_path,
     )
 
     assert result == {
@@ -142,4 +166,86 @@ def test_partial_api_profile_is_rejected_before_transport(tmp_path):
                 "YOUTUBE_USER": REFERENCES["YOUTUBE_USER"],
             },
             tmp_path / "unused.py",
+            root=tmp_path,
         )
+
+
+def test_private_session_supplies_api_and_oauth_without_api_env(tmp_path):
+    _path, session = _write_session(tmp_path)
+
+    configured = youtube.configuration(
+        tmp_path,
+        PROFILE,
+        {"YOUTUBE_USER": session["account_hint"]},
+    )
+
+    assert configured == (
+        session["api_key"],
+        session["client_id"],
+        session["client_secret"],
+        session["account_hint"],
+        session,
+    )
+
+
+def test_private_session_rejects_account_mismatch_and_unsafe_mode(tmp_path):
+    path, _session = _write_session(tmp_path)
+    with pytest.raises(ValueError, match="account differs"):
+        youtube.load_session(
+            tmp_path, {"YOUTUBE_USER": "different@example.invalid"}
+        )
+
+    path.chmod(0o640)
+    with pytest.raises(ValueError, match="unsafe"):
+        youtube.load_session(
+            tmp_path, {"YOUTUBE_USER": "youtube@example.invalid"}
+        )
+
+
+def test_private_session_path_cannot_escape_private_root(tmp_path):
+    with pytest.raises(ValueError, match="below .kodi-private"):
+        youtube.load_session(
+            tmp_path,
+            {
+                "YOUTUBE_USER": "youtube@example.invalid",
+                "YOUTUBE_SESSION_FILE": "outside.json",
+            },
+        )
+
+
+def test_dispatch_uses_host_event_transport_for_lan_android(monkeypatch):
+    calls = []
+
+    class Rpc:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def call(self, *_args, **_kwargs):
+            raise RuntimeError("method unavailable")
+
+    class Events:
+        def __init__(self, *_args):
+            pass
+
+        def execute_builtin_from_host(self, command):
+            calls.append(("host", command))
+
+        def execute_builtin(self, command):
+            calls.append(("device", command))
+
+    monkeypatch.setattr(youtube, "AdbJsonRpcClient", Rpc)
+    monkeypatch.setattr(youtube, "AdbEventClient", Events)
+    monkeypatch.setattr(youtube, "_wait_report", lambda *_args: {"ok": True})
+
+    result = youtube._dispatch(
+        "adb", 5038, "192.0.2.8:5555", "RunScript(test)", 0
+    )
+
+    assert result == {"ok": True}
+    assert calls == [("host", "RunScript(test)")]

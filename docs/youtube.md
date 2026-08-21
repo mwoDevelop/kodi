@@ -5,9 +5,10 @@ Projekt instaluje oficjalny `plugin.video.youtube` natywnie z
 mwoDevelop. `manifests/kodi-default-addons.json` przypina wersję i SHA-256 użyte do
 kwalifikacji, a Kodi zachowuje oficjalny origin i mechanizm aktualizacji.
 
-Pierwsze wydanie tej funkcji obejmuje instalację, osobiste klucze API i lokalną sesję
-OAuth. Token sesji nie jest kopiowany między urządzeniami ani zapisywany przez Profile
-Sync na QNAP. Po czystej reinstalacji trzeba ponownie wykonać logowanie urządzenia.
+Funkcja obejmuje instalację, osobiste klucze API i prywatny, przenośny profil sesji
+OAuth. Rollout z zaufanego hosta stosuje ten profil na zarządzanych urządzeniach i
+weryfikuje oczekiwany kanał. Profil nie jest wersjonowany, nie wchodzi do Profile Sync
+i nie jest jeszcze przechowywany na QNAP.
 
 ## Prywatne referencje
 
@@ -20,10 +21,10 @@ YOUTUBE_CLIENT_SECRET=REDACTED
 YOUTUBE_USER=operator-account-hint@example.invalid
 ```
 
-`YOUTUBE_USER` jest wyłącznie lokalną wskazówką, które konto wybrać na stronie Google.
-Nie jest przesyłany przez adapter. `YOUTUBE_PASS` nie jest obsługiwany, nie jest
-kopiowany na urządzenie i należy go usunąć z `.env`. Automatyzowanie hasła, CAPTCHA,
-2FA lub formularza logowania Google nie jest częścią rozwiązania.
+`YOUTUBE_USER` jest lokalną tożsamością oczekiwanego konta i musi odpowiadać polu
+`account_hint` w prywatnej sesji. `YOUTUBE_PASS` nie jest obsługiwany przez dodatek ani
+adapter i nigdy nie jest kopiowany na urządzenie. Google wymaga zgody OAuth; hasło,
+CAPTCHA, 2FA i formularz logowania nie są częścią rolloutu.
 
 W Google Cloud należy włączyć YouTube Data API v3, utworzyć ekran zgody oraz klienta
 OAuth typu „TVs and Limited Input devices”. Klucz API powinien być ograniczony do
@@ -41,6 +42,12 @@ Prywatny profil reinstalacji używa tylko referencji:
   "account_hint_ref": "YOUTUBE_USER"
 }
 ```
+
+Kanoniczna sesja znajduje się w ignorowanym pliku
+`.kodi-private/youtube/session.json` o trybie `0600`. Zawiera osobiste API, oczekiwany
+identyfikator kanału oraz trzy refresh tokeny wymagane przez wersję 7.4.4: TV,
+użytkownika i VR. Wartości są przekazywane do urządzenia tylko w krótkotrwałym pliku,
+a raport zawiera wyłącznie statusy logiczne.
 
 ## Instalacja i konfiguracja
 
@@ -60,9 +67,10 @@ Sam adapter Android można uruchomić diagnostycznie:
 ```
 
 Adapter ustawia kanoniczne pola API przypiętej wersji dodatku, kończy setup wizard,
-wiąże opcjonalny serwer HTTP dodatku z loopback i wykonuje publiczną sondę YouTube Data
-API. Prywatny plik tymczasowy i raport na pamięci współdzielonej Androida są usuwane w
-bloku `finally`. Raport nie zawiera wartości kluczy ani wskazówki konta.
+wiąże opcjonalny serwer HTTP dodatku z loopback, odświeża trzy tokeny, sprawdza przez
+YouTube Data API oczekiwany kanał i atomowo zapisuje minimalny stan dodatku. Prywatny
+plik tymczasowy i raport na pamięci współdzielonej Androida są usuwane w bloku
+`finally`. Raport nie zawiera kluczy, tokenów, adresu konta ani identyfikatora kanału.
 
 `inputstream.adaptive` jest obowiązkową zależnością binarną. Oficjalne repo Kodi dla
 Androida publikuje ją dla ARM64 i ARMv7, dlatego Kodi działające jako pakiet `x86` w
@@ -73,27 +81,29 @@ modalne potwierdzenie. Automatyzacja akceptuje wyłącznie dialog, który pojawi
 bezpośrednio po jej własnym `InstallAddon`, i odmawia działania przy wcześniej
 otwartym oknie potwierdzenia.
 
-Brak kompletu `YOUTUBE_API_KEY`, `YOUTUBE_CLIENT_ID` i `YOUTUBE_CLIENT_SECRET` daje
-jawny stan `API_CONFIG_REQUIRED`; instalacja kodu może się udać, ale konto nie jest
-gotowe. Częściowy zestaw referencji jest błędem i nie powoduje mutacji.
-Przy pierwszym ręcznym otwarciu dodatku Kodi może wtedy nadal pokazać kreator
-konfiguracji. Rollout celowo go nie akceptuje ani nie oznacza jako ukończony bez
-kluczy API; operator może zamknąć okno, a po uzupełnieniu referencji ponownie
-uruchomić adapter i wykonać device flow.
+Adapter przyjmuje albo kompletny zestaw API w `.env`, albo kompletną sesję prywatną.
+Brak obu źródeł daje `API_CONFIG_REQUIRED`; częściowy zestaw jest błędem bez mutacji.
+Uzgadnianie oficjalnego dodatku porównuje jego pliki z przypiętym ZIP-em, dzięki czemu
+potrafi naprawić uszkodzoną instalację tej samej wersji bez zmiany originu Kodi.
 
-## Interaktywny OAuth
+## Utworzenie i rotacja sesji OAuth
 
-Po konfiguracji otwórz w Kodi `YouTube -> Sign In`. Dodatek wyświetla kod urządzenia;
-na zaufanym komputerze lub telefonie otwórz adres wskazany przez Google, zaloguj się na
-konto oznaczone lokalnie przez `YOUTUBE_USER` i zaakceptuj zakresy. Przypięta wersja
-dodatku może poprosić kolejno o więcej niż jeden kod dla używanych klientów TV/VR.
-Nie wyłączaj Kodi przed ukończeniem całego przepływu.
+Na zaufanym hoście uruchom:
+
+```bash
+.venv/bin/python tools/youtube_session_authorize.py --references .env
+```
+
+Narzędzie pokaże kolejno trzy publiczne kody: YouTube TV, osobistego klienta i YouTube
+VR. Każdy kod zatwierdź na wskazanej stronie Google dla konta z `YOUTUBE_USER`.
+Narzędzie nie czyta ani nie wysyła `YOUTUBE_PASS`; po sukcesie weryfikuje kanał i
+atomowo zastępuje prywatną sesję. Następny rollout propaguje ją na urządzenia.
 
 Stan adaptera oznacza:
 
-- `AUTHORIZATION_REQUIRED` — brak lokalnego refresh tokenu;
-- `CONSENT_PENDING` — zapisano część tokenów, ale przepływ nie jest kompletny;
-- `ACCOUNT_READY` — dodatek ma kompletny lokalny zestaw sesji;
+- `AUTHORIZATION_REQUIRED` — brak lokalnych refresh tokenów;
+- `CONSENT_PENDING` — zapisano mniej niż trzy wymagane tokeny;
+- `ACCOUNT_READY` — wszystkie tokeny odświeżono, a oczekiwany kanał zweryfikowano;
 - `API_CONFIG_REQUIRED` — brakuje osobistego zestawu API;
 - `UNQUALIFIED_UPSTREAM` — Kodi zainstalowało wersję nowszą od przetestowanej.
 
@@ -106,8 +116,10 @@ bez zmian i nie może ponownie żądać kodu.
 - `YouTubeApiDisabled`: włącz YouTube Data API v3 w projekcie klucza.
 - `YouTubeQuotaExceeded`: sprawdź quota w Google Cloud; adapter nie usuwa sesji.
 - `YouTubeApiProbeFailed`: sprawdź DNS, zegar i VPN przed zmianą poświadczeń.
-- `AUTHORIZATION_REQUIRED` po reinstalacji: wykonaj nowy device flow; jest to
-  oczekiwane w release 1.
+- `YouTubeSessionInvalid`: wykonaj ponownie `youtube_session_authorize.py`, a potem
+  rollout; token został unieważniony lub wygasł.
+- timeout na urządzeniu przy poprawnej sesji: sprawdź trasę Google przez VPN i zegar;
+  adapter nie zastępuje wtedy poprzedniego działającego stanu.
 - niekwalifikowana wersja: nie wykonuj downgrade'u ani migracji tokenu; zakwalifikuj
   nowy oficjalny ZIP najpierw na BlueStacks i X88.
 
