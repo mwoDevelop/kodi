@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: kodi-secret-broker
+Version: 0.1.0
+Requires-Python: >=3.11
+Requires-Dist: cryptography==49.0.0
+Requires-Dist: pyhpke==0.6.5
