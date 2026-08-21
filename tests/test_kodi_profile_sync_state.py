@@ -65,6 +65,45 @@ def test_probe_redacts_server_and_secrets(tmp_path):
     assert "never-print" not in serialized
 
 
+def test_probe_accepts_schema_2_and_reports_only_redacted_secret_health(tmp_path):
+    addon = Addon(
+        {
+            "server_url": "https://profile-sync.example.test",
+            "logical_device_id": "x88pro20",
+        }
+    )
+    (tmp_path / "state.json").write_text(
+        json.dumps(
+            {
+                "schema": 2,
+                "status": "NO_CHANGE",
+                "enrollment": {
+                    "logical_device_id": "x88pro20",
+                    "channel": "home-stable",
+                    "encryption_key_id": "encryption-public-id",
+                },
+                "access_token": "never-print-token",
+                "signing_seed": "never-print-seed",
+                "encryption_private_key": "never-print-private-key",
+                "secret_state": "SHADOW_VERIFIED",
+                "secret_type": "youtube-session-v1",
+                "secret_set_generation": 1,
+                "secret_last_verified_utc": "2026-08-21T18:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = probe(addon, tmp_path)
+
+    serialized = json.dumps(result)
+    assert result["has_encryption_private_key"] is True
+    assert result["encryption_key_registered"] is True
+    assert result["secret_state"] == "SHADOW_VERIFIED"
+    assert result["secret_set_generation"] == 1
+    assert "never-print" not in serialized
+
+
 def test_configure_sets_per_device_identity_without_creating_credentials(
     tmp_path,
 ):

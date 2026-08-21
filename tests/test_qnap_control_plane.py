@@ -1,4 +1,5 @@
 import copy
+import io
 import json
 import subprocess
 
@@ -9,6 +10,7 @@ from tools.qnap_control_plane import (
     ControlPlaneError,
     environment,
     validate_policy,
+    verify_api,
 )
 
 
@@ -95,6 +97,49 @@ def test_control_plane_environment_rejects_public_or_mutable_target():
         environment(image, "8.8.8.8")
     with pytest.raises(ControlPlaneError, match="immutable"):
         environment("ghcr.io/mwodevelop/kodi-control-plane:latest", "192.168.1.39")
+
+
+@pytest.mark.parametrize("schema", (1, 2))
+def test_control_plane_api_accepts_supported_response_schemas(
+    monkeypatch, tmp_path, schema
+):
+    ca = tmp_path / "ca.crt"
+    certificate = tmp_path / "client.crt"
+    key = tmp_path / "client.key"
+    for path in (ca, certificate, key):
+        path.write_text("test", encoding="utf-8")
+
+    class Context:
+        minimum_version = None
+
+        def load_cert_chain(self, _certificate, _key):
+            return None
+
+    class Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    payload = json.dumps(
+        {
+            "schema": schema,
+            "healthy": True,
+            "services": [],
+            "audit_sequence": 1,
+        }
+    ).encode("utf-8")
+    monkeypatch.setattr(
+        "tools.qnap_control_plane.ssl.create_default_context", lambda **_kwargs: Context()
+    )
+    monkeypatch.setattr(
+        "tools.qnap_control_plane.urlopen", lambda *_args, **_kwargs: Response(payload)
+    )
+
+    assert verify_api("192.168.1.39", ca, certificate, key, attempts=1)[
+        "schema"
+    ] == schema
 
 
 @pytest.fixture

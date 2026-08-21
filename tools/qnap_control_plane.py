@@ -327,9 +327,8 @@ def verify_api(host_ip, ca, client_certificate, client_key, attempts=30):
             with urlopen(endpoint, timeout=5, context=context) as response:
                 document = json.load(response)
             if (
-                document.get("schema") == 1
+                document.get("schema") in {1, 2}
                 and isinstance(document.get("healthy"), bool)
-                and document.get("schema") in {1, 2}
                 and isinstance(document.get("services"), list)
                 and isinstance(document.get("audit_sequence"), int)
             ):
