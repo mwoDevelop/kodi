@@ -1020,6 +1020,7 @@ class ProductionExecutor:
                     {
                         "snapshot_id": snapshot["snapshot_id"],
                         "attestation_id": attestation["attestation_id"],
+                        "attestation_kind": "device",
                         "attestation_sha256": attestation["attestation_sha256"],
                         "qnap_candidate_id": qnap["candidate_id"],
                         "qnap_candidate_sha256": qnap["qnap_candidate_sha256"],
