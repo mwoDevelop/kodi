@@ -49,6 +49,7 @@ def test_qnap_lock_accepts_transitional_lock_without_control_plane(tmp_path):
     assert set(qnap_lock.load_lock(path)["services"]) == {
         "profile-sync",
         "provider-relay",
+        "secret-broker",
         "upstream-watchdog",
     }
 
@@ -197,6 +198,49 @@ def test_deploy_accepts_a_structured_watchdog_alert(monkeypatch, tmp_path):
 
     assert result["result"] == "NO_CHANGE"
     assert result["services"] == {"upstream-watchdog": "NO_CHANGE"}
+
+
+def test_full_deploy_orders_runtime_dependencies(monkeypatch, tmp_path):
+    document = lock_document()
+    path = tmp_path / "qnap-stable.json"
+    path.write_text(json.dumps(document))
+    running = {
+        name: {
+            "image": item["image"].replace("a" * 64, "e" * 64),
+            "status": "running",
+            "health": "healthy",
+        }
+        for name, item in document["services"].items()
+    }
+    deployed = []
+
+    class Lock:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+    def deploy(name, image, *_args, **_kwargs):
+        deployed.append(name)
+        running[name]["image"] = image
+
+    monkeypatch.setattr(qnap_lock, "RemoteLock", Lock)
+    monkeypatch.setattr(
+        qnap_lock.qnap_images,
+        "status",
+        lambda *_args, **_kwargs: {
+            name: dict(item) for name, item in running.items()
+        },
+    )
+    monkeypatch.setattr(qnap_lock.qnap_images, "deploy", deploy)
+
+    qnap_lock.deploy(path)
+
+    assert deployed[:3] == ["secret-broker", "profile-sync", "control-plane"]
 
 
 def test_deploy_rejects_service_outside_stable_lock(tmp_path):

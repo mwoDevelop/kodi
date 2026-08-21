@@ -4,7 +4,7 @@
 
 - tożsamości enrollmentów i stan floty;
 - historia rolloutów i raportów;
-- w dalszych fazach: sekrety użytkownika, release intent i klucze assignment;
+- zaszyfrowane secret sety użytkownika oraz klucz główny Secret Brokera;
 - integralność repo stable oraz konfiguracji urządzeń.
 
 ## Granice zaufania
@@ -22,7 +22,8 @@
 - obowiązkowe mTLS dla API operatora i integracji Profile Sync, z osobnymi
   korzeniami zaufania dla operatorów i klientów integracyjnych;
 - health/readiness tylko na loopback kontenera;
-- brak endpointów mutujących i brak magazynu sekretów;
+- brak mutującego GUI; operacje lifecycle Secret Brokera są ograniczone do
+  audytowanego CLI przez SSH i stdin;
 - oddzielny kontrakt integracyjny zamiast bezpośredniego SQLite;
 - rekursywna redakcja przed zapisem cache/audytu;
 - łańcuch SHA-256 audytu oraz checkpoint HMAC z kluczem poza bazą;
@@ -34,8 +35,8 @@
 - checkpoint na tym samym QNAP nie dowodzi historii wobec przejętego root QTS;
   przed cutoverem wymagany jest cykliczny eksport poza QNAP;
 - HMAC jest mechanizmem przejściowym dla read-only audytu, nie kluczem promotora;
-- GitHub App, WebAuthn, delegated assignment key i secret envelopes nie są częścią
-  tego release i żadna mutacja nie może od nich pozornie zależeć;
+- GitHub App, WebAuthn i delegated assignment key nie są częścią tego release;
+  mutacje sekretów nie są dostępne w GUI;
 - brak dostępności QNAP oznacza brak nowych operacji administracyjnych, lecz nie
   unieważnia ostatniej działającej konfiguracji Kodi.
 
@@ -45,9 +46,15 @@
   referencje; nie trafiają do Git, raportów ani Profile Sync;
 - po zastosowaniu na urządzeniu wartości mogą zostać odczytane przez przejęty system,
   dlatego klient ma minimalne scope, a API key jest ograniczony do YouTube Data API;
-- bearer token sesji pozostaje lokalny per instalacja wtyczki. Nie jest kopiowany
-  pomiędzy urządzeniami, objęty portable state ani zapisywany na QNAP;
+- trzy refresh tokeny tworzą jeden wspólny fleet secret set przechowywany
+  zaszyfrowanie na QNAP. Profile Sync transportuje wyłącznie kopertę HPKE dla
+  konkretnego enrollmentu, a Agent zapisuje dane tylko w profilu oficjalnego
+  dodatku YouTube;
 - `YOUTUBE_USER` jest tylko lokalną wskazówką operatora, a `YOUTUBE_PASS` jest jawnie
   odrzucany. Device flow nie automatyzuje formularza Google, CAPTCHA ani 2FA;
-- niedostępność QNAP nie unieważnia istniejącej sesji. Czysta reinstalacja kończy się
-  stanem `AUTHORIZATION_REQUIRED` i wymaga nowej jawnej zgody.
+- wszystkie trzy tokeny mają scope `https://www.googleapis.com/auth/youtube`,
+  wymagany przez kwalifikowaną wersję oficjalnego dodatku. Ryzyko jest ograniczane
+  dedykowanym kontem, nie deklaracją niezgodnego scope `youtube.readonly`;
+- niedostępność QNAP nie unieważnia już zapisanej sesji. Czysta reinstalacja nie
+  odzyska jej do czasu powrotu Broker/Profile Sync, ale nie wymaga ponownej zgody,
+  jeżeli aktywny secret set i enrollment są dostępne.

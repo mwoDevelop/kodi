@@ -22,6 +22,16 @@
       "reason_codes": ["PROFILE_SYNC_TRANSPORT_ERROR", "STALE", "UNAVAILABLE"]
     },
     {
+      "id": "secret-broker",
+      "owner": "secret-broker",
+      "adapter": "secret_broker_readiness_mtls",
+      "auth": "mtls_read_only",
+      "stale_after_seconds": 900,
+      "trust_level": "authenticated_observation",
+      "fallback": "last_success",
+      "reason_codes": ["SECRET_BROKER_TRANSPORT_ERROR", "SECRET_BROKER_NOT_READY", "STALE", "UNAVAILABLE"]
+    },
+    {
       "id": "github-workflows",
       "owner": "github",
       "adapter": "github_actions_api",

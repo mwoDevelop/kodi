@@ -36,6 +36,18 @@ services:
       - /run/control-plane/profile-sync/client.crt
       - --profile-sync-client-key
       - /run/control-plane/profile-sync/client.key
+      - --secret-broker-host
+      - secret-broker
+      - --secret-broker-port
+      - "9444"
+      - --secret-broker-server-name
+      - secret-broker
+      - --secret-broker-ca
+      - /run/control-plane/secret-broker/ca.crt
+      - --secret-broker-client-cert
+      - /run/control-plane/secret-broker/client.crt
+      - --secret-broker-client-key
+      - /run/control-plane/secret-broker/client.key
       - --github-repository
       - mwoDevelop/kodi
       - --refresh-seconds
@@ -97,6 +109,24 @@ services:
       - type: bind
         source: ${CONTROL_PLANE_PROFILE_SYNC_CLIENT_KEY:?set Profile Sync client key}
         target: /run/control-plane/profile-sync/client.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_SECRET_BROKER_CA:?set Secret Broker CA}
+        target: /run/control-plane/secret-broker/ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_SECRET_BROKER_CLIENT_CERT:?set Secret Broker client certificate}
+        target: /run/control-plane/secret-broker/client.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_SECRET_BROKER_CLIENT_KEY:?set Secret Broker client key}
+        target: /run/control-plane/secret-broker/client.key
         read_only: true
         bind:
           create_host_path: false

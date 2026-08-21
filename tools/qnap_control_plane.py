@@ -69,8 +69,9 @@ def _local_file(path, description, private=False):
     return path.resolve()
 
 
-def validate_private_files(private):
+def validate_private_files(private, secret_broker_private=None):
     private = Path(private)
+    broker = Path(secret_broker_private or private / "secret-broker")
     files = {
         "tls_certificate": _local_file(
             private / "tls/server.crt", "Control Plane TLS certificate"
@@ -99,6 +100,13 @@ def validate_private_files(private):
         "profile_client_key": _local_file(
             private / "profile-sync/client.key", "Profile Sync client key", private=True
         ),
+        "broker_ca": _local_file(broker / "ca.crt", "Secret Broker CA"),
+        "broker_client_certificate": _local_file(
+            broker / "client.crt", "Secret Broker client certificate"
+        ),
+        "broker_client_key": _local_file(
+            broker / "client.key", "Secret Broker client key", private=True
+        ),
     }
     if len(files["checkpoint_key"].read_bytes()) < 32:
         raise ControlPlaneError("audit checkpoint key is too short")
@@ -113,6 +121,10 @@ def validate_private_files(private):
         profile.load_cert_chain(
             files["profile_client_certificate"], files["profile_client_key"]
         )
+        broker_client = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        broker_client.load_cert_chain(
+            files["broker_client_certificate"], files["broker_client_key"]
+        )
     except (OSError, ssl.SSLError) as error:
         raise ControlPlaneError("certificate and key pair differs") from error
     try:
@@ -125,6 +137,11 @@ def validate_private_files(private):
         _verify_certificate(
             files["profile_ca"],
             files["profile_client_certificate"],
+            "sslclient",
+        )
+        _verify_certificate(
+            files["broker_ca"],
+            files["broker_client_certificate"],
             "sslclient",
         )
     except OSError as error:
@@ -156,6 +173,9 @@ def environment(image, host_ip):
             f"CONTROL_PLANE_PROFILE_SYNC_CA={config / 'profile-sync/ca.crt'}",
             f"CONTROL_PLANE_PROFILE_SYNC_CLIENT_CERT={config / 'profile-sync/client.crt'}",
             f"CONTROL_PLANE_PROFILE_SYNC_CLIENT_KEY={config / 'profile-sync/client.key'}",
+            f"CONTROL_PLANE_SECRET_BROKER_CA={config / 'secret-broker/ca.crt'}",
+            f"CONTROL_PLANE_SECRET_BROKER_CLIENT_CERT={config / 'secret-broker/client.crt'}",
+            f"CONTROL_PLANE_SECRET_BROKER_CLIENT_KEY={config / 'secret-broker/client.key'}",
             f"CONTROL_PLANE_SCHEDULE_CATALOG={config / 'catalogs/control-plane-schedules.json'}",
             f"CONTROL_PLANE_STATUS_SOURCE_CATALOG={config / 'catalogs/control-plane-status-sources.json'}",
             "CONTROL_PLANE_UID=10001",
@@ -237,6 +257,9 @@ def validate_policy(document):
         "/run/control-plane/profile-sync/ca.crt",
         "/run/control-plane/profile-sync/client.crt",
         "/run/control-plane/profile-sync/client.key",
+        "/run/control-plane/secret-broker/ca.crt",
+        "/run/control-plane/secret-broker/client.crt",
+        "/run/control-plane/secret-broker/client.key",
         "/run/control-plane/catalogs/schedules.json",
         "/run/control-plane/catalogs/status-sources.json",
     }
@@ -271,6 +294,9 @@ def validate_policy(document):
         "--checkpoint-key /run/control-plane/audit-checkpoint.key",
         "--profile-sync-host profile-sync",
         "--profile-sync-port 8767",
+        "--secret-broker-host secret-broker",
+        "--secret-broker-port 9444",
+        "--secret-broker-server-name secret-broker",
         "--schedule-catalog /run/control-plane/catalogs/schedules.json",
         "--status-source-catalog /run/control-plane/catalogs/status-sources.json",
     ):
@@ -314,11 +340,13 @@ def verify_api(host_ip, ca, client_certificate, client_key, attempts=30):
     raise ControlPlaneError("Control Plane mTLS API verification failed") from last_error
 
 
-def deploy(session, repository, image, host_ip, private):
+def deploy(
+    session, repository, image, host_ip, private, secret_broker_private=None
+):
     report = preflight(session)
     if report["raid"] != {"array": "UU", "recovery_percent": None}:
         raise ControlPlaneError("Control Plane deployment requires healthy RAID [UU]")
-    files = validate_private_files(private)
+    files = validate_private_files(private, secret_broker_private)
     env = environment(image, host_ip)
     _install, docker = container_station(session)
     repository = Path(repository)
@@ -344,7 +372,7 @@ def deploy(session, repository, image, host_ip, private):
             shlex.quote(str(path))
             for path in (
                 app, data, ROOT / "backups", config / "tls",
-                config / "profile-sync", config / "catalogs",
+                config / "profile-sync", config / "secret-broker", config / "catalogs",
             )
         )
     )
@@ -361,6 +389,11 @@ def deploy(session, repository, image, host_ip, private):
             files["profile_client_certificate"], 0o400
         ),
         config / "profile-sync/client.key": (files["profile_client_key"], 0o400),
+        config / "secret-broker/ca.crt": (files["broker_ca"], 0o400),
+        config / "secret-broker/client.crt": (
+            files["broker_client_certificate"], 0o400
+        ),
+        config / "secret-broker/client.key": (files["broker_client_key"], 0o400),
         config / "catalogs/control-plane-schedules.json": (
             repository / "manifests/control-plane-schedules.json",
             0o400,

@@ -52,6 +52,7 @@ def load_lock(path):
     supported_sets = {
         frozenset(available),
         frozenset(set(available) - {"control-plane"}),
+        frozenset(set(available) - {"secret-broker"}),
     }
     if frozenset(document["services"]) not in supported_sets:
         raise ValueError("QNAP lock service set differs from deployment policy")
@@ -186,8 +187,17 @@ class RemoteLock:
 
 def deploy(lock_path, references=".env", repository=ROOT, service_names=None):
     lock = load_lock(lock_path)
-    selected = list(service_names or lock["services"])
-    unknown = sorted(set(selected).difference(lock["services"]))
+    requested = list(service_names or lock["services"])
+    deployment_order = (
+        "secret-broker",
+        "profile-sync",
+        "control-plane",
+        "provider-relay",
+        "upstream-watchdog",
+    )
+    selected = [name for name in deployment_order if name in requested]
+    selected.extend(name for name in requested if name not in selected)
+    unknown = sorted(set(requested).difference(lock["services"]))
     if unknown:
         raise ValueError("unknown QNAP stable services: %s" % ", ".join(unknown))
     expected = {

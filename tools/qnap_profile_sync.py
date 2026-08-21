@@ -345,6 +345,12 @@ def production_environment(image, host_ip):
             % (root / "config" / "tls" / "server.key"),
             "PROFILE_SYNC_INTEGRATION_CLIENT_CA=%s"
             % (root / "config" / "tls" / "integration-clients-ca.crt"),
+            "PROFILE_SYNC_SECRET_BROKER_CA=%s"
+            % (root / "config" / "secret-broker" / "ca.crt"),
+            "PROFILE_SYNC_SECRET_BROKER_CLIENT_CERT=%s"
+            % (root / "config" / "secret-broker" / "client.crt"),
+            "PROFILE_SYNC_SECRET_BROKER_CLIENT_KEY=%s"
+            % (root / "config" / "secret-broker" / "client.key"),
             "PROFILE_SYNC_UID=10001",
             "PROFILE_SYNC_GID=10001",
             "",
@@ -438,7 +444,7 @@ def verify_production(host_ip, ca_certificate, attempts=45):
             if (
                 document.get("status") == "ready"
                 and document.get("mode") == "verified-tls"
-                and document.get("database_schema") == 4
+                and document.get("database_schema") == 5
                 and document.get("service") == "kodi-profile-sync-server"
             ):
                 return {
@@ -468,6 +474,7 @@ def deploy_production(
     tls_certificate,
     tls_key,
     ca_certificate,
+    secret_broker_private=None,
 ):
     report = preflight(session)
     if report["raid"] != {"array": "UU", "recovery_percent": None}:
@@ -478,6 +485,21 @@ def deploy_production(
     integration_ca = _local_regular_file(
         ca_certificate, "TLS CA certificate"
     )
+    secret_broker_private = Path(secret_broker_private or "")
+    broker_files = {
+        "ca": _local_regular_file(
+            secret_broker_private / "ca.crt", "Secret Broker CA"
+        ),
+        "certificate": _local_regular_file(
+            secret_broker_private / "client.crt",
+            "Secret Broker client certificate",
+        ),
+        "key": _local_regular_file(
+            secret_broker_private / "client.key",
+            "Secret Broker client key",
+            private=True,
+        ),
+    }
     _install, docker = container_station(session)
     root = production_root()
     app = root / "app"
@@ -509,6 +531,9 @@ def deploy_production(
             tls=shlex.quote(str(tls)),
         )
     )
+    session.execute(
+        "mkdir -p " + shlex.quote(str(config / "secret-broker"))
+    )
     deployment = Path(repository) / "deploy" / "qnap-profile-sync"
     compose_source = (deployment / "compose.yaml").read_text(
         encoding="utf-8"
@@ -531,6 +556,17 @@ def deploy_production(
         security["key_registry"].read_text(encoding="utf-8"),
         0o400,
     )
+    for name, source in broker_files.items():
+        target_name = {
+            "ca": "ca.crt",
+            "certificate": "client.crt",
+            "key": "client.key",
+        }[name]
+        session.upload_text(
+            str(config / "secret-broker" / target_name),
+            source.read_text(encoding="utf-8"),
+            0o400,
+        )
     session.upload_text(
         str(tls / "server.crt"),
         security["tls_certificate"].read_text(encoding="utf-8"),
@@ -558,6 +594,10 @@ def deploy_production(
                 str(tls / "integration-clients-ca.crt")
             ),
         )
+    )
+    session.execute(
+        "chown -R 10001:10001 "
+        + shlex.quote(str(config / "secret-broker"))
     )
     session.execute(
         docker

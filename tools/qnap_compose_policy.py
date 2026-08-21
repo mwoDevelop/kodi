@@ -24,6 +24,9 @@ KEY_TARGET = "/run/profile-sync/key-registry.json"
 TLS_CERT_TARGET = "/run/profile-sync/tls/server.crt"
 TLS_KEY_TARGET = "/run/profile-sync/tls/server.key"
 INTEGRATION_CA_TARGET = "/run/profile-sync/integration/clients-ca.crt"
+SECRET_BROKER_CA_TARGET = "/run/profile-sync/secret-broker/ca.crt"
+SECRET_BROKER_CERT_TARGET = "/run/profile-sync/secret-broker/client.crt"
+SECRET_BROKER_KEY_TARGET = "/run/profile-sync/secret-broker/client.key"
 
 
 class PolicyError(ValueError):
@@ -146,7 +149,14 @@ def validate_policy(document, mode, allow_placeholder=False):
         TLS_KEY_TARGET,
     }
     if mode == "production":
-        expected_targets.add(INTEGRATION_CA_TARGET)
+        expected_targets.update(
+            {
+                INTEGRATION_CA_TARGET,
+                SECRET_BROKER_CA_TARGET,
+                SECRET_BROKER_CERT_TARGET,
+                SECRET_BROKER_KEY_TARGET,
+            }
+        )
     if not isinstance(volumes, list) or len(volumes) != len(expected_targets):
         raise PolicyError("unexpected bind mount target count")
     by_target = {item.get("target"): item for item in volumes}
@@ -179,12 +189,23 @@ def validate_policy(document, mode, allow_placeholder=False):
         explicit_bind_targets_from_source,
     )
     integration_ca_source = None
+    secret_broker_sources = []
     if mode == "production":
         integration_ca_source = _absolute_source(
             by_target[INTEGRATION_CA_TARGET],
             INTEGRATION_CA_TARGET,
             explicit_bind_targets_from_source,
         )
+        secret_broker_sources = [
+            _absolute_source(
+                by_target[target], target, explicit_bind_targets_from_source
+            )
+            for target in (
+                SECRET_BROKER_CA_TARGET,
+                SECRET_BROKER_CERT_TARGET,
+                SECRET_BROKER_KEY_TARGET,
+            )
+        ]
     for target in expected_targets - {"/data"}:
         if by_target[target].get("read_only") is not True:
             raise PolicyError("security configuration must be read-only")
@@ -209,6 +230,11 @@ def validate_policy(document, mode, allow_placeholder=False):
                 raise PolicyError("production TLS file is outside ProfileSync")
         if not integration_ca_source.startswith(production_root + "/config/tls/"):
             raise PolicyError("integration client CA is outside ProfileSync")
+        if any(
+            not source.startswith(production_root + "/config/secret-broker/")
+            for source in secret_broker_sources
+        ):
+            raise PolicyError("Secret Broker mTLS file is outside ProfileSync")
         networks = service.get("networks", {})
         if "control-plane" not in networks:
             raise PolicyError("production integration network is missing")
@@ -216,6 +242,8 @@ def validate_policy(document, mode, allow_placeholder=False):
         if (
             "--integration-listen 0.0.0.0" not in command
             or "--integration-client-ca " + INTEGRATION_CA_TARGET not in command
+            or "--secret-broker-url https://secret-broker:9444" not in command
+            or "--secret-broker-ca " + SECRET_BROKER_CA_TARGET not in command
         ):
             raise PolicyError("production mTLS integration listener is missing")
         if labels.get(SMOKE_LABEL) == "smoke":
