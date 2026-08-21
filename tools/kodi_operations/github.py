@@ -63,7 +63,7 @@ class GitHubClient:
         return {"commit": commit, "branch": branch, "clean": True}
 
     def wait_publication_queue_idle(
-        self, *, quiet_polls=3, poll_seconds=5, max_polls=180
+        self, *, quiet_polls=3, poll_seconds=5, max_polls=360
     ):
         """Wait for the shared kodi-pages concurrency group to become stable-idle.
 

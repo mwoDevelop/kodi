@@ -6,7 +6,6 @@ on:
     - cron: "10 3 * * *"
   workflow_run:
     workflows:
-      - publish testing
       - deploy stable
       - certify Umbrella hermetically
     types: [completed]
