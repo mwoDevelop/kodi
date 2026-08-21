@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import datetime as dt
 import base64
+import datetime as dt
 import hashlib
 import json
 import subprocess
@@ -20,6 +20,12 @@ class GitHubError(RuntimeError):
 
 
 class GitHubClient:
+    PUBLICATION_WORKFLOWS = (
+        "publish-testing.yml",
+        "publish-pages.yml",
+        "deploy-stable.yml",
+    )
+
     def __init__(self, repository: Path, slug="mwoDevelop/kodi"):
         self.repository = Path(repository).resolve()
         self.slug = slug
@@ -56,7 +62,50 @@ class GitHubClient:
         self.gh("auth", "status")
         return {"commit": commit, "branch": branch, "clean": True}
 
+    def wait_publication_queue_idle(
+        self, *, quiet_polls=3, poll_seconds=5, max_polls=180
+    ):
+        """Wait for the shared kodi-pages concurrency group to become stable-idle.
+
+        GitHub retains only one pending run per concurrency group.  A delayed
+        workflow_run event can therefore replace a manual pending dispatch even
+        when cancel-in-progress is false.  Requiring consecutive idle polls
+        closes that race without weakening the single-writer contract.
+        """
+        idle_polls = 0
+        active_states = {"queued", "pending", "in_progress", "waiting", "requested"}
+        for _attempt in range(max_polls):
+            active = []
+            for workflow in self.PUBLICATION_WORKFLOWS:
+                rows = self.gh_json(
+                    "run",
+                    "list",
+                    "--repo",
+                    self.slug,
+                    "--workflow",
+                    workflow,
+                    "--branch",
+                    "main",
+                    "--limit",
+                    "10",
+                    "--json",
+                    "databaseId,status,url",
+                )
+                active.extend(
+                    item for item in rows if item.get("status") in active_states
+                )
+            if active:
+                idle_polls = 0
+            else:
+                idle_polls += 1
+                if idle_polls >= quiet_polls:
+                    return
+            time.sleep(poll_seconds)
+        raise GitHubError("kodi-pages publication queue did not become idle")
+
     def dispatch(self, workflow, commit, fields=None):
+        if workflow in self.PUBLICATION_WORKFLOWS:
+            self.wait_publication_queue_idle()
         started = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=5)
         command = [
             "workflow",
@@ -68,7 +117,7 @@ class GitHubClient:
             "main",
         ]
         for key, value in sorted((fields or {}).items()):
-            command.extend(("--field", "%s=%s" % (key, value)))
+            command.extend(("--field", f"{key}={value}"))
         self.gh(*command)
         for _attempt in range(60):
             runs = self.gh_json(
@@ -91,9 +140,7 @@ class GitHubClient:
                 item
                 for item in runs
                 if item.get("headSha") == commit
-                and dt.datetime.fromisoformat(
-                    item["createdAt"].replace("Z", "+00:00")
-                )
+                and dt.datetime.fromisoformat(item["createdAt"].replace("Z", "+00:00"))
                 >= started
             ]
             if matches:
@@ -247,9 +294,7 @@ class GitHubClient:
             "--json",
             "assets",
         )
-        expected_name = (
-            "qnap-candidate-%s.json" % candidate_id if candidate_id else None
-        )
+        expected_name = f"qnap-candidate-{candidate_id}.json" if candidate_id else None
         names = [
             item["name"]
             for item in view["assets"]
@@ -258,7 +303,9 @@ class GitHubClient:
             and (expected_name is None or item["name"] == expected_name)
         ]
         if len(names) != 1:
-            raise GitHubError("snapshot does not contain exactly one selected QNAP candidate")
+            raise GitHubError(
+                "snapshot does not contain exactly one selected QNAP candidate"
+            )
         cache = self._release_cache(snapshot["tag"])
         path = cache / names[0]
         if not path.is_file():
@@ -287,7 +334,7 @@ class GitHubClient:
         }
 
     def promotion_pr(self, snapshot_id):
-        branch = "automation/promote-stable-%s" % snapshot_id[:12]
+        branch = f"automation/promote-stable-{snapshot_id[:12]}"
         rows = self.gh_json(
             "pr",
             "list",
@@ -353,7 +400,7 @@ class GitHubClient:
         def content(path):
             result = self.gh_json(
                 "api",
-                "repos/%s/contents/%s?ref=%s" % (self.slug, path, head),
+                f"repos/{self.slug}/contents/{path}?ref={head}",
             )
             if not isinstance(result, dict) or result.get("encoding") != "base64":
                 raise GitHubError("promotion PR content could not be verified")
@@ -364,9 +411,7 @@ class GitHubClient:
                 raise GitHubError("promotion PR content is invalid") from error
 
         try:
-            stable = json.loads(
-                content("manifests/locks/stable.json").decode("utf-8")
-            )
+            stable = json.loads(content("manifests/locks/stable.json").decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise GitHubError("promotion stable lock is invalid") from error
         expected = {
@@ -374,8 +419,10 @@ class GitHubClient:
             "attestation_id": attestation["attestation_id"],
             "attestation_sha256": attestation["attestation_sha256"],
         }
-        if stable.get("schema") != 2 or stable.get("channel") != "stable" or any(
-            stable.get(key) != value for key, value in expected.items()
+        if (
+            stable.get("schema") != 2
+            or stable.get("channel") != "stable"
+            or any(stable.get(key) != value for key, value in expected.items())
         ):
             raise GitHubError("promotion stable lock differs from certified candidate")
         qnap_payload = content("manifests/locks/qnap-stable.json")
