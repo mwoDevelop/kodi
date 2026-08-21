@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-08
 
+- [QNAP Control Plane 3A1 — dashboard, release i live deploy](2026-08-21-control-plane-3a1-release.md)
 - [Automatyczny release i status Umbrelli](2026-08-19-umbrella-auto-release.md)
 - [QNAP Control Plane — faza 2 i release stable](2026-08-14-control-plane-phase2-release.md)
 - [OpenSubtitles.com jako domyślna usługa Kodi](2026-08-13-opensubtitles-com-service-1.0.13.1.md)
