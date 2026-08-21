@@ -123,6 +123,10 @@ python tools/kodi_routine_profile.py \
   <private-snapshot>/payload \
   .kodi-private/routine/bluestacks1.json \
   --kodi-major 21
+PYTHONPATH=. .venv/bin/python tools/profile_sync_portable_release.py converge \
+  --routine-settings .kodi-private/umbrella/settings.xml \
+  --canary bluestacks1 \
+  --canary x88pro20
 PYTHONPATH=. .venv/bin/python \
   tests/e2e/profile_sync_foundation_device.py
 .venv/bin/python tools/kodi_portable_state_rollout.py audit \
@@ -130,6 +134,12 @@ PYTHONPATH=. .venv/bin/python \
 .venv/bin/python tools/kodi_portable_state_rollout.py sync \
   --result .kodi-private/e2e/portable-state-sync.json
 ```
+
+Opcjonalne `--routine-settings` nie publikuje źródłowego XML ani sekretów.
+Eksportuje z niego wyłącznie identyfikatory jawnie dopuszczone przez
+`manifests/kodi-profile-policy.json`, składa je z aktywną rewizją i portable
+favourites, a następnie używa tego samego podpisanego candidate/promote i kopii
+QNAP. Brak różnicy kończy się `NO_CHANGE`.
 
 Repozytorium serwera:
 

@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-08
 
+- [X88 — binding mwoScrapers i filtr nazw źródeł](2026-08-21-x88-provider-binding-filter-diagnosis.md)
 - [QNAP Control Plane 3A1 — dashboard, release i live deploy](2026-08-21-control-plane-3a1-release.md)
 - [Automatyczny release i status Umbrelli](2026-08-19-umbrella-auto-release.md)
 - [QNAP Control Plane — faza 2 i release stable](2026-08-14-control-plane-phase2-release.md)

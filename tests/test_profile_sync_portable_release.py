@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -8,6 +9,7 @@ from tools.profile_sync_portable_release import (
     _database_state,
     _latest_enrollments,
     _portable_export,
+    _routine_export,
     bootstrap_active,
 )
 
@@ -37,6 +39,40 @@ def test_portable_bundle_becomes_profile_sync_adapter(tmp_path):
             ),
         }
     ]
+
+
+def test_private_umbrella_authority_becomes_default_deny_routine_update(
+    tmp_path,
+):
+    repository = tmp_path / "repository"
+    private = repository / ".kodi-private"
+    private.mkdir(parents=True)
+    settings = private / "umbrella.xml"
+    settings.write_text(
+        '<settings version="2">'
+        '<setting id="provider.external.enabled">true</setting>'
+        '<setting id="external_provider.name">mwoscrapers</setting>'
+        '<setting id="external_provider.module">script.module.mwoscrapers</setting>'
+        '<setting id="realdebrid.filter.filename">false</setting>'
+        '<setting id="realdebridtoken">must-not-export</setting>'
+        "</settings>",
+        encoding="utf-8",
+    )
+    manifests = repository / "manifests"
+    manifests.mkdir()
+    source_policy = Path("manifests/kodi-profile-policy.json")
+    (manifests / "kodi-profile-policy.json").write_bytes(
+        source_policy.read_bytes()
+    )
+
+    revision = _routine_export(repository, settings, 2)
+    values = revision["adapters"]["umbrella.preferences"]["values"]
+
+    assert values["provider.external.enabled"] is True
+    assert values["external_provider.name"] == "mwoscrapers"
+    assert values["external_provider.module"] == "script.module.mwoscrapers"
+    assert values["realdebrid.filter.filename"] is False
+    assert "realdebridtoken" not in json.dumps(revision)
 
 
 def test_database_state_and_latest_enrollment_are_exact(tmp_path):

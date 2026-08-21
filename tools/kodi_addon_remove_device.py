@@ -103,6 +103,13 @@ def _remove(addon_id):
         raise
     if moved:
         shutil.rmtree(backup)
+    addon_data = xbmcvfs.translatePath(
+        "special://profile/addon_data/%s" % addon_id
+    )
+    addon_data_removed = False
+    if os.path.isdir(addon_data):
+        shutil.rmtree(addon_data)
+        addon_data_removed = True
     packages = os.path.join(addons, "packages")
     removed_packages = 0
     for package in glob.glob(os.path.join(packages, addon_id + "-*.zip")):
@@ -111,6 +118,7 @@ def _remove(addon_id):
             removed_packages += 1
     return {
         **result,
+        "addon_data_removed": addon_data_removed,
         "directory_removed": moved,
         "packages_removed": removed_packages,
     }

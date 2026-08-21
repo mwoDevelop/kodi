@@ -88,6 +88,22 @@ oraz ustawia go jako domyślną usługę filmów i seriali; błąd zachowuje pop
 pliki ustawień. Ogólne sondy providera i Real-Debrid są obecnie częścią adaptera
 Android, a nie adaptera Flatpak.
 
+Preflight Androida usuwa z `advancedsettings.xml` wyłącznie stare sekcje
+`videodatabase` i `musicdatabase`. Biblioteka oraz wyszukiwanie nie zależą dzięki
+temu od dostępności MariaDB na QNAP; pozostałe ustawienia zaawansowane są
+zachowywane. Ten sam przebieg usuwa kod i `addon_data` jawnie wycofanych
+FenLight/Coco, oryginalnego WatchNixtoons2 oraz nieobsługiwanych repozytoriów,
+ale odmawia usunięcia repozytorium, które nadal jest źródłem zainstalowanego
+dodatku.
+
+Profil rutynowy zarządza całym bindingiem zewnętrznego providera Umbrella:
+`provider.external.enabled=true`, nazwą `mwoscrapers` i modułem
+`script.module.mwoscrapers`. Ustawienia te są stosowane po starcie, więc Umbrella
+nie może pozostawić włączonej flagi z pustą nazwą modułu. Filtr
+`realdebrid.filter.filename` pozostaje wyłączony: jego lista obejmuje typowe
+oznaczenia wydań (m.in. WEB-DL, WEBRip i BDRip) i potrafi usunąć wszystkie
+poprawne wyniki. Deduplikacja oraz negatywna pamięć błędów RD nadal działają.
+
 Wśród dodatków domyślnych Kodi instaluje również oficjalny
 `plugin.video.youtube` z `repository.xbmc.org`. Adapter pobiera API i trzy refresh
 tokeny z ignorowanego `.kodi-private/youtube/session.json`, wymaga zgodności jego

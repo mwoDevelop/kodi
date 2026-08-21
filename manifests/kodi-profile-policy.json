@@ -83,6 +83,18 @@
               "type": "integer",
               "class": "portable"
             },
+            "external_provider.module": {
+              "type": "string",
+              "class": "portable"
+            },
+            "external_provider.name": {
+              "type": "string",
+              "class": "portable"
+            },
+            "provider.external.enabled": {
+              "type": "boolean",
+              "class": "portable"
+            },
             "rd_cloud.enabled": {
               "type": "boolean",
               "class": "portable"

@@ -1,11 +1,12 @@
 # Budowanie i wdrażanie obrazów QNAP
 
-`tools/qnap_images.py` jest wspólnym punktem wejścia na hoście dla czterech aplikacji Kodi
+`tools/qnap_images.py` jest wspólnym punktem wejścia na hoście dla pięciu aplikacji Kodi
 Container Station:
 
 - `control-plane` (odczytowy agregator floty i audytu);
 - `profile-sync`;
 - `provider-relay`;
+- `secret-broker` (szyfrowane zestawy sekretów dla urządzeń);
 - `upstream-watchdog`.
 
 Uruchamia należące do repozytorium buildy GitHub Actions, publikuje obrazy
@@ -20,7 +21,7 @@ zreviewowany `manifests/locks/qnap-stable.json`, a nie ten prywatny cache.
 `tools/kodi_ops.py release` uruchamia build tylko po zmianie deterministycznego
 hasha zadeklarowanych inputów. Każdy workflow publikuje approval zawierający
 immutable digest obrazu, commit, input hash, platformy, SHA raportu skanera i
-run ID. `tools/qnap_candidate.py` składa komplet czterech approval w jeden asset
+run ID. `tools/qnap_candidate.py` składa komplet pięciu approval w jeden asset
 testing, a PR promocji kopiuje dokładnie jego bajty do stable locka.
 
 ## Typowe polecenia

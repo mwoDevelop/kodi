@@ -9,11 +9,16 @@ import io
 import json
 import re
 import secrets
+import sys
 import tarfile
 import tempfile
 import time
 from pathlib import Path
 from xml.etree import ElementTree
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from tools.kodi_profile import (
     KODI_PACKAGE,
@@ -262,7 +267,6 @@ def rollout(adb, port, serial, sources, device_script):
 
 
 def main():
-    root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--setting",
@@ -277,7 +281,7 @@ def main():
     parser.add_argument("--adb-server-port", type=int, default=5038)
     parser.add_argument(
         "--device-script",
-        default=str(root / "tools/kodi_profile_restore_device.py"),
+        default=str(ROOT / "tools/kodi_profile_restore_device.py"),
     )
     parser.add_argument("--result")
     args = parser.parse_args()

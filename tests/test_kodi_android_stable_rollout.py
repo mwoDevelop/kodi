@@ -109,6 +109,14 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
         lambda *_args: "ready",
     )
     monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.reconcile_android_advancedsettings",
+        lambda *_args: {"status": "NO_CHANGE", "removed": []},
+    )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.reconcile_retired_addons",
+        lambda *_args: {"status": "NO_CHANGE", "removed": [], "checked": 6},
+    )
+    monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.prepare",
         lambda _root, channel: prepared,
     )
@@ -152,6 +160,8 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     )
 
     assert result["channel"] == "testing"
+    assert result["advancedsettings"]["status"] == "NO_CHANGE"
+    assert result["retired_addons"]["status"] == "NO_CHANGE"
     assert loaded == {
         "devices": tmp_path / "devices.json",
         "references": tmp_path / "references.env",

@@ -6,6 +6,7 @@ import re
 import sys
 import time
 
+import requests
 import xbmcaddon
 import xbmcvfs
 
@@ -54,7 +55,7 @@ def main():
 
         xbmcaddon.Addon = addon_with_default
         report["stage"] = "import"
-        from resources.lib.debrid.realdebrid import RealDebrid
+        from resources.lib.debrid.realdebrid import RealDebrid, rest_base_url
 
         report["stage"] = "account"
         debrid = RealDebrid()
@@ -94,8 +95,39 @@ def main():
             "ok": availability_ok,
             "response_mapping": availability_ok,
         }
+        report["stage"] = "active_count"
+        active_started = time.monotonic()
+        active_response = requests.get(
+            rest_base_url + "torrents/activeCount",
+            params={"auth_token": debrid.token},
+            timeout=8,
+        )
+        active_seconds = round(time.monotonic() - active_started, 3)
+        try:
+            active_payload = active_response.json()
+        except (TypeError, ValueError):
+            active_payload = {}
+        active_ok = (
+            active_response.status_code == 200
+            and isinstance(active_payload, dict)
+            and isinstance(active_payload.get("nb"), int)
+            and isinstance(active_payload.get("limit"), int)
+        )
+        report["active_count"] = {
+            "elapsed_seconds": active_seconds,
+            "http_status": int(active_response.status_code),
+            "ok": active_ok,
+            "active": (
+                int(active_payload["nb"])
+                if active_ok else None
+            ),
+            "limit": (
+                int(active_payload["limit"])
+                if active_ok else None
+            ),
+        }
         report["addon_version"] = addon.getAddonInfo("version")
-        report["ok"] = account_ok and availability_ok
+        report["ok"] = account_ok and availability_ok and active_ok
         report["stage"] = "complete"
     except Exception as error:  # noqa: BLE001 - Kodi runtime boundary
         report["error_type"] = type(error).__name__
