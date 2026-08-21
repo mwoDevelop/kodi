@@ -10,6 +10,7 @@ from tools.profile_sync_portable_release import (
     _latest_enrollments,
     _portable_export,
     _routine_export,
+    _trigger_sync,
     bootstrap_active,
 )
 
@@ -132,6 +133,77 @@ def test_database_state_and_latest_enrollment_are_exact(tmp_path):
 def test_latest_enrollment_fails_closed_for_unenrolled_device():
     with pytest.raises(RuntimeError, match="device-b"):
         _latest_enrollments({"enrollments": []}, {"device-b"})
+
+
+def test_trigger_sync_prefers_acknowledged_jsonrpc_dispatch(monkeypatch):
+    revision = "sha256:" + "b" * 64
+    calls = []
+
+    class Rpc:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def call(self, method, params):
+            calls.append((method, params))
+            return "OK"
+
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release.AdbJsonRpcClient", Rpc
+    )
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release._wait_for_kodi_ready",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release._profile_sync_probe",
+        lambda *_args: {
+            "enrollment_id": "enr:device000",
+            "assigned_revision": revision,
+            "applied_revision": revision,
+            "status": "NO_CHANGE",
+        },
+    )
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release._cleanup", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release.time.sleep", lambda *_args: None
+    )
+
+    result = _trigger_sync(
+        {
+            "devices": {
+                "device-a": {
+                    "platform": "android",
+                    "endpoints": {"adb": "192.0.2.10:5555"},
+                }
+            }
+        },
+        "device-a",
+        "adb",
+        5038,
+        revision,
+    )
+
+    assert result["status"] == "NO_CHANGE"
+    assert calls == [
+        (
+            "XBMC.ExecuteBuiltin",
+            {
+                "command": (
+                    "RunScript(special://home/addons/"
+                    "service.mwodevelop.profilesync/default.py,--sync-once)"
+                ),
+                "wait": False,
+            },
+        )
+    ]
 
 
 def test_bootstrap_active_signs_only_a_missing_current_assignment(

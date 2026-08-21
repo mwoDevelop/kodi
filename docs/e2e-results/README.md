@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-08
 
+- [Profile Sync 1.1.1 — canary BlueStacks i X88](2026-08-22-profile-sync-1.1.1-canary.md)
 - [X88 — binding mwoScrapers i filtr nazw źródeł](2026-08-21-x88-provider-binding-filter-diagnosis.md)
 - [QNAP Control Plane 3A1 — dashboard, release i live deploy](2026-08-21-control-plane-3a1-release.md)
 - [Automatyczny release i status Umbrelli](2026-08-19-umbrella-auto-release.md)
