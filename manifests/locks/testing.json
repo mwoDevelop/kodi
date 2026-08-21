@@ -23,9 +23,9 @@
       "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
     },
     "service.mwodevelop.profilesync": {
-      "commit": "d18e84abdcba7d595a77cc61a66f67f205991925",
-      "version": "1.1.0",
-      "zip_sha256": "9cd8d199ee67b60228931794bd9d0e49c52d7dcf1f86a8c66a2a9df92aae8a5a"
+      "commit": "3442130ec1b4c80729a9d9b24c679d8c8e8dadb6",
+      "version": "1.1.1",
+      "zip_sha256": "6ae17881d183ce64a8afc6302e05d82051da90c57bf3c770ccb24ffd6888a6ab"
     },
     "service.subtitles.opensubtitles-com": {
       "commit": "27b00fc2ba9c1637f6cd4c858a1c702bee786280",
