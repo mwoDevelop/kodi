@@ -35,6 +35,11 @@ MAX_CHECK_ATTEMPTS = 2
 STABLE_JSONRPC_PINGS = 3
 KODI_SERVICE_WARMUP_SECONDS = 20
 TESTING_ORIGIN = "repository.mwodevelop.testing"
+# The resolver canary must use a durable, openly redistributable title. Sintel
+# sources have repeatedly disappeared from otherwise healthy Real-Debrid
+# indexes, while the Big Buck Bunny fixture is independently exercised by the
+# device E2E matrix and remains resolvable on both release canaries.
+UMBRELLA_PLAYBACK_CASE = "big_buck_bunny"
 
 
 def _run(argv, env=None):
@@ -331,7 +336,7 @@ def _functional_checks(
                     "--event-via-adb",
                     "--direct-play",
                     "--case",
-                    "sintel",
+                    UMBRELLA_PLAYBACK_CASE,
                     "--observe-seconds",
                     str(observe_seconds),
                 ],
