@@ -14,7 +14,8 @@ from urllib.parse import urlsplit
 
 
 ADDON_ID = "service.mwodevelop.profilesync"
-STATE_SCHEMA = 1
+STATE_SCHEMA = 2
+SUPPORTED_STATE_SCHEMAS = {1, STATE_SCHEMA}
 SAFE_LOGICAL_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 SAFE_CHANNEL = SAFE_LOGICAL_ID
 SETTING_IDS = (
@@ -79,7 +80,10 @@ def _state_document(profile):
             "enrollment": None,
         }
     document = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(document, dict) or document.get("schema") != STATE_SCHEMA:
+    if (
+        not isinstance(document, dict)
+        or document.get("schema") not in SUPPORTED_STATE_SCHEMAS
+    ):
         raise ValueError("unsupported Profile Sync state")
     return document
 
@@ -123,6 +127,16 @@ def probe(addon, profile):
         and channel == enrollment_channel,
         "has_access_token": bool(state.get("access_token")),
         "has_signing_seed": bool(state.get("signing_seed")),
+        "has_encryption_private_key": bool(
+            state.get("encryption_private_key")
+        ),
+        "encryption_key_registered": bool(
+            enrollment and enrollment.get("encryption_key_id")
+        ),
+        "secret_state": state.get("secret_state"),
+        "secret_type": state.get("secret_type"),
+        "secret_set_generation": state.get("secret_set_generation"),
+        "secret_last_verified_utc": state.get("secret_last_verified_utc"),
         "last_check_utc": state.get("last_check_utc"),
         "assigned_revision": state.get("assigned_revision"),
         "applied_revision": state.get("applied_revision"),
