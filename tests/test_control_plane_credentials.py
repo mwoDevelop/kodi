@@ -2,7 +2,7 @@ import subprocess
 
 import pytest
 
-from tools.control_plane_credentials import CredentialError, generate
+from tools.control_plane_credentials import CredentialError, extend_existing, generate
 from tools.qnap_control_plane import ControlPlaneError, validate_private_files
 from tools.secret_broker_credentials import initialize as initialize_broker
 
@@ -39,6 +39,10 @@ def test_generates_isolated_server_operator_and_profile_sync_credentials(tmp_pat
     assert result["host_ip"] == "192.168.1.39"
     assert set(result["files"]) == {
         "audit-checkpoint.key",
+        "authz/aead.key",
+        "authz/clients-ca.crt",
+        "authz/server.crt",
+        "authz/server.key",
         "profile-sync/ca.crt",
         "profile-sync/client.crt",
         "profile-sync/client.key",
@@ -47,23 +51,33 @@ def test_generates_isolated_server_operator_and_profile_sync_credentials(tmp_pat
         "tls/ca.key",
         "tls/operator-client.crt",
         "tls/operator-client.key",
-            "tls/server.crt",
-            "tls/server.key",
-            "watchdog/ca.crt",
-            "watchdog/client.crt",
-            "watchdog/client.key",
-            "watchdog/clients-ca.crt",
-            "watchdog/server.crt",
-            "watchdog/server.key",
+        "tls/server.crt",
+        "tls/server.key",
+        "watchdog/ca.crt",
+        "watchdog/client.crt",
+        "watchdog/client.key",
+        "watchdog/clients-ca.crt",
+        "watchdog/server.crt",
+        "watchdog/server.key",
+        "web/authz-ca.crt",
+        "web/authz-client.crt",
+        "web/authz-client.key",
+        "web/core-ca.crt",
+        "web/core-client.crt",
+        "web/core-client.key",
     }
     for relative in (
         "audit-checkpoint.key",
+        "authz/aead.key",
+        "authz/server.key",
         "profile-sync/client.key",
         "tls/ca.key",
         "tls/operator-client.key",
-            "tls/server.key",
-            "watchdog/client.key",
-            "watchdog/server.key",
+        "tls/server.key",
+        "watchdog/client.key",
+        "watchdog/server.key",
+        "web/authz-client.key",
+        "web/core-client.key",
     ):
         assert (output / relative).stat().st_mode & 0o077 == 0
     certificate = subprocess.run(
@@ -81,6 +95,7 @@ def test_generates_isolated_server_operator_and_profile_sync_credentials(tmp_pat
         text=True,
     ).stdout
     assert "192.168.1.39" in certificate
+    assert "DNS:control-plane" in certificate
     subprocess.run(
         (
             "openssl",
@@ -107,6 +122,9 @@ def test_generates_isolated_server_operator_and_profile_sync_credentials(tmp_pat
     assert rejected.returncode != 0
     broker = tmp_path / "secret-broker"
     initialize_broker(broker)
+    validate_private_files(output, broker / "control-plane")
+    extension = extend_existing(output, "192.168.1.39")
+    assert extension["extended"] is True
     validate_private_files(output, broker / "control-plane")
     (output / "tls/clients-ca.crt").write_bytes(
         (output / "profile-sync/ca.crt").read_bytes()

@@ -31,7 +31,10 @@ try:
         preflight,
     )
     from qnap_provider_relay import deploy as deploy_relay
-    from qnap_control_plane import deploy as deploy_control_plane
+    from qnap_control_plane import (
+        create_browser_bootstrap,
+        deploy as deploy_control_plane,
+    )
     from qnap_secret_broker import deploy as deploy_secret_broker
 except ModuleNotFoundError:
     from tools.qnap_profile_sync import (
@@ -43,7 +46,10 @@ except ModuleNotFoundError:
         preflight,
     )
     from tools.qnap_provider_relay import deploy as deploy_relay
-    from tools.qnap_control_plane import deploy as deploy_control_plane
+    from tools.qnap_control_plane import (
+        create_browser_bootstrap,
+        deploy as deploy_control_plane,
+    )
     from tools.qnap_secret_broker import deploy as deploy_secret_broker
 
 
@@ -1217,10 +1223,25 @@ def main():
         help="reapply selected stable runtime configuration even when image digest matches",
     )
     sub.add_parser("status")
+    bootstrap_parser = sub.add_parser("browser-bootstrap")
+    bootstrap_parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="invalidate the current operator and reopen one-time bootstrap",
+    )
     args = parser.parse_args()
     try:
         if args.command == "status":
             result = {"schema": 1, "services": status(args.references)}
+        elif args.command == "browser-bootstrap":
+            session = connect(ROOT, args.references)
+            try:
+                result = {
+                    "schema": 1,
+                    "bootstrap": create_browser_bootstrap(session, args.reset),
+                }
+            finally:
+                session.close()
         else:
             available = services(
                 args.profile_sync_repository,

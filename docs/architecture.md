@@ -32,11 +32,15 @@ flowchart LR
   subgraph QNAP["QNAP / Container Station"]
     Engine["Silnik zarządzany przez Container Station"]
     PS["Profile Sync Server<br/>HTTPS dla urządzeń"]
-    CP["Kodi Control Plane<br/>API i dashboard mTLS, read-only"]
+    CP["Kodi Control Plane core<br/>API mTLS, read-only"]
+    CPWeb["Control Plane Web/BFF<br/>HTTPS :19444, read-only"]
+    CPAuth["Control Plane Authz<br/>hasło, TOTP, sesje"]
     Relay["Provider Relay<br/>opcjonalny fallback Torrentio"]
     Watchdog["Upstream Watchdog<br/>monitoring workflow GitHub"]
     Engine --- PS
     Engine --- CP
+    Engine --- CPWeb
+    Engine --- CPAuth
     Engine --- Relay
     Engine --- Watchdog
   end
@@ -44,7 +48,7 @@ flowchart LR
   subgraph Host["Zaufany host operatora / WSL"]
     Ops["kodi_ops.py i adaptery rollout/restore"]
     Private[".env i .kodi-private<br/>inventory, sekrety, snapshoty"]
-    Browser["Przeglądarka operatora<br/>z certyfikatem mTLS"]
+    Browser["Przeglądarka operatora<br/>hasło + TOTP"]
   end
 
   subgraph Fleet["Flota Kodi"]
@@ -64,7 +68,9 @@ flowchart LR
   Private --> Ops
   Ops -->|"SSH i bezpieczne Compose"| Engine
   Ops -->|"ADB lub SSH, bootstrap i restore"| Fleet
-  Browser -->|"mTLS przez LAN"| CP
+  Browser -->|"HTTPS przez LAN :19444"| CPWeb
+  CPWeb -->|"dedykowane mTLS, allowlista dashboardu"| CP
+  CPWeb -->|"prywatne mTLS"| CPAuth
 
   Android --> Addons
   Flatpak --> Addons
@@ -90,7 +96,9 @@ flowchart LR
 | Control Plane | Integration API Profile Sync | Prywatne mTLS na `mwodevelop-control:8767` | Zredagowana flota i rollouty | Dashboard i obserwowalność |
 | Control Plane | GitHub API | HTTPS read-only | Statusy workflow i harmonogramów | Dashboard i freshness |
 | Upstream Watchdog | GitHub API | HTTPS, publiczny odczyt | Ostatnie wyniki 11 workflow | Alarm fail-closed |
-| Przeglądarka operatora | Control Plane | HTTPS/mTLS przez LAN `:19443` | Statyczny panel i odczytowe API | Administracyjny podgląd |
+| Przeglądarka operatora | Control Plane Web/BFF | HTTPS przez LAN `:19444`, hasło+TOTP, sesja i CSRF | Statyczny panel i odczytowe API | Administracyjny podgląd bez certyfikatu klienta |
+| Control Plane Web/BFF | Control Plane core | Prywatne mTLS, certyfikat o ograniczonym scope | Wyłącznie endpointy dashboardu | Separacja przeglądarki od API operatorskiego |
+| Control Plane Web/BFF | Control Plane Authz | Prywatne mTLS bez portu LAN | Bootstrap, login, sesja, recovery | Uwierzytelnienie przeglądarkowe |
 | Host operatora | QNAP | SSH, następnie bezpieczny Docker Compose | Przypięte digesty i konfiguracja wdrożenia | Build/deploy/status kontenerów |
 | Host operatora | Kodi Android / Kodi Flatpak | ADB / SSH | Bootstrap, prywatne ustawienia, rollout, restore i sondy | Administracja, która nie jest jeszcze autonomiczna |
 | MwoScrapers | Publiczni providerzy | HTTPS | Metadane wyszukiwania i kandydaci torrentów | Standardowa ścieżka wyszukiwania |
@@ -128,7 +136,9 @@ digestów zapisanych w `qnap-stable.json`.
 
 | Usługa | Interfejs | Stan i dane |
 |---|---|---|
-| `control-plane` | LAN `HTTPS/mTLS :19443`; wewnętrzne `/ready` | Agreguje zredagowany stan floty, rolloutów, usług, harmonogramów i audytu. Statyczny dashboard oraz API są tylko do odczytu. Własna baza SQLite |
+| `control-plane` | LAN `HTTPS/mTLS :19443`; wewnętrzne `/ready` | Agreguje zredagowany stan floty, rolloutów, usług, harmonogramów i audytu. Maszynowy dashboard oraz API są tylko do odczytu. Własna baza SQLite |
+| `control-plane-web` | LAN `HTTPS :19444/control-plane/`; prywatne mTLS do core/authz | Read-only BFF dla przeglądarki: LAN + dokładny Host/Origin + CSRF + sesja. Nie ma certyfikatu klienta po stronie przeglądarki ani dostępu do sekretów floty |
+| `control-plane-authz` | Brak opublikowanego portu; prywatne mTLS | Hasło scrypt, TOTP, recovery codes, rate limit i sesje. Osobna baza SQLite; seed TOTP szyfrowany AES-GCM |
 | `profile-sync` | LAN `HTTPS :18765`; prywatne mTLS `:8767` tylko w sieci Compose | Enrollmenty, podpisane rewizje i assignmenty, heartbeat oraz raporty zastosowania. Trwała baza SQLite/blob |
 | `provider-relay` | Prywatny adres LAN `HTTP :18766` | Bezstanowy, opcjonalny fallback wyłącznie dla allowlistowanych zapytań providerów, obecnie przede wszystkim Torrentio |
 | `upstream-watchdog` | Brak opublikowanego portu | Co sześć godzin sprawdza 11 cyklicznych workflow GitHub; healthcheck QTS odczytuje wynik co pięć minut |
@@ -148,8 +158,9 @@ aktualnym miejscem wykonywania administracji:
 - `tools/kodi_ops.py` składa dry-run, release, rollout i restore;
 - `tools/qnap_images.py` buduje lub wdraża zatwierdzone obrazy QNAP;
 - adaptery Android używają dedykowanego lokalnego demona ADB, a adaptery NUC — SSH;
-- przeglądarka operatora może otworzyć dashboard QNAP po przedstawieniu certyfikatu
-  klienta mTLS.
+- przeglądarka operatora może otworzyć tymczasowy dashboard QNAP na `:19444` po
+  zaakceptowaniu lokalnego certyfikatu oraz zalogowaniu hasłem i TOTP; interfejs
+  maszynowy na `:19443` nadal wymaga certyfikatu klienta mTLS.
 
 Sekrety nie są publikowane do GitHub, GitHub Pages, GHCR ani raportów E2E. Planowane
 przeniesienie administracji i zaszyfrowanych sekretów do QNAP nie jest jeszcze
@@ -298,7 +309,9 @@ błędu. Watchdog działa fail-closed: sprawny proces może celowo mieć stan `u
 jeśli monitorowany workflow rzeczywiście zakończył się błędem.
 
 Control Plane nie ma obecnie endpointów mutujących, dostępu do Docker socketa,
-klucza promotora ani sekretów floty. Dashboard wymaga certyfikatu klienta mTLS.
+klucza promotora ani sekretów floty. API maszynowe wymaga certyfikatu klienta
+mTLS. Browser BFF jest osobnym procesem, ograniczonym do LAN i endpointów
+dashboardu, i wymaga hasła+TOTP.
 
 ## 7. Źródła prawdy
 

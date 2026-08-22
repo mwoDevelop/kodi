@@ -1,12 +1,18 @@
 # Architektura QNAP Control Plane
 
-## Aktualny przyrost: read-only dashboard, API i lokalny writer bundle
+## Aktualny przyrost: read-only dashboard z authz, API mTLS i lokalny writer bundle
 
-```text
-GitHub Actions (uwierzytelniony read) --------+
-qnap-upstream-watchdog -- prywatne mTLS ------+--> kodi-control-plane
-kodi-profile-sync-server -- prywatne mTLS ----+       |
-kodi-secret-broker -- prywatne mTLS ----------+       +-- mTLS API i GUI --> klient w LAN
+```mermaid
+flowchart LR
+  Browser[Przeglądarka w LAN] -->|HTTPS :19444<br/>hasło + TOTP + sesja| Web[control-plane-web]
+  Web -->|dedykowane mTLS<br/>tylko dashboard| Core[control-plane]
+  Web -->|prywatne mTLS| Authz[control-plane-authz]
+  Operator[CLI operatora] -->|HTTPS/mTLS :19443| Core
+  Profile[Profile Sync] -->|prywatne mTLS| Core
+  Watchdog[Upstream Watchdog] -->|prywatne mTLS| Core
+  GitHub[GitHub API] -->|token read-only| Core
+  Authz --> AuthDB[(authz.sqlite)]
+  Core --> CoreDB[(control-plane.sqlite)]
 ```
 
 Control Plane utrwala zredagowane snapshoty operacyjne oraz własne, niemutowalne
@@ -19,6 +25,12 @@ dowodu wiążącego dokładny commit, lock, indeks, artifact manifest, atestacj�
 drzewa komponentów. Publikacja head używa oczekiwanej generacji (CAS). API mTLS
 może tylko odczytać opublikowany head; agent Kodi nie konsumuje go jeszcze bez
 osobnego, ograniczonego assignmentu.
+
+Proces web nie ma bazy użytkowników ani dostępu do sekretów floty. Authz ma osobną
+bazę, szyfruje seed TOTP AES-GCM kluczem montowanym poza bazą i nie ma portu LAN.
+Core rozpoznaje certyfikat BFF po fingerprintcie i odrzuca nim każdy odczyt poza
+allowlistą dashboardu. Port `:19444` jest rozwiązaniem przejściowym: lokalny
+certyfikat trzeba zaakceptować w przeglądarce, ale nie trzeba instalować CA.
 
 Tożsamość wywołującego API jest zapisywana jako fingerprint SHA-256 certyfikatu
 klienta. W audycie nie jest zapisywany certyfikat, subject ani credential.

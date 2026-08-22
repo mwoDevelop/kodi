@@ -119,7 +119,8 @@ def issue(root, ca_certificate, ca_key, name, common_name, extension):
             ca_certificate,
             "-CAkey",
             ca_key,
-            "-CAcreateserial",
+            "-set_serial",
+            hex(secrets.randbits(159) | 1),
             "-days",
             "825",
             "-sha256",
@@ -174,7 +175,7 @@ def generate(profile_sync_tls, output, host_ip):
             operator_ca_key,
             "control-plane-server",
             str(address),
-            "subjectAltName=IP:%s\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n"
+            "subjectAltName=IP:%s,DNS:control-plane\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n"
             % address,
         )
         operator_certificate, operator_key = issue(
@@ -209,6 +210,34 @@ def generate(profile_sync_tls, output, host_ip):
             "kodi-control-plane-watchdog-observer",
             "extendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n",
         )
+        web_client_certificate, web_client_key = issue(
+            temporary,
+            operator_ca_certificate,
+            operator_ca_key,
+            "web-client",
+            "control-plane-web-readonly",
+            "extendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n",
+        )
+        authz_server_certificate, authz_server_key = issue(
+            temporary,
+            operator_ca_certificate,
+            operator_ca_key,
+            "authz-server",
+            "control-plane-authz",
+            "subjectAltName=DNS:control-plane-authz\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n",
+        )
+        authz_client_certificate, authz_client_key = issue(
+            temporary,
+            operator_ca_certificate,
+            operator_ca_key,
+            "authz-client",
+            "control-plane-web-authz-client",
+            "extendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n",
+        )
+        web = temporary / "web"
+        authz = temporary / "authz"
+        web.mkdir(mode=0o700)
+        authz.mkdir(mode=0o700)
         for source, destination in (
             (server_certificate, tls / "server.crt"),
             (server_key, tls / "server.key"),
@@ -226,11 +255,22 @@ def generate(profile_sync_tls, output, host_ip):
             (watchdog_client_key, watchdog / "client.key"),
             (operator_ca_certificate, watchdog / "ca.crt"),
             (operator_ca_certificate, watchdog / "clients-ca.crt"),
+            (web_client_certificate, web / "core-client.crt"),
+            (web_client_key, web / "core-client.key"),
+            (operator_ca_certificate, web / "core-ca.crt"),
+            (authz_client_certificate, web / "authz-client.crt"),
+            (authz_client_key, web / "authz-client.key"),
+            (operator_ca_certificate, web / "authz-ca.crt"),
+            (authz_server_certificate, authz / "server.crt"),
+            (authz_server_key, authz / "server.key"),
+            (operator_ca_certificate, authz / "clients-ca.crt"),
         ):
             shutil.copyfile(source, destination)
+        auth_key = authz / "aead.key"
+        auth_key.write_text(secrets.token_hex(32), encoding="ascii")
         checkpoint = temporary / "audit-checkpoint.key"
         checkpoint.write_text(secrets.token_hex(32) + "\n", encoding="ascii")
-        for path in (tls / "ca.key", tls / "server.key", tls / "operator-client.key", profile / "client.key", watchdog / "server.key", watchdog / "client.key", checkpoint):
+        for path in (tls / "ca.key", tls / "server.key", tls / "operator-client.key", profile / "client.key", watchdog / "server.key", watchdog / "client.key", web / "core-client.key", web / "authz-client.key", authz / "server.key", auth_key, checkpoint):
             path.chmod(0o600)
         for path in (tls / "ca.crt", tls / "server.crt", tls / "operator-client.crt", tls / "clients-ca.crt", profile / "client.crt", profile / "ca.crt", watchdog / "server.crt", watchdog / "client.crt", watchdog / "ca.crt", watchdog / "clients-ca.crt"):
             path.chmod(0o644)
@@ -241,6 +281,10 @@ def generate(profile_sync_tls, output, host_ip):
         for generated in temporary.glob("profile-sync-client.*"):
             generated.unlink()
         for generated in temporary.glob("watchdog-*.*"):
+            generated.unlink()
+        for generated in temporary.glob("web-client.*"):
+            generated.unlink()
+        for generated in temporary.glob("authz-*.*"):
             generated.unlink()
         temporary.replace(output)
         output.chmod(0o700)
@@ -255,6 +299,88 @@ def generate(profile_sync_tls, output, host_ip):
     }
 
 
+def extend_existing(output, host_ip):
+    output = Path(output).expanduser().resolve()
+    if not output.is_dir() or output.is_symlink():
+        raise CredentialError("existing Control Plane credential directory is invalid")
+    ca_certificate = output / "tls/ca.crt"
+    ca_key = private_file(output / "tls/ca.key", "Control Plane CA key")
+    try:
+        address = ipaddress.ip_address(host_ip)
+    except ValueError as error:
+        raise CredentialError("host IP is invalid") from error
+    if not address.is_private or address.is_loopback or address.is_unspecified:
+        raise CredentialError("host IP must be a private LAN address")
+    temporary = Path(tempfile.mkdtemp(prefix=".control-plane-extend-", dir=output.parent))
+    temporary.chmod(0o700)
+    try:
+        issued = {}
+        issued["server"] = issue(
+            temporary,
+            ca_certificate,
+            ca_key,
+            "control-plane-server",
+            str(address),
+            "subjectAltName=IP:%s,DNS:control-plane\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n" % address,
+        )
+        issued["web"] = issue(
+            temporary,
+            ca_certificate,
+            ca_key,
+            "web-client",
+            "control-plane-web-readonly",
+            "extendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n",
+        )
+        issued["authz_server"] = issue(
+            temporary,
+            ca_certificate,
+            ca_key,
+            "authz-server",
+            "control-plane-authz",
+            "subjectAltName=DNS:control-plane-authz\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n",
+        )
+        issued["authz_client"] = issue(
+            temporary,
+            ca_certificate,
+            ca_key,
+            "authz-client",
+            "control-plane-web-authz-client",
+            "extendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n",
+        )
+        destinations = {
+            output / "tls/server.crt": issued["server"][0],
+            output / "tls/server.key": issued["server"][1],
+            output / "web/core-client.crt": issued["web"][0],
+            output / "web/core-client.key": issued["web"][1],
+            output / "web/core-ca.crt": ca_certificate,
+            output / "web/authz-client.crt": issued["authz_client"][0],
+            output / "web/authz-client.key": issued["authz_client"][1],
+            output / "web/authz-ca.crt": ca_certificate,
+            output / "authz/server.crt": issued["authz_server"][0],
+            output / "authz/server.key": issued["authz_server"][1],
+            output / "authz/clients-ca.crt": ca_certificate,
+        }
+        for destination, source in destinations.items():
+            destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            staged = destination.with_name("." + destination.name + ".new")
+            shutil.copyfile(source, staged)
+            staged.chmod(0o600 if destination.suffix == ".key" else 0o644)
+            staged.replace(destination)
+        auth_key = output / "authz/aead.key"
+        if not auth_key.exists():
+            auth_key.write_text(secrets.token_hex(32), encoding="ascii")
+            auth_key.chmod(0o600)
+    finally:
+        shutil.rmtree(temporary, ignore_errors=True)
+    return {
+        "schema": 1,
+        "directory": str(output),
+        "host_ip": str(address),
+        "extended": True,
+        "files": sorted(str(path.relative_to(output)) for path in output.rglob("*") if path.is_file()),
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -263,9 +389,14 @@ def main(argv=None):
     )
     parser.add_argument("--output", default=".kodi-private/control-plane")
     parser.add_argument("--host-ip", required=True)
+    parser.add_argument("--extend-existing", action="store_true")
     args = parser.parse_args(argv)
     try:
-        result = generate(args.profile_sync_tls, args.output, args.host_ip)
+        result = (
+            extend_existing(args.output, args.host_ip)
+            if args.extend_existing
+            else generate(args.profile_sync_tls, args.output, args.host_ip)
+        )
     except (OSError, CredentialError) as error:
         parser.error(str(error))
     print(json.dumps(result, indent=2, sort_keys=True))

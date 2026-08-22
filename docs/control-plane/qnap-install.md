@@ -14,6 +14,8 @@ W ignorowanym katalogu `.kodi-private/control-plane/` znajdują się:
 - certyfikat i klucz serwera API;
 - dedykowany CA certyfikatów operatorskich, odrębny od CA Profile Sync;
 - certyfikat i klucz klienta do Profile Sync integration API;
+- dedykowane certyfikaty BFF do core i authz oraz certyfikat serwera authz;
+- 32-bajtowy klucz AEAD authz, przechowywany poza bazą;
 - losowy klucz checkpointu audytu, minimum 32 bajty;
 - opcjonalnie plik tokenu GitHub read-only; publiczne repo działa bez niego.
 
@@ -26,6 +28,7 @@ Wartości nie są zapisywane w `.env`, locku obrazu ani logach.
 python tools/qnap_images.py build control-plane --dry-run
 python tools/qnap_images.py deploy control-plane --dry-run
 python tools/qnap_images.py status
+python tools/qnap_images.py browser-bootstrap
 ```
 
 Po promocji immutable digestu wdrożenie produkcyjne wykonuje się przez zwykły
@@ -33,12 +36,16 @@ Po promocji immutable digestu wdrożenie produkcyjne wykonuje się przez zwykły
 
 Po wdrożeniu należy potwierdzić:
 
-1. kontener jest widoczny w Container Station i ma stan healthy/degraded;
+1. trzy kontenery projektu są widoczne w Container Station i mają stan
+   healthy/degraded;
 2. integracyjny port Profile Sync nie jest publikowany do hosta;
 3. wywołanie API bez certyfikatu klienta kończy się błędem TLS;
 4. `GET /v1/fleet` z certyfikatem nie zawiera tokenów ani kluczy;
 5. backup i restore do izolowanej bazy zachowują checkpoint audytu;
 6. drugi refresh identycznych źródeł nie zmienia ich digestu payloadu.
+7. `https://<QNAP>:19444/control-plane/login` działa bez certyfikatu klienta po
+   zaakceptowaniu ostrzeżenia TLS, a klient spoza LAN jest odrzucany;
+8. bootstrap, login, logout, restart i odzyskanie TOTP zachowują kontrakt sesji.
 
 Po aktualizacji z wydania `0.1.x` baza jest migrowana expand-only ze schematu 1
 do 2. Przed wdrożeniem należy zachować podpisany backup. Restore backupu schematu
