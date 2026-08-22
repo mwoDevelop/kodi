@@ -288,16 +288,13 @@ services:
       - 0.0.0.0
       - --port
       - "9444"
-      - --tls-cert
-      - /run/control-plane/tls/server.crt
-      - --tls-key
-      - /run/control-plane/tls/server.key
+      - --plaintext-behind-loopback-proxy
       - --expected-host
       - ${CONTROL_PLANE_BROWSER_HOST:?set exact browser Host}
       - --expected-origin
       - ${CONTROL_PLANE_BROWSER_ORIGIN:?set exact browser origin}
       - --allowed-network
-      - ${CONTROL_PLANE_BROWSER_ALLOWED_NETWORK:?set browser LAN network}
+      - ${CONTROL_PLANE_BROWSER_ALLOWED_NETWORK:?set trusted Docker proxy network}
       - --core-host
       - control-plane
       - --core-server-name
@@ -321,22 +318,10 @@ services:
     ports:
       - name: control-plane-browser
         target: 9444
-        published: "${CONTROL_PLANE_BROWSER_PORT:-19444}"
-        host_ip: ${CONTROL_PLANE_HOST_IP:?set explicit listener address}
+        published: "${CONTROL_PLANE_BROWSER_BACKEND_PORT:-19445}"
+        host_ip: 127.0.0.1
         protocol: tcp
     volumes:
-      - type: bind
-        source: ${CONTROL_PLANE_TLS_CERT:?set browser server certificate}
-        target: /run/control-plane/tls/server.crt
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${CONTROL_PLANE_TLS_KEY:?set browser server key}
-        target: /run/control-plane/tls/server.key
-        read_only: true
-        bind:
-          create_host_path: false
       - type: bind
         source: ${CONTROL_PLANE_WEB_CORE_CA:?set core CA}
         target: /run/control-plane/web/core-ca.crt

@@ -4,7 +4,8 @@
 
 ```mermaid
 flowchart LR
-  Browser[Przeglądarka w LAN] -->|HTTPS :19444<br/>hasło + TOTP + sesja| Web[control-plane-web]
+  Browser[Przeglądarka w LAN] -->|HTTPS :443<br/>hasło + TOTP + sesja| QTS[QTS HTTPS + QPKG proxy]
+  QTS -->|HTTP 127.0.0.1:19445<br/>tylko /control-plane| Web[control-plane-web]
   Web -->|dedykowane mTLS<br/>tylko dashboard| Core[control-plane]
   Web -->|prywatne mTLS| Authz[control-plane-authz]
   Operator[CLI operatora] -->|HTTPS/mTLS :19443| Core
@@ -29,8 +30,10 @@ osobnego, ograniczonego assignmentu.
 Proces web nie ma bazy użytkowników ani dostępu do sekretów floty. Authz ma osobną
 bazę, szyfruje seed TOTP AES-GCM kluczem montowanym poza bazą i nie ma portu LAN.
 Core rozpoznaje certyfikat BFF po fingerprintcie i odrzuca nim każdy odczyt poza
-allowlistą dashboardu. Port `:19444` jest rozwiązaniem przejściowym: lokalny
-certyfikat trzeba zaakceptować w przeglądarce, ale nie trzeba instalować CA.
+allowlistą dashboardu. QTS kończy przeglądarkowy TLS na standardowym porcie 443,
+a QPKG `KodiCPGateway` rejestruje wspierany `Use_Proxy` i skrót otwierany w nowej
+karcie. Backend HTTP jest publikowany przez Compose wyłącznie na loopback QNAP;
+nie ma osobnego certyfikatu ani portu osiągalnego z LAN.
 
 Tożsamość wywołującego API jest zapisywana jako fingerprint SHA-256 certyfikatu
 klienta. W audycie nie jest zapisywany certyfikat, subject ani credential.

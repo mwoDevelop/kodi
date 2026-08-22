@@ -64,7 +64,7 @@ def test_control_plane_compose_is_read_only_mtls_and_private_network(
         "image": "ghcr.io/mwodevelop/kodi-control-plane@sha256:" + "a" * 64,
         "host_ip": "192.0.2.39",
         "port": 19443,
-        "browser_port": 19444,
+        "browser_backend_port": 19445,
         "project": "qnap-control-plane",
         "network": "mwodevelop-control",
     }
@@ -97,6 +97,12 @@ def test_control_plane_environment_rejects_public_or_mutable_target():
         image, "192.168.1.39"
     )
     assert "CONTROL_PLANE_FRAME_ANCESTOR=https://192.168.1.39" in environment(
+        image, "192.168.1.39"
+    )
+    assert "CONTROL_PLANE_BROWSER_BACKEND_PORT=19445" in environment(
+        image, "192.168.1.39"
+    )
+    assert "CONTROL_PLANE_BROWSER_HOST=127.0.0.1:19445" in environment(
         image, "192.168.1.39"
     )
     with pytest.raises(ControlPlaneError, match="private LAN"):
@@ -168,7 +174,7 @@ def test_control_plane_browser_requires_no_client_certificate(monkeypatch, tmp_p
             return False
 
     monkeypatch.setattr(
-        "tools.qnap_control_plane.ssl.create_default_context", lambda **_kwargs: Context()
+        "tools.qnap_control_plane.ssl._create_unverified_context", lambda: Context()
     )
     monkeypatch.setattr(
         "tools.qnap_control_plane.urlopen",
@@ -177,7 +183,7 @@ def test_control_plane_browser_requires_no_client_certificate(monkeypatch, tmp_p
 
     result = verify_browser("192.168.1.39", ca, attempts=1)
     assert result["status"] == "ready"
-    assert result["endpoint"].endswith(":19444/control-plane/login")
+    assert result["endpoint"] == "https://192.168.1.39/control-plane/login"
 
 
 def test_browser_bootstrap_runs_only_inside_authz_container(monkeypatch):

@@ -20,10 +20,10 @@ Sync ani żadnego pliku `.env` z credentialami urządzeń.
 Wdrożenie kopiuje z repo kanoniczne manifesty
 `control-plane-schedules.json` i `control-plane-status-sources.json`, a następnie
 montuje je read-only. Dotychczasowy dashboard mTLS pozostaje pod
-`https://<QNAP>:19443/`. Dla zwykłej przeglądarki działa dodatkowo
-`https://<QNAP>:19444/control-plane/`: nie wymaga certyfikatu klienta, lecz wymaga
-hasła i TOTP oraz akceptacji ostrzeżenia lokalnego certyfikatu. Listener akceptuje
-wyłącznie skonfigurowaną podsieć LAN i dokładny Host/Origin. Web/BFF używa
+`https://<QNAP>:19443/`. Dla zwykłej przeglądarki działa dodatkowo kanoniczne
+`https://<QNAP>/control-plane/`: nie wymaga certyfikatu klienta, lecz wymaga
+hasła i TOTP. QPKG `KodiCPGateway` rejestruje skrót QTS i przekazuje ten prefiks
+z HTTPS QTS do backendu dostępnego wyłącznie na `127.0.0.1:19445`. Web/BFF używa
 dedykowanego certyfikatu mTLS, którego core ogranicza do odczytu endpointów
 dashboardu. Authz nie publikuje żadnego portu do LAN.
 
@@ -45,3 +45,14 @@ Powtarzalny test kontraktu i renderowania:
 .venv/bin/python tests/e2e/control_plane_dashboard_cdp.py \
   --cdp http://127.0.0.1:9222
 ```
+
+Budowa, instalacja i kontrola samego gatewaya:
+
+```bash
+python tools/qnap_control_plane_gateway.py build --output /tmp/qnap-gateway
+python tools/qnap_control_plane_gateway.py deploy
+python tools/qnap_control_plane_gateway.py status
+```
+
+Format pakietu i jego granice opisuje
+[README QPKG gatewaya](../qnap-control-plane-gateway/README.md).

@@ -32,7 +32,8 @@ ROOT = PurePosixPath(
     "/share/CACHEDEV3_DATA/.mwodevelop/control-plane"
 )
 PORT = 19443
-BROWSER_PORT = 19444
+BROWSER_BACKEND_PORT = 19445
+BROWSER_PATH = "/control-plane/"
 
 
 class ControlPlaneError(RuntimeError):
@@ -233,12 +234,11 @@ def environment(image, host_ip):
         (
             f"CONTROL_PLANE_IMAGE={image}",
             f"CONTROL_PLANE_PORT={PORT}",
-            f"CONTROL_PLANE_BROWSER_PORT={BROWSER_PORT}",
+            f"CONTROL_PLANE_BROWSER_BACKEND_PORT={BROWSER_BACKEND_PORT}",
             f"CONTROL_PLANE_HOST_IP={address}",
-            f"CONTROL_PLANE_BROWSER_HOST={address}:{BROWSER_PORT}",
-            f"CONTROL_PLANE_BROWSER_ORIGIN=https://{address}:{BROWSER_PORT}",
-            "CONTROL_PLANE_BROWSER_ALLOWED_NETWORK="
-            + str(ipaddress.ip_network(f"{address}/24", strict=False)),
+            f"CONTROL_PLANE_BROWSER_HOST=127.0.0.1:{BROWSER_BACKEND_PORT}",
+            f"CONTROL_PLANE_BROWSER_ORIGIN=https://{address}",
+            "CONTROL_PLANE_BROWSER_ALLOWED_NETWORK=172.16.0.0/12",
             f"CONTROL_PLANE_FRAME_ANCESTOR=https://{address}",
             f"CONTROL_PLANE_PROFILE_SYNC_SERVER_NAME={address}",
             f"CONTROL_PLANE_DATA={ROOT / 'data'}",
@@ -348,7 +348,7 @@ def validate_policy(document):
         int(core_port.get("target", 0)) != 9443
         or int(core_port.get("published", 0)) != PORT
         or int(web_port.get("target", 0)) != 9444
-        or int(web_port.get("published", 0)) != BROWSER_PORT
+        or int(web_port.get("published", 0)) != BROWSER_BACKEND_PORT
         or core_port.get("protocol") != "tcp"
         or web_port.get("protocol") != "tcp"
     ):
@@ -356,12 +356,14 @@ def validate_policy(document):
     address = ipaddress.ip_address(str(core_port.get("host_ip", "")))
     web_address = ipaddress.ip_address(str(web_port.get("host_ip", "")))
     if (
-        address != web_address
-        or not address.is_private
+        not address.is_private
         or address.is_loopback
         or address.is_unspecified
+        or not web_address.is_loopback
     ):
-        raise ControlPlaneError("Control Plane APIs must bind one private LAN address")
+        raise ControlPlaneError(
+            "Control Plane core must bind private LAN and browser backend loopback"
+        )
 
     core_targets = {
         "/data",
@@ -384,8 +386,6 @@ def validate_policy(document):
         "/run/control-plane/catalogs/status-sources.json",
     }
     web_targets = {
-        "/run/control-plane/tls/server.crt",
-        "/run/control-plane/tls/server.key",
         "/run/control-plane/web/core-ca.crt",
         "/run/control-plane/web/core-client.crt",
         "/run/control-plane/web/core-client.key",
@@ -457,10 +457,10 @@ def validate_policy(document):
             raise ControlPlaneError("Control Plane command policy differs")
     web_command = " ".join(str(item) for item in web.get("command", []))
     for required in (
-        f"--expected-host {address}:{BROWSER_PORT}",
-        f"--expected-origin https://{address}:{BROWSER_PORT}",
-        "--allowed-network "
-        + str(ipaddress.ip_network(f"{address}/24", strict=False)),
+        "--plaintext-behind-loopback-proxy",
+        f"--expected-host 127.0.0.1:{BROWSER_BACKEND_PORT}",
+        f"--expected-origin https://{address}",
+        "--allowed-network 172.16.0.0/12",
         "--core-host control-plane",
         "--authz-host control-plane-authz",
     ):
@@ -488,7 +488,7 @@ def validate_policy(document):
         "image": core["image"],
         "host_ip": str(address),
         "port": PORT,
-        "browser_port": BROWSER_PORT,
+        "browser_backend_port": BROWSER_BACKEND_PORT,
         "project": PROJECT,
         "network": NETWORK,
     }
@@ -517,11 +517,11 @@ def verify_api(host_ip, ca, client_certificate, client_key, attempts=30):
     raise ControlPlaneError("Control Plane mTLS API verification failed") from last_error
 
 
-def verify_browser(host_ip, ca, attempts=30):
-    """Verify that the browser listener works without a client certificate."""
-    context = ssl.create_default_context(cafile=str(ca))
+def verify_browser(host_ip, _ca=None, attempts=30):
+    """Verify the browser facade through the QTS HTTPS gateway."""
+    context = ssl._create_unverified_context()
     context.minimum_version = ssl.TLSVersion.TLSv1_2
-    endpoint = f"https://{host_ip}:{BROWSER_PORT}/control-plane/login"
+    endpoint = f"https://{host_ip}{BROWSER_PATH}login"
     last_error = None
     for _attempt in range(attempts):
         try:
@@ -573,6 +573,11 @@ def deploy(
     watchdog_private=None,
     github_token=None,
 ):
+    try:
+        from qnap_control_plane_gateway import install as install_gateway
+    except ModuleNotFoundError:
+        from tools.qnap_control_plane_gateway import install as install_gateway
+
     report = preflight(session)
     if report["raid"] != {"array": "UU", "recovery_percent": None}:
         raise ControlPlaneError("Control Plane deployment requires healthy RAID [UU]")
@@ -694,6 +699,7 @@ def deploy(
     }
     policy = validate_policy(rendered)
     session.execute(compose + " up -d --pull always", timeout=360)
+    gateway = install_gateway(session, repository)
     api = verify_api(
         host_ip,
         files["client_ca"],
@@ -706,4 +712,5 @@ def deploy(
         "preflight": report,
         "api": api,
         "browser": browser,
+        "gateway": gateway,
     }

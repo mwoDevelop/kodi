@@ -1,0 +1,2 @@
+# The gateway owns only QTS package metadata. The backend remains managed by
+# the qnap-control-plane Compose project and is never started from this QPKG.
