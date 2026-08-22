@@ -1029,6 +1029,7 @@ def deploy(service_name, image, references, repository=ROOT):
                 Path(repository) / ".kodi-private/control-plane/watchdog",
             )
         elif service_name == "control-plane":
+            github = watchdog_github_credentials(private_references)
             result = deploy_control_plane(
                 session,
                 repository,
@@ -1037,6 +1038,7 @@ def deploy(service_name, image, references, repository=ROOT):
                 Path(repository) / ".kodi-private/control-plane",
                 Path(repository) / ".kodi-private/secret-broker/control-plane",
                 Path(repository) / ".kodi-private/control-plane/watchdog",
+                github["token"],
             )
         elif service_name == "secret-broker":
             result = deploy_secret_broker(

@@ -64,6 +64,8 @@ services:
       - /run/control-plane/watchdog/client.key
       - --github-repository
       - mwoDevelop/kodi
+      - --github-token-file
+      - /run/control-plane/github/token
       - --refresh-seconds
       - "60"
       - --schedule-refresh-seconds
@@ -159,6 +161,12 @@ services:
       - type: bind
         source: ${CONTROL_PLANE_WATCHDOG_CLIENT_KEY:?set Watchdog observer client key}
         target: /run/control-plane/watchdog/client.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_GITHUB_TOKEN:?set authenticated GitHub API token file}
+        target: /run/control-plane/github/token
         read_only: true
         bind:
           create_host_path: false

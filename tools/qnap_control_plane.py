@@ -199,6 +199,7 @@ def environment(image, host_ip):
             f"CONTROL_PLANE_WATCHDOG_CA={config / 'watchdog/ca.crt'}",
             f"CONTROL_PLANE_WATCHDOG_CLIENT_CERT={config / 'watchdog/client.crt'}",
             f"CONTROL_PLANE_WATCHDOG_CLIENT_KEY={config / 'watchdog/client.key'}",
+            f"CONTROL_PLANE_GITHUB_TOKEN={config / 'github/token'}",
             f"CONTROL_PLANE_SCHEDULE_CATALOG={config / 'catalogs/control-plane-schedules.json'}",
             f"CONTROL_PLANE_STATUS_SOURCE_CATALOG={config / 'catalogs/control-plane-status-sources.json'}",
             "CONTROL_PLANE_UID=10001",
@@ -286,6 +287,7 @@ def validate_policy(document):
         "/run/control-plane/watchdog/ca.crt",
         "/run/control-plane/watchdog/client.crt",
         "/run/control-plane/watchdog/client.key",
+        "/run/control-plane/github/token",
         "/run/control-plane/catalogs/schedules.json",
         "/run/control-plane/catalogs/status-sources.json",
     }
@@ -327,6 +329,7 @@ def validate_policy(document):
         "--watchdog-host upstream-watchdog",
         "--watchdog-port 9445",
         "--watchdog-server-name upstream-watchdog",
+        "--github-token-file /run/control-plane/github/token",
         "--schedule-catalog /run/control-plane/catalogs/schedules.json",
         "--status-source-catalog /run/control-plane/catalogs/status-sources.json",
     ):
@@ -377,6 +380,7 @@ def deploy(
     private,
     secret_broker_private=None,
     watchdog_private=None,
+    github_token=None,
 ):
     report = preflight(session)
     if report["raid"] != {"array": "UU", "recovery_percent": None}:
@@ -384,6 +388,8 @@ def deploy(
     files = validate_private_files(
         private, secret_broker_private, watchdog_private
     )
+    if not github_token or any(char in github_token for char in "\r\n"):
+        raise ControlPlaneError("Control Plane GitHub token is missing or invalid")
     env = environment(image, host_ip)
     _install, docker = container_station(session)
     repository = Path(repository)
@@ -410,6 +416,7 @@ def deploy(
             for path in (
                 app, data, ROOT / "backups", config / "tls",
                 config / "profile-sync", config / "secret-broker", config / "watchdog",
+                config / "github",
                 config / "catalogs",
             )
         )
@@ -451,6 +458,7 @@ def deploy(
         session.upload_text(
             str(destination), source.read_text(encoding="utf-8"), mode
         )
+    session.upload_text(str(config / "github/token"), github_token + "\n", 0o400)
     session.execute(
         "chown -R 10001:10001 "
         + " ".join(
