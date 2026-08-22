@@ -41,6 +41,7 @@ Powtarzalny test kontraktu i renderowania:
 
 ```bash
 .venv/bin/python tests/e2e/control_plane_readonly.py
+.venv/bin/python tests/e2e/control_plane_browser.py
 .venv/bin/python tests/e2e/control_plane_dashboard_cdp.py \
   --cdp http://127.0.0.1:9222
 ```
