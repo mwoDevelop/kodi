@@ -28,6 +28,14 @@ def test_gateway_source_is_minimal_and_fail_closed(repository_root):
     int(QDK_SHA256, 16)
 
 
+def test_gateway_webui_uses_canonical_shortcut_path(repository_root):
+    config = (
+        repository_root / "deploy/qnap-control-plane-gateway/qpkg.cfg"
+    ).read_text(encoding="utf-8")
+    assert 'QPKG_WEBUI="/control-plane"' in config
+    assert 'QPKG_WEBUI="/control-plane/"' not in config
+
+
 def test_gateway_contains_no_credentials_or_generated_package(repository_root):
     root = repository_root / "deploy/qnap-control-plane-gateway"
     assert not list(root.rglob("*.qpkg"))

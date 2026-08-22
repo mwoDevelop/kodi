@@ -20,7 +20,7 @@ except ModuleNotFoundError:
 
 
 NAME = "KodiCPGateway"
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 BACKEND_PORT = 19445
 PROXY_PATH = "/control-plane"
 QDK_VERSION = "2.5.3"
@@ -45,7 +45,9 @@ def validate_source(repository):
     expected = {
         "QPKG_NAME": NAME,
         "QPKG_VER": VERSION,
-        "QPKG_WEBUI": PROXY_PATH + "/",
+        # Keep the desktop target canonical. QTS still adds a separator to the
+        # generated proxy destination; the BFF normalizes that known hop.
+        "QPKG_WEBUI": PROXY_PATH,
         "QPKG_WEB_PORT": str(BACKEND_PORT),
         "QPKG_USE_PROXY": "1",
         "QPKG_PROXY_PATH": PROXY_PATH,
@@ -193,7 +195,7 @@ def verify(session):
     expected = {
         "Version": VERSION,
         "Enable": "TRUE",
-        "WebUI": PROXY_PATH + "/",
+        "WebUI": PROXY_PATH,
         "Web_Port": str(BACKEND_PORT),
         "Use_Proxy": "1",
         "Proxy_Path": PROXY_PATH,
