@@ -43,8 +43,9 @@ Po wdrożeniu należy potwierdzić:
 4. `GET /v1/fleet` z certyfikatem nie zawiera tokenów ani kluczy;
 5. backup i restore do izolowanej bazy zachowują checkpoint audytu;
 6. drugi refresh identycznych źródeł nie zmienia ich digestu payloadu.
-7. `https://<QNAP>:19444/control-plane/login` działa bez certyfikatu klienta po
-   zaakceptowaniu ostrzeżenia TLS, a klient spoza LAN jest odrzucany;
+7. `https://<QNAP>/control-plane/login` działa bez certyfikatu klienta przez
+   HTTPS QTS, port backendu `127.0.0.1:19445` nie jest osiągalny z LAN, a QPKG
+   `KodiCPGateway` ma włączone `Use_Proxy=1`;
 8. bootstrap, login, logout, restart i odzyskanie TOTP zachowują kontrakt sesji.
 
 Po aktualizacji z wydania `0.1.x` baza jest migrowana expand-only ze schematu 1

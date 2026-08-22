@@ -13,6 +13,7 @@ publikację head przez CAS. Nie jest to jeszcze assignment dla urządzenia.
 - [Architektura i przepływ danych](architecture.md)
 - [Model zagrożeń](threat-model.md)
 - [Instalacja pierwszego przyrostu na QNAP](qnap-install.md)
+- [Plan migracji panelu na QTS HTTPS gateway](../QNAP_CONTROL_PLANE_BROWSER_GATEWAY_PLAN.md)
 - [ADR](adr/README.md)
 - [Review planu panelu administracyjnego z 2026-08-21](../QNAP_ADMIN_MODULE_PLAN_REVIEW_2026-08-21.md)
 
@@ -32,10 +33,11 @@ Control Plane udostępnia przez mTLS wyłącznie:
 - `GET /api/v1/{dashboard,schedules,services,alerts}` oraz statyczny panel `/`
   za mTLS na `:19443`;
 - `GET /control-plane/` i BFF
-  `/control-plane/api/v1/dashboard` za hasłem+TOTP na `:19444`.
+  `/control-plane/api/v1/dashboard` za hasłem+TOTP przez QTS HTTPS `:443`.
 
 Interfejs maszynowy nadal wymaga mTLS. Interfejs przeglądarkowy nie wymaga
-certyfikatu klienta, ale jest ograniczony do LAN, dokładnego Host/Origin, sesji,
+certyfikatu klienta. QPKG/QTS przekazuje go do backendu wyłącznie na loopback;
+BFF nadal wymaga dokładnego Host/Origin, sesji,
 CSRF oraz hasła+TOTP. Nie ma jeszcze WebAuthn ani żadnych akcji mutujących. Każdy status zawiera osobne pochodzenie i
 świeżość; proces cykliczny rozdziela obecność schedulera, wynik runu i stale dane.
 Kanoniczne katalogi są w `manifests/control-plane-{schedules,status-sources}.json`.
