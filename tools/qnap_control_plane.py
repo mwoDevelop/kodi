@@ -236,7 +236,7 @@ def environment(image, host_ip):
             f"CONTROL_PLANE_PORT={PORT}",
             f"CONTROL_PLANE_BROWSER_BACKEND_PORT={BROWSER_BACKEND_PORT}",
             f"CONTROL_PLANE_HOST_IP={address}",
-            f"CONTROL_PLANE_BROWSER_HOST=127.0.0.1:{BROWSER_BACKEND_PORT}",
+            f"CONTROL_PLANE_BROWSER_HOST={address}",
             f"CONTROL_PLANE_BROWSER_ORIGIN=https://{address}",
             "CONTROL_PLANE_BROWSER_ALLOWED_NETWORK=172.16.0.0/12",
             f"CONTROL_PLANE_FRAME_ANCESTOR=https://{address}",
@@ -458,7 +458,7 @@ def validate_policy(document):
     web_command = " ".join(str(item) for item in web.get("command", []))
     for required in (
         "--plaintext-behind-loopback-proxy",
-        f"--expected-host 127.0.0.1:{BROWSER_BACKEND_PORT}",
+        f"--expected-host {address}",
         f"--expected-origin https://{address}",
         "--allowed-network 172.16.0.0/12",
         "--core-host control-plane",
