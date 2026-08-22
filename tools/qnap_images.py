@@ -16,6 +16,8 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 try:
     from qnap_profile_sync import (
@@ -54,6 +56,7 @@ WATCHDOG_IMAGE = re.compile(
     r"@sha256:[a-f0-9]{64}$"
 )
 WATCHDOG_PROJECT = "qnap-upstream-watchdog"
+GITHUB_OWNER = "mwoDevelop"
 WATCHDOG_ROOT = PurePosixPath(
     "/share/CACHEDEV3_DATA/.mwodevelop-services/upstream-watchdog-v1"
 )
@@ -607,10 +610,96 @@ def save_state(path, images):
     path.chmod(0o600)
 
 
-def _watchdog_environment(image):
+def _github_identity(token):
+    """Validate a GitHub API token without persisting or returning it."""
+    request = Request(
+        "https://api.github.com/user",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": "Bearer " + token,
+            "User-Agent": "mwoDevelop-kodi-watchdog-deploy/1",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    with urlopen(request, timeout=20) as response:
+        document = json.load(response)
+        return {
+            "login": document.get("login"),
+            "rate_limit": int(response.headers.get("X-RateLimit-Limit", 0)),
+            "rate_remaining": int(
+                response.headers.get("X-RateLimit-Remaining", 0)
+            ),
+        }
+
+
+def watchdog_github_credentials(references):
+    """Resolve a verified token for the configured GitHub account.
+
+    ``GITHUB_PASS`` is accepted only when it is actually an API token. GitHub
+    account passwords have not authenticated REST API calls since 2020. A
+    matching local ``gh`` session is a migration fallback, allowing an
+    existing operator login to repair the deployment without copying the
+    account password into another store.
+    """
+    username = references.get("GITHUB_USER", "").strip()
+    if not username:
+        raise ImageError("GITHUB_USER is required for watchdog authentication")
+    expected_logins = {username.casefold()}
+    # Web sign-in accepts an account email, while REST identifies the account
+    # only by login. For an email-shaped GITHUB_USER, bind the token to the
+    # versioned repository owner instead of accepting an arbitrary account.
+    if "@" in username:
+        expected_logins.add(GITHUB_OWNER.casefold())
+    candidates = []
+    if references.get("GITHUB_TOKEN"):
+        candidates.append(("GITHUB_TOKEN", references["GITHUB_TOKEN"]))
+    password = references.get("GITHUB_PASS", "")
+    if password.startswith(("ghp_", "github_pat_")):
+        candidates.append(("GITHUB_PASS", password))
+    try:
+        local = _run(
+            ("gh", "auth", "token", "--hostname", "github.com")
+        ).stdout.strip()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        local = ""
+    if local:
+        candidates.append(("gh-cli", local))
+
+    seen = set()
+    for source, token in candidates:
+        if not token or token in seen or any(char in token for char in "\r\n"):
+            continue
+        seen.add(token)
+        try:
+            identity = _github_identity(token)
+        except (HTTPError, URLError, OSError, ValueError, json.JSONDecodeError):
+            continue
+        if str(identity.get("login", "")).casefold() not in expected_logins:
+            continue
+        if identity.get("rate_limit", 0) <= 60:
+            continue
+        return {
+            "token": token,
+            "source": source,
+            "login": identity["login"],
+            "rate_limit": identity["rate_limit"],
+            "rate_remaining": identity["rate_remaining"],
+        }
+    raise ImageError(
+        "no authenticated GitHub API token matches GITHUB_USER; "
+        "GITHUB_PASS must be a PAT or gh must hold a valid login"
+    )
+
+
+def _watchdog_environment(image, token):
     if not WATCHDOG_IMAGE.fullmatch(image):
         raise ImageError("watchdog image must use its immutable GHCR digest")
-    return "UPSTREAM_WATCHDOG_IMAGE=%s\n" % image
+    if not token or any(char in token for char in "\r\n"):
+        raise ImageError("watchdog GitHub token is missing or invalid")
+    return (
+        "UPSTREAM_WATCHDOG_IMAGE=%s\n"
+        "UPSTREAM_WATCHDOG_GITHUB_TOKEN=%s\n" % (image, token)
+    )
 
 
 def _watchdog_compose(docker):
@@ -646,6 +735,9 @@ def validate_watchdog_policy(document):
         raise ImageError("watchdog no-new-privileges policy differs")
     if service.get("ports") or service.get("volumes"):
         raise ImageError("watchdog must not publish ports or mount volumes")
+    environment = service.get("environment", {})
+    if not isinstance(environment, dict) or not environment.get("GITHUB_TOKEN"):
+        raise ImageError("watchdog authenticated GitHub API policy differs")
     if int(service.get("mem_limit", 0)) != 64 * 1024 * 1024:
         raise ImageError("watchdog memory limit differs")
     if int(service.get("pids_limit", 0)) != 32:
@@ -679,11 +771,12 @@ def watchdog_workflow_keys(repository):
     return keys
 
 
-def deploy_watchdog(session, repository, image):
+def deploy_watchdog(session, repository, image, references):
     report = preflight(session)
     if report["raid"] != {"array": "UU", "recovery_percent": None}:
         raise ImageError("watchdog deployment requires healthy RAID [UU]")
-    _watchdog_environment(image)
+    github = watchdog_github_credentials(references)
+    environment = _watchdog_environment(image, github["token"])
     _install, docker = container_station(session)
     compose = _watchdog_compose(docker)
     deployment = Path(repository) / "deploy/qnap-upstream-watchdog"
@@ -704,7 +797,7 @@ def deploy_watchdog(session, repository, image):
         )
         session.upload_text(
             str(WATCHDOG_ROOT / "watchdog.env"),
-            _watchdog_environment(image),
+            environment,
             0o600,
         )
         rendered = json.loads(
@@ -757,6 +850,10 @@ def deploy_watchdog(session, repository, image):
         raise
     return {
         "policy": policy,
+        "github_auth": {
+            key: github[key]
+            for key in ("source", "login", "rate_limit", "rate_remaining")
+        },
         "runtime_healthy": status["healthy"],
         "workflows": len(status["workflows"]),
         "workflow_failures": [
@@ -803,7 +900,9 @@ def deploy(service_name, image, references, repository=ROOT):
                 host_ip,
             )
         elif service_name == "upstream-watchdog":
-            result = deploy_watchdog(session, repository, image)
+            result = deploy_watchdog(
+                session, repository, image, private_references
+            )
         elif service_name == "control-plane":
             result = deploy_control_plane(
                 session,
@@ -984,6 +1083,11 @@ def main():
     deploy_parser.add_argument("services", nargs="*", default=["all"])
     deploy_parser.add_argument("--lock", default=str(DEFAULT_STABLE_LOCK))
     deploy_parser.add_argument("--dry-run", action="store_true")
+    deploy_parser.add_argument(
+        "--reconcile",
+        action="store_true",
+        help="reapply selected stable runtime configuration even when image digest matches",
+    )
     sub.add_parser("status")
     args = parser.parse_args()
     try:
@@ -1030,6 +1134,7 @@ def main():
                         args.references,
                         repository=ROOT,
                         service_names=names,
+                        reconcile_services=names if args.reconcile else None,
                     )
                 print(json.dumps(result, indent=2, sort_keys=True))
                 return 0

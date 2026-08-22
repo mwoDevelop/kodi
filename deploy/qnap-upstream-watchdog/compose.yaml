@@ -1,6 +1,8 @@
 services:
   upstream-watchdog:
     image: ${UPSTREAM_WATCHDOG_IMAGE:?set immutable image digest}
+    environment:
+      GITHUB_TOKEN: ${UPSTREAM_WATCHDOG_GITHUB_TOKEN:?set authenticated GitHub API token}
     restart: unless-stopped
     init: true
     read_only: true

@@ -185,7 +185,13 @@ class RemoteLock:
             self.session.close()
 
 
-def deploy(lock_path, references=".env", repository=ROOT, service_names=None):
+def deploy(
+    lock_path,
+    references=".env",
+    repository=ROOT,
+    service_names=None,
+    reconcile_services=None,
+):
     lock = load_lock(lock_path)
     requested = list(service_names or lock["services"])
     deployment_order = (
@@ -200,6 +206,13 @@ def deploy(lock_path, references=".env", repository=ROOT, service_names=None):
     unknown = sorted(set(requested).difference(lock["services"]))
     if unknown:
         raise ValueError("unknown QNAP stable services: %s" % ", ".join(unknown))
+    reconcile = set(reconcile_services or ())
+    invalid_reconcile = sorted(reconcile.difference(requested))
+    if invalid_reconcile:
+        raise ValueError(
+            "reconciled services were not selected: %s"
+            % ", ".join(invalid_reconcile)
+        )
     expected = {
         name: lock["services"][name]["image"] for name in selected
     }
@@ -212,11 +225,12 @@ def deploy(lock_path, references=".env", repository=ROOT, service_names=None):
         } != {name: item.get("image") for name, item in before.items()}:
             raise RuntimeError("QNAP runtime changed after preflight")
         for name, image in expected.items():
-            if observed[name].get("image") == image:
+            image_matches = observed[name].get("image") == image
+            if image_matches and name not in reconcile:
                 actions[name] = "NO_CHANGE"
                 continue
             qnap_images.deploy(name, image, references, repository=repository)
-            actions[name] = "DEPLOYED"
+            actions[name] = "RECONCILED" if image_matches else "DEPLOYED"
         deadline = time.monotonic() + 120
         while True:
             after = qnap_images.status(references, repository=repository)
@@ -251,6 +265,7 @@ def main():
     deploy_parser.add_argument("--lock", required=True)
     deploy_parser.add_argument("--references", default=".env")
     deploy_parser.add_argument("--service", action="append")
+    deploy_parser.add_argument("--reconcile-service", action="append")
     compose = commands.add_parser("compose")
     compose.add_argument("--approval", action="append", required=True)
     compose.add_argument("--output", required=True)
@@ -265,7 +280,12 @@ def main():
         lock = load_lock(args.output)
         result = {"schema": 1, "candidate_id": lock["candidate_id"], "services": sorted(lock["services"])}
     else:
-        result = deploy(args.lock, args.references, service_names=args.service)
+        result = deploy(
+            args.lock,
+            args.references,
+            service_names=args.service,
+            reconcile_services=args.reconcile_service,
+        )
     print(json.dumps(result, indent=2, sort_keys=True))
 
 

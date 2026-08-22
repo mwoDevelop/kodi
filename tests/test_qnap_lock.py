@@ -200,6 +200,55 @@ def test_deploy_accepts_a_structured_watchdog_alert(monkeypatch, tmp_path):
     assert result["services"] == {"upstream-watchdog": "NO_CHANGE"}
 
 
+def test_deploy_can_force_runtime_configuration_reconciliation(
+    monkeypatch, tmp_path
+):
+    document = lock_document()
+    path = tmp_path / "qnap-stable.json"
+    path.write_text(json.dumps(document))
+    running = {
+        name: {"image": item["image"], "status": "running", "health": "healthy"}
+        for name, item in document["services"].items()
+    }
+    deployments = []
+
+    class Lock:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+    monkeypatch.setattr(qnap_lock, "RemoteLock", Lock)
+    monkeypatch.setattr(
+        qnap_lock.qnap_images,
+        "status",
+        lambda *_args, **_kwargs: {
+            name: dict(item) for name, item in running.items()
+        },
+    )
+    monkeypatch.setattr(
+        qnap_lock.qnap_images,
+        "deploy",
+        lambda name, image, *_args, **_kwargs: deployments.append((name, image)),
+    )
+
+    result = qnap_lock.deploy(
+        path,
+        service_names=["upstream-watchdog"],
+        reconcile_services=["upstream-watchdog"],
+    )
+
+    assert result["result"] == "DEPLOYED"
+    assert result["services"] == {"upstream-watchdog": "RECONCILED"}
+    assert deployments == [
+        ("upstream-watchdog", document["services"]["upstream-watchdog"]["image"])
+    ]
+
+
 def test_full_deploy_orders_runtime_dependencies(monkeypatch, tmp_path):
     document = lock_document()
     path = tmp_path / "qnap-stable.json"
