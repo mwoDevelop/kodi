@@ -1382,7 +1382,7 @@ Release jest gotowy dopiero, gdy:
 | 1 | Read-only API mTLS, audit, backup i QNAP Compose | wydane | 0 dni |
 | 2 | Bundle, delegowany signer, lifecycle schematów i mixed-version | bundle wydany, delegacja offline | 3–7 dni |
 | 3A1 | Read-only status API, katalog harmonogramów, freshness i UI mTLS | wydane i wdrożone | 0 dni |
-| 3A2a | Tymczasowy browser auth password+TOTP, bootstrap/recovery i browser E2E | w realizacji | 0–1 dzień |
+| 3A2a | Tymczasowy browser auth password+TOTP, bootstrap/recovery i browser E2E | wydane i wdrożone | 0 dni |
 | 3A2b | Stabilny DNS/TLS, QTS proxy lub ingress i WebAuthn | odroczone po spike QTS 5.2 | 3–6 dni |
 | 3B | Trwała kolejka akcji niskiego ryzyka, outbox/fencing i rekonsyliacja | do wykonania | 5–10 dni |
 | 4 | Magazyn sekretów, import shadow, koperty i off-box recovery | do wykonania | 6–12 dni |
