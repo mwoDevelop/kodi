@@ -128,12 +128,13 @@ czterousługowego locka.
   lokalnej gotowości, aby tolerować wyścigi podczas uruchamiania i odpowiedzi upstream;
 - wdrożenie watchdoga sprawdza wzmocnione zasady Compose i wycofuje poprzednie
   pliki Compose, jeśli nowy kontener nie może opublikować pełnego dokumentu statusu
-  pięciu workflow;
+  dokładnie 11 workflow z wersjonowanego manifestu;
 - watchdog może działać poprawnie, ale celowo zgłaszać `unhealthy`, gdy jeden z
   monitorowanych workflow GitHub zakończył się błędem. Wdrożenie nie ukrywa tej awarii upstream.
 - wdrożenie Control Plane publikuje wyłącznie API mTLS, nie montuje socketa
   Dockera, używa oddzielnego CA operatorów i łączy się z read-only integration
-  API Profile Sync przez prywatną sieć Compose;
+  API Profile Sync oraz endpointem Watchdoga przez prywatną sieć Compose; odczyty
+  GitHub używają zweryfikowanego tokena read-only zamiast limitu anonimowego;
 
 Wszystkie kontenery są uruchamiane przez silnik zarządzany przez GUI Container
 Station. Żaden kontener aplikacyjny nie otrzymuje `/var/run/docker.sock`, a skrypt
