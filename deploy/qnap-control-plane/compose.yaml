@@ -50,6 +50,18 @@ services:
       - /run/control-plane/secret-broker/client.crt
       - --secret-broker-client-key
       - /run/control-plane/secret-broker/client.key
+      - --watchdog-host
+      - upstream-watchdog
+      - --watchdog-port
+      - "9445"
+      - --watchdog-server-name
+      - upstream-watchdog
+      - --watchdog-ca
+      - /run/control-plane/watchdog/ca.crt
+      - --watchdog-client-cert
+      - /run/control-plane/watchdog/client.crt
+      - --watchdog-client-key
+      - /run/control-plane/watchdog/client.key
       - --github-repository
       - mwoDevelop/kodi
       - --refresh-seconds
@@ -129,6 +141,24 @@ services:
       - type: bind
         source: ${CONTROL_PLANE_SECRET_BROKER_CLIENT_KEY:?set Secret Broker client key}
         target: /run/control-plane/secret-broker/client.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_WATCHDOG_CA:?set Watchdog observer CA}
+        target: /run/control-plane/watchdog/ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_WATCHDOG_CLIENT_CERT:?set Watchdog observer client certificate}
+        target: /run/control-plane/watchdog/client.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_WATCHDOG_CLIENT_KEY:?set Watchdog observer client key}
+        target: /run/control-plane/watchdog/client.key
         read_only: true
         bind:
           create_host_path: false

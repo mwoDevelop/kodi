@@ -69,9 +69,12 @@ def _local_file(path, description, private=False):
     return path.resolve()
 
 
-def validate_private_files(private, secret_broker_private=None):
+def validate_private_files(
+    private, secret_broker_private=None, watchdog_private=None
+):
     private = Path(private)
     broker = Path(secret_broker_private or private / "secret-broker")
+    watchdog = Path(watchdog_private or private / "watchdog")
     files = {
         "tls_certificate": _local_file(
             private / "tls/server.crt", "Control Plane TLS certificate"
@@ -107,6 +110,13 @@ def validate_private_files(private, secret_broker_private=None):
         "broker_client_key": _local_file(
             broker / "client.key", "Secret Broker client key", private=True
         ),
+        "watchdog_ca": _local_file(watchdog / "ca.crt", "Watchdog observer CA"),
+        "watchdog_client_certificate": _local_file(
+            watchdog / "client.crt", "Watchdog observer client certificate"
+        ),
+        "watchdog_client_key": _local_file(
+            watchdog / "client.key", "Watchdog observer client key", private=True
+        ),
     }
     if len(files["checkpoint_key"].read_bytes()) < 32:
         raise ControlPlaneError("audit checkpoint key is too short")
@@ -125,6 +135,10 @@ def validate_private_files(private, secret_broker_private=None):
         broker_client.load_cert_chain(
             files["broker_client_certificate"], files["broker_client_key"]
         )
+        watchdog_client = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        watchdog_client.load_cert_chain(
+            files["watchdog_client_certificate"], files["watchdog_client_key"]
+        )
     except (OSError, ssl.SSLError) as error:
         raise ControlPlaneError("certificate and key pair differs") from error
     try:
@@ -142,6 +156,11 @@ def validate_private_files(private, secret_broker_private=None):
         _verify_certificate(
             files["broker_ca"],
             files["broker_client_certificate"],
+            "sslclient",
+        )
+        _verify_certificate(
+            files["watchdog_ca"],
+            files["watchdog_client_certificate"],
             "sslclient",
         )
     except OSError as error:
@@ -177,6 +196,9 @@ def environment(image, host_ip):
             f"CONTROL_PLANE_SECRET_BROKER_CA={config / 'secret-broker/ca.crt'}",
             f"CONTROL_PLANE_SECRET_BROKER_CLIENT_CERT={config / 'secret-broker/client.crt'}",
             f"CONTROL_PLANE_SECRET_BROKER_CLIENT_KEY={config / 'secret-broker/client.key'}",
+            f"CONTROL_PLANE_WATCHDOG_CA={config / 'watchdog/ca.crt'}",
+            f"CONTROL_PLANE_WATCHDOG_CLIENT_CERT={config / 'watchdog/client.crt'}",
+            f"CONTROL_PLANE_WATCHDOG_CLIENT_KEY={config / 'watchdog/client.key'}",
             f"CONTROL_PLANE_SCHEDULE_CATALOG={config / 'catalogs/control-plane-schedules.json'}",
             f"CONTROL_PLANE_STATUS_SOURCE_CATALOG={config / 'catalogs/control-plane-status-sources.json'}",
             "CONTROL_PLANE_UID=10001",
@@ -261,6 +283,9 @@ def validate_policy(document):
         "/run/control-plane/secret-broker/ca.crt",
         "/run/control-plane/secret-broker/client.crt",
         "/run/control-plane/secret-broker/client.key",
+        "/run/control-plane/watchdog/ca.crt",
+        "/run/control-plane/watchdog/client.crt",
+        "/run/control-plane/watchdog/client.key",
         "/run/control-plane/catalogs/schedules.json",
         "/run/control-plane/catalogs/status-sources.json",
     }
@@ -299,6 +324,9 @@ def validate_policy(document):
         "--secret-broker-host secret-broker",
         "--secret-broker-port 9444",
         "--secret-broker-server-name secret-broker",
+        "--watchdog-host upstream-watchdog",
+        "--watchdog-port 9445",
+        "--watchdog-server-name upstream-watchdog",
         "--schedule-catalog /run/control-plane/catalogs/schedules.json",
         "--status-source-catalog /run/control-plane/catalogs/status-sources.json",
     ):
@@ -342,12 +370,20 @@ def verify_api(host_ip, ca, client_certificate, client_key, attempts=30):
 
 
 def deploy(
-    session, repository, image, host_ip, private, secret_broker_private=None
+    session,
+    repository,
+    image,
+    host_ip,
+    private,
+    secret_broker_private=None,
+    watchdog_private=None,
 ):
     report = preflight(session)
     if report["raid"] != {"array": "UU", "recovery_percent": None}:
         raise ControlPlaneError("Control Plane deployment requires healthy RAID [UU]")
-    files = validate_private_files(private, secret_broker_private)
+    files = validate_private_files(
+        private, secret_broker_private, watchdog_private
+    )
     env = environment(image, host_ip)
     _install, docker = container_station(session)
     repository = Path(repository)
@@ -373,7 +409,8 @@ def deploy(
             shlex.quote(str(path))
             for path in (
                 app, data, ROOT / "backups", config / "tls",
-                config / "profile-sync", config / "secret-broker", config / "catalogs",
+                config / "profile-sync", config / "secret-broker", config / "watchdog",
+                config / "catalogs",
             )
         )
     )
@@ -395,6 +432,12 @@ def deploy(
             files["broker_client_certificate"], 0o400
         ),
         config / "secret-broker/client.key": (files["broker_client_key"], 0o400),
+        config / "watchdog/ca.crt": (files["watchdog_ca"], 0o400),
+        config / "watchdog/client.crt": (
+            files["watchdog_client_certificate"],
+            0o400,
+        ),
+        config / "watchdog/client.key": (files["watchdog_client_key"], 0o400),
         config / "catalogs/control-plane-schedules.json": (
             repository / "manifests/control-plane-schedules.json",
             0o400,

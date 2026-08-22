@@ -159,8 +159,10 @@ def generate(profile_sync_tls, output, host_ip):
     try:
         tls = temporary / "tls"
         profile = temporary / "profile-sync"
+        watchdog = temporary / "watchdog"
         tls.mkdir(mode=0o700)
         profile.mkdir(mode=0o700)
+        watchdog.mkdir(mode=0o700)
         operator_ca_certificate, operator_ca_key = create_ca(
             temporary,
             "control-plane-ca",
@@ -191,6 +193,22 @@ def generate(profile_sync_tls, output, host_ip):
             "kodi-control-plane",
             "extendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n",
         )
+        watchdog_server_certificate, watchdog_server_key = issue(
+            temporary,
+            operator_ca_certificate,
+            operator_ca_key,
+            "watchdog-server",
+            "upstream-watchdog",
+            "subjectAltName=DNS:upstream-watchdog\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n",
+        )
+        watchdog_client_certificate, watchdog_client_key = issue(
+            temporary,
+            operator_ca_certificate,
+            operator_ca_key,
+            "watchdog-client",
+            "kodi-control-plane-watchdog-observer",
+            "extendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n",
+        )
         for source, destination in (
             (server_certificate, tls / "server.crt"),
             (server_key, tls / "server.key"),
@@ -202,19 +220,27 @@ def generate(profile_sync_tls, output, host_ip):
             (profile_certificate, profile / "client.crt"),
             (profile_key, profile / "client.key"),
             (ca_certificate, profile / "ca.crt"),
+            (watchdog_server_certificate, watchdog / "server.crt"),
+            (watchdog_server_key, watchdog / "server.key"),
+            (watchdog_client_certificate, watchdog / "client.crt"),
+            (watchdog_client_key, watchdog / "client.key"),
+            (operator_ca_certificate, watchdog / "ca.crt"),
+            (operator_ca_certificate, watchdog / "clients-ca.crt"),
         ):
             shutil.copyfile(source, destination)
         checkpoint = temporary / "audit-checkpoint.key"
         checkpoint.write_text(secrets.token_hex(32) + "\n", encoding="ascii")
-        for path in (tls / "ca.key", tls / "server.key", tls / "operator-client.key", profile / "client.key", checkpoint):
+        for path in (tls / "ca.key", tls / "server.key", tls / "operator-client.key", profile / "client.key", watchdog / "server.key", watchdog / "client.key", checkpoint):
             path.chmod(0o600)
-        for path in (tls / "ca.crt", tls / "server.crt", tls / "operator-client.crt", tls / "clients-ca.crt", profile / "client.crt", profile / "ca.crt"):
+        for path in (tls / "ca.crt", tls / "server.crt", tls / "operator-client.crt", tls / "clients-ca.crt", profile / "client.crt", profile / "ca.crt", watchdog / "server.crt", watchdog / "client.crt", watchdog / "ca.crt", watchdog / "clients-ca.crt"):
             path.chmod(0o644)
         for generated in temporary.glob("control-plane-*.*"):
             generated.unlink()
         for generated in temporary.glob("operator-client.*"):
             generated.unlink()
         for generated in temporary.glob("profile-sync-client.*"):
+            generated.unlink()
+        for generated in temporary.glob("watchdog-*.*"):
             generated.unlink()
         temporary.replace(output)
         output.chmod(0o700)

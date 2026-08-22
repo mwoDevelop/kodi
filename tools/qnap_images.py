@@ -11,6 +11,8 @@ import json
 import os
 import re
 import shlex
+import ssl
+import stat
 import subprocess
 import tempfile
 import time
@@ -698,8 +700,57 @@ def _watchdog_environment(image, token):
         raise ImageError("watchdog GitHub token is missing or invalid")
     return (
         "UPSTREAM_WATCHDOG_IMAGE=%s\n"
-        "UPSTREAM_WATCHDOG_GITHUB_TOKEN=%s\n" % (image, token)
+        "UPSTREAM_WATCHDOG_GITHUB_TOKEN=%s\n"
+        "UPSTREAM_WATCHDOG_TLS_CERT=%s\n"
+        "UPSTREAM_WATCHDOG_TLS_KEY=%s\n"
+        "UPSTREAM_WATCHDOG_CLIENT_CA=%s\n"
+        % (
+            image,
+            token,
+            WATCHDOG_ROOT / "config/server.crt",
+            WATCHDOG_ROOT / "config/server.key",
+            WATCHDOG_ROOT / "config/clients-ca.crt",
+        )
     )
+
+
+def _watchdog_private_files(private):
+    private = Path(private)
+    files = {
+        "server_certificate": private / "server.crt",
+        "server_key": private / "server.key",
+        "client_ca": private / "clients-ca.crt",
+    }
+    for name, path in files.items():
+        try:
+            metadata = path.lstat()
+        except OSError as error:
+            raise ImageError("Watchdog observer credential is missing") from error
+        if not stat.S_ISREG(metadata.st_mode) or path.is_symlink():
+            raise ImageError("Watchdog observer credential must be a regular file")
+        if name == "server_key" and stat.S_IMODE(metadata.st_mode) & 0o077:
+            raise ImageError("Watchdog observer key permissions are too broad")
+    try:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(files["server_certificate"], files["server_key"])
+    except (OSError, ssl.SSLError) as error:
+        raise ImageError("Watchdog observer certificate and key differ") from error
+    verified = subprocess.run(
+        (
+            "openssl",
+            "verify",
+            "-purpose",
+            "sslserver",
+            "-CAfile",
+            str(files["client_ca"]),
+            str(files["server_certificate"]),
+        ),
+        capture_output=True,
+        text=True,
+    )
+    if verified.returncode != 0:
+        raise ImageError("Watchdog observer certificate trust chain differs")
+    return files
 
 
 def _watchdog_compose(docker):
@@ -733,8 +784,29 @@ def validate_watchdog_policy(document):
         raise ImageError("watchdog capabilities policy differs")
     if "no-new-privileges:true" not in service.get("security_opt", []):
         raise ImageError("watchdog no-new-privileges policy differs")
-    if service.get("ports") or service.get("volumes"):
-        raise ImageError("watchdog must not publish ports or mount volumes")
+    if service.get("ports"):
+        raise ImageError("watchdog must not publish ports")
+    volumes = service.get("volumes", [])
+    if not isinstance(volumes, list) or any(
+        not isinstance(item, dict) for item in volumes
+    ):
+        raise ImageError("watchdog observer mount set differs")
+    expected_targets = {
+        "/run/watchdog/tls/server.crt",
+        "/run/watchdog/tls/server.key",
+        "/run/watchdog/tls/clients-ca.crt",
+    }
+    by_target = {item.get("target"): item for item in volumes}
+    if set(by_target) != expected_targets or len(volumes) != len(expected_targets):
+        raise ImageError("watchdog observer mount set differs")
+    for target, item in by_target.items():
+        source = str(item.get("source", ""))
+        if (
+            item.get("type") != "bind"
+            or item.get("read_only") is not True
+            or not source.startswith(str(WATCHDOG_ROOT / "config"))
+        ):
+            raise ImageError("watchdog observer mount policy differs")
     environment = service.get("environment", {})
     if not isinstance(environment, dict) or not environment.get("GITHUB_TOKEN"):
         raise ImageError("watchdog authenticated GitHub API policy differs")
@@ -744,6 +816,21 @@ def validate_watchdog_policy(document):
         raise ImageError("watchdog PID limit differs")
     if str(service.get("user")) != "10001:10001":
         raise ImageError("watchdog user differs")
+    networks = service.get("networks", {})
+    if set(networks) != {"control-plane"}:
+        raise ImageError("watchdog private network differs")
+    configured = document.get("networks", {}).get("control-plane", {})
+    if configured.get("name") != "mwodevelop-control" or configured.get("external") is not True:
+        raise ImageError("watchdog shared network differs")
+    command = " ".join(str(item) for item in service.get("command", []))
+    for required in (
+        "--listen 0.0.0.0",
+        "--port 9445",
+        "--tls-cert /run/watchdog/tls/server.crt",
+        "--client-ca /run/watchdog/tls/clients-ca.crt",
+    ):
+        if required not in command:
+            raise ImageError("watchdog observer command policy differs")
     health = " ".join(
         str(item) for item in service.get("healthcheck", {}).get("test", [])
     )
@@ -771,11 +858,12 @@ def watchdog_workflow_keys(repository):
     return keys
 
 
-def deploy_watchdog(session, repository, image, references):
+def deploy_watchdog(session, repository, image, references, private):
     report = preflight(session)
     if report["raid"] != {"array": "UU", "recovery_percent": None}:
         raise ImageError("watchdog deployment requires healthy RAID [UU]")
     github = watchdog_github_credentials(references)
+    private_files = _watchdog_private_files(private)
     environment = _watchdog_environment(image, github["token"])
     _install, docker = container_station(session)
     compose = _watchdog_compose(docker)
@@ -790,7 +878,12 @@ def deploy_watchdog(session, repository, image, references):
         "cat " + shlex.quote(str(WATCHDOG_ROOT / "watchdog.env")),
         allowed=(0, 1),
     )
-    session.execute("mkdir -p " + shlex.quote(str(WATCHDOG_ROOT)))
+    session.execute(
+        "mkdir -p "
+        + shlex.quote(str(WATCHDOG_ROOT))
+        + " "
+        + shlex.quote(str(WATCHDOG_ROOT / "config"))
+    )
     try:
         session.upload_text(
             str(WATCHDOG_ROOT / "compose.yaml"), compose_text, 0o600
@@ -799,6 +892,34 @@ def deploy_watchdog(session, repository, image, references):
             str(WATCHDOG_ROOT / "watchdog.env"),
             environment,
             0o600,
+        )
+        for destination, (source, mode) in {
+            WATCHDOG_ROOT / "config/server.crt": (
+                private_files["server_certificate"],
+                0o400,
+            ),
+            WATCHDOG_ROOT / "config/server.key": (
+                private_files["server_key"],
+                0o400,
+            ),
+            WATCHDOG_ROOT / "config/clients-ca.crt": (
+                private_files["client_ca"],
+                0o400,
+            ),
+        }.items():
+            session.upload_text(
+                str(destination), source.read_text(encoding="utf-8"), mode
+            )
+        session.execute(
+            "chown -R 10001:10001 "
+            + shlex.quote(str(WATCHDOG_ROOT / "config"))
+        )
+        session.execute(
+            docker
+            + " network inspect mwodevelop-control >/dev/null 2>&1 || "
+            + docker
+            + " network create --driver bridge --label io.mwodevelop.managed=true "
+            + "mwodevelop-control >/dev/null"
         )
         rendered = json.loads(
             session.execute(
@@ -901,7 +1022,11 @@ def deploy(service_name, image, references, repository=ROOT):
             )
         elif service_name == "upstream-watchdog":
             result = deploy_watchdog(
-                session, repository, image, private_references
+                session,
+                repository,
+                image,
+                private_references,
+                Path(repository) / ".kodi-private/control-plane/watchdog",
             )
         elif service_name == "control-plane":
             result = deploy_control_plane(
@@ -911,6 +1036,7 @@ def deploy(service_name, image, references, repository=ROOT):
                 host_ip,
                 Path(repository) / ".kodi-private/control-plane",
                 Path(repository) / ".kodi-private/secret-broker/control-plane",
+                Path(repository) / ".kodi-private/control-plane/watchdog",
             )
         elif service_name == "secret-broker":
             result = deploy_secret_broker(

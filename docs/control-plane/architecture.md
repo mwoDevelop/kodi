@@ -3,17 +3,10 @@
 ## Aktualny przyrost: read-only dashboard, API i lokalny writer bundle
 
 ```text
-GitHub Actions (publiczny read)
-             |
-             v
-      kodi-control-plane -- mTLS API + statyczne GUI --> klient w LAN
-             |
-             | mTLS, prywatna sieć mwodevelop-control
-             v
-     kodi-profile-sync-server integration API
-             |
-             v
-   zredagowane enrollmenty, heartbeat i raporty
+GitHub Actions (uwierzytelniony read) --------+
+qnap-upstream-watchdog -- prywatne mTLS ------+--> kodi-control-plane
+kodi-profile-sync-server -- prywatne mTLS ----+       |
+kodi-secret-broker -- prywatne mTLS ----------+       +-- mTLS API i GUI --> klient w LAN
 ```
 
 Control Plane utrwala zredagowane snapshoty operacyjne oraz własne, niemutowalne
@@ -41,6 +34,7 @@ nieograniczonego wzrostu bazy.
 | enrollment, rewizja, assignment, raport | Profile Sync | odczyt przez wersjonowany kontrakt |
 | snapshot, bundle desired state i audit | Control Plane | bez wartości sekretów i assignmentów |
 | harmonogramy i pochodzenie statusów | manifesty w `mwoDevelop/kodi` | mount read-only, weryfikowany względem workflow i watchdoga |
+| wynik cyklu watchdoga | `qnap-upstream-watchdog` | prywatny endpoint read-only mTLS, bez portu LAN i bez sekretów |
 | prywatny inventory i sekrety | nadal localhost | migracja dopiero po bramie secret-envelope |
 
 ## Degraded mode

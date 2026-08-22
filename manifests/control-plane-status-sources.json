@@ -32,6 +32,16 @@
       "reason_codes": ["SECRET_BROKER_TRANSPORT_ERROR", "SECRET_BROKER_NOT_READY", "STALE", "UNAVAILABLE"]
     },
     {
+      "id": "upstream-watchdog",
+      "owner": "operations",
+      "adapter": "watchdog_status_mtls",
+      "auth": "mtls_read_only",
+      "stale_after_seconds": 900,
+      "trust_level": "authenticated_observation",
+      "fallback": "last_success",
+      "reason_codes": ["WATCHDOG_TRANSPORT_ERROR", "WATCHDOG_INVALID_STATUS", "STALE", "UNAVAILABLE"]
+    },
+    {
       "id": "github-workflows",
       "owner": "github",
       "adapter": "github_actions_api",
