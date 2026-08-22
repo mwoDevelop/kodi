@@ -22,6 +22,8 @@ services:
       - /run/control-plane/tls/server.key
       - --client-ca
       - /run/control-plane/tls/clients-ca.crt
+      - --dashboard-client-certificate
+      - /run/control-plane/tls/dashboard-client.crt
       - --frame-ancestor
       - ${CONTROL_PLANE_FRAME_ANCESTOR:?set exact QTS HTTPS origin}
       - --checkpoint-key
@@ -101,6 +103,12 @@ services:
       - type: bind
         source: ${CONTROL_PLANE_CLIENT_CA:?set client CA}
         target: /run/control-plane/tls/clients-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_WEB_CORE_CLIENT_CERT:?set browser BFF core client certificate}
+        target: /run/control-plane/tls/dashboard-client.crt
         read_only: true
         bind:
           create_host_path: false
@@ -199,7 +207,194 @@ services:
     networks:
       - control-plane
 
+  control-plane-authz:
+    image: ${CONTROL_PLANE_IMAGE:?set immutable image digest}
+    entrypoint: ["python", "-m", "kodi_control_plane.authz_http"]
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "${CONTROL_PLANE_UID:-10001}:${CONTROL_PLANE_GID:-10001}"
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    command:
+      - --listen
+      - 0.0.0.0
+      - --port
+      - "9446"
+      - --database
+      - /data/authz.sqlite
+      - --auth-key
+      - /run/control-plane/authz/aead.key
+      - --tls-cert
+      - /run/control-plane/authz/server.crt
+      - --tls-key
+      - /run/control-plane/authz/server.key
+      - --client-ca
+      - /run/control-plane/authz/clients-ca.crt
+    volumes:
+      - type: bind
+        source: ${CONTROL_PLANE_AUTHZ_DATA:?set authz data directory}
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_AUTHZ_KEY:?set authz AEAD key}
+        target: /run/control-plane/authz/aead.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_AUTHZ_TLS_CERT:?set authz server certificate}
+        target: /run/control-plane/authz/server.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_AUTHZ_TLS_KEY:?set authz server key}
+        target: /run/control-plane/authz/server.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_AUTHZ_CLIENT_CA:?set authz client CA}
+        target: /run/control-plane/authz/clients-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    mem_limit: 128m
+    pids_limit: 64
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:9082/ready', timeout=3))['status'] == 'ready'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - browser-auth
+
+  control-plane-web:
+    image: ${CONTROL_PLANE_IMAGE:?set immutable image digest}
+    entrypoint: ["python", "-m", "kodi_control_plane.web"]
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "${CONTROL_PLANE_UID:-10001}:${CONTROL_PLANE_GID:-10001}"
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    command:
+      - --listen
+      - 0.0.0.0
+      - --port
+      - "9444"
+      - --tls-cert
+      - /run/control-plane/tls/server.crt
+      - --tls-key
+      - /run/control-plane/tls/server.key
+      - --expected-host
+      - ${CONTROL_PLANE_BROWSER_HOST:?set exact browser Host}
+      - --expected-origin
+      - ${CONTROL_PLANE_BROWSER_ORIGIN:?set exact browser origin}
+      - --allowed-network
+      - ${CONTROL_PLANE_BROWSER_ALLOWED_NETWORK:?set browser LAN network}
+      - --core-host
+      - control-plane
+      - --core-server-name
+      - control-plane
+      - --core-ca
+      - /run/control-plane/web/core-ca.crt
+      - --core-client-cert
+      - /run/control-plane/web/core-client.crt
+      - --core-client-key
+      - /run/control-plane/web/core-client.key
+      - --authz-host
+      - control-plane-authz
+      - --authz-server-name
+      - control-plane-authz
+      - --authz-ca
+      - /run/control-plane/web/authz-ca.crt
+      - --authz-client-cert
+      - /run/control-plane/web/authz-client.crt
+      - --authz-client-key
+      - /run/control-plane/web/authz-client.key
+    ports:
+      - name: control-plane-browser
+        target: 9444
+        published: "${CONTROL_PLANE_BROWSER_PORT:-19444}"
+        host_ip: ${CONTROL_PLANE_HOST_IP:?set explicit listener address}
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: ${CONTROL_PLANE_TLS_CERT:?set browser server certificate}
+        target: /run/control-plane/tls/server.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_TLS_KEY:?set browser server key}
+        target: /run/control-plane/tls/server.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_WEB_CORE_CA:?set core CA}
+        target: /run/control-plane/web/core-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_WEB_CORE_CLIENT_CERT:?set core client certificate}
+        target: /run/control-plane/web/core-client.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_WEB_CORE_CLIENT_KEY:?set core client key}
+        target: /run/control-plane/web/core-client.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_WEB_AUTHZ_CA:?set authz CA}
+        target: /run/control-plane/web/authz-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_WEB_AUTHZ_CLIENT_CERT:?set authz client certificate}
+        target: /run/control-plane/web/authz-client.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_WEB_AUTHZ_CLIENT_KEY:?set authz client key}
+        target: /run/control-plane/web/authz-client.key
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    mem_limit: 128m
+    pids_limit: 64
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:9083/ready', timeout=3))['status'] == 'ready'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      control-plane:
+        condition: service_healthy
+      control-plane-authz:
+        condition: service_healthy
+    networks:
+      - control-plane
+      - browser-auth
+
 networks:
   control-plane:
     name: mwodevelop-control
     external: true
+  browser-auth:
+    internal: true

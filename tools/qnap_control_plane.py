@@ -32,6 +32,7 @@ ROOT = PurePosixPath(
     "/share/CACHEDEV3_DATA/.mwodevelop/control-plane"
 )
 PORT = 19443
+BROWSER_PORT = 19444
 
 
 class ControlPlaneError(RuntimeError):
@@ -91,6 +92,32 @@ def validate_private_files(
         "operator_key": _local_file(
             private / "tls/operator-client.key", "operator client key", private=True
         ),
+        "web_core_ca": _local_file(private / "web/core-ca.crt", "browser core CA"),
+        "web_core_client_certificate": _local_file(
+            private / "web/core-client.crt", "browser core client certificate"
+        ),
+        "web_core_client_key": _local_file(
+            private / "web/core-client.key", "browser core client key", private=True
+        ),
+        "web_authz_ca": _local_file(private / "web/authz-ca.crt", "browser authz CA"),
+        "web_authz_client_certificate": _local_file(
+            private / "web/authz-client.crt", "browser authz client certificate"
+        ),
+        "web_authz_client_key": _local_file(
+            private / "web/authz-client.key", "browser authz client key", private=True
+        ),
+        "authz_key": _local_file(
+            private / "authz/aead.key", "authz AEAD key", private=True
+        ),
+        "authz_tls_certificate": _local_file(
+            private / "authz/server.crt", "authz TLS certificate"
+        ),
+        "authz_tls_key": _local_file(
+            private / "authz/server.key", "authz TLS key", private=True
+        ),
+        "authz_client_ca": _local_file(
+            private / "authz/clients-ca.crt", "authz client CA"
+        ),
         "checkpoint_key": _local_file(
             private / "audit-checkpoint.key", "audit checkpoint key", private=True
         ),
@@ -120,6 +147,9 @@ def validate_private_files(
     }
     if len(files["checkpoint_key"].read_bytes()) < 32:
         raise ControlPlaneError("audit checkpoint key is too short")
+    auth_key = files["authz_key"].read_text(encoding="ascii")
+    if not re.fullmatch(r"[a-f0-9]{64}", auth_key):
+        raise ControlPlaneError("authz AEAD key is invalid")
     try:
         server = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         server.load_cert_chain(files["tls_certificate"], files["tls_key"])
@@ -138,6 +168,18 @@ def validate_private_files(
         watchdog_client = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         watchdog_client.load_cert_chain(
             files["watchdog_client_certificate"], files["watchdog_client_key"]
+        )
+        web_core = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        web_core.load_cert_chain(
+            files["web_core_client_certificate"], files["web_core_client_key"]
+        )
+        web_authz = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        web_authz.load_cert_chain(
+            files["web_authz_client_certificate"], files["web_authz_client_key"]
+        )
+        authz_server = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        authz_server.load_cert_chain(
+            files["authz_tls_certificate"], files["authz_tls_key"]
         )
     except (OSError, ssl.SSLError) as error:
         raise ControlPlaneError("certificate and key pair differs") from error
@@ -163,6 +205,15 @@ def validate_private_files(
             files["watchdog_client_certificate"],
             "sslclient",
         )
+        _verify_certificate(
+            files["web_core_ca"], files["web_core_client_certificate"], "sslclient"
+        )
+        _verify_certificate(
+            files["web_authz_ca"], files["web_authz_client_certificate"], "sslclient"
+        )
+        _verify_certificate(
+            files["authz_client_ca"], files["authz_tls_certificate"], "sslserver"
+        )
     except OSError as error:
         raise ControlPlaneError("OpenSSL certificate verification failed") from error
     return files
@@ -182,13 +233,29 @@ def environment(image, host_ip):
         (
             f"CONTROL_PLANE_IMAGE={image}",
             f"CONTROL_PLANE_PORT={PORT}",
+            f"CONTROL_PLANE_BROWSER_PORT={BROWSER_PORT}",
             f"CONTROL_PLANE_HOST_IP={address}",
+            f"CONTROL_PLANE_BROWSER_HOST={address}:{BROWSER_PORT}",
+            f"CONTROL_PLANE_BROWSER_ORIGIN=https://{address}:{BROWSER_PORT}",
+            "CONTROL_PLANE_BROWSER_ALLOWED_NETWORK="
+            + str(ipaddress.ip_network(f"{address}/24", strict=False)),
             f"CONTROL_PLANE_FRAME_ANCESTOR=https://{address}",
             f"CONTROL_PLANE_PROFILE_SYNC_SERVER_NAME={address}",
             f"CONTROL_PLANE_DATA={ROOT / 'data'}",
+            f"CONTROL_PLANE_AUTHZ_DATA={ROOT / 'authz-data'}",
             f"CONTROL_PLANE_TLS_CERT={config / 'tls/server.crt'}",
             f"CONTROL_PLANE_TLS_KEY={config / 'tls/server.key'}",
             f"CONTROL_PLANE_CLIENT_CA={config / 'tls/clients-ca.crt'}",
+            f"CONTROL_PLANE_WEB_CORE_CA={config / 'web/core-ca.crt'}",
+            f"CONTROL_PLANE_WEB_CORE_CLIENT_CERT={config / 'web/core-client.crt'}",
+            f"CONTROL_PLANE_WEB_CORE_CLIENT_KEY={config / 'web/core-client.key'}",
+            f"CONTROL_PLANE_WEB_AUTHZ_CA={config / 'web/authz-ca.crt'}",
+            f"CONTROL_PLANE_WEB_AUTHZ_CLIENT_CERT={config / 'web/authz-client.crt'}",
+            f"CONTROL_PLANE_WEB_AUTHZ_CLIENT_KEY={config / 'web/authz-client.key'}",
+            f"CONTROL_PLANE_AUTHZ_KEY={config / 'authz/aead.key'}",
+            f"CONTROL_PLANE_AUTHZ_TLS_CERT={config / 'authz/server.crt'}",
+            f"CONTROL_PLANE_AUTHZ_TLS_KEY={config / 'authz/server.key'}",
+            f"CONTROL_PLANE_AUTHZ_CLIENT_CA={config / 'authz/clients-ca.crt'}",
             f"CONTROL_PLANE_CHECKPOINT_KEY={config / 'audit-checkpoint.key'}",
             f"CONTROL_PLANE_PROFILE_SYNC_CA={config / 'profile-sync/ca.crt'}",
             f"CONTROL_PLANE_PROFILE_SYNC_CLIENT_CERT={config / 'profile-sync/client.crt'}",
@@ -236,47 +303,72 @@ def validate_policy(document):
     if document.get("name") != PROJECT:
         raise ControlPlaneError("unexpected Control Plane Compose project")
     services = document.get("services")
-    if not isinstance(services, dict) or set(services) != {"control-plane"}:
+    expected_services = {
+        "control-plane",
+        "control-plane-authz",
+        "control-plane-web",
+    }
+    if not isinstance(services, dict) or set(services) != expected_services:
         raise ControlPlaneError("unexpected Control Plane service set")
-    service = services["control-plane"]
-    if "container_name" in service or service.get("network_mode") == "host":
-        raise ControlPlaneError("fixed container name and host network are forbidden")
-    if not IMAGE.fullmatch(str(service.get("image", ""))):
-        raise ControlPlaneError("Control Plane image is not immutable")
-    if service.get("read_only") is not True or service.get("init") is not True:
-        raise ControlPlaneError("Control Plane filesystem or init policy differs")
-    if service.get("restart") != "unless-stopped":
-        raise ControlPlaneError("Control Plane restart policy differs")
-    if set(service.get("cap_drop", [])) != {"ALL"}:
-        raise ControlPlaneError("Control Plane capabilities policy differs")
-    if "no-new-privileges:true" not in service.get("security_opt", []):
-        raise ControlPlaneError("Control Plane no-new-privileges policy differs")
-    if service.get("privileged") is True:
-        raise ControlPlaneError("Control Plane must not be privileged")
-    if str(service.get("user")) != "10001:10001":
-        raise ControlPlaneError("Control Plane user policy differs")
-    if int(service.get("mem_limit", 0)) != 256 * 1024 * 1024:
-        raise ControlPlaneError("Control Plane memory limit differs")
-    if int(service.get("pids_limit", 0)) != 128:
-        raise ControlPlaneError("Control Plane PID limit differs")
-    ports = service.get("ports", [])
-    if len(ports) != 1:
-        raise ControlPlaneError("only the mTLS operator API may be published")
-    port = ports[0]
+    limits = {
+        "control-plane": (256 * 1024 * 1024, 128),
+        "control-plane-authz": (128 * 1024 * 1024, 64),
+        "control-plane-web": (128 * 1024 * 1024, 64),
+    }
+    for name, service in services.items():
+        if "container_name" in service or service.get("network_mode") == "host":
+            raise ControlPlaneError("fixed container name and host network are forbidden")
+        if not IMAGE.fullmatch(str(service.get("image", ""))):
+            raise ControlPlaneError("Control Plane image is not immutable")
+        if service.get("read_only") is not True or service.get("init") is not True:
+            raise ControlPlaneError("Control Plane filesystem or init policy differs")
+        if service.get("restart") != "unless-stopped":
+            raise ControlPlaneError("Control Plane restart policy differs")
+        if set(service.get("cap_drop", [])) != {"ALL"}:
+            raise ControlPlaneError("Control Plane capabilities policy differs")
+        if "no-new-privileges:true" not in service.get("security_opt", []):
+            raise ControlPlaneError("Control Plane no-new-privileges policy differs")
+        if service.get("privileged") is True or str(service.get("user")) != "10001:10001":
+            raise ControlPlaneError("Control Plane privilege policy differs")
+        if (int(service.get("mem_limit", 0)), int(service.get("pids_limit", 0))) != limits[name]:
+            raise ControlPlaneError("Control Plane resource policy differs")
+        if any("docker.sock" in str(item) for item in service.get("volumes", [])):
+            raise ControlPlaneError("Control Plane must not mount a Docker socket")
+
+    core = services["control-plane"]
+    web = services["control-plane-web"]
+    authz = services["control-plane-authz"]
+    if len(core.get("ports", [])) != 1 or len(web.get("ports", [])) != 1:
+        raise ControlPlaneError("Control Plane published port set differs")
+    if authz.get("ports", []):
+        raise ControlPlaneError("authz must not publish a LAN port")
+    core_port = core["ports"][0]
+    web_port = web["ports"][0]
     if (
-        int(port.get("target", 0)) != 9443
-        or int(port.get("published", 0)) != PORT
-        or port.get("protocol") != "tcp"
+        int(core_port.get("target", 0)) != 9443
+        or int(core_port.get("published", 0)) != PORT
+        or int(web_port.get("target", 0)) != 9444
+        or int(web_port.get("published", 0)) != BROWSER_PORT
+        or core_port.get("protocol") != "tcp"
+        or web_port.get("protocol") != "tcp"
     ):
         raise ControlPlaneError("Control Plane published API differs")
-    address = ipaddress.ip_address(str(port.get("host_ip", "")))
-    if not address.is_private or address.is_loopback or address.is_unspecified:
-        raise ControlPlaneError("Control Plane API must bind one private LAN address")
-    targets = {
+    address = ipaddress.ip_address(str(core_port.get("host_ip", "")))
+    web_address = ipaddress.ip_address(str(web_port.get("host_ip", "")))
+    if (
+        address != web_address
+        or not address.is_private
+        or address.is_loopback
+        or address.is_unspecified
+    ):
+        raise ControlPlaneError("Control Plane APIs must bind one private LAN address")
+
+    core_targets = {
         "/data",
         "/run/control-plane/tls/server.crt",
         "/run/control-plane/tls/server.key",
         "/run/control-plane/tls/clients-ca.crt",
+        "/run/control-plane/tls/dashboard-client.crt",
         "/run/control-plane/audit-checkpoint.key",
         "/run/control-plane/profile-sync/ca.crt",
         "/run/control-plane/profile-sync/client.crt",
@@ -291,34 +383,62 @@ def validate_policy(document):
         "/run/control-plane/catalogs/schedules.json",
         "/run/control-plane/catalogs/status-sources.json",
     }
-    volumes = service.get("volumes", [])
-    by_target = {item.get("target"): item for item in volumes}
-    if set(by_target) != targets or len(volumes) != len(targets):
-        raise ControlPlaneError("Control Plane bind mount set differs")
+    web_targets = {
+        "/run/control-plane/tls/server.crt",
+        "/run/control-plane/tls/server.key",
+        "/run/control-plane/web/core-ca.crt",
+        "/run/control-plane/web/core-client.crt",
+        "/run/control-plane/web/core-client.key",
+        "/run/control-plane/web/authz-ca.crt",
+        "/run/control-plane/web/authz-client.crt",
+        "/run/control-plane/web/authz-client.key",
+    }
+    authz_targets = {
+        "/data",
+        "/run/control-plane/authz/aead.key",
+        "/run/control-plane/authz/server.crt",
+        "/run/control-plane/authz/server.key",
+        "/run/control-plane/authz/clients-ca.crt",
+    }
     source_targets = set(
         document.get("_mwodevelop_source_policy", {}).get(
             "bind_create_host_path_false", []
         )
     )
-    for target in targets:
-        source = _absolute_bind(by_target[target], target, source_targets)
-        expected_root = str(ROOT / ("data" if target == "/data" else "config"))
-        if not source.startswith(expected_root):
-            raise ControlPlaneError(f"{target} is outside the managed root")
-        if target != "/data" and by_target[target].get("read_only") is not True:
-            raise ControlPlaneError("Control Plane configuration must be read-only")
-    if any("docker.sock" in str(item) for item in volumes):
-        raise ControlPlaneError("Control Plane must not mount a Docker socket")
-    networks = service.get("networks", {})
-    if set(networks) != {"control-plane"}:
-        raise ControlPlaneError("Control Plane network set differs")
+    for service, targets, data_root in (
+        (core, core_targets, ROOT / "data"),
+        (web, web_targets, None),
+        (authz, authz_targets, ROOT / "authz-data"),
+    ):
+        volumes = service.get("volumes", [])
+        by_target = {item.get("target"): item for item in volumes}
+        if set(by_target) != targets or len(volumes) != len(targets):
+            raise ControlPlaneError("Control Plane bind mount set differs")
+        for target in targets:
+            source = _absolute_bind(by_target[target], target, source_targets)
+            expected = str(data_root if target == "/data" else ROOT / "config")
+            if not source.startswith(expected):
+                raise ControlPlaneError(f"{target} is outside the managed root")
+            if target != "/data" and by_target[target].get("read_only") is not True:
+                raise ControlPlaneError("Control Plane configuration must be read-only")
+
+    if set(core.get("networks", {})) != {"control-plane"}:
+        raise ControlPlaneError("core network set differs")
+    if set(web.get("networks", {})) != {"control-plane", "browser-auth"}:
+        raise ControlPlaneError("browser network set differs")
+    if set(authz.get("networks", {})) != {"browser-auth"}:
+        raise ControlPlaneError("authz network set differs")
     configured_network = document.get("networks", {}).get("control-plane", {})
     if configured_network.get("name") != NETWORK or configured_network.get("external") is not True:
         raise ControlPlaneError("Control Plane shared network differs")
-    command = " ".join(str(item) for item in service.get("command", []))
+    if document.get("networks", {}).get("browser-auth", {}).get("internal") is not True:
+        raise ControlPlaneError("browser auth network must be internal")
+
+    command = " ".join(str(item) for item in core.get("command", []))
     for required in (
         "--tls-cert /run/control-plane/tls/server.crt",
         "--client-ca /run/control-plane/tls/clients-ca.crt",
+        "--dashboard-client-certificate /run/control-plane/tls/dashboard-client.crt",
         f"--frame-ancestor https://{address}",
         "--checkpoint-key /run/control-plane/audit-checkpoint.key",
         "--profile-sync-host profile-sync",
@@ -335,15 +455,40 @@ def validate_policy(document):
     ):
         if required not in command:
             raise ControlPlaneError("Control Plane command policy differs")
-    health = " ".join(
-        str(item) for item in service.get("healthcheck", {}).get("test", [])
-    )
-    if "127.0.0.1:9080/ready" not in health:
-        raise ControlPlaneError("Control Plane healthcheck must remain on loopback")
+    web_command = " ".join(str(item) for item in web.get("command", []))
+    for required in (
+        f"--expected-host {address}:{BROWSER_PORT}",
+        f"--expected-origin https://{address}:{BROWSER_PORT}",
+        "--allowed-network "
+        + str(ipaddress.ip_network(f"{address}/24", strict=False)),
+        "--core-host control-plane",
+        "--authz-host control-plane-authz",
+    ):
+        if required not in web_command:
+            raise ControlPlaneError("browser command policy differs")
+    authz_command = " ".join(str(item) for item in authz.get("command", []))
+    for required in (
+        "--database /data/authz.sqlite",
+        "--auth-key /run/control-plane/authz/aead.key",
+        "--client-ca /run/control-plane/authz/clients-ca.crt",
+    ):
+        if required not in authz_command:
+            raise ControlPlaneError("authz command policy differs")
+    for service, endpoint in (
+        (core, "127.0.0.1:9080/ready"),
+        (authz, "127.0.0.1:9082/ready"),
+        (web, "127.0.0.1:9083/ready"),
+    ):
+        health = " ".join(
+            str(item) for item in service.get("healthcheck", {}).get("test", [])
+        )
+        if endpoint not in health:
+            raise ControlPlaneError("Control Plane healthcheck must remain on loopback")
     return {
-        "image": service["image"],
+        "image": core["image"],
         "host_ip": str(address),
         "port": PORT,
+        "browser_port": BROWSER_PORT,
         "project": PROJECT,
         "network": NETWORK,
     }
@@ -372,6 +517,52 @@ def verify_api(host_ip, ca, client_certificate, client_key, attempts=30):
     raise ControlPlaneError("Control Plane mTLS API verification failed") from last_error
 
 
+def verify_browser(host_ip, ca, attempts=30):
+    """Verify that the browser listener works without a client certificate."""
+    context = ssl.create_default_context(cafile=str(ca))
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    endpoint = f"https://{host_ip}:{BROWSER_PORT}/control-plane/login"
+    last_error = None
+    for _attempt in range(attempts):
+        try:
+            with urlopen(endpoint, timeout=5, context=context) as response:
+                payload = response.read(256 * 1024)
+            if response.status == 200 and b"Kodi Control Plane" in payload:
+                return {"status": "ready", "endpoint": endpoint}
+        except (OSError, URLError, ssl.SSLError) as error:
+            last_error = error
+        time.sleep(2)
+    raise ControlPlaneError(
+        "Control Plane browser verification without client certificate failed"
+    ) from last_error
+
+
+def create_browser_bootstrap(session, reset=False):
+    """Create a short-lived browser bootstrap code inside the private authz DB."""
+    report = preflight(session)
+    if report["raid"] != {"array": "UU", "recovery_percent": None}:
+        raise ControlPlaneError("browser bootstrap requires healthy RAID [UU]")
+    _install, docker = container_station(session)
+    compose = compose_command(docker)
+    command = (
+        compose
+        + " exec -T control-plane-authz python -m kodi_control_plane.admin"
+        + " --database /data/authz.sqlite auth-bootstrap"
+        + " --auth-key /run/control-plane/authz/aead.key"
+        + (" --reset" if reset else "")
+    )
+    try:
+        document = json.loads(session.execute(command, timeout=30))
+    except json.JSONDecodeError as error:
+        raise ControlPlaneError("browser bootstrap returned invalid JSON") from error
+    if (
+        not isinstance(document.get("code"), str)
+        or not isinstance(document.get("expires_at"), int)
+    ):
+        raise ControlPlaneError("browser bootstrap response differs")
+    return document
+
+
 def deploy(
     session,
     repository,
@@ -397,6 +588,7 @@ def deploy(
     compose_source = (deployment / "compose.yaml").read_text(encoding="utf-8")
     app = ROOT / "app"
     data = ROOT / "data"
+    authz_data = ROOT / "authz-data"
     config = ROOT / "config"
     marker = app / ".managed-by-mwodevelop"
     existing = session.execute(
@@ -414,7 +606,8 @@ def deploy(
         + " ".join(
             shlex.quote(str(path))
             for path in (
-                app, data, ROOT / "backups", config / "tls",
+                app, data, authz_data, ROOT / "backups", config / "tls",
+                config / "web", config / "authz",
                 config / "profile-sync", config / "secret-broker", config / "watchdog",
                 config / "github",
                 config / "catalogs",
@@ -423,11 +616,25 @@ def deploy(
     )
     session.upload_text(str(app / "compose.yaml"), compose_source, 0o600)
     session.upload_text(str(app / "control-plane.env"), env, 0o600)
-    session.upload_text(str(marker), "kodi-control-plane-readonly-v2\n", 0o600)
+    session.upload_text(str(marker), "kodi-control-plane-browser-v3\n", 0o600)
     uploads = {
         config / "tls/server.crt": (files["tls_certificate"], 0o400),
         config / "tls/server.key": (files["tls_key"], 0o400),
         config / "tls/clients-ca.crt": (files["client_ca"], 0o400),
+        config / "web/core-ca.crt": (files["web_core_ca"], 0o400),
+        config / "web/core-client.crt": (
+            files["web_core_client_certificate"], 0o400
+        ),
+        config / "web/core-client.key": (files["web_core_client_key"], 0o400),
+        config / "web/authz-ca.crt": (files["web_authz_ca"], 0o400),
+        config / "web/authz-client.crt": (
+            files["web_authz_client_certificate"], 0o400
+        ),
+        config / "web/authz-client.key": (files["web_authz_client_key"], 0o400),
+        config / "authz/aead.key": (files["authz_key"], 0o400),
+        config / "authz/server.crt": (files["authz_tls_certificate"], 0o400),
+        config / "authz/server.key": (files["authz_tls_key"], 0o400),
+        config / "authz/clients-ca.crt": (files["authz_client_ca"], 0o400),
         config / "audit-checkpoint.key": (files["checkpoint_key"], 0o400),
         config / "profile-sync/ca.crt": (files["profile_ca"], 0o400),
         config / "profile-sync/client.crt": (
@@ -463,7 +670,7 @@ def deploy(
         "chown -R 10001:10001 "
         + " ".join(
             shlex.quote(str(path))
-            for path in (data, ROOT / "backups", config)
+            for path in (data, authz_data, ROOT / "backups", config)
         )
     )
     session.execute(
@@ -493,4 +700,10 @@ def deploy(
         files["operator_certificate"],
         files["operator_key"],
     )
-    return {"policy": policy, "preflight": report, "api": api}
+    browser = verify_browser(host_ip, files["client_ca"])
+    return {
+        "policy": policy,
+        "preflight": report,
+        "api": api,
+        "browser": browser,
+    }

@@ -1,7 +1,8 @@
 # Read-only Kodi Control Plane i dashboard na QNAP
 
-Projekt Compose uruchamia czwartą aplikację Kodi w Container Station. API na
-porcie `19443` wymaga mTLS. Połączenie do Profile Sync używa prywatnej zewnętrznej
+Projekt Compose uruchamia trzy procesy jednego obrazu w Container Station:
+`control-plane`, `control-plane-authz` i `control-plane-web`. API na porcie
+`19443` nadal wymaga mTLS. Połączenie do Profile Sync używa prywatnej zewnętrznej
 sieci `mwodevelop-control`; port integracyjny `8767` nie jest publikowany na QNAP.
 
 Wdrożenie jest obsługiwane przez wspólny interfejs:
@@ -18,18 +19,29 @@ Sync ani żadnego pliku `.env` z credentialami urządzeń.
 
 Wdrożenie kopiuje z repo kanoniczne manifesty
 `control-plane-schedules.json` i `control-plane-status-sources.json`, a następnie
-montuje je read-only. Pod `https://<QNAP>:19443/` działa statyczny dashboard bez
-CDN; tak samo jak API wymaga certyfikatu klienta mTLS. Endpointy
-`/api/v1/{dashboard,schedules,services,alerts}` są wyłącznie odczytowe.
-Dashboard może być osadzony przez skrót `WebBrowser` na pulpicie QTS. Nagłówek
-`frame-ancestors` dopuszcza wyłącznie dokładny origin HTTPS tego samego QNAP;
-inne strony pozostają zablokowane, a ramka nadal musi przedstawić certyfikat
-klienta mTLS.
+montuje je read-only. Dotychczasowy dashboard mTLS pozostaje pod
+`https://<QNAP>:19443/`. Dla zwykłej przeglądarki działa dodatkowo
+`https://<QNAP>:19444/control-plane/`: nie wymaga certyfikatu klienta, lecz wymaga
+hasła i TOTP oraz akceptacji ostrzeżenia lokalnego certyfikatu. Listener akceptuje
+wyłącznie skonfigurowaną podsieć LAN i dokładny Host/Origin. Web/BFF używa
+dedykowanego certyfikatu mTLS, którego core ogranicza do odczytu endpointów
+dashboardu. Authz nie publikuje żadnego portu do LAN.
+
+Pierwszy bootstrap albo jawny reset break-glass:
+
+```bash
+python tools/qnap_images.py browser-bootstrap
+python tools/qnap_images.py browser-bootstrap --reset
+```
+
+Kod jest jednorazowy i wygasa po 10 minutach. `--reset` usuwa istniejącego
+operatora, sesje i kody odzyskiwania, dlatego używa się go wyłącznie świadomie.
 
 Powtarzalny test kontraktu i renderowania:
 
 ```bash
 .venv/bin/python tests/e2e/control_plane_readonly.py
+.venv/bin/python tests/e2e/control_plane_browser.py
 .venv/bin/python tests/e2e/control_plane_dashboard_cdp.py \
   --cdp http://127.0.0.1:9222
 ```

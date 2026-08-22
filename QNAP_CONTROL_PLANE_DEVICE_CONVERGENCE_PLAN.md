@@ -6,6 +6,28 @@ i magazyn sekretów zaplanowane
 
 Data: 2026-08-21
 
+Aktualizacja 2026-08-22 — realizacja przyrostu 3A2a:
+
+- zachowujemy `HTTPS/mTLS :19443` jako dotychczasowy interfejs maszynowy oraz
+  dodajemy osobny, nadal read-only interfejs przeglądarkowy
+  `https://<QNAP>:19444/control-plane/`;
+- przeglądarka nie przedstawia certyfikatu klienta. Dostęp jest ograniczony do
+  jednej podsieci LAN, dokładnego `Host` i `Origin`, hasła oraz TOTP; sesja ma
+  limit bezczynności i limit bezwzględny, CSRF używa double-submit cookie;
+- osobny proces `control-plane-authz` ma własną bazę SQLite, szyfruje seed TOTP
+  AES-GCM kluczem spoza bazy, przechowuje jednorazowe kody odzyskiwania i nie
+  publikuje portu do LAN;
+- proces `control-plane-web` jest BFF tylko do odczytu. Do core i authz łączy się
+  dedykowanymi certyfikatami mTLS; certyfikat BFF ma w core allowlistę wyłącznie
+  dla endpointów dashboardu;
+- QTS 5.2 nie zapewnia potrzebnego routingu source-path, a publiczny urząd
+  certyfikacji nie wystawi certyfikatu dla prywatnego IP. Dlatego ten przyrost
+  świadomie nie używa QTS reverse proxy ani WebAuthn: przeglądarka pokaże
+  ostrzeżenie dla lokalnego certyfikatu, ale nie wymaga instalacji CA;
+- `tools/qnap_images.py browser-bootstrap` generuje na QNAP jednorazowy kod
+  ważny maksymalnie 10 minut. `--reset` jest jawną ścieżką break-glass, która
+  unieważnia operatora i sesje przed ponowną konfiguracją.
+
 Aktualizacja 2026-08-21 — wydanie przyrostu 3A1:
 
 - wydano `kodi-control-plane` 0.3.0 ze statycznym dashboardem read-only,
@@ -1354,13 +1376,14 @@ Release jest gotowy dopiero, gdy:
 
 ## 12. Kolejność realizacji i przybliżony koszt
 
-| Faza | Rezultat | Stan 2026-08-21 | Pozostały szacunek |
+| Faza | Rezultat | Stan 2026-08-22 | Pozostały szacunek |
 |---|---|---|---:|
 | 0 | ADR, threat model i spiki go/no-go Kodi/crypto/WebAuthn | częściowo | 2–5 dni |
 | 1 | Read-only API mTLS, audit, backup i QNAP Compose | wydane | 0 dni |
 | 2 | Bundle, delegowany signer, lifecycle schematów i mixed-version | bundle wydany, delegacja offline | 3–7 dni |
 | 3A1 | Read-only status API, katalog harmonogramów, freshness i UI mTLS | wydane i wdrożone | 0 dni |
-| 3A2 | DNS/QTS proxy, WebAuthn/authz, bootstrap/recovery i browser E2E | do wykonania | 4–8 dni |
+| 3A2a | Tymczasowy browser auth password+TOTP, bootstrap/recovery i browser E2E | w realizacji | 0–1 dzień |
+| 3A2b | Stabilny DNS/TLS, QTS proxy lub ingress i WebAuthn | odroczone po spike QTS 5.2 | 3–6 dni |
 | 3B | Trwała kolejka akcji niskiego ryzyka, outbox/fencing i rekonsyliacja | do wykonania | 5–10 dni |
 | 4 | Magazyn sekretów, import shadow, koperty i off-box recovery | do wykonania | 6–12 dni |
 | 5A | Device Agent, GitHub App, kontroler fal, canary i exact-artifact proof | częściowo | 10–20 dni |
@@ -1391,11 +1414,18 @@ jest skrótem MVP i nie może wyprzedzić recovery drill.
 
 ### Przyrost 3A2 — browser auth bez mutacji
 
-1. Dodać stabilny lokalny DNS/TLS, QTS reverse proxy i ścisłą walidację originu.
-2. Uruchomić authz, jednorazowy bootstrap, dwie passkeys, recovery codes, role,
-   signed grants i osobny listener przeglądarkowy.
-3. Wykonać browser E2E, negatywne proxy/WebAuthn/CSRF/session tests oraz restart i
-   recovery operatora, nadal bez endpointów mutujących stan floty.
+1. W 3A2a opublikować osobny listener `:19444` bez certyfikatu klienta, ograniczony
+   do LAN, dokładnego Host/Origin i ścieżki `/control-plane/`; obecne `:19443`
+   pozostawić bez zmian za mTLS.
+2. Uruchomić osobny authz z jednorazowym bootstrapem, hasłem scrypt, TOTP,
+   recovery codes, limitem prób i sesjami. Web/BFF ma mieć wyłącznie certyfikat
+   mTLS read-only do czterech endpointów core i nie ma dostępu do sekretów floty.
+3. Wykonać browser E2E, negatywne Host/Origin/LAN/CSRF/session/scope tests,
+   restart i recovery operatora. Potwierdzić, że browser TLS nie wysyła
+   `CertificateRequest`, a stare API nadal go wymaga.
+4. W 3A2b, po dostępności stabilnego lokalnego DNS i wspieranego ingressu,
+   zastąpić ostrzeżenie certyfikatu zaufanym TLS i dodać WebAuthn. Nie blokuje to
+   read-only 3A2a i nie otwiera mutacji.
 
 ### Przyrost 3B — kolejka i bezpieczne akcje
 

@@ -383,6 +383,30 @@ def main():
                 str(profile_tls / "client.crt"),
                 "--profile-sync-client-key",
                 str(profile_tls / "client.key"),
+                "--secret-broker-host",
+                "127.0.0.1",
+                "--secret-broker-port",
+                str(free_port()),
+                "--secret-broker-server-name",
+                "127.0.0.1",
+                "--secret-broker-ca",
+                str(operator_tls / "ca.crt"),
+                "--secret-broker-client-cert",
+                str(operator_tls / "client.crt"),
+                "--secret-broker-client-key",
+                str(operator_tls / "client.key"),
+                "--watchdog-host",
+                "127.0.0.1",
+                "--watchdog-port",
+                str(free_port()),
+                "--watchdog-server-name",
+                "127.0.0.1",
+                "--watchdog-ca",
+                str(operator_tls / "ca.crt"),
+                "--watchdog-client-cert",
+                str(operator_tls / "client.crt"),
+                "--watchdog-client-key",
+                str(operator_tls / "client.key"),
                 "--refresh-seconds",
                 "15",
                 "--schedule-refresh-seconds",
@@ -408,7 +432,7 @@ def main():
             status, fleet = wait_for(endpoint + "/v1/fleet", context, control)
             if status != 200 or fleet["profile_sync"]["status"] != "ok":
                 raise RuntimeError("Profile Sync fleet did not cross mTLS")
-            if fleet["profile_sync"]["data"]["database_schema"] != 4:
+            if fleet["profile_sync"]["data"]["database_schema"] != 5:
                 raise RuntimeError("unexpected Profile Sync database schema")
             no_client = ssl.create_default_context(cafile=operator_tls / "ca.crt")
             try:
@@ -448,7 +472,7 @@ def main():
                         "schema": 1,
                         "status": "PASS",
                         "fleet_devices": len(fleet["profile_sync"]["data"]["devices"]),
-                        "profile_sync_database_schema": 4,
+                        "profile_sync_database_schema": 5,
                         "mtls_without_client": "REJECTED",
                         "mutation": "REJECTED",
                         "bundle_lifecycle": "PREPARING_READY_PUBLISHED",

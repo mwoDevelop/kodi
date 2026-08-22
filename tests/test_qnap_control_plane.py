@@ -8,9 +8,11 @@ import pytest
 from tools.qnap_compose_policy import explicit_bind_targets
 from tools.qnap_control_plane import (
     ControlPlaneError,
+    create_browser_bootstrap,
     environment,
     validate_policy,
     verify_api,
+    verify_browser,
 )
 
 
@@ -62,6 +64,7 @@ def test_control_plane_compose_is_read_only_mtls_and_private_network(
         "image": "ghcr.io/mwodevelop/kodi-control-plane@sha256:" + "a" * 64,
         "host_ip": "192.0.2.39",
         "port": 19443,
+        "browser_port": 19444,
         "project": "qnap-control-plane",
         "network": "mwodevelop-control",
     }
@@ -75,7 +78,7 @@ def test_control_plane_policy_rejects_docker_socket_and_missing_client_ca(
     socket_mount["services"]["control-plane"]["volumes"][0]["source"] = (
         "/var/run/docker.sock"
     )
-    with pytest.raises(ControlPlaneError, match="managed root"):
+    with pytest.raises(ControlPlaneError, match="Docker socket"):
         validate_policy(socket_mount)
 
     missing_ca = copy.deepcopy(document)
@@ -143,6 +146,62 @@ def test_control_plane_api_accepts_supported_response_schemas(
     assert verify_api("192.168.1.39", ca, certificate, key, attempts=1)[
         "schema"
     ] == schema
+
+
+def test_control_plane_browser_requires_no_client_certificate(monkeypatch, tmp_path):
+    ca = tmp_path / "ca.crt"
+    ca.write_text("test", encoding="utf-8")
+
+    class Context:
+        minimum_version = None
+
+        def load_cert_chain(self, *_args):
+            raise AssertionError("browser verification must not load a client certificate")
+
+    class Response(io.BytesIO):
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(
+        "tools.qnap_control_plane.ssl.create_default_context", lambda **_kwargs: Context()
+    )
+    monkeypatch.setattr(
+        "tools.qnap_control_plane.urlopen",
+        lambda *_args, **_kwargs: Response(b"<title>Kodi Control Plane</title>"),
+    )
+
+    result = verify_browser("192.168.1.39", ca, attempts=1)
+    assert result["status"] == "ready"
+    assert result["endpoint"].endswith(":19444/control-plane/login")
+
+
+def test_browser_bootstrap_runs_only_inside_authz_container(monkeypatch):
+    class Session:
+        def execute(self, command, timeout=None):
+            assert timeout == 30
+            assert "exec -T control-plane-authz" in command
+            assert "--database /data/authz.sqlite auth-bootstrap" in command
+            assert "--auth-key /run/control-plane/authz/aead.key" in command
+            assert command.endswith(" --reset")
+            return '{"code":"one-time-code","expires_at":1800000600}'
+
+    monkeypatch.setattr(
+        "tools.qnap_control_plane.preflight",
+        lambda _session: {"raid": {"array": "UU", "recovery_percent": None}},
+    )
+    monkeypatch.setattr(
+        "tools.qnap_control_plane.container_station",
+        lambda _session: ("/share/install", "docker"),
+    )
+    assert create_browser_bootstrap(Session(), reset=True) == {
+        "code": "one-time-code",
+        "expires_at": 1800000600,
+    }
 
 
 @pytest.fixture

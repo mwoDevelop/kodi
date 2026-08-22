@@ -19,7 +19,7 @@ publikację head przez CAS. Nie jest to jeszcze assignment dla urządzenia.
 Plan całości znajduje się w
 [`QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN.md`](../../QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN.md).
 
-## Aktualna granica release 3A1
+## Aktualna granica release 3A2a
 
 Control Plane udostępnia przez mTLS wyłącznie:
 
@@ -29,10 +29,14 @@ Control Plane udostępnia przez mTLS wyłącznie:
 - `GET /v1/audit/checkpoint`.
 - `GET /v1/desired-state/<channel>`.
 - `GET /v1/dashboard`, `/v1/schedules`, `/v1/alerts`;
-- `GET /api/v1/{dashboard,schedules,services,alerts}` oraz statyczny panel `/`.
+- `GET /api/v1/{dashboard,schedules,services,alerts}` oraz statyczny panel `/`
+  za mTLS na `:19443`;
+- `GET /control-plane/` i BFF
+  `/control-plane/api/v1/dashboard` za hasłem+TOTP na `:19444`.
 
-Panel jest nadal chroniony istniejącym mTLS i nie ma logowania przeglądarkowego
-WebAuthn ani żadnych akcji mutujących. Każdy status zawiera osobne pochodzenie i
+Interfejs maszynowy nadal wymaga mTLS. Interfejs przeglądarkowy nie wymaga
+certyfikatu klienta, ale jest ograniczony do LAN, dokładnego Host/Origin, sesji,
+CSRF oraz hasła+TOTP. Nie ma jeszcze WebAuthn ani żadnych akcji mutujących. Każdy status zawiera osobne pochodzenie i
 świeżość; proces cykliczny rozdziela obecność schedulera, wynik runu i stale dane.
 Kanoniczne katalogi są w `manifests/control-plane-{schedules,status-sources}.json`.
 
