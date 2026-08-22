@@ -84,7 +84,9 @@ Control Plane odświeża co 60 sekund read-only widoki Profile Sync, Secret Brok
 watchdoga przez prywatne mTLS i zbiorczy stan GitHub, a szczegóły 11 harmonogramów
 co 15 minut. Heartbeat procesu Profile Sync urządzeń wylicza z najnowszej generacji
 enrollmentu każdego logicznego urządzenia, więc stare generacje nie tworzą
-fałszywego alertu. Błąd źródła nie usuwa ostatniego
+fałszywego alertu. Odczyty GitHub Control Plane i Watchdoga używają tego samego
+zweryfikowanego tokena read-only, ale osobnych kopii pliku sekretu w katalogach
+wdrożeniowych; panel nie polega na anonimowym limicie API. Błąd źródła nie usuwa ostatniego
 poprawnego payloadu: zapisuje kod błędu, przechodzi w `degraded` i dopisuje
 zdarzenie do łańcucha audytu. Ten collector nie jest procesem aktualizacji i nie
 ma endpointu mutującego, klucza assignmentów ani dostępu do socketa Dockera.

@@ -48,17 +48,24 @@ def _safe_run(run):
 
 
 def _select_runs(runs):
-    scheduled = next(
-        (item for item in runs if item.get("event") == "schedule"), None
-    )
-    effective = next(
-        (
-            item
-            for item in runs
-            if item.get("event") in {"schedule", "workflow_dispatch"}
-        ),
+    scheduled_index = next(
+        (index for index, item in enumerate(runs) if item.get("event") == "schedule"),
         None,
     )
+    scheduled = runs[scheduled_index] if scheduled_index is not None else None
+    manual = next(
+        (
+            item
+            for item in runs[:scheduled_index]
+            if item.get("event") == "workflow_dispatch"
+            and (
+                item.get("status") in {"queued", "in_progress", "waiting"}
+                or item.get("conclusion") == "success"
+            )
+        ),
+        None,
+    ) if scheduled_index is not None else None
+    effective = manual or scheduled
     return scheduled, effective
 
 

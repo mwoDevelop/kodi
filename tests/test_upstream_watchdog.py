@@ -230,6 +230,34 @@ def test_watchdog_manual_run_cannot_replace_missing_scheduler():
     assert report["workflows"][0]["status"] == "missing"
 
 
+def test_watchdog_ignores_cancelled_manual_run_after_successful_schedule():
+    now = dt.datetime(2026, 8, 22, 8, tzinfo=dt.timezone.utc)
+
+    def fetch(_repository, _workflow, token=None):
+        return [
+            {
+                "id": 2,
+                "event": "workflow_dispatch",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "updated_at": "2026-08-22T07:30:00Z",
+            },
+            {
+                "id": 1,
+                "event": "schedule",
+                "status": "completed",
+                "conclusion": "success",
+                "updated_at": "2026-08-22T05:05:00Z",
+            },
+        ]
+
+    report = evaluate(_manifest(), fetcher=fetch, now=now)
+
+    assert report["healthy"] is True
+    assert report["workflows"][0]["run_id"] == 1
+    assert report["workflows"][0]["run_event"] == "schedule"
+
+
 def test_watchdog_publishes_complete_fail_closed_report_on_api_error():
     manifest = _manifest()
     manifest["workflows"].append(
