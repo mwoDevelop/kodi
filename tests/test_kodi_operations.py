@@ -737,6 +737,8 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
     )
     assert opensubtitles_com[0][4:6] == ("--references", ".env")
     assert retry_adapters == [
+        "stable-addons",
+        "default-addons",
         "opensubtitles",
         "opensubtitles-com",
         "profile-sync",

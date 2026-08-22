@@ -375,7 +375,10 @@ class ProductionExecutor:
 
     def _android_converge(self, device_id: str) -> StepOutcome:
         serial = self.fleet["devices"][device_id]["endpoints"]["adb"]
-        stable = self._run_json(
+        # Profile Sync may have restarted Kodi immediately before this device
+        # step.  Retry the complete idempotent adapter once so a short ADB/Kodi
+        # readiness race cannot abort an otherwise healthy fleet rollout.
+        stable = self._run_json_with_retry(
             [
                 sys.executable,
                 "tools/kodi_android_stable_rollout.py",
@@ -388,7 +391,10 @@ class ProductionExecutor:
             ],
             adapter="stable-addons",
         )
-        defaults = self._run_json(
+        # The stable reconciliation itself can also restart Kodi when it
+        # changes an add-on.  Keep the following idempotent reconciliation
+        # behind the same bounded, fail-closed transport retry.
+        defaults = self._run_json_with_retry(
             [
                 sys.executable,
                 "tools/kodi_default_addons.py",
