@@ -21,6 +21,10 @@ Wdrożenie kopiuje z repo kanoniczne manifesty
 montuje je read-only. Pod `https://<QNAP>:19443/` działa statyczny dashboard bez
 CDN; tak samo jak API wymaga certyfikatu klienta mTLS. Endpointy
 `/api/v1/{dashboard,schedules,services,alerts}` są wyłącznie odczytowe.
+Dashboard może być osadzony przez skrót `WebBrowser` na pulpicie QTS. Nagłówek
+`frame-ancestors` dopuszcza wyłącznie dokładny origin HTTPS tego samego QNAP;
+inne strony pozostają zablokowane, a ramka nadal musi przedstawić certyfikat
+klienta mTLS.
 
 Powtarzalny test kontraktu i renderowania:
 

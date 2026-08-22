@@ -22,6 +22,8 @@ services:
       - /run/control-plane/tls/server.key
       - --client-ca
       - /run/control-plane/tls/clients-ca.crt
+      - --frame-ancestor
+      - ${CONTROL_PLANE_FRAME_ANCESTOR:?set exact QTS HTTPS origin}
       - --checkpoint-key
       - /run/control-plane/audit-checkpoint.key
       - --profile-sync-host
