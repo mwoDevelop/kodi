@@ -55,8 +55,11 @@ błędem lub przekracza indywidualny próg `stale_after_seconds`. Dla procesów 
 Healthcheck kontenera odczytuje wynik co pięć minut, a QTS/Container Station
 odpowiada za powiadomienie zewnętrzne.
 
-Watchdog ma wyłącznie publiczny dostęp GitHub do odczytu. Nie może ponowić workflow,
-zmienić gałęzi ani naprawić artefaktu upstream. Pomyślne odkrycie nie maskuje
+Watchdog ma uwierzytelniony, wyłącznie odczytowy dostęp do GitHub API, aby nie
+dzielić anonimowego limitu `60/h` dla adresu wyjściowego QNAP. Token jest wstrzykiwany
+z prywatnych referencji podczas wdrożenia i nie trafia do repozytorium ani raportu
+statusu. Watchdog nie może ponowić workflow, zmienić gałęzi ani naprawić artefaktu
+upstream. Pomyślne odkrycie nie maskuje
 błędu audytu zaakceptowanych artefaktów; oba workflow mwoScrapers są
 monitorowane niezależnie.
 

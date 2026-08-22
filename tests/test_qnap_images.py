@@ -19,6 +19,7 @@ def watchdog_policy(image=IMAGE):
         "services": {
             "upstream-watchdog": {
                 "image": image,
+                "environment": {"GITHUB_TOKEN": "test-token"},
                 "init": True,
                 "read_only": True,
                 "restart": "unless-stopped",
@@ -82,6 +83,7 @@ def test_watchdog_workflow_keys_follow_manifest(tmp_path):
         ("cap_drop", []),
         ("ports", ["8080:8080"]),
         ("volumes", ["/tmp:/tmp"]),
+        ("environment", {}),
         ("user", "0:0"),
     ],
 )
@@ -90,6 +92,151 @@ def test_watchdog_policy_rejects_unsafe_changes(field, value):
     document["services"]["upstream-watchdog"][field] = value
     with pytest.raises(qnap_images.ImageError):
         qnap_images.validate_watchdog_policy(document)
+
+
+def test_watchdog_environment_contains_secret_without_logging_it():
+    environment = qnap_images._watchdog_environment(IMAGE, "test-token")
+
+    assert environment.splitlines() == [
+        "UPSTREAM_WATCHDOG_IMAGE=" + IMAGE,
+        "UPSTREAM_WATCHDOG_GITHUB_TOKEN=test-token",
+    ]
+
+
+def test_watchdog_credentials_accept_github_pass_only_when_it_is_a_token(
+    monkeypatch,
+):
+    pat = "ghp_" + "a" * 36
+    monkeypatch.setattr(
+        qnap_images,
+        "_github_identity",
+        lambda token: {
+            "login": "mwoDevelop" if token == pat else "",
+            "rate_limit": 5000,
+            "rate_remaining": 4999,
+        },
+    )
+    monkeypatch.setattr(
+        qnap_images,
+        "_run",
+        lambda *_args, **_kwargs: type("Result", (), {"stdout": ""})(),
+    )
+
+    credentials = qnap_images.watchdog_github_credentials(
+        {"GITHUB_USER": "mwodevelop", "GITHUB_PASS": pat}
+    )
+
+    assert credentials == {
+        "token": pat,
+        "source": "GITHUB_PASS",
+        "login": "mwoDevelop",
+        "rate_limit": 5000,
+        "rate_remaining": 4999,
+    }
+
+
+def test_watchdog_credentials_fall_back_to_matching_gh_session(monkeypatch):
+    monkeypatch.setattr(
+        qnap_images,
+        "_github_identity",
+        lambda token: (
+            {
+                "login": "mwoDevelop",
+                "rate_limit": 5000,
+                "rate_remaining": 4900,
+            }
+            if token == "gh-token"
+            else (_ for _ in ()).throw(qnap_images.HTTPError(
+                "https://api.github.com/user", 401, "bad", {}, None
+            ))
+        ),
+    )
+    monkeypatch.setattr(
+        qnap_images,
+        "_run",
+        lambda *_args, **_kwargs: type(
+            "Result", (), {"stdout": "gh-token\n"}
+        )(),
+    )
+
+    credentials = qnap_images.watchdog_github_credentials(
+        {"GITHUB_USER": "mwoDevelop", "GITHUB_PASS": "account-password"}
+    )
+
+    assert credentials["source"] == "gh-cli"
+    assert credentials["token"] == "gh-token"
+    assert credentials["rate_limit"] == 5000
+
+
+def test_watchdog_credentials_bind_email_sign_in_to_repository_owner(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        qnap_images,
+        "_github_identity",
+        lambda _token: {
+            "login": "mwoDevelop",
+            "rate_limit": 5000,
+            "rate_remaining": 4800,
+        },
+    )
+    monkeypatch.setattr(
+        qnap_images,
+        "_run",
+        lambda *_args, **_kwargs: type("Result", (), {"stdout": "gh-token"})(),
+    )
+
+    credentials = qnap_images.watchdog_github_credentials(
+        {"GITHUB_USER": "operator@example.invalid", "GITHUB_PASS": "password"}
+    )
+
+    assert credentials["login"] == "mwoDevelop"
+
+
+def test_watchdog_credentials_reject_email_with_foreign_account(monkeypatch):
+    monkeypatch.setattr(
+        qnap_images,
+        "_github_identity",
+        lambda _token: {
+            "login": "different-owner",
+            "rate_limit": 5000,
+            "rate_remaining": 4800,
+        },
+    )
+    monkeypatch.setattr(
+        qnap_images,
+        "_run",
+        lambda *_args, **_kwargs: type("Result", (), {"stdout": "gh-token"})(),
+    )
+
+    with pytest.raises(qnap_images.ImageError, match="authenticated GitHub"):
+        qnap_images.watchdog_github_credentials(
+            {"GITHUB_USER": "operator@example.invalid"}
+        )
+
+
+def test_watchdog_credentials_fail_closed_without_authenticated_token(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        qnap_images,
+        "_github_identity",
+        lambda _token: {
+            "login": "mwoDevelop",
+            "rate_limit": 60,
+            "rate_remaining": 59,
+        },
+    )
+    monkeypatch.setattr(
+        qnap_images,
+        "_run",
+        lambda *_args, **_kwargs: type("Result", (), {"stdout": ""})(),
+    )
+
+    with pytest.raises(qnap_images.ImageError, match="authenticated GitHub"):
+        qnap_images.watchdog_github_credentials(
+            {"GITHUB_USER": "mwoDevelop", "GITHUB_PASS": "password"}
+        )
 
 
 def test_private_build_state_round_trip(tmp_path):

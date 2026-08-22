@@ -50,6 +50,15 @@ python tools/qnap_images.py build all
 python tools/qnap_images.py deploy all
 ```
 
+Gdy digest stable się nie zmienił, ale trzeba ponownie zastosować prywatną
+konfigurację wybranej usługi (na przykład po rotacji tokena Watchdoga), użyj:
+
+```bash
+python tools/qnap_images.py deploy upstream-watchdog --reconcile
+```
+
+Bez jawnego `--reconcile` zgodny digest pozostaje bezpiecznym `NO_CHANGE`.
+
 To interfejs niskopoziomowy do diagnostyki i kontrolowanych prac serwisowych.
 Rutynowy rollout wykonuj przez `tools/kodi_ops.py rollout`; wtedy deploy jest
 dozwolony wyłącznie z zatwierdzonego stable locka, pod zdalną blokadą i z
