@@ -20,6 +20,19 @@ def watchdog_policy(image=IMAGE):
             "upstream-watchdog": {
                 "image": image,
                 "environment": {"GITHUB_TOKEN": "test-token"},
+                "command": [
+                    "watch",
+                    "--listen",
+                    "0.0.0.0",
+                    "--port",
+                    "9445",
+                    "--tls-cert",
+                    "/run/watchdog/tls/server.crt",
+                    "--tls-key",
+                    "/run/watchdog/tls/server.key",
+                    "--client-ca",
+                    "/run/watchdog/tls/clients-ca.crt",
+                ],
                 "init": True,
                 "read_only": True,
                 "restart": "unless-stopped",
@@ -40,6 +53,33 @@ def watchdog_policy(image=IMAGE):
                         "assert open('/run/watchdog/status.json')",
                     ]
                 },
+                "volumes": [
+                    {
+                        "type": "bind",
+                        "source": str(qnap_images.WATCHDOG_ROOT / "config/server.crt"),
+                        "target": "/run/watchdog/tls/server.crt",
+                        "read_only": True,
+                    },
+                    {
+                        "type": "bind",
+                        "source": str(qnap_images.WATCHDOG_ROOT / "config/server.key"),
+                        "target": "/run/watchdog/tls/server.key",
+                        "read_only": True,
+                    },
+                    {
+                        "type": "bind",
+                        "source": str(qnap_images.WATCHDOG_ROOT / "config/clients-ca.crt"),
+                        "target": "/run/watchdog/tls/clients-ca.crt",
+                        "read_only": True,
+                    },
+                ],
+                "networks": {"control-plane": None},
+            }
+        },
+        "networks": {
+            "control-plane": {
+                "name": "mwodevelop-control",
+                "external": True,
             }
         },
     }
@@ -100,6 +140,12 @@ def test_watchdog_environment_contains_secret_without_logging_it():
     assert environment.splitlines() == [
         "UPSTREAM_WATCHDOG_IMAGE=" + IMAGE,
         "UPSTREAM_WATCHDOG_GITHUB_TOKEN=test-token",
+        "UPSTREAM_WATCHDOG_TLS_CERT="
+        + str(qnap_images.WATCHDOG_ROOT / "config/server.crt"),
+        "UPSTREAM_WATCHDOG_TLS_KEY="
+        + str(qnap_images.WATCHDOG_ROOT / "config/server.key"),
+        "UPSTREAM_WATCHDOG_CLIENT_CA="
+        + str(qnap_images.WATCHDOG_ROOT / "config/clients-ca.crt"),
     ]
 
 

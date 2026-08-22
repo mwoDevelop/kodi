@@ -3,6 +3,20 @@ services:
     image: ${UPSTREAM_WATCHDOG_IMAGE:?set immutable image digest}
     environment:
       GITHUB_TOKEN: ${UPSTREAM_WATCHDOG_GITHUB_TOKEN:?set authenticated GitHub API token}
+    command:
+      - watch
+      - --status
+      - /run/watchdog/status.json
+      - --listen
+      - 0.0.0.0
+      - --port
+      - "9445"
+      - --tls-cert
+      - /run/watchdog/tls/server.crt
+      - --tls-key
+      - /run/watchdog/tls/server.key
+      - --client-ca
+      - /run/watchdog/tls/clients-ca.crt
     restart: unless-stopped
     init: true
     read_only: true
@@ -14,6 +28,25 @@ services:
     tmpfs:
       - /run/watchdog:size=1m,mode=0700,uid=10001,gid=10001
       - /tmp:size=4m,mode=1777
+    volumes:
+      - type: bind
+        source: ${UPSTREAM_WATCHDOG_TLS_CERT:?set server certificate}
+        target: /run/watchdog/tls/server.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${UPSTREAM_WATCHDOG_TLS_KEY:?set server key}
+        target: /run/watchdog/tls/server.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${UPSTREAM_WATCHDOG_CLIENT_CA:?set client CA}
+        target: /run/watchdog/tls/clients-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
     mem_limit: 64m
     pids_limit: 32
     healthcheck:
@@ -26,3 +59,10 @@ services:
       timeout: 5s
       retries: 2
       start_period: 30s
+    networks:
+      - control-plane
+
+networks:
+  control-plane:
+    name: mwodevelop-control
+    external: true

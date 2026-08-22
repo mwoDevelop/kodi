@@ -166,7 +166,7 @@
       "stale_after_seconds": 28800,
       "retry_policy": "next_interval",
       "dependencies": ["github-api"],
-      "observer": "not_implemented"
+      "observer": "watchdog_status"
     },
     {
       "id": "kodi-profile-sync-device",

@@ -29,8 +29,12 @@ repozytoriów `mwoDevelop`; token dowolnego innego konta jest odrzucany.
 Aplikacja wykonuje wyłącznie żądania `GET`; docelowy PAT powinien mieć tylko prawa
 odczytu publicznych repozytoriów. Migracyjny token `gh auth` może mieć szersze zakresy,
 dlatego należy zastąpić go dedykowanym PAT w `GITHUB_TOKEN` albo `GITHUB_PASS`.
-Kontener nie ma woluminów, opublikowanych portów, dodatkowych capabilities ani
-zapisywalnego głównego systemu plików. Wdrażaj wyłącznie niezmienny
+Kontener nie ma opublikowanych portów, dodatkowych capabilities ani zapisywalnego
+głównego systemu plików. Jedyne bind mounty to trzy pliki certyfikatów obserwatora,
+zamontowane read-only z zarządzanego katalogu QNAP. Prywatny endpoint
+`https://upstream-watchdog:9445/v1/status` jest osiągalny wyłącznie w sieci
+`mwodevelop-control` i wymaga certyfikatu klienta mTLS; służy Control Plane do
+sprawdzania świeżości cyklu. Wdrażaj wyłącznie niezmienny
 wieloarchitekturowy digest GHCR. Sekret jest widoczny dla administratora silnika
 w metadanych kontenera, dlatego dostęp administracyjny do Container Station pozostaje
 granicą zaufania.
@@ -52,6 +56,14 @@ python tools/qnap_images.py deploy upstream-watchdog --reconcile
 
 `--reconcile` ponownie stosuje prywatną konfigurację także wtedy, gdy digest obrazu
 stable się nie zmienił. Jest wymagane po dodaniu lub rotacji tokena.
+
+Materiał mTLS powstaje razem z nową konfiguracją Control Plane. Dla istniejącej
+instalacji można go dołożyć bez rotowania certyfikatu operatora:
+
+```bash
+python tools/watchdog_observer_credentials.py
+python tools/qnap_images.py deploy upstream-watchdog control-plane --reconcile
+```
 
 Skonfiguruj Container Station/QTS tak, aby powiadamiał o niezdrowym kontenerze. Dokument
 statusu pozostaje w pliku tmpfs o rozmiarze 1 MiB i zawiera tylko identyfikatory

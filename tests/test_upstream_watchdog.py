@@ -103,6 +103,7 @@ def test_watchdog_accepts_recent_success_and_active_run():
         return [
             {
                 "id": 42,
+                "event": "schedule",
                 "status": "completed",
                 "conclusion": "success",
                 "updated_at": "2026-07-29T11:00:00Z",
@@ -115,7 +116,7 @@ def test_watchdog_accepts_recent_success_and_active_run():
     assert report["workflows"][0]["age_seconds"] == 3600
 
 
-def test_watchdog_observes_only_scheduled_runs(monkeypatch):
+def test_watchdog_fetches_schedule_and_manual_remediation_runs(monkeypatch):
     observed = {}
 
     class Response:
@@ -135,7 +136,8 @@ def test_watchdog_observes_only_scheduled_runs(monkeypatch):
 
     monkeypatch.setattr(upstream_watchdog, "urlopen", open_request)
     assert fetch_runs("owner/repo", "sync.yml") == []
-    assert "event=schedule" in observed["url"]
+    assert "event=" not in observed["url"]
+    assert "per_page=20" in observed["url"]
     assert observed["timeout"] == 20
 
 
@@ -145,12 +147,14 @@ def test_watchdog_rejects_failure_and_stale_success():
         [
             {
                 "id": 1,
+                "event": "schedule",
                 "status": "completed",
                 "conclusion": "failure",
                 "updated_at": "2026-07-29T11:00:00Z",
             },
             {
                 "id": 2,
+                "event": "schedule",
                 "status": "completed",
                 "conclusion": "success",
                 "updated_at": "2026-07-27T11:00:00Z",
@@ -174,6 +178,56 @@ def test_watchdog_rejects_failure_and_stale_success():
 
     assert report["healthy"] is False
     assert [item["healthy"] for item in report["workflows"]] == [False, False]
+
+
+def test_watchdog_accepts_newer_manual_success_without_hiding_scheduler():
+    now = dt.datetime(2026, 8, 22, 8, tzinfo=dt.timezone.utc)
+
+    def fetch(_repository, _workflow, token=None):
+        return [
+            {
+                "id": 2,
+                "event": "workflow_dispatch",
+                "status": "completed",
+                "conclusion": "success",
+                "updated_at": "2026-08-22T07:30:00Z",
+            },
+            {
+                "id": 1,
+                "event": "schedule",
+                "status": "completed",
+                "conclusion": "failure",
+                "updated_at": "2026-08-22T05:05:00Z",
+            },
+        ]
+
+    report = evaluate(_manifest(), fetcher=fetch, now=now)
+
+    assert report["healthy"] is True
+    item = report["workflows"][0]
+    assert item["run_id"] == 2
+    assert item["run_event"] == "workflow_dispatch"
+    assert item["latest_scheduled_run"]["id"] == 1
+
+
+def test_watchdog_manual_run_cannot_replace_missing_scheduler():
+    now = dt.datetime(2026, 8, 22, 8, tzinfo=dt.timezone.utc)
+
+    def fetch(_repository, _workflow, token=None):
+        return [
+            {
+                "id": 2,
+                "event": "workflow_dispatch",
+                "status": "completed",
+                "conclusion": "success",
+                "updated_at": "2026-08-22T07:30:00Z",
+            }
+        ]
+
+    report = evaluate(_manifest(), fetcher=fetch, now=now)
+
+    assert report["healthy"] is False
+    assert report["workflows"][0]["status"] == "missing"
 
 
 def test_watchdog_publishes_complete_fail_closed_report_on_api_error():
@@ -221,7 +275,7 @@ def test_control_plane_catalogs_are_valid_and_watchdog_thresholds_match():
         item for item in schedules["jobs"] if item["kind"] == "github_actions"
     ]
     assert len(github_jobs) == 11
-    assert len(sources["sources"]) == 5
+    assert len(sources["sources"]) == 6
     assert {(item["repository"], item["workflow"]) for item in github_jobs} == set(
         SCHEDULED_WORKFLOWS
     )

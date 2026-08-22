@@ -55,6 +55,12 @@ błędem lub przekracza indywidualny próg `stale_after_seconds`. Dla procesów 
 Healthcheck kontenera odczytuje wynik co pięć minut, a QTS/Container Station
 odpowiada za powiadomienie zewnętrzne.
 
+Obserwacja rozdziela dwa fakty. Najnowszy przebieg `schedule` dowodzi, że cron nadal
+jest uruchamiany; nie można go zastąpić ręcznym wywołaniem. Nowszy
+`workflow_dispatch` może natomiast potwierdzić skuteczną naprawę wcześniejszego
+błędu i staje się bieżącym wynikiem funkcjonalnym. Dzięki temu panel nie utrzymuje
+fałszywego alertu po udanym ręcznym ponowieniu, ale nadal wykryje brak schedulera.
+
 Watchdog ma uwierzytelniony, wyłącznie odczytowy dostęp do GitHub API, aby nie
 dzielić anonimowego limitu `60/h` dla adresu wyjściowego QNAP. Token jest wstrzykiwany
 z prywatnych referencji podczas wdrożenia i nie trafia do repozytorium ani raportu
@@ -74,8 +80,11 @@ harmonogramów aktualizacji:
 | Watchdog upstream | 5 minut | ostatnia utrwalona ocena workflow GitHub |
 | Secret Broker | 30 sekund | mTLS `/ready`, klucz główny i integralność SQLite |
 
-Control Plane odświeża co 60 sekund read-only widoki Profile Sync i zbiorczy stan
-GitHub, a szczegóły 11 harmonogramów co 15 minut. Błąd źródła nie usuwa ostatniego
+Control Plane odświeża co 60 sekund read-only widoki Profile Sync, Secret Brokera,
+watchdoga przez prywatne mTLS i zbiorczy stan GitHub, a szczegóły 11 harmonogramów
+co 15 minut. Heartbeat procesu Profile Sync urządzeń wylicza z najnowszej generacji
+enrollmentu każdego logicznego urządzenia, więc stare generacje nie tworzą
+fałszywego alertu. Błąd źródła nie usuwa ostatniego
 poprawnego payloadu: zapisuje kod błędu, przechodzi w `degraded` i dopisuje
 zdarzenie do łańcucha audytu. Ten collector nie jest procesem aktualizacji i nie
 ma endpointu mutującego, klucza assignmentów ani dostępu do socketa Dockera.
@@ -138,6 +147,10 @@ gh run list --repo mwoDevelop/umbrellaplug.github.io \
 W przypadku wdrożonego watchdoga sprawdź `/run/watchdog/status.json` wewnątrz kontenera
 `qnap-upstream-watchdog-upstream-watchdog-1`. Zdrowy kontener stanowi dowód wyłącznie
 dla workflow obecnych w wersjonowanym manifeście watchdoga.
+
+Ten sam, zredagowany dokument jest dostępny dla Control Plane pod prywatnym endpointem
+`https://upstream-watchdog:9445/v1/status`. Endpoint nie ma portu opublikowanego do
+LAN i wymaga dedykowanego certyfikatu klienta mTLS.
 
 Dodając lub usuwając zaplanowane upstream workflow, zaktualizuj razem:
 

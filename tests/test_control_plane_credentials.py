@@ -47,15 +47,23 @@ def test_generates_isolated_server_operator_and_profile_sync_credentials(tmp_pat
         "tls/ca.key",
         "tls/operator-client.crt",
         "tls/operator-client.key",
-        "tls/server.crt",
-        "tls/server.key",
+            "tls/server.crt",
+            "tls/server.key",
+            "watchdog/ca.crt",
+            "watchdog/client.crt",
+            "watchdog/client.key",
+            "watchdog/clients-ca.crt",
+            "watchdog/server.crt",
+            "watchdog/server.key",
     }
     for relative in (
         "audit-checkpoint.key",
         "profile-sync/client.key",
         "tls/ca.key",
         "tls/operator-client.key",
-        "tls/server.key",
+            "tls/server.key",
+            "watchdog/client.key",
+            "watchdog/server.key",
     ):
         assert (output / relative).stat().st_mode & 0o077 == 0
     certificate = subprocess.run(
