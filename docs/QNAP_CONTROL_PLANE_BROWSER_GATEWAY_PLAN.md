@@ -75,3 +75,22 @@ które już otwierają `https://192.168.1.39/`, korzystają z zaakceptowanego
 wyjątku. Gateway usuwa drugi certyfikat i niestandardowy port, ale pełne
 usunięcie ostrzeżeń na nowych urządzeniach wymaga odnowienia certyfikatu QTS
 albo publicznej nazwy DNS z certyfikatem zaufanego CA.
+
+## Stan realizacji — 23 sierpnia 2026
+
+Plan został zrealizowany. QPKG `KodiCPGateway` 0.1.1 rejestruje skrót i proxy
+QTS, a Control Plane 0.6.5 normalizuje jeden dodatkowy separator ścieżki
+wprowadzany przez generator proxy QTS. Stabilny manifest przypina obraz
+`ghcr.io/mwodevelop/kodi-control-plane@sha256:093ee65df2e46e7ea7bcd3eaff61054c9b6b19d035cad2277ef7594ff4d2b821`.
+
+Potwierdzone bramki:
+
+- 41/41 testów Control Plane oraz 630/630 testów repo Kodi;
+- dwa niezależne workflow E2E repo Kodi przeszły przed scaleniem;
+- logowanie, dashboard `OK`, ręczne odświeżenie i wylogowanie działają przez
+  `https://192.168.1.39/control-plane/`;
+- wszystkie kontenery QNAP są zdrowe;
+- porty 19444 i 19445 nie są osiągalne z LAN, a 19443 bez certyfikatu klienta
+  kończy handshake alertem `certificate required`;
+- Chrome na Androidzie wyświetla stronę logowania po jednorazowym zaakceptowaniu
+  istniejącego wyjątku dla certyfikatu QTS; nie instalowano osobnego CA panelu.
