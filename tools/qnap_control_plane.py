@@ -164,6 +164,7 @@ def environment(image, host_ip):
             f"CONTROL_PLANE_IMAGE={image}",
             f"CONTROL_PLANE_PORT={PORT}",
             f"CONTROL_PLANE_HOST_IP={address}",
+            f"CONTROL_PLANE_FRAME_ANCESTOR=https://{address}",
             f"CONTROL_PLANE_PROFILE_SYNC_SERVER_NAME={address}",
             f"CONTROL_PLANE_DATA={ROOT / 'data'}",
             f"CONTROL_PLANE_TLS_CERT={config / 'tls/server.crt'}",
@@ -291,6 +292,7 @@ def validate_policy(document):
     for required in (
         "--tls-cert /run/control-plane/tls/server.crt",
         "--client-ca /run/control-plane/tls/clients-ca.crt",
+        f"--frame-ancestor https://{address}",
         "--checkpoint-key /run/control-plane/audit-checkpoint.key",
         "--profile-sync-host profile-sync",
         "--profile-sync-port 8767",

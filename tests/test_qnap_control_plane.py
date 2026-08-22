@@ -93,6 +93,9 @@ def test_control_plane_environment_rejects_public_or_mutable_target():
     assert "CONTROL_PLANE_HOST_IP=192.168.1.39" in environment(
         image, "192.168.1.39"
     )
+    assert "CONTROL_PLANE_FRAME_ANCESTOR=https://192.168.1.39" in environment(
+        image, "192.168.1.39"
+    )
     with pytest.raises(ControlPlaneError, match="private LAN"):
         environment(image, "8.8.8.8")
     with pytest.raises(ControlPlaneError, match="immutable"):
