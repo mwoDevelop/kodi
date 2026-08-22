@@ -1,7 +1,7 @@
 {
-  "attestation_id": "116cc2725e5eea4a8d0f86dcdedda8a89be4f9914c7d42081970dfb74cc1e145",
+  "attestation_id": "409c75fce851c1483a2187ad712fa934975a640f1e4eda14ee3e2e2dd64d7a44",
   "attestation_kind": "device",
-  "attestation_sha256": "0d414c78a2023fbc9c6903971437947a5136467ef69ddece22c5b7bcc92f7902",
+  "attestation_sha256": "6087a94245b20abaaf2a19bfe8a2ae98be2a48806abd47c5934094909c1ba2b3",
   "channel": "stable",
   "components": {
     "plugin.video.umbrella": {
@@ -10,9 +10,9 @@
       "zip_sha256": "3eda5c1cbb8f04386ea9f8ddf869dad75a4842c7a6ee1d0b51e5dc3b56ebbcc9"
     },
     "plugin.video.watchnixtoons2.mwodevelop": {
-      "commit": "df5f3474c1744b7187041acce37958bca50b49c1",
-      "version": "0.27.1",
-      "zip_sha256": "b0e95a6d559556ea735b72b06aed935ad64870bddc955005090f42cb76d64909"
+      "commit": "2b4087f1db712762e1ae9a59a5c194f2ab1b1b15",
+      "version": "0.29.1",
+      "zip_sha256": "fec698fc7e5aae1684e145d64fdd187c75d180b6ed61d5a1cf9aac2e4c777668"
     },
     "script.module.mwoscrapers": {
       "commit": "eeef07bcf7152d205410cf2b700fda5688ba082d",
@@ -38,7 +38,7 @@
   },
   "promotion_kind": "normal",
   "schema": 2,
-  "source_artifact_manifest_sha256": "5c35df004fa5a3446abb8256e831b996d6195b485faf156c601a4f87a2a78af0",
-  "source_index_sha256": "d763593118a98472188cc892ff34e7c18afa8bbda8a2af0a5b2ec367b6a531d2",
-  "source_snapshot_id": "607d2f20917e123b4e1e897efa64ff3aaa9c2a73dcbc11d536bf03a902800634"
+  "source_artifact_manifest_sha256": "b9f6589f6837953a99c2415500f31a22037fd162f23ae00db6622c9f48efd4d4",
+  "source_index_sha256": "d2491df6b95df341247504976c62892cd1ea5afff106939bbe887ec305e2476a",
+  "source_snapshot_id": "9f4c36bbbec725cea3b033466c8f6056baa9fcb85260b93c4c85571dd8d0460a"
 }
