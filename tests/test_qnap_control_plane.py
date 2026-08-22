@@ -102,7 +102,7 @@ def test_control_plane_environment_rejects_public_or_mutable_target():
     assert "CONTROL_PLANE_BROWSER_BACKEND_PORT=19445" in environment(
         image, "192.168.1.39"
     )
-    assert "CONTROL_PLANE_BROWSER_HOST=127.0.0.1:19445" in environment(
+    assert "CONTROL_PLANE_BROWSER_HOST=192.168.1.39" in environment(
         image, "192.168.1.39"
     )
     with pytest.raises(ControlPlaneError, match="private LAN"):
