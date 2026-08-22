@@ -1067,6 +1067,14 @@ def status(references, repository=ROOT):
         rows = {}
         for name, container in (
             ("control-plane", "qnap-control-plane-control-plane-1"),
+            (
+                "control-plane-authz",
+                "qnap-control-plane-control-plane-authz-1",
+            ),
+            (
+                "control-plane-web",
+                "qnap-control-plane-control-plane-web-1",
+            ),
             ("profile-sync", "qnap-profile-sync-profile-sync-1"),
             ("secret-broker", "qnap-secret-broker-secret-broker-1"),
             ("provider-relay", "qnap-provider-relay-provider-relay-1"),

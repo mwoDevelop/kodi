@@ -631,13 +631,16 @@ def test_status_explains_watchdog_health(monkeypatch):
         lambda _session: ("/share/install", "docker"),
     )
 
-    watchdog = qnap_images.status(".env")["upstream-watchdog"]
+    status = qnap_images.status(".env")
+    watchdog = status["upstream-watchdog"]
 
     assert watchdog["runtime_healthy"] is False
     assert watchdog["workflows"] == 2
     assert watchdog["workflow_failures"] == [
         "mwoDevelop/repo/audit.yml"
     ]
+    assert status["control-plane-authz"]["status"] == "running"
+    assert status["control-plane-web"]["status"] == "running"
 
 
 def test_status_treats_empty_docker_inspect_as_missing(monkeypatch):
