@@ -171,6 +171,32 @@ def test_recovery_force_stops_before_starting_kodi(monkeypatch):
     assert sleeps == [20]
 
 
+def test_recovery_tolerates_unsupported_unsuspend_but_keeps_strict_checks(
+    monkeypatch,
+):
+    commands = []
+    waits = []
+
+    def fake_adb(*args):
+        commands.append(args)
+        if "unsuspend" in args:
+            raise subprocess.CalledProcessError(255, args)
+
+    monkeypatch.setattr("tools.certify_device_matrix._adb", fake_adb)
+    monkeypatch.setattr(
+        "tools.certify_device_matrix._wait_for_jsonrpc",
+        lambda *args: waits.append(args),
+    )
+    monkeypatch.setattr("tools.certify_device_matrix.time.sleep", lambda _seconds: None)
+
+    _recover_kodi("adb", 5038, "sony", 12345)
+
+    assert any("unsuspend" in command for command in commands)
+    assert any("enable" in command for command in commands)
+    assert any("start" in command for command in commands)
+    assert waits == [("127.0.0.1", 12345)]
+
+
 def test_addon_state_retries_transient_jsonrpc_read(monkeypatch):
     calls = []
     sleeps = []
