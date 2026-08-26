@@ -605,6 +605,16 @@ def _configure_youtube(stage):
         }
     if not config.is_file() or config.is_symlink():
         raise ValueError("YouTube Flatpak private configuration is unsafe")
+    try:
+        expected_schema = json.loads(config.read_text(encoding="utf-8")).get(
+            "schema"
+        )
+    except (OSError, TypeError, ValueError) as error:
+        raise ValueError(
+            "YouTube Flatpak private configuration is invalid"
+        ) from error
+    if expected_schema not in {1, 2}:
+        raise ValueError("YouTube Flatpak private configuration schema is invalid")
     previous_argv = sys.argv
     try:
         sys.argv = [str(script), str(config), str(report_path)]
@@ -635,10 +645,10 @@ def _configure_youtube(stage):
     if (
         not isinstance(report, dict)
         or not set(report).issubset(allowed)
-        or report.get("schema") != 1
+        or report.get("schema") != expected_schema
         or not report.get("ok")
     ):
-        raise RuntimeError(
+        error = RuntimeError(
             "YouTube Flatpak adapter failed: %s at %s"
             % (
                 report.get("error_type", "unknown")
@@ -649,6 +659,11 @@ def _configure_youtube(stage):
                 else "unknown",
             )
         )
+        if isinstance(report, dict) and isinstance(
+            report.get("error_type"), str
+        ):
+            error.code = report["error_type"]
+        raise error
     return report
 
 

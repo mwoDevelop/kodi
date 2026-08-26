@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-08
 
+- [Przywrócenie zdrowia providerów, watchdoga, heartbeatów i harmonogramów](2026-08-26-operations-health-remediation.md)
 - [QNAP Control Plane 3A2a — dostęp przeglądarkowy bez certyfikatu klienta](2026-08-22-control-plane-3a2a-release.md)
 - [Profile Sync 1.1.1 — canary BlueStacks i X88](2026-08-22-profile-sync-1.1.1-canary.md)
 - [X88 — binding mwoScrapers i filtr nazw źródeł](2026-08-21-x88-provider-binding-filter-diagnosis.md)

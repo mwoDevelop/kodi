@@ -866,7 +866,7 @@ def test_in_kodi_youtube_adapter_accepts_only_sanitized_report(
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     (tmp_path / "youtube-configure.py").write_text("pass\n")
-    (tmp_path / "youtube-config.json").write_text('{"private":"value"}\n')
+    (tmp_path / "youtube-config.json").write_text('{"schema":2}\n')
 
     def run(_path, run_name):
         assert run_name == "__main__"
@@ -874,7 +874,7 @@ def test_in_kodi_youtube_adapter_accepts_only_sanitized_report(
             json.dumps(
                 {
                     "ok": True,
-                    "schema": 1,
+                    "schema": 2,
                     "stage": "complete",
                     "authorization": "AUTHORIZATION_REQUIRED",
                     "personal_api_configured": True,
