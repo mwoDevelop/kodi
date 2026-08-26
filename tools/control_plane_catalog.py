@@ -61,6 +61,11 @@ def load_schedules(path):
             raise ValueError(f"invalid dependencies in {job['id']}")
         if job["kind"] == "github_actions":
             expected = required | {"repository", "workflow", "event", "cron"}
+            window_policy = {
+                "missed_windows_warning",
+                "missed_windows_failure",
+            }
+            expected |= window_policy
             if set(job) != expected:
                 raise ValueError(f"unexpected GitHub schedule fields in {job['id']}")
             if (
@@ -72,6 +77,16 @@ def load_schedules(path):
                 or not all(CRON.fullmatch(item) for item in job["cron"])
             ):
                 raise ValueError(f"invalid GitHub schedule {job['id']}")
+            warning = job["missed_windows_warning"]
+            failure = job["missed_windows_failure"]
+            if (
+                not isinstance(warning, int)
+                or not isinstance(failure, int)
+                or warning < 1
+                or failure < warning
+                or failure > 96
+            ):
+                raise ValueError(f"invalid missed-window policy in {job['id']}")
         elif job["kind"] in {"internal_interval", "device_interval"}:
             expected = required | {"interval_seconds", "observer"}
             if set(job) != expected or not isinstance(job["interval_seconds"], int):

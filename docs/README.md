@@ -50,6 +50,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | Bramka bezpieczeństwa upstream | [Projekt skanowania w poszukiwaniu złośliwego oprogramowania](UPSTREAM_MALWARE_SCANNING_PLAN.md) |
 | Usunięcie zgodności legacy | [Plan usunięcia kodu legacy](../LEGACY_REMOVAL_PLAN.md) |
 | Orchestrator operacji | [Plan release, rollout i restore](../KODI_OPS_PLAN.md) |
+| Zdrowie usług i procesów cyklicznych | [Plan naprawy providerów, watchdoga, heartbeatów i harmonogramów](../OPERATIONS_HEALTH_REMEDIATION_PLAN.md) |
 | Cykl życia formatów | [Schematy bieżące i legacy](schema-lifecycle.md) |
 | Wstępny rekonesans repozytorium | [Rekord etapu 0](ETAP0.md) |
 | Początkowa linia bazowa upstream | [Wartość bazowa upstream z 25.07.2026 r.](upstream-sync-baseline-2026-07-25.md) |
@@ -67,6 +68,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 - [Review pełnego wydania Upstream
   Sync](UPSTREAM_SYNC_FULL_RELEASE_REVIEW_2026-07-29.md)
 - [Review planu release, rollout i restore](KODI_OPS_PLAN_REVIEW.md)
+- [Review planu zdrowia usług i procesów cyklicznych](OPERATIONS_HEALTH_REMEDIATION_PLAN_REVIEW.md)
 
 ## Dowody z testów i wdrożenia
 

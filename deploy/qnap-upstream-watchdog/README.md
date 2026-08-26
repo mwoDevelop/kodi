@@ -4,14 +4,22 @@ W przypadku rutynowych kompilacji i wdrożeń współdzielonych z innymi usługa
 użyj [`tools/qnap_images.py`](../../docs/qnap-images.md).
 
 Ta niezależna usługa Container Station odpytuje najnowsze uruchomienie każdego
-cyklicznego workflow upstream. Zgłasza `unhealthy`, gdy brakuje workflow, zakończył się
-on błędem albo jest starszy niż 36 godzin, dzięki czemu brakujący cron GitHub jest widoczny.
+cyklicznego workflow upstream. Raportuje `monitored_state=FAILED`, gdy brakuje
+workflow, zakończył się on błędem albo jest przeterminowany. Stan kontenera opisuje
+natomiast gotowość obserwatora: poprawny, kompletny i świeży raport pozostaje
+`healthy` nawet wtedy, gdy wykrył awarię monitorowanego workflow.
 
 Proces odpytuje GitHub co sześć godzin; Container Station ocenia ostatni utrwalony wynik
 co pięć minut. Wersjonowany manifest obejmuje centralne uzgadnianie, audyt zaakceptowanych
 providerów i artefaktów, discovery providerów, Umbrella i WatchNixtoons2. Zobacz pełny
 [katalog procesów cyklicznych](../../docs/scheduled-processes.md), aby poznać
 własność, granice zapisu i polecenia weryfikacji.
+
+Dokument statusu schema 2 rozdziela `observer_ready`,
+`collection_state=READY|PARTIAL|ERROR` i
+`monitored_state=HEALTHY|FAILED|UNKNOWN`. Błąd GitHub API lub niekompletny katalog
+nie jest fałszywie klasyfikowany jako awaria workflow — daje `UNKNOWN` i niezdrowy
+healthcheck obserwatora.
 
 Usługa korzysta wyłącznie z uwierzytelnionych odczytów API GitHub. Token nie jest
 wersjonowany: narzędzie wdrożeniowe sprawdza zgodność tożsamości z `GITHUB_USER`

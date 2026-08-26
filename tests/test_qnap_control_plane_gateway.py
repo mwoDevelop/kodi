@@ -8,6 +8,7 @@ from tools.qnap_control_plane_gateway import (
     PROXY_PATH,
     QDK_SHA256,
     VERSION,
+    ensure_proxy,
     validate_source,
 )
 
@@ -44,3 +45,25 @@ def test_gateway_contains_no_credentials_or_generated_package(repository_root):
     ).lower()
     assert "github_token" not in text
     assert "password=" not in text
+
+
+def test_gateway_reenables_qpkg_and_refreshes_stale_qts_proxy():
+    class Session:
+        def __init__(self):
+            self.command = None
+
+        def execute(self, command, timeout=None):
+            self.command = command
+            assert timeout == 90
+            return "421"
+
+    session = Session()
+
+    assert ensure_proxy(session) == {
+        "proxy_rule": "active",
+        "proxy_http_status": 421,
+    }
+    assert "/sbin/qpkg_cli --enable KodiCPGateway" in session.command
+    assert "grep -Fx" in session.command
+    assert "/etc/init.d/Qthttpd.sh restart" in session.command
+    assert "case \"$code\" in 200|302|303|401|403|421" in session.command

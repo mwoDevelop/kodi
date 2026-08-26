@@ -9,7 +9,7 @@ from tools.control_plane_catalog import (
     load_schedules,
     load_status_sources,
 )
-from tools.upstream_watchdog import evaluate, fetch_runs, load_manifest
+from tools.upstream_watchdog import evaluate, fetch_runs, load_manifest, validate_status
 
 SCHEDULED_WORKFLOWS = {
     ("mwoDevelop/kodi", "reconcile-upstreams.yml"): (
@@ -113,6 +113,9 @@ def test_watchdog_accepts_recent_success_and_active_run():
     report = evaluate(_manifest(), fetcher=fetch, now=now, token="token")
 
     assert report["healthy"] is True
+    assert report["observer_ready"] is True
+    assert report["collection_state"] == "READY"
+    assert report["monitored_state"] == "HEALTHY"
     assert report["workflows"][0]["age_seconds"] == 3600
 
 
@@ -177,6 +180,9 @@ def test_watchdog_rejects_failure_and_stale_success():
     )
 
     assert report["healthy"] is False
+    assert report["observer_ready"] is True
+    assert report["collection_state"] == "READY"
+    assert report["monitored_state"] == "FAILED"
     assert [item["healthy"] for item in report["workflows"]] == [False, False]
 
 
@@ -276,14 +282,71 @@ def test_watchdog_publishes_complete_fail_closed_report_on_api_error():
     report = evaluate(manifest, fetcher=fetch)
 
     assert report["healthy"] is False
+    assert report["observer_ready"] is False
+    assert report["collection_state"] == "PARTIAL"
+    assert report["monitored_state"] == "UNKNOWN"
     assert len(report["workflows"]) == 2
     assert report["workflows"][0] == {
         **manifest["workflows"][0],
         "status": "api_error",
         "healthy": False,
+        "monitored_state": "UNKNOWN",
     }
     assert report["workflows"][1]["status"] == "missing"
     assert "sensitive" not in json.dumps(report)
+
+
+def test_watchdog_health_validates_observer_not_monitored_result():
+    now = dt.datetime(2026, 8, 26, 10, tzinfo=dt.timezone.utc)
+    report = {
+        "schema": 2,
+        "checked_at": "2026-08-26T09:59:00+00:00",
+        "observer_ready": True,
+        "collection_state": "READY",
+        "monitored_state": "FAILED",
+        "healthy": False,
+        "workflows": [
+            {
+                **_manifest()["workflows"][0],
+                "status": "completed",
+                "healthy": False,
+                "monitored_state": "FAILED",
+            }
+        ],
+    }
+
+    assert validate_status(report, _manifest(), now=now)
+
+    report["observer_ready"] = False
+    report["collection_state"] = "PARTIAL"
+    report["monitored_state"] = "UNKNOWN"
+    assert not validate_status(report, _manifest(), now=now)
+
+
+def test_watchdog_health_rejects_stale_future_and_incomplete_reports():
+    now = dt.datetime(2026, 8, 26, 10, tzinfo=dt.timezone.utc)
+    report = evaluate(
+        _manifest(),
+        fetcher=lambda *_args, **_kwargs: [
+            {
+                "id": 1,
+                "event": "schedule",
+                "status": "completed",
+                "conclusion": "success",
+                "updated_at": "2026-08-26T09:59:00Z",
+            }
+        ],
+        now=now,
+    )
+    assert validate_status(report, _manifest(), now=now)
+
+    report["checked_at"] = "2026-08-25T00:00:00Z"
+    assert not validate_status(report, _manifest(), now=now)
+    report["checked_at"] = "2026-08-26T10:06:00Z"
+    assert not validate_status(report, _manifest(), now=now)
+    report["checked_at"] = "2026-08-26T09:59:00Z"
+    report["workflows"] = []
+    assert not validate_status(report, _manifest(), now=now)
 
 
 def test_versioned_manifest_is_valid():

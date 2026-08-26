@@ -33,8 +33,10 @@ python tools/qnap_images.py status
 ```
 
 W przypadku watchdoga `status` odczytuje również utrwalony wynik działania i zgłasza
-czas kontroli, liczbę workflow i dokładne nazwy workflow zakończonych błędem. Pozwala to odróżnić
-działający watchdog fail-closed od uszkodzonego kontenera.
+czas kontroli, liczbę workflow, `observer_ready`, `collection_state`,
+`monitored_state` oraz dokładne nazwy workflow zakończonych błędem lub nieznanych.
+Pozwala to odróżnić działający watchdog, który wykrył błąd procesu, od uszkodzonego
+lub niezdolnego do zebrania danych obserwatora.
 
 Podejrzyj wszystkie buildy bez logowania do GHCR i bez uruchamiania Dockera:
 
@@ -129,8 +131,10 @@ czterousługowego locka.
 - wdrożenie watchdoga sprawdza wzmocnione zasady Compose i wycofuje poprzednie
   pliki Compose, jeśli nowy kontener nie może opublikować pełnego dokumentu statusu
   dokładnie 11 workflow z wersjonowanego manifestu;
-- watchdog może działać poprawnie, ale celowo zgłaszać `unhealthy`, gdy jeden z
-  monitorowanych workflow GitHub zakończył się błędem. Wdrożenie nie ukrywa tej awarii upstream.
+- healthcheck watchdoga sprawdza gotowość obserwatora, pełny katalog, świeżość i
+  spójność schema; wykryta awaria workflow jest publikowana osobno jako
+  `monitored_state=FAILED` i nie psuje kondycji kontenera. Wdrożenie nadal nie
+  ukrywa tej awarii upstream w statusie ani w Control Plane;
 - wdrożenie Control Plane publikuje wyłącznie API mTLS, nie montuje socketa
   Dockera, używa oddzielnego CA operatorów i łączy się z read-only integration
   API Profile Sync oraz endpointem Watchdoga przez prywatną sieć Compose; odczyty

@@ -19,13 +19,21 @@ Sync ani żadnego pliku `.env` z credentialami urządzeń.
 
 Wdrożenie kopiuje z repo kanoniczne manifesty
 `control-plane-schedules.json` i `control-plane-status-sources.json`, a następnie
-montuje je read-only. Dotychczasowy dashboard mTLS pozostaje pod
+montuje je read-only. Z prywatnego rejestru urządzeń generuje także zredagowany
+`device-inventory.json`, zawierający wyłącznie logiczny identyfikator, kanał, tryb
+monitorowania i progi świeżości. Adresy, tokeny i credentiale nie trafiają do
+Control Plane. Dotychczasowy dashboard mTLS pozostaje pod
 `https://<QNAP>:19443/`. Dla zwykłej przeglądarki działa dodatkowo kanoniczne
 `https://<QNAP>/control-plane/`: nie wymaga certyfikatu klienta, lecz wymaga
 hasła i TOTP. QPKG `KodiCPGateway` rejestruje skrót QTS i przekazuje ten prefiks
 z HTTPS QTS do backendu dostępnego wyłącznie na `127.0.0.1:19445`. Web/BFF używa
 dedykowanego certyfikatu mTLS, którego core ogranicza do odczytu endpointów
 dashboardu. Authz nie publikuje żadnego portu do LAN.
+
+Wdrożenie QPKG ponownie aktywuje `KodiCPGateway`, weryfikuje dokładną regułę proxy
+`/control-plane` i wykonuje kontrolowany restart Qthttpd tylko wtedy, gdy żywa
+ścieżka zwraca brak routingu. Naprawia to stale wpisy `app_proxy.conf` po zmianach
+QTS bez otwierania prywatnego portu backendu do LAN.
 
 Pierwszy bootstrap albo jawny reset break-glass:
 

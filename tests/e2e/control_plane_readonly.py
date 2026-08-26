@@ -311,6 +311,25 @@ def main():
         checkpoint = temporary / "audit-checkpoint.key"
         checkpoint.write_bytes(os.urandom(32))
         checkpoint.chmod(0o600)
+        device_inventory = temporary / "device-inventory.json"
+        device_inventory.write_text(
+            json.dumps(
+                {
+                    "schema": 1,
+                    "devices": [
+                        {
+                            "logical_device_id": "e2e-device",
+                            "monitoring_mode": "on_demand",
+                            "channel": "home-stable",
+                            "warning_after_seconds": 28800,
+                            "failure_after_seconds": 259200,
+                            "maintenance_until": None,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
         consumer_port, admin_port, integration_port = (
             free_port(),
             free_port(),
@@ -415,6 +434,8 @@ def main():
                 str(ROOT / "manifests/control-plane-schedules.json"),
                 "--status-source-catalog",
                 str(ROOT / "manifests/control-plane-status-sources.json"),
+                "--device-inventory",
+                str(device_inventory),
             ),
             cwd=CONTROL_PLANE,
             env={**os.environ, "PYTHONPATH": str(CONTROL_PLANE / "src")},
@@ -460,6 +481,22 @@ def main():
             _status, dashboard = request(endpoint + "/api/v1/dashboard", context)
             if dashboard["schema"] != 1 or len(dashboard["schedules"]["jobs"]) != 13:
                 raise RuntimeError("dashboard schedule catalog is unavailable")
+            if dashboard["fleet"]["devices"] != [
+                {
+                    "logical_device_id": "e2e-device",
+                    "monitoring_mode": "on_demand",
+                    "expected_channel": "home-stable",
+                    "state": "UNENROLLED",
+                    "severity": "none",
+                    "reason_codes": ["DEVICE_UNENROLLED"],
+                    "enrollment_generation": None,
+                    "client_version": None,
+                    "platform": None,
+                    "last_seen_at": None,
+                    "age_seconds": None,
+                }
+            ]:
+                raise RuntimeError("redacted device inventory is unavailable")
             with urllib.request.urlopen(
                 endpoint + "/", context=context, timeout=2
             ) as response:
@@ -480,6 +517,7 @@ def main():
                         "services": [item["id"] for item in services["services"]],
                         "dashboard": "READ_ONLY_RENDERABLE",
                         "scheduled_jobs": len(dashboard["schedules"]["jobs"]),
+                        "device_inventory": "REDACTED_PER_DEVICE",
                     },
                     indent=2,
                     sort_keys=True,

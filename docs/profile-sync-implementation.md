@@ -246,6 +246,16 @@ wymaga zarejestrowanej pomyślnej instalacji i ponownej synchronizacji dla obu p
 głównych NUC; żadne z nich nie jest zgłaszane jako zaliczone, gdy punkt końcowy jest
 nieosiągalny.
 
+## Odporność cyklu klienta od wersji 1.1.2
+
+Klient klasyfikuje timeouty, błędy transportu, HTTP 429 oraz 5xx jako przejściowe
+i ponawia cykl z utrwalonym backoffem 1/5/15/30 minut oraz jitterem. HTTP 401/403,
+błędy konfiguracji i kontraktu pozostają terminalne do chwili zmiany ich
+bezpiecznego odcisku. Stan przetrwa restart Kodi, chroni przed cofnięciem zegara i
+nie tworzy pętli restartów. Utrwalona telemetria rozdziela `last_attempt`,
+`last_heartbeat_success`, `last_cycle_success`, liczbę kolejnych błędów, przyczynę
+oraz następny termin próby; nie zawiera tokenów ani credentiali.
+
 ## Warstwowe rewizje rutynowe
 
 Schemat 2 pozostaje czytelny i eksportuje tylko przenośny wspólny podzbiór. Schemat 3
