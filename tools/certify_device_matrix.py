@@ -123,18 +123,24 @@ def _recover_kodi(adb, server_port, endpoint, port):
         "force-stop",
         KODI_PACKAGE,
     )
-    # BlueStacks can leave the Android package suspended or disabled after
-    # force-stop. Certified Kodi 21 Android targets support this package API.
-    _adb(
-        adb,
-        server_port,
-        endpoint,
-        "shell",
-        "cmd",
-        "package",
-        "unsuspend",
-        KODI_PACKAGE,
-    )
+    # BlueStacks can leave the Android package suspended after force-stop.
+    # Some Android TV firmware does not implement `cmd package unsuspend` and
+    # returns 255 even for an already runnable package. Treat this one command
+    # as best-effort: the strict enable, launch and JSON-RPC readiness checks
+    # below still fail closed if Kodi is actually suspended or unavailable.
+    try:
+        _adb(
+            adb,
+            server_port,
+            endpoint,
+            "shell",
+            "cmd",
+            "package",
+            "unsuspend",
+            KODI_PACKAGE,
+        )
+    except subprocess.CalledProcessError:
+        pass
     # Enabling an already enabled package is idempotent on Android and keeps
     # recovery portable across emulators and physical Android TV devices.
     _adb(
