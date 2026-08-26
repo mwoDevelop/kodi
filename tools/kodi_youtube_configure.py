@@ -35,6 +35,10 @@ REMOTE_REPORT = "/sdcard/Download/.mwo-youtube-configure.json"
 ADAPTER = "youtube-oauth-v1"
 EXPECTED_ADDON_VERSION = "7.4.4"
 DEFAULT_SESSION_FILE = ".kodi-private/youtube/session.json"
+# The in-Kodi adapter can perform five sequential 30-second network requests:
+# API-key probe, three token refreshes and the account/channel probe. Keep a
+# margin for Kodi dispatch and atomic report publication, especially on VPNs.
+PRIVATE_ADAPTER_TIMEOUT_SECONDS = 210
 ENVIRONMENT_NAMES = (
     "YOUTUBE_API_KEY",
     "YOUTUBE_CLIENT_ID",
@@ -232,18 +236,15 @@ def _wait_report(adb, port, serial, deadline):
 
 
 def _dispatch(adb, port, serial, command, deadline):
+    events = AdbEventClient(adb, port, serial)
     try:
+        # Always prefer the device-local EventServer path. Android 14 may
+        # expose ADB over LAN while binding Kodi's UDP listener only to
+        # 127.0.0.1; a host UDP send then succeeds but is silently discarded.
+        events.execute_builtin(command)
+    except (OSError, RuntimeError, TimeoutError):
         with AdbJsonRpcClient(adb, port, serial) as rpc:
             rpc.call("XBMC.ExecuteBuiltin", {"command": command, "wait": False})
-    except (OSError, RuntimeError, TimeoutError):
-        events = AdbEventClient(adb, port, serial)
-        if not serial.startswith(("127.0.0.1:", "[::1]:", "localhost:")):
-            try:
-                events.execute_builtin_from_host(command)
-            except (OSError, RuntimeError):
-                events.execute_builtin(command)
-        else:
-            events.execute_builtin(command)
     return _wait_report(adb, port, serial, deadline)
 
 
@@ -255,7 +256,7 @@ def configure(
     references,
     device_script,
     root=None,
-    timeout=120,
+    timeout=PRIVATE_ADAPTER_TIMEOUT_SECONDS,
 ):
     root = Path(root or Path(__file__).resolve().parents[1])
     api_key, client_id, client_secret, account_hint, session = configuration(
@@ -341,8 +342,7 @@ def configure(
         )
 
 
-def main():
-    root = Path(__file__).resolve().parents[1]
+def _parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--serial", required=True)
     parser.add_argument("--references", default=".env")
@@ -352,8 +352,15 @@ def main():
     parser.add_argument("--account-hint-ref", default="YOUTUBE_USER")
     parser.add_argument("--adb", default="/home/mwo/android-sdk/platform-tools/adb")
     parser.add_argument("--adb-server-port", type=int, default=5038)
-    parser.add_argument("--timeout", type=float, default=120)
-    args = parser.parse_args()
+    parser.add_argument(
+        "--timeout", type=float, default=PRIVATE_ADAPTER_TIMEOUT_SECONDS
+    )
+    return parser
+
+
+def main():
+    root = Path(__file__).resolve().parents[1]
+    args = _parser().parse_args()
     references = Path(args.references)
     if not references.is_absolute():
         references = root / references

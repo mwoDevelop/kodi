@@ -62,6 +62,12 @@ def test_adapter_version_is_bound_to_qualified_official_manifest():
     assert youtube.EXPECTED_ADDON_VERSION == entry["version"]
 
 
+def test_private_adapter_timeout_covers_sequential_network_budget():
+    assert youtube.PRIVATE_ADAPTER_TIMEOUT_SECONDS >= 5 * 30 + 30
+    args = youtube._parser().parse_args(["--serial", "192.0.2.1:5555"])
+    assert args.timeout == youtube.PRIVATE_ADAPTER_TIMEOUT_SECONDS
+
+
 def test_profile_rejects_password_and_arbitrary_references():
     with pytest.raises(ValueError, match="invalid private YouTube profile"):
         youtube.validate_profile({**PROFILE, "password_ref": "YOUTUBE_PASS"})
@@ -213,7 +219,7 @@ def test_private_session_path_cannot_escape_private_root(tmp_path):
         )
 
 
-def test_dispatch_uses_host_event_transport_for_lan_android(monkeypatch):
+def test_dispatch_uses_device_local_event_transport_for_lan_android(monkeypatch):
     calls = []
 
     class Rpc:
@@ -248,4 +254,42 @@ def test_dispatch_uses_host_event_transport_for_lan_android(monkeypatch):
     )
 
     assert result == {"ok": True}
-    assert calls == [("host", "RunScript(test)")]
+    assert calls == [("device", "RunScript(test)")]
+
+
+def test_dispatch_falls_back_to_json_rpc_when_event_transport_fails(monkeypatch):
+    calls = []
+
+    class Events:
+        def __init__(self, *_args):
+            pass
+
+        def execute_builtin(self, _command):
+            raise OSError("event transport unavailable")
+
+    class Rpc:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def call(self, method, params):
+            calls.append((method, params))
+
+    monkeypatch.setattr(youtube, "AdbEventClient", Events)
+    monkeypatch.setattr(youtube, "AdbJsonRpcClient", Rpc)
+    monkeypatch.setattr(youtube, "_wait_report", lambda *_args: {"ok": True})
+
+    assert youtube._dispatch(
+        "adb", 5038, "192.0.2.8:5555", "RunScript(test)", 0
+    ) == {"ok": True}
+    assert calls == [
+        (
+            "XBMC.ExecuteBuiltin",
+            {"command": "RunScript(test)", "wait": False},
+        )
+    ]

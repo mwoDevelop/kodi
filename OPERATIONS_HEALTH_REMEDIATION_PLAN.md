@@ -1,6 +1,6 @@
 # Plan przywrócenia wiarygodnego monitoringu usług i procesów cyklicznych
 
-Status: wdrożony i zweryfikowany; Bedroom TV wstrzymany decyzją operatora
+Status: wdrożony i zweryfikowany na całym aktualnie dostępnym zakresie
 
 Data bazowa: 26 sierpnia 2026 r.
 

@@ -59,11 +59,18 @@ Orkiestrator `tools/kodi_ops.py` zakończył scoped rollout
   zastosował rewizję, a favourites osiągnęły `CONVERGED`. Pełny zestaw ponownie
   zakończył się wynikiem `640 passed`; końcowy dry-run
   `fae2f2498da0430b8892e86514858232` potwierdził `portable_status=OK`.
+- Bedroom TV: rollout `1db1a36572ee4948b027586f9d4d85b3` zakończył się
+  statusem `COMPLETE` przy aktywnym NordVPN. Stable, providery, Real-Debrid,
+  Rapideo, OpenSubtitles.com i YouTube przeszły testy, Profile Sync zwrócił
+  `NO_CHANGE`, a dziewięć favourites osiągnęło `CONVERGED`. Pełny zestaw
+  zakończył się wynikiem `643 passed`; końcowy dry-run
+  `ca45133cc950420e81f0aa419525adee` potwierdził Kodi 21.3,
+  `portable_status=OK` i brak wymaganych zmian. Dla odporności na chwilowe
+  zerwania lokalnego JSON-RPC dodano ograniczony retry odczytu szczegółów
+  dodatku. Uruchamianie prywatnego adaptera YouTube korzysta najpierw z
+  urządzeniowego EventServera, ponieważ Android 14 może wiązać port Kodi tylko
+  do loopbacku. Diagnostyka providerów na urządzeniu sprawdza ograniczoną
+  ścieżkę użytkownika; pełna macierz providerów pozostaje zadaniem cyklicznym CI.
 
 OpenSubtitles.org nadal zwraca `VIP_REQUIRED`; jest to stan konta/usługi, a nie
 regresja dodatku. OpenSubtitles.com pozostaje działającą usługą domyślną.
-
-## Odroczenia
-
-- Bedroom TV pominięto po jawnej decyzji operatora; nie wykonywano po niej
-  dalszych operacji na urządzeniu.

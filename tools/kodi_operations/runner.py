@@ -35,9 +35,8 @@ from tools.kodi_flatpak_restore import (
 )
 from tools.kodi_inventory import inventory_device
 from tools.kodi_mwoscrapers_endpoint_probe import (
-    probe as legacy_provider_probe,
+    probe as device_provider_probe,
 )
-from tools.kodi_mwoscrapers_probe import probe as expanded_provider_probe
 from tools.kodi_profile import create_snapshot, verify_snapshot
 from tools.kodi_reinstall import (
     deploy_target,
@@ -311,28 +310,10 @@ class ProductionExecutor:
         return argv
 
     def _provider_probe(self, serial: str) -> dict[str, Any]:
-        """Select diagnostics from the promoted stable provider contract."""
-        stable = json.loads(
-            (self.repository / "manifests/locks/stable.json").read_text(
-                encoding="utf-8"
-            )
+        """Probe the promoted user path; the full matrix runs in scheduled CI."""
+        return device_provider_probe(
+            self.adb, self.adb_server_port, serial, 75
         )
-        version = stable["components"]["script.module.mwoscrapers"][
-            "version"
-        ]
-        try:
-            numeric = tuple(
-                int(part)
-                for part in version.split("+", 1)[0].split("-", 1)[0].split(".")
-            )
-        except (AttributeError, ValueError) as error:
-            raise ValueError("invalid stable MwoScrapers version") from error
-        probe = (
-            expanded_provider_probe
-            if numeric >= (0, 2, 0)
-            else legacy_provider_probe
-        )
-        return probe(self.adb, self.adb_server_port, serial, 75)
 
     def _youtube_configuration(self, serial: str) -> dict[str, Any]:
         required = {
