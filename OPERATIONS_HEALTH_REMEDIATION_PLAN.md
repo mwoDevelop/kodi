@@ -1,7 +1,6 @@
 # Plan przywrócenia wiarygodnego monitoringu usług i procesów cyklicznych
 
-Status: wdrożony i zweryfikowany; Bedroom TV wstrzymany decyzją operatora, X88
-odroczony z powodu niedostępnego ADB
+Status: wdrożony i zweryfikowany; Bedroom TV wstrzymany decyzją operatora
 
 Data bazowa: 26 sierpnia 2026 r.
 
