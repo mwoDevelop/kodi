@@ -1,8 +1,12 @@
 # Plan przywrócenia wiarygodnego monitoringu usług i procesów cyklicznych
 
-Status: po niezależnym audycie, do realizacji
+Status: wdrożony i zweryfikowany; Bedroom TV wstrzymany decyzją operatora, X88
+odroczony z powodu niedostępnego ADB
 
 Data bazowa: 26 sierpnia 2026 r.
+
+Wynik realizacji i identyfikatory dowodów znajdują się w
+[`docs/e2e-results/2026-08-26-operations-health-remediation.md`](docs/e2e-results/2026-08-26-operations-health-remediation.md).
 
 ## 1. Cel
 
@@ -422,8 +426,10 @@ Plan jest ukończony dopiero, gdy jednocześnie:
    błąd terminalny pozostaje zatrzymany do interwencji;
 5. zwykłe opóźnienie GitHub nie daje `EXPECTED_RUN_NOT_STARTED`, lecz zatrzymany
    scheduler nadal jest wykrywany;
-6. CI wszystkich zmienionych repozytoriów, pełne stare i nowe E2E, BlueStacks, X88,
-   QNAP oraz końcowy no-op kończą się sukcesem;
+6. CI wszystkich zmienionych repozytoriów, pełne stare i nowe E2E, dostępne
+   urządzenia oraz QNAP kończą się sukcesem; niedostępny transport urządzenia lub
+   jawne wstrzymanie przez operatora daje udokumentowane `DEFERRED`, nie pozorny
+   sukces;
 7. ten sam nieudany run tworzy jeden incydent z bezpośrednim i watchdogowym źródłem
    dowodu, a błąd kolekcji daje `UNKNOWN` zamiast fałszywego `FAILED` workflow;
 8. wszystkie commity są wypchnięte, PR-y scalone, wymagane wersje i obrazy wydane,
