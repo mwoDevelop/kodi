@@ -1002,7 +1002,14 @@ class ProductionExecutor:
                 run = self.github.dispatch(
                     "certify-testing.yml",
                     base_commit,
-                    {"snapshot_id": snapshot["snapshot_id"], "android_tv": "x88pro20"},
+                    {
+                        "snapshot_id": snapshot["snapshot_id"],
+                        "android_tv": getattr(
+                            self,
+                            "release_android_tv_canary",
+                            "x88pro20",
+                        ),
+                    },
                 )
                 self.github.watch(run)
             attestation = self.github.attestation_for_snapshot(snapshot)
@@ -1335,6 +1342,9 @@ class OperationRunner:
                 "external_attempts", 3
             )
             self.executor.retry_seconds = options.get("retry_seconds", 5)
+            self.executor.release_android_tv_canary = options.get(
+                "android_tv_canary", "x88pro20"
+            )
         if resume:
             stored_plan = store.read("plan.json")
             if stored_plan != plan_document:

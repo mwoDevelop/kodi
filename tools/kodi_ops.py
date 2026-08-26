@@ -41,6 +41,10 @@ def parser():
     release.add_argument("--dry-run", action="store_true")
     release.add_argument("--no-promote", action="store_true")
     release.add_argument("--no-rollout", action="store_true")
+    release.add_argument(
+        "--android-tv-canary",
+        help="logical Android TV canary (default: x88pro20)",
+    )
     release.add_argument("--resume")
     return result
 
@@ -50,7 +54,9 @@ def main(argv=None):
     if args.resume:
         if args.operation == "rollout" and args.device:
             raise SystemExit("--resume cannot be combined with --device")
-        if args.operation == "release" and (args.no_promote or args.no_rollout):
+        if args.operation == "release" and (
+            args.no_promote or args.no_rollout or args.android_tv_canary
+        ):
             raise SystemExit("--resume cannot change release options")
         plan = OperationPlan.from_document(
             RunStore(ROOT, args.resume).read("plan.json")
@@ -76,6 +82,7 @@ def main(argv=None):
             ROOT,
             no_promote=args.no_promote,
             no_rollout=args.no_rollout,
+            android_tv_canary=args.android_tv_canary or "x88pro20",
         )
     runner = OperationRunner(
         ROOT,

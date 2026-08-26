@@ -212,6 +212,18 @@ Wariant bez automatycznego rollout po promocji:
 .venv/bin/python tools/kodi_ops.py release --no-rollout
 ```
 
+Jeżeli domyślny Android TV `x88pro20` jest niedostępny, wskaż jawnie inny
+dostępny, zarejestrowany cel. BlueStacks pozostaje obowiązkowym pierwszym canary:
+
+```bash
+.venv/bin/python tools/kodi_ops.py release \
+  --android-tv-canary sony-tv \
+  --no-rollout
+```
+
+Wznowienie zachowuje wybór zapisany w planie; nie łącz `--resume` z ponownym
+podaniem opcji canary.
+
 ## Restore jednego urządzenia
 
 Tryb `repair` nie odinstalowuje ani nie instaluje Kodi:
