@@ -106,6 +106,28 @@ def test_scoped_rollout_has_no_hidden_canary(monkeypatch, tmp_path):
     assert not plan.steps[1].mutation
 
 
+def test_release_plan_can_select_an_available_android_tv_canary(tmp_path):
+    root = repository(tmp_path)
+    (root / "manifests/locks/qnap-stable.json").write_text(
+        json.dumps({"schema": 1, "services": {}})
+    )
+
+    plan = planner.release_plan(root, android_tv_canary="sony-tv")
+
+    assert plan.canaries == ("bluestacks1", "sony-tv")
+    assert plan.options["android_tv_canary"] == "sony-tv"
+
+
+def test_release_plan_rejects_emulator_as_android_tv_canary(tmp_path):
+    root = repository(tmp_path)
+    (root / "manifests/locks/qnap-stable.json").write_text(
+        json.dumps({"schema": 1, "services": {}})
+    )
+
+    with pytest.raises(ValueError, match="Android TV canary"):
+        planner.release_plan(root, android_tv_canary="bluestacks1")
+
+
 def test_persisted_plan_round_trip_keeps_content_identity(monkeypatch, tmp_path):
     root = repository(tmp_path)
     monkeypatch.setattr(planner, "load_fleet", lambda _root: fleet())

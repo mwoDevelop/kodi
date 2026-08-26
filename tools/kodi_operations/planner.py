@@ -225,7 +225,18 @@ def restore_plan(repository: Path, device: str, mode: str):
     )
 
 
-def release_plan(repository: Path, no_promote=False, no_rollout=False):
+def release_plan(
+    repository: Path,
+    no_promote=False,
+    no_rollout=False,
+    android_tv_canary="x88pro20",
+):
+    if (
+        not isinstance(android_tv_canary, str)
+        or not android_tv_canary
+        or android_tv_canary == "bluestacks1"
+    ):
+        raise ValueError("release Android TV canary is invalid")
     stable_sha, snapshot = _stable_identity(repository)
     qnap_sha = _qnap_lock_identity(repository)
     actions = (
@@ -264,7 +275,11 @@ def release_plan(repository: Path, no_promote=False, no_rollout=False):
         qnap_lock_sha256=qnap_sha,
         scope="full",
         devices=(),
-        canaries=("bluestacks1", "x88pro20"),
+        canaries=("bluestacks1", android_tv_canary),
         steps=tuple(steps),
-        options={"no_promote": no_promote, "no_rollout": no_rollout},
+        options={
+            "no_promote": no_promote,
+            "no_rollout": no_rollout,
+            "android_tv_canary": android_tv_canary,
+        },
     )
