@@ -53,6 +53,57 @@ def test_version_at_least_uses_kodi_numeric_release_prefix(actual, minimum, expe
     assert defaults.version_at_least(actual, minimum) is expected
 
 
+def test_addon_details_retries_incomplete_jsonrpc_response(monkeypatch):
+    calls = []
+
+    class Rpc:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def call(self, method, params):
+            calls.append((method, params))
+            if len(calls) < defaults.ADDON_DETAILS_ATTEMPTS:
+                raise RuntimeError("Kodi JSON-RPC returned an incomplete response")
+            return {"addon": {"enabled": True, "version": "7.4.4"}}
+
+    monkeypatch.setattr(defaults, "AdbJsonRpcClient", Rpc)
+    monkeypatch.setattr(defaults.time, "sleep", lambda *_args: None)
+
+    assert defaults.addon_details(
+        "adb", 5038, "device", "plugin.video.youtube"
+    ) == {"enabled": True, "version": "7.4.4"}
+    assert len(calls) == defaults.ADDON_DETAILS_ATTEMPTS
+
+
+def test_addon_details_does_not_retry_missing_addon(monkeypatch):
+    calls = []
+
+    class Rpc:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def call(self, *_args):
+            calls.append(True)
+            raise RuntimeError("Kodi JSON-RPC failed with code -32602")
+
+    monkeypatch.setattr(defaults, "AdbJsonRpcClient", Rpc)
+
+    assert defaults.addon_details("adb", 5038, "device", "missing") is None
+    assert calls == [True]
+
+
 def test_native_official_addon_is_installed_by_kodi_and_origin_is_audited(
     monkeypatch, tmp_path
 ):

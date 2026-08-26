@@ -639,18 +639,14 @@ def test_provider_configuration_uses_only_device_scoped_optional_relay():
     assert "--torrentio-endpoint" not in sony
 
 
-def test_android_rollout_uses_complete_six_provider_probe():
-    assert operation_runner.expanded_provider_probe.__module__ == (
-        "tools.kodi_mwoscrapers_probe"
+def test_android_rollout_uses_bounded_device_provider_probe():
+    assert operation_runner.device_provider_probe.__module__ == (
+        "tools.kodi_mwoscrapers_endpoint_probe"
     )
 
 
-@pytest.mark.parametrize(
-    ("version", "expected"),
-    (("0.1.10", "legacy"), ("0.2.0", "expanded")),
-)
-def test_android_rollout_selects_probe_from_promoted_stable_lock(
-    monkeypatch, tmp_path, version, expected
+def test_android_rollout_keeps_full_matrix_out_of_device_gate(
+    monkeypatch, tmp_path
 ):
     executor = object.__new__(ProductionExecutor)
     executor.repository = tmp_path
@@ -662,7 +658,7 @@ def test_android_rollout_selects_probe_from_promoted_stable_lock(
         json.dumps(
             {
                 "components": {
-                    "script.module.mwoscrapers": {"version": version}
+                    "script.module.mwoscrapers": {"version": "0.2.1"}
                 }
             }
         ),
@@ -670,22 +666,14 @@ def test_android_rollout_selects_probe_from_promoted_stable_lock(
     )
     calls = []
 
-    def probe(name):
-        def execute(*args):
-            calls.append((name, args))
-            return {"report": {}}
+    def probe(*args):
+        calls.append(args)
+        return {"report": {}}
 
-        return execute
-
-    monkeypatch.setattr(
-        operation_runner, "legacy_provider_probe", probe("legacy")
-    )
-    monkeypatch.setattr(
-        operation_runner, "expanded_provider_probe", probe("expanded")
-    )
+    monkeypatch.setattr(operation_runner, "device_provider_probe", probe)
 
     assert executor._provider_probe("serial") == {"report": {}}
-    assert calls == [(expected, ("adb", 5038, "serial", 75))]
+    assert calls == [("adb", 5038, "serial", 75)]
 
 
 def test_android_rollout_configures_opensubtitles_from_private_references(

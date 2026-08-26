@@ -44,6 +44,8 @@ DEPENDENCY_TYPES = {"python", "platform"}
 OFFICIAL_PREFIX = "https://mirrors.kodi.tv/addons/omega/"
 REMOTE_ADDONS = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi/addons"
 YES_NO_DIALOG_ID = 10100
+ADDON_DETAILS_ATTEMPTS = 3
+ADDON_DETAILS_RETRY_SECONDS = 0.5
 
 
 def _digest(path):
@@ -362,16 +364,24 @@ def reconcile_official_dependencies(
 
 
 def addon_details(adb, port, serial, addon_id):
-    try:
-        with AdbJsonRpcClient(adb, port, serial) as rpc:
-            return rpc.call(
-                "Addons.GetAddonDetails",
-                {"addonid": addon_id, "properties": ["version", "enabled"]},
-            )["addon"]
-    except RuntimeError as error:
-        if "code -32602" in str(error):
-            return None
-        raise
+    for attempt in range(1, ADDON_DETAILS_ATTEMPTS + 1):
+        try:
+            with AdbJsonRpcClient(adb, port, serial) as rpc:
+                return rpc.call(
+                    "Addons.GetAddonDetails",
+                    {"addonid": addon_id, "properties": ["version", "enabled"]},
+                )["addon"]
+        except RuntimeError as error:
+            if "code -32602" in str(error):
+                return None
+            transient = "incomplete response" in str(error).casefold()
+            if not transient or attempt == ADDON_DETAILS_ATTEMPTS:
+                raise
+        except (OSError, TimeoutError):
+            if attempt == ADDON_DETAILS_ATTEMPTS:
+                raise
+        time.sleep(ADDON_DETAILS_RETRY_SECONDS)
+    raise AssertionError("bounded Kodi add-on details retry was exhausted")
 
 
 def android_package_abi(adb, port, serial):
