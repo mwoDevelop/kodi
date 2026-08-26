@@ -52,6 +52,13 @@ Orkiestrator `tools/kodi_ops.py` zakończył scoped rollout
   `ACCOUNT_READY`, OpenSubtitles.com — pass; powtórzenie `NO_CHANGE`;
 - `nuc-alek`: analogiczny rollout zakończony sukcesem; osobne powtórzenie dało
   `sync_status=NO_CHANGE`.
+- X88: po odnalezieniu urządzenia pod nowym adresem `192.168.1.5` odbudowano
+  stabilne dodatki, usunięto osierocone stare dodatki i wykonano rollout
+  `b21b56c661f5413ca0b7cbba9f84224a` ze statusem `COMPLETE`. Providery,
+  Real-Debrid, Rapideo, OpenSubtitles.com i YouTube przeszły testy, Profile Sync
+  zastosował rewizję, a favourites osiągnęły `CONVERGED`. Pełny zestaw ponownie
+  zakończył się wynikiem `640 passed`; końcowy dry-run
+  `fae2f2498da0430b8892e86514858232` potwierdził `portable_status=OK`.
 
 OpenSubtitles.org nadal zwraca `VIP_REQUIRED`; jest to stan konta/usługi, a nie
 regresja dodatku. OpenSubtitles.com pozostaje działającą usługą domyślną.
@@ -60,5 +67,3 @@ regresja dodatku. OpenSubtitles.com pozostaje działającą usługą domyślną.
 
 - Bedroom TV pominięto po jawnej decyzji operatora; nie wykonywano po niej
   dalszych operacji na urządzeniu.
-- X88 oznaczono `DEFERRED`, ponieważ host był osiągalny, ale port ADB odrzucał
-  połączenia. Nie przypisano mu pozornego sukcesu i nie zmieniano enrollmentu.
