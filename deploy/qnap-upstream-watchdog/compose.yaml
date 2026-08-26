@@ -53,8 +53,10 @@ services:
       test:
         - CMD
         - python
-        - -c
-        - "import json; assert json.load(open('/run/watchdog/status.json'))['healthy']"
+        - tools/upstream_watchdog.py
+        - health
+        - --status
+        - /run/watchdog/status.json
       interval: 5m
       timeout: 5s
       retries: 2

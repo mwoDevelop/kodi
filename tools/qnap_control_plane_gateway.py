@@ -120,55 +120,99 @@ def build(repository, output_directory):
 def install(session, repository):
     validate_source(repository)
     try:
-        return verify(session)
+        metadata = verify(session)
     except GatewayError:
-        pass
-    with tempfile.TemporaryDirectory(prefix="mwodevelop-gateway-") as temporary:
-        package = build(repository, temporary)
-        encoded = base64.b64encode(package.read_bytes()).decode("ascii")
-        encoded_path = str(REMOTE_PACKAGE) + ".b64"
-        session.upload_text(encoded_path, encoded + "\n", 0o600)
-        session.execute(
-            "base64 -d "
-            + shlex.quote(encoded_path)
-            + " > "
-            + shlex.quote(str(REMOTE_PACKAGE))
-            + " && chmod 600 "
-            + shlex.quote(str(REMOTE_PACKAGE))
-            + " && rm -f "
-            + shlex.quote(encoded_path)
-        )
-        try:
-            # QTS rejects locally built, unsigned packages in qpkgd before its
-            # documented ignore-cert flag is evaluated. Run the verified QDK
-            # self-extracting installer directly, matching qpkgd's own execution.
-            install_output = session.execute(
-                "QNAP_QPKG="
-                + NAME
-                + " /bin/sh "
+        with tempfile.TemporaryDirectory(prefix="mwodevelop-gateway-") as temporary:
+            package = build(repository, temporary)
+            encoded = base64.b64encode(package.read_bytes()).decode("ascii")
+            encoded_path = str(REMOTE_PACKAGE) + ".b64"
+            session.upload_text(encoded_path, encoded + "\n", 0o600)
+            session.execute(
+                "base64 -d "
+                + shlex.quote(encoded_path)
+                + " > "
                 + shlex.quote(str(REMOTE_PACKAGE))
-                + " 2>&1",
-                allowed=(0, 10),
-                timeout=180,
+                + " && chmod 600 "
+                + shlex.quote(str(REMOTE_PACKAGE))
+                + " && rm -f "
+                + shlex.quote(encoded_path)
             )
-        finally:
-            session.execute("rm -f " + shlex.quote(str(REMOTE_PACKAGE)), allowed=(0, 1))
-    registered = session.execute(
-        "/sbin/getcfg " + NAME + " Version -d missing -f /etc/config/qpkg.conf",
-        allowed=(0, 1, 250),
-    )
-    if registered != VERSION:
-        detail = (
-            install_output.splitlines()[-1][:240] if install_output else "no diagnostic"
+            try:
+                # QTS rejects locally built, unsigned packages in qpkgd before its
+                # documented ignore-cert flag is evaluated. Run the verified QDK
+                # self-extracting installer directly, matching qpkgd's own execution.
+                install_output = session.execute(
+                    "QNAP_QPKG="
+                    + NAME
+                    + " /bin/sh "
+                    + shlex.quote(str(REMOTE_PACKAGE))
+                    + " 2>&1",
+                    allowed=(0, 10),
+                    timeout=180,
+                )
+            finally:
+                session.execute(
+                    "rm -f " + shlex.quote(str(REMOTE_PACKAGE)), allowed=(0, 1)
+                )
+        registered = session.execute(
+            "/sbin/getcfg " + NAME + " Version -d missing -f /etc/config/qpkg.conf",
+            allowed=(0, 1, 250),
         )
-        raise GatewayError("QPKG installation failed: " + detail)
-    session.execute("/sbin/setcfg " + NAME + " Enable TRUE -f /etc/config/qpkg.conf")
-    session.execute(
-        "/etc/init.d/" + NAME + ".sh start",
-        allowed=(0, 1),
-        timeout=60,
+        if registered != VERSION:
+            detail = (
+                install_output.splitlines()[-1][:240]
+                if install_output
+                else "no diagnostic"
+            )
+            raise GatewayError("QPKG installation failed: " + detail)
+        session.execute(
+            "/sbin/setcfg " + NAME + " Enable TRUE -f /etc/config/qpkg.conf"
+        )
+        session.execute(
+            "/etc/init.d/" + NAME + ".sh start",
+            allowed=(0, 1),
+            timeout=60,
+        )
+        metadata = verify(session)
+    return {**metadata, **ensure_proxy(session)}
+
+
+def ensure_proxy(session):
+    """Regenerate and activate the QTS proxy rule after every deployment.
+
+    QTS can preserve valid QPKG metadata while replacing ``app_proxy.conf``
+    with a stale generic ``/apps`` rewrite after a web-server restart. Enabling
+    the package regenerates the supported rule; Qthttpd is restarted only when
+    the live route still returns 404.
+    """
+
+    rule = (
+        f'ProxyPass "{PROXY_PATH}" '
+        f'"http://127.0.0.1:{BACKEND_PORT}{PROXY_PATH}" retry=0'
     )
-    return verify(session)
+    quoted_rule = shlex.quote(rule)
+    result = session.execute(
+        "/sbin/qpkg_cli --enable "
+        + NAME
+        + " >/dev/null 2>&1 || true; sleep 3; "
+        + "grep -Fx "
+        + quoted_rule
+        + " /etc/app_proxy.conf >/dev/null || exit 41; "
+        + "code=$(curl -ksS -o /dev/null -w '%{http_code}' "
+        + f"https://127.0.0.1{PROXY_PATH}/login || true); "
+        + "if [ \"$code\" = 000 ] || [ \"$code\" = 404 ]; then "
+        + "/etc/init.d/Qthttpd.sh restart >/tmp/"
+        + NAME
+        + "-qthttpd-restart.log 2>&1; attempt=0; "
+        + "until curl -ksS -o /dev/null https://127.0.0.1/cgi-bin/; do "
+        + "attempt=$((attempt + 1)); [ $attempt -lt 30 ] || exit 42; sleep 1; done; "
+        + "fi; code=$(curl -ksS -o /dev/null -w '%{http_code}' "
+        + f"https://127.0.0.1{PROXY_PATH}/login || true); "
+        + "case \"$code\" in 200|302|303|401|403|421) ;; *) exit 43 ;; esac; "
+        + "printf '%s' \"$code\"",
+        timeout=90,
+    )
+    return {"proxy_rule": "active", "proxy_http_status": int(result)}
 
 
 def verify(session):

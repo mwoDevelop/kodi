@@ -7,7 +7,6 @@ import pytest
 
 from tools import qnap_images
 
-
 IMAGE = (
     "ghcr.io/mwodevelop/kodi-upstream-watchdog@sha256:" + "a" * 64
 )
@@ -49,8 +48,10 @@ def watchdog_policy(image=IMAGE):
                     "test": [
                         "CMD",
                         "python",
-                        "-c",
-                        "assert open('/run/watchdog/status.json')",
+                        "tools/upstream_watchdog.py",
+                        "health",
+                        "--status",
+                        "/run/watchdog/status.json",
                     ]
                 },
                 "volumes": [
@@ -635,6 +636,9 @@ def test_status_explains_watchdog_health(monkeypatch):
     watchdog = status["upstream-watchdog"]
 
     assert watchdog["runtime_healthy"] is False
+    assert watchdog["observer_ready"] is True
+    assert watchdog["collection_state"] == "READY"
+    assert watchdog["monitored_state"] == "FAILED"
     assert watchdog["workflows"] == 2
     assert watchdog["workflow_failures"] == [
         "mwoDevelop/repo/audit.yml"
@@ -684,6 +688,14 @@ def test_service_health_accepts_initial_watchdog_runtime_evidence_only():
     assert not qnap_images.service_is_healthy(
         {"status": "running", "health": "starting"}
     )
+    assert qnap_images.service_is_healthy(
+        {
+            "status": "running",
+            "health": "starting",
+            "observer_ready": True,
+            "monitored_state": "FAILED",
+        }
+    )
 
 
 def test_watchdog_alert_is_operational_but_not_healthy():
@@ -698,6 +710,26 @@ def test_watchdog_alert_is_operational_but_not_healthy():
     assert not qnap_images.service_is_healthy(item)
     assert qnap_images.service_is_operational("upstream-watchdog", item)
     assert not qnap_images.service_is_operational("profile-sync", item)
+
+
+def test_new_watchdog_business_failure_remains_operational():
+    item = {
+        "status": "running",
+        "health": "starting",
+        "checked_at": "2026-08-26T10:00:00+00:00",
+        "runtime_healthy": False,
+        "observer_ready": True,
+        "collection_state": "READY",
+        "monitored_state": "FAILED",
+        "workflow_failures": ["example/reconcile.yml"],
+    }
+
+    assert qnap_images.service_is_healthy(item)
+    assert qnap_images.service_is_operational("upstream-watchdog", item)
+
+    item["health"] = "unhealthy"
+    assert not qnap_images.service_is_healthy(item)
+    assert not qnap_images.service_is_operational("upstream-watchdog", item)
 
 
 def test_watchdog_without_a_structured_alert_is_not_operational():

@@ -25,7 +25,7 @@ workflow obsługuje również `workflow_dispatch`, umożliwiający kontrolowane 
 | 04:41 codziennie | `mwoDevelop/script.module.mwoscrapers` | `discover-provider-upstreams.yml` | Obserwuje najnowsze źródła providerów i utrzymuje stan review dotyczący wyłącznie pochodzenia. | Zmieniona obserwacja może zaktualizować `automation/provider-provenance` i otworzyć PR wymagający review. Nie importuje ani nie wykonuje kodu providera. |
 | 04:50 codziennie | `mwoDevelop/umbrellaplug.github.io` | `propose-upstream-update.yml` | Odtwarza stos poprawek downstream Umbrella na dokładnym commitcie upstream, skanuje kandydata i go testuje. | Zweryfikowana zmiana może zaktualizować `automation/umbrella-upstream` i otworzyć PR wymagający review. Chronione ścieżki muszą pozostać niezmienione. |
 | co 15 minut | `mwoDevelop/umbrellaplug.github.io` | `approve-upstream-update.yml` | Sprawdza dokładny PR odtwarzający fork Umbrelli, jego Candidate-ID, stos patchy i zielone checki. | Domyślnie obserwacyjny. Mutacja wymaga chronionego Environment, dedykowanej App i `UMBRELLA_AUTO_MERGE_ENABLED=true` również w repozytorium forka. |
-| 05:03 codziennie | `mwoDevelop/script.module.mwoscrapers` | `probe-provider-health.yml` | Sprawdza publiczne kontrakty wszystkich kwalifikowanych providerów na kontrolowanym filmie i odcinku. | Tylko do odczytu. Artefakt przechowuje wyłącznie status, czas i liczbę wyników; nie zapisuje nazw źródeł, magnetów, hashy ani URL-i treści. |
+| 05:03 codziennie | `mwoDevelop/script.module.mwoscrapers` | `probe-provider-health.yml` | Sprawdza publiczne kontrakty wszystkich kwalifikowanych providerów na co najmniej dwóch kontrolowanych filmach i dwóch odcinkach. | Tylko do odczytu. Wynik schema 2 rozróżnia błędy transportu, kontraktu, deadline i pusty wynik po filtracji; quorum chroni przed uznaniem pojedynczego braku tytułu za awarię providera. Artefakt nie zapisuje nazw źródeł, magnetów, hashy ani URL-i treści. |
 
 Audyt providerów i ich discovery są celowo rozdzielone:
 
@@ -52,8 +52,13 @@ Monitorowana lista workflow jest wersjonowana w `manifests/upstream-watchdog.jso
 Workflow jest niezdrowy, gdy brakuje ostatniego uruchomienia, zakończyło się ono
 błędem lub przekracza indywidualny próg `stale_after_seconds`. Dla procesów co
 15 minut jest to 1 godzina, co 30 minut — 2 godziny, a dla dziennych — 36 godzin.
-Healthcheck kontenera odczytuje wynik co pięć minut, a QTS/Container Station
-odpowiada za powiadomienie zewnętrzne.
+Stan obserwatora jest jednak rozdzielony od wyniku obserwowanych workflow:
+`observer_ready` i `collection_state=READY|PARTIAL|ERROR` opisują zdolność zebrania
+pełnego, świeżego katalogu, natomiast `monitored_state=HEALTHY|FAILED|UNKNOWN`
+opisuje same procesy. Healthcheck kontenera sprawdza gotowość obserwatora i
+integralność dokumentu, dlatego poprawnie działający watchdog pozostaje zdrowym
+kontenerem również wtedy, gdy raportuje `monitored_state=FAILED`. QTS/Container
+Station może dzięki temu odróżnić awarię sondy od alarmu domenowego.
 
 Obserwacja rozdziela dwa fakty. Najnowszy przebieg `schedule` dowodzi, że cron nadal
 jest uruchamiany; nie można go zastąpić ręcznym wywołaniem. Nowszy
@@ -91,7 +96,11 @@ poprawnego payloadu: zapisuje kod błędu, przechodzi w `degraded` i dopisuje
 zdarzenie do łańcucha audytu. Ten collector nie jest procesem aktualizacji i nie
 ma endpointu mutującego, klucza assignmentów ani dostępu do socketa Dockera.
 Dashboard mTLS rozdziela `scheduler_status`, `run_result` i `freshness`; jego
-cykliczne odczyty nie powiększają tamper-evident audit chain.
+cykliczne odczyty nie powiększają tamper-evident audit chain. Katalog określa
+osobne progi `missed_windows_warning` i `missed_windows_failure` na podstawie
+liczby opuszczonych wystąpień crona. Alerty z bezpośredniego odczytu GitHub i
+Watchdoga są deduplikowane po repozytorium, workflow i identyfikatorze
+zaplanowanego uruchomienia.
 
 ## Klienci Kodi Profile Sync
 
@@ -104,6 +113,11 @@ są wyłączone z payloadu synchronizowanego profilu.
 Profile Sync nie instaluje kodu dodatku, nie uruchamia GitHub workflow, nie promuje
 kanału repozytorium ani nie używa przekaźnika providerów. Dlatego jego backend i
 harmonogram są monitorowane niezależnie od synchronizacji upstream.
+
+Od wersji 1.1.2 przejściowe błędy transportu, timeout, HTTP 429 i 5xx są
+ponawiane z utrwalonym backoffem 1/5/15/30 minut i jitterem. Błędy autoryzacji,
+konfiguracji oraz kontraktu są terminalne do czasu zmiany ich odcisku. Telemetria
+rozróżnia próbę, udany heartbeat i udany pełny cykl, nie zapisując sekretów.
 
 W tym samym cyklu Agent może pobrać krótkotrwałą kopertę HPKE z Profile Sync.
 Profile Sync uzyskuje ją z Secret Brokera przez prywatne mTLS; Control Plane sprawdza

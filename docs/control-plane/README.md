@@ -41,6 +41,13 @@ BFF nadal wymaga dokładnego Host/Origin, sesji,
 CSRF oraz hasła+TOTP. Nie ma jeszcze WebAuthn ani żadnych akcji mutujących. Każdy status zawiera osobne pochodzenie i
 świeżość; proces cykliczny rozdziela obecność schedulera, wynik runu i stale dane.
 Kanoniczne katalogi są w `manifests/control-plane-{schedules,status-sources}.json`.
+Każdy wpis harmonogramu ma progi ostrzeżenia i awarii wyrażone liczbą opuszczonych
+okien crona. Zdarzenia tego samego przebiegu pobrane bezpośrednio z GitHub i przez
+Watchdoga są deduplikowane.
+
+Dashboard otrzymuje też zredagowany spis urządzeń wygenerowany podczas wdrożenia.
+Tryb `always_on` lub `on_demand`, kanał i indywidualne progi pozwalają poprawnie
+klasyfikować heartbeat bez ujawniania adresów, poświadczeń ani generacji enrollmentu.
 
 Profile Sync udostępnia mu osobny kontrakt mTLS
 `/v1/integration/{fleet,rollouts}` w prywatnej sieci Compose. Consumer API nadal

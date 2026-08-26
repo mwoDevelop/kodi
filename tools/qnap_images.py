@@ -22,6 +22,13 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 try:
+    from control_plane_device_inventory import build_inventory
+    from qnap_control_plane import (
+        create_browser_bootstrap,
+    )
+    from qnap_control_plane import (
+        deploy as deploy_control_plane,
+    )
     from qnap_profile_sync import (
         QnapError,
         connect,
@@ -31,12 +38,15 @@ try:
         preflight,
     )
     from qnap_provider_relay import deploy as deploy_relay
-    from qnap_control_plane import (
-        create_browser_bootstrap,
-        deploy as deploy_control_plane,
-    )
     from qnap_secret_broker import deploy as deploy_secret_broker
 except ModuleNotFoundError:
+    from tools.control_plane_device_inventory import build_inventory
+    from tools.qnap_control_plane import (
+        create_browser_bootstrap,
+    )
+    from tools.qnap_control_plane import (
+        deploy as deploy_control_plane,
+    )
     from tools.qnap_profile_sync import (
         QnapError,
         connect,
@@ -46,10 +56,6 @@ except ModuleNotFoundError:
         preflight,
     )
     from tools.qnap_provider_relay import deploy as deploy_relay
-    from tools.qnap_control_plane import (
-        create_browser_bootstrap,
-        deploy as deploy_control_plane,
-    )
     from tools.qnap_secret_broker import deploy as deploy_secret_broker
 
 
@@ -752,6 +758,7 @@ def _watchdog_private_files(private):
             str(files["server_certificate"]),
         ),
         capture_output=True,
+        check=False,
         text=True,
     )
     if verified.returncode != 0:
@@ -805,7 +812,7 @@ def validate_watchdog_policy(document):
     by_target = {item.get("target"): item for item in volumes}
     if set(by_target) != expected_targets or len(volumes) != len(expected_targets):
         raise ImageError("watchdog observer mount set differs")
-    for target, item in by_target.items():
+    for item in by_target.values():
         source = str(item.get("source", ""))
         if (
             item.get("type") != "bind"
@@ -840,8 +847,14 @@ def validate_watchdog_policy(document):
     health = " ".join(
         str(item) for item in service.get("healthcheck", {}).get("test", [])
     )
-    if "/run/watchdog/status.json" not in health:
-        raise ImageError("watchdog healthcheck does not inspect its status")
+    if not all(
+        item in health
+        for item in (
+            "tools/upstream_watchdog.py health",
+            "--status /run/watchdog/status.json",
+        )
+    ):
+        raise ImageError("watchdog healthcheck does not verify observer readiness")
     return {
         "image": service["image"],
         "project": document["name"],
@@ -952,6 +965,10 @@ def deploy_watchdog(session, repository, image, references, private):
                 }
                 if (
                     candidate.get("schema") == 2
+                    and candidate.get("observer_ready") is True
+                    and candidate.get("collection_state") == "READY"
+                    and candidate.get("monitored_state")
+                    in {"HEALTHY", "FAILED"}
                     and observed_workflows == expected_workflows
                     and len(candidate.get("workflows", []))
                     == len(expected_workflows)
@@ -981,12 +998,21 @@ def deploy_watchdog(session, repository, image, references, private):
             key: github[key]
             for key in ("source", "login", "rate_limit", "rate_remaining")
         },
+        # Compatibility alias retained for one N/N+1 generation.
         "runtime_healthy": status["healthy"],
+        "observer_ready": status["observer_ready"],
+        "collection_state": status["collection_state"],
+        "monitored_state": status["monitored_state"],
         "workflows": len(status["workflows"]),
         "workflow_failures": [
-            "%s/%s" % (item["repository"], item["workflow"])
+            f'{item["repository"]}/{item["workflow"]}'
             for item in status["workflows"]
-            if not item.get("healthy")
+            if item.get("monitored_state") == "FAILED"
+        ],
+        "workflow_unknown": [
+            f'{item["repository"]}/{item["workflow"]}'
+            for item in status["workflows"]
+            if item.get("monitored_state") == "UNKNOWN"
         ],
     }
 
@@ -1045,6 +1071,7 @@ def deploy(service_name, image, references, repository=ROOT):
                 Path(repository) / ".kodi-private/secret-broker/control-plane",
                 Path(repository) / ".kodi-private/control-plane/watchdog",
                 github["token"],
+                build_inventory(private_references),
             )
         elif service_name == "secret-broker":
             result = deploy_secret_broker(
@@ -1123,15 +1150,51 @@ def status(references, repository=ROOT):
                     if document.get("schema") == 2 and isinstance(
                         workflows, list
                     ):
+                        extended = all(
+                            field in document
+                            for field in (
+                                "observer_ready",
+                                "collection_state",
+                                "monitored_state",
+                            )
+                        )
                         watchdog.update(
                             {
                                 "checked_at": document.get("checked_at"),
+                                # Compatibility alias for schema 2 N/N+1.
                                 "runtime_healthy": document.get("healthy"),
+                                "observer_ready": (
+                                    document.get("observer_ready")
+                                    if extended
+                                    else True
+                                ),
+                                "collection_state": (
+                                    document.get("collection_state")
+                                    if extended
+                                    else "READY"
+                                ),
+                                "monitored_state": (
+                                    document.get("monitored_state")
+                                    if extended
+                                    else (
+                                        "HEALTHY"
+                                        if document.get("healthy") is True
+                                        else "FAILED"
+                                    )
+                                ),
                                 "workflow_failures": [
-                                    "%s/%s"
-                                    % (item["repository"], item["workflow"])
+                                    f'{item["repository"]}/{item["workflow"]}'
                                     for item in workflows
-                                    if not item.get("healthy")
+                                    if item.get("monitored_state") == "FAILED"
+                                    or (
+                                        "monitored_state" not in item
+                                        and item.get("healthy") is False
+                                    )
+                                ],
+                                "workflow_unknown": [
+                                    f'{item["repository"]}/{item["workflow"]}'
+                                    for item in workflows
+                                    if item.get("monitored_state") == "UNKNOWN"
                                 ],
                                 "workflows": len(workflows),
                             }
@@ -1158,7 +1221,10 @@ def service_is_healthy(item):
     health = item.get("health")
     if health in {None, "healthy"}:
         return True
-    return health == "starting" and item.get("runtime_healthy") is True
+    return health == "starting" and (
+        item.get("observer_ready") is True
+        or item.get("runtime_healthy") is True
+    )
 
 
 def service_is_operational(name, item):
@@ -1173,10 +1239,21 @@ def service_is_operational(name, item):
         return True
     if name != "upstream-watchdog":
         return False
+    if item.get("status") != "running":
+        return False
+    if "observer_ready" in item:
+        return (
+            item.get("health") != "unhealthy"
+            and item.get("observer_ready") is True
+            and item.get("collection_state") == "READY"
+            and item.get("monitored_state") in {"HEALTHY", "FAILED"}
+        )
+    # Legacy schema 2 compatibility: a complete structured failure report is
+    # evidence that the older observer ran, even though its healthcheck coupled
+    # Docker health to the monitored business result.
     failures = item.get("workflow_failures")
     return (
-        item.get("status") == "running"
-        and item.get("runtime_healthy") is False
+        item.get("runtime_healthy") is False
         and isinstance(item.get("checked_at"), str)
         and bool(item["checked_at"])
         and isinstance(failures, list)

@@ -76,6 +76,8 @@ services:
       - /run/control-plane/catalogs/schedules.json
       - --status-source-catalog
       - /run/control-plane/catalogs/status-sources.json
+      - --device-inventory
+      - /run/control-plane/catalogs/device-inventory.json
     ports:
       - name: control-plane-api
         target: 9443
@@ -187,6 +189,12 @@ services:
       - type: bind
         source: ${CONTROL_PLANE_STATUS_SOURCE_CATALOG:?set status-source catalog}
         target: /run/control-plane/catalogs/status-sources.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_DEVICE_INVENTORY:?set redacted device inventory}
+        target: /run/control-plane/catalogs/device-inventory.json
         read_only: true
         bind:
           create_host_path: false

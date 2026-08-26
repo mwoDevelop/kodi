@@ -52,6 +52,7 @@ def _verify_certificate(ca, certificate, purpose):
             str(certificate),
         ),
         capture_output=True,
+        check=False,
         text=True,
     )
     if result.returncode != 0:
@@ -269,6 +270,7 @@ def environment(image, host_ip):
             f"CONTROL_PLANE_GITHUB_TOKEN={config / 'github/token'}",
             f"CONTROL_PLANE_SCHEDULE_CATALOG={config / 'catalogs/control-plane-schedules.json'}",
             f"CONTROL_PLANE_STATUS_SOURCE_CATALOG={config / 'catalogs/control-plane-status-sources.json'}",
+            f"CONTROL_PLANE_DEVICE_INVENTORY={config / 'catalogs/device-inventory.json'}",
             "CONTROL_PLANE_UID=10001",
             "CONTROL_PLANE_GID=10001",
             "",
@@ -384,6 +386,7 @@ def validate_policy(document):
         "/run/control-plane/github/token",
         "/run/control-plane/catalogs/schedules.json",
         "/run/control-plane/catalogs/status-sources.json",
+        "/run/control-plane/catalogs/device-inventory.json",
     }
     web_targets = {
         "/run/control-plane/web/core-ca.crt",
@@ -452,6 +455,7 @@ def validate_policy(document):
         "--github-token-file /run/control-plane/github/token",
         "--schedule-catalog /run/control-plane/catalogs/schedules.json",
         "--status-source-catalog /run/control-plane/catalogs/status-sources.json",
+        "--device-inventory /run/control-plane/catalogs/device-inventory.json",
     ):
         if required not in command:
             raise ControlPlaneError("Control Plane command policy differs")
@@ -572,6 +576,7 @@ def deploy(
     secret_broker_private=None,
     watchdog_private=None,
     github_token=None,
+    device_inventory=None,
 ):
     try:
         from qnap_control_plane_gateway import install as install_gateway
@@ -586,6 +591,13 @@ def deploy(
     )
     if not github_token or any(char in github_token for char in "\r\n"):
         raise ControlPlaneError("Control Plane GitHub token is missing or invalid")
+    if (
+        not isinstance(device_inventory, dict)
+        or device_inventory.get("schema") != 1
+        or not isinstance(device_inventory.get("devices"), list)
+        or not device_inventory["devices"]
+    ):
+        raise ControlPlaneError("Control Plane device inventory is invalid")
     env = environment(image, host_ip)
     _install, docker = container_station(session)
     repository = Path(repository)
@@ -670,6 +682,11 @@ def deploy(
         session.upload_text(
             str(destination), source.read_text(encoding="utf-8"), mode
         )
+    session.upload_text(
+        str(config / "catalogs/device-inventory.json"),
+        json.dumps(device_inventory, indent=2, sort_keys=True) + "\n",
+        0o400,
+    )
     session.upload_text(str(config / "github/token"), github_token + "\n", 0o400)
     session.execute(
         "chown -R 10001:10001 "

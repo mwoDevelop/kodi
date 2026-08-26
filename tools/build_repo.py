@@ -25,6 +25,8 @@ EXCLUDED_PARTS = {
     "__pycache__",
     ".venv",
     ".venv-downstream",
+    "build",
+    "dist",
     "tests",
 }
 
@@ -49,7 +51,10 @@ def addon_files(source, patterns):
         if not path.is_file() or path.is_symlink():
             continue
         relative = path.relative_to(source)
-        if any(part in EXCLUDED_PARTS for part in relative.parts):
+        if any(
+            part in EXCLUDED_PARTS or part.endswith(".egg-info")
+            for part in relative.parts
+        ):
             continue
         if selected(relative, patterns):
             yield path, relative
@@ -124,7 +129,10 @@ def component_files(config, commit):
         relative = PurePosixPath(full_path)
         if prefix:
             relative = relative.relative_to(PurePosixPath(prefix))
-        if any(part in EXCLUDED_PARTS for part in relative.parts):
+        if any(
+            part in EXCLUDED_PARTS or part.endswith(".egg-info")
+            for part in relative.parts
+        ):
             continue
         if not selected(relative, config["include"]):
             continue
