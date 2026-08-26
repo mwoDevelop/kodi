@@ -1,7 +1,7 @@
 {
-  "attestation_id": "409c75fce851c1483a2187ad712fa934975a640f1e4eda14ee3e2e2dd64d7a44",
+  "attestation_id": "8768502cc647c4f705e2c88bd270acf7db13cb8608ccb72072a829a22d96d2a0",
   "attestation_kind": "device",
-  "attestation_sha256": "6087a94245b20abaaf2a19bfe8a2ae98be2a48806abd47c5934094909c1ba2b3",
+  "attestation_sha256": "c82bd3fc21c628ed3551a046d224c61b59f09386e5775fed71cf7e68b58c8228",
   "channel": "stable",
   "components": {
     "plugin.video.umbrella": {
@@ -15,20 +15,20 @@
       "zip_sha256": "fec698fc7e5aae1684e145d64fdd187c75d180b6ed61d5a1cf9aac2e4c777668"
     },
     "script.module.mwoscrapers": {
-      "commit": "eeef07bcf7152d205410cf2b700fda5688ba082d",
+      "commit": "357c1e6df7d8414768a69ba8108fe84b44ef5804",
       "provider_api": 1,
-      "version": "0.2.0",
-      "zip_sha256": "23238732672279d5d4c0fda3869cf89a0e5be8133eed09478781f6aa18d9e73d"
+      "version": "0.2.1",
+      "zip_sha256": "d767c990c65b2fbee9d1cdfff6be4c669488238e74acc4dbae86fbf7d59d919f"
     },
     "script.mwoscrapers": {
-      "commit": "eeef07bcf7152d205410cf2b700fda5688ba082d",
+      "commit": "357c1e6df7d8414768a69ba8108fe84b44ef5804",
       "version": "0.1.1",
       "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
     },
     "service.mwodevelop.profilesync": {
-      "commit": "3442130ec1b4c80729a9d9b24c679d8c8e8dadb6",
-      "version": "1.1.1",
-      "zip_sha256": "6ae17881d183ce64a8afc6302e05d82051da90c57bf3c770ccb24ffd6888a6ab"
+      "commit": "a266d122a9c59171be6f606482fdf0869464e0df",
+      "version": "1.1.2",
+      "zip_sha256": "be1c631e5c445046957156d4ecb0baf453dd3041eec7aa792993cb336c1bd9c1"
     },
     "service.subtitles.opensubtitles-com": {
       "commit": "27b00fc2ba9c1637f6cd4c858a1c702bee786280",
@@ -38,7 +38,7 @@
   },
   "promotion_kind": "normal",
   "schema": 2,
-  "source_artifact_manifest_sha256": "b9f6589f6837953a99c2415500f31a22037fd162f23ae00db6622c9f48efd4d4",
-  "source_index_sha256": "d2491df6b95df341247504976c62892cd1ea5afff106939bbe887ec305e2476a",
-  "source_snapshot_id": "9f4c36bbbec725cea3b033466c8f6056baa9fcb85260b93c4c85571dd8d0460a"
+  "source_artifact_manifest_sha256": "fd00a118b826c2ba8079e12d2731a3e5018b61cd927c61befbc5c76b4f3db8b7",
+  "source_index_sha256": "1bf9ef19acc050408f77eaabb0ee4f45814cf15a843526ac361dea0ec6450f78",
+  "source_snapshot_id": "e59ad94224f957b2d03a22f06fa1ea6ad8bd934d74be7ffcd79d5524a55ad552"
 }
