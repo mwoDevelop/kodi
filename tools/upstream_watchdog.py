@@ -130,10 +130,8 @@ def evaluate(
         else:
             try:
                 run = effective or scheduled
-                scheduled_updated = _timestamp(scheduled["updated_at"])
                 updated = _timestamp(run["updated_at"])
                 age = now - updated
-                scheduled_age = now - scheduled_updated
                 conclusion = run.get("conclusion")
                 active = run.get("status") in {
                     "queued",
@@ -141,8 +139,7 @@ def evaluate(
                     "waiting",
                 }
                 healthy = (
-                    scheduled_age.total_seconds() <= config["max_age_seconds"]
-                    and age.total_seconds() <= config["max_age_seconds"]
+                    age.total_seconds() <= config["max_age_seconds"]
                     and (active or conclusion == "success")
                 )
                 result = {
