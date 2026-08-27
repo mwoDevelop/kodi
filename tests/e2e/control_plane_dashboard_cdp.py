@@ -56,10 +56,22 @@ class DashboardService:
                 "jobs": [
                     {
                         "id": "github-kodi-publish-pages",
+                        "state": "OK",
                         "scheduler_status": "REMEDIATED",
                         "run_result": "SUCCESS",
                         "freshness": "FRESH",
                         "next_expected": "2026-08-22T03:10:00Z",
+                        "process_observation": {
+                            "schema": 1,
+                            "observation_source": "github_actions",
+                            "observer_state": "READY",
+                            "last_attempt_at": "2026-08-22T03:10:00Z",
+                            "last_success_at": "2026-08-22T03:10:00Z",
+                            "next_expected_at": "2026-08-22T04:10:00Z",
+                            "result": "SUCCESS",
+                            "freshness": "FRESH",
+                            "error_code": None,
+                        },
                     }
                 ]
             },
@@ -228,8 +240,11 @@ def main(argv=None):
             raise RuntimeError("status sources were not rendered")
         if "github-kodi-publish-pages" not in value["schedules"]:
             raise RuntimeError("scheduled jobs were not rendered")
-        if "REMEDIATED" not in value["schedules"]:
-            raise RuntimeError("manual scheduler remediation was not rendered")
+        for expected in ("github_actions", "READY", "SUCCESS", "FRESH"):
+            if expected not in value["schedules"]:
+                raise RuntimeError(
+                    "unified process observation was not rendered: " + expected
+                )
         websocket.call(
             "Runtime.evaluate",
             {"expression": "document.querySelector('#refresh').click()"},
