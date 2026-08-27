@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart LR
-  Browser[Przeglądarka w LAN] -->|HTTPS :443<br/>hasło + TOTP + sesja| QTS[QTS HTTPS + QPKG CGI]
+  Browser[Przeglądarka w LAN] -->|HTTPS :443<br/>admin NAS_SID albo ręczny login| QTS[QTS HTTPS + QPKG CGI]
   QTS -->|CGI do HTTP 127.0.0.1:19445<br/>tylko własny prefiks| Web[control-plane-web]
   Web -->|dedykowane mTLS<br/>tylko dashboard| Core[control-plane]
   Web -->|prywatne mTLS| Authz[control-plane-authz]
@@ -32,7 +32,11 @@ bazę, szyfruje seed TOTP AES-GCM kluczem montowanym poza bazą i nie ma portu L
 Core rozpoznaje certyfikat BFF po fingerprintcie i odrzuca nim każdy odczyt poza
 allowlistą dashboardu. QTS kończy przeglądarkowy TLS na standardowym porcie 443,
 a bezusługowy QPKG `KodiCPGateway` rejestruje skrót i standardową bramę CGI.
-Nie modyfikuje `app_proxy.conf`. Backend HTTP jest publikowany przez Compose
+CGI waliduje aktywny `NAS_SID` lokalnym API QTS i tylko administratorowi
+tworzy zwykłą sesję Control Plane przez istniejący login z CSRF i TOTP.
+Poświadczenia są plikami `0600` poza WWW w wygenerowanym pakiecie; bez sesji
+QTS pozostaje ręczny ekran logowania. Brama nie modyfikuje `app_proxy.conf`.
+Backend HTTP jest publikowany przez Compose
 wyłącznie na loopback QNAP;
 nie ma osobnego certyfikatu ani portu osiągalnego z LAN.
 

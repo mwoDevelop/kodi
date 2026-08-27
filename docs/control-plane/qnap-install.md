@@ -19,6 +19,10 @@ W ignorowanym katalogu `.kodi-private/control-plane/` znajdują się:
 - losowy klucz checkpointu audytu, minimum 32 bajty;
 - opcjonalnie plik tokenu GitHub read-only; publiczne repo działa bez niego.
 
+Ignorowany plik `.kodi-private/control-plane-operator.json` zawiera nazwę,
+hasło i URI TOTP operatora. Deployment wyodrębnia z niego tylko dane potrzebne
+bramie QTS i umieszcza je w generowanym QPKG poza katalogiem WWW jako `0600`.
+
 Klucze mają tryb `0400` lub `0600`. Certyfikaty publiczne mogą mieć `0644`.
 Wartości nie są zapisywane w `.env`, locku obrazu ani logach.
 
@@ -43,8 +47,9 @@ Po wdrożeniu należy potwierdzić:
 4. `GET /v1/fleet` z certyfikatem nie zawiera tokenów ani kluczy;
 5. backup i restore do izolowanej bazy zachowują checkpoint audytu;
 6. drugi refresh identycznych źródeł nie zmienia ich digestu payloadu.
-7. `https://<QNAP>/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/login`
-   działa bez certyfikatu klienta przez HTTPS QTS, port backendu
+7. skrót QTS z ważną sesją administratora otwiera bezpośrednio dashboard,
+   natomiast `https://<QNAP>/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/login`
+   zachowuje ręczny fallback bez certyfikatu klienta; port backendu
    `127.0.0.1:19445` nie jest osiągalny z LAN, a bezusługowy QPKG nie korzysta
    z `app_proxy.conf`;
 8. bootstrap, login, logout, restart i odzyskanie TOTP zachowują kontrakt sesji.

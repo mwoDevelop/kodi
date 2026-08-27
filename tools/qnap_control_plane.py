@@ -723,7 +723,11 @@ def deploy(
     }
     policy = validate_policy(rendered)
     session.execute(compose + " up -d --pull always", timeout=360)
-    gateway = install_gateway(session, repository)
+    gateway = install_gateway(
+        session,
+        repository,
+        repository / ".kodi-private/control-plane-operator.json",
+    )
     api = verify_api(
         host_ip,
         files["client_ca"],

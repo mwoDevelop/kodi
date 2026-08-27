@@ -98,7 +98,7 @@ flowchart LR
 | Control Plane | Integration API Profile Sync | Prywatne mTLS na `mwodevelop-control:8767` | Zredagowana flota i rollouty | Dashboard i obserwowalność |
 | Control Plane | GitHub API | HTTPS read-only | Statusy workflow i harmonogramów | Dashboard i freshness |
 | Upstream Watchdog | GitHub API | HTTPS, publiczny odczyt | Ostatnie wyniki 11 workflow | Alarm fail-closed |
-| Przeglądarka operatora | QTS HTTPS / QPKG CGI → Control Plane Web/BFF | HTTPS `:443/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/`, następnie HTTP tylko po loopback `:19445`; hasło+TOTP, sesja i CSRF | Statyczny panel i odczytowe API | Administracyjny podgląd bez certyfikatu klienta i bez osobnego CA panelu |
+| Przeglądarka operatora | QTS HTTPS / QPKG CGI → Control Plane Web/BFF | HTTPS `:443/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/`, następnie HTTP tylko po loopback `:19445`; zweryfikowany admin `NAS_SID` albo ręczne hasło+TOTP, sesja i CSRF | Statyczny panel i odczytowe API | Administracyjny podgląd bez certyfikatu klienta i bez osobnego CA panelu |
 | Control Plane Web/BFF | Control Plane core | Prywatne mTLS, certyfikat o ograniczonym scope | Wyłącznie endpointy dashboardu | Separacja przeglądarki od API operatorskiego |
 | Control Plane Web/BFF | Control Plane Authz | Prywatne mTLS bez portu LAN | Bootstrap, login, sesja, recovery | Uwierzytelnienie przeglądarkowe |
 | Host operatora | QNAP | SSH, następnie bezpieczny Docker Compose | Przypięte digesty i konfiguracja wdrożenia | Build/deploy/status kontenerów |
@@ -139,7 +139,7 @@ digestów zapisanych w `qnap-stable.json`.
 | Usługa | Interfejs | Stan i dane |
 |---|---|---|
 | `control-plane` | LAN `HTTPS/mTLS :19443`; wewnętrzne `/ready` | Agreguje zredagowany stan floty, rolloutów, usług, harmonogramów i audytu. Maszynowy dashboard oraz API są tylko do odczytu. Własna baza SQLite |
-| `KodiCPGateway` + `control-plane-web` | QTS `HTTPS :443/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/` → CGI → `127.0.0.1:19445`; prywatne mTLS BFF do core/authz | Bezusługowy QPKG rejestruje skrót i stateless CGI bez `app_proxy.conf`; read-only BFF wymusza dokładny Host/Origin, CSRF i sesję. Nie ma portu backendu w LAN ani dostępu do sekretów floty |
+| `KodiCPGateway` + `control-plane-web` | QTS `HTTPS :443/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/` → CGI → `127.0.0.1:19445`; prywatne mTLS BFF do core/authz | Bezusługowy QPKG rejestruje skrót i CGI bez `app_proxy.conf`. Po walidacji administratorskiego `NAS_SID` CGI wykonuje istniejący login z TOTP serwer-serwer; prywatne pliki `0600` są poza WWW. Read-only BFF nadal wymusza Host/Origin, CSRF i sesję, a backend nie ma portu w LAN ani dostępu do sekretów floty |
 | `control-plane-authz` | Brak opublikowanego portu; prywatne mTLS | Hasło scrypt, TOTP, recovery codes, rate limit i sesje. Osobna baza SQLite; seed TOTP szyfrowany AES-GCM |
 | `profile-sync` | LAN `HTTPS :18765`; prywatne mTLS `:8767` tylko w sieci Compose | Enrollmenty, podpisane rewizje i assignmenty, heartbeat oraz raporty zastosowania. Trwała baza SQLite/blob |
 | `provider-relay` | Prywatny adres LAN `HTTP :18766` | Bezstanowy, opcjonalny fallback wyłącznie dla allowlistowanych zapytań providerów, obecnie przede wszystkim Torrentio |
@@ -161,8 +161,9 @@ aktualnym miejscem wykonywania administracji:
 - `tools/qnap_images.py` buduje lub wdraża zatwierdzone obrazy QNAP;
 - adaptery Android używają dedykowanego lokalnego demona ADB, a adaptery NUC — SSH;
 - przeglądarka operatora otwiera dashboard przez standardowy HTTPS QTS pod
-  `/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/` i loguje się hasłem
-  oraz TOTP; interfejs
+  `/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/`; aktywna sesja
+  administratora QTS uruchamia bezpieczny login serwer-serwer, a wejście
+  bez niej zachowuje ręczne hasło i TOTP; interfejs
   maszynowy na `:19443` nadal wymaga certyfikatu klienta mTLS.
 
 Sekrety nie są publikowane do GitHub, GitHub Pages, GHCR ani raportów E2E. Planowane
