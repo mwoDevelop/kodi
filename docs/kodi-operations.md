@@ -22,6 +22,10 @@ Bieżący kontrakt CLI definiuje `tools/kodi_ops.py`, kolejność i politykę fa
   sprawdź listę `devices` i `canaries` w dry-run;
 - preflight odtwarza ulotne połączenia sieciowe ADB z prywatnego inventory,
   dzięki czemu restart izolowanego demona ADB nie wymaga ręcznego `adb connect`;
+- hostowy rollout Android wymaga JDK (`javac`) oraz `d8` z Android SDK
+  `build-tools`; narzędzie kompiluje z przypiętego źródła mały helper DEX i
+  umieszcza go pod content-addressed nazwą w `/data/local/tmp`, aby sekwencja
+  Kodi EventServer `HELO/ACTION/BYE` używała jednego socketu UDP;
 - release wymaga czystego `main` równego dokładnemu `origin/main` oraz
   zalogowanego GitHub CLI;
 - restore wymaga wcześniejszego dry-run i jawnego `--yes`.

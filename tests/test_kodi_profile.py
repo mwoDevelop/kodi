@@ -98,13 +98,62 @@ def test_event_client_uses_ipv4_mapped_loopback_for_android_ipv6_listener(
 
     monkeypatch.setattr("tools.kodi_profile.adb_command", command)
 
-    AdbEventClient("adb", 5037, "serial").execute_builtin(
-        "Notification(test,ready)"
-    )
+    client = AdbEventClient("adb", 5037, "serial")
+    monkeypatch.setattr(client, "_android_sender_path", lambda: None)
+    client.execute_builtin("Notification(test,ready)")
 
     assert len(commands) == 3
-    assert all("nc -4 -u " in command for command in commands)
+    assert all(command.count("nc -4 -u ") == 1 for command in commands)
+    assert all(command.count("base64 -d") == 1 for command in commands)
     assert all(" 127.0.0.1 9777" in command for command in commands)
+
+
+def test_event_client_prefers_android_sender_for_one_udp_socket(monkeypatch):
+    commands = []
+    monkeypatch.setattr(
+        "tools.kodi_profile.adb_output",
+        lambda *_args, **_kwargs: "udp6 0 0 :::9777 :::*",
+    )
+
+    def command(*args, **_kwargs):
+        if "command -v nc" in args[-1]:
+            return SimpleNamespace(stdout="/system/bin/nc\n", returncode=0)
+        commands.append(args[-1])
+        return SimpleNamespace(stdout="", returncode=0)
+
+    monkeypatch.setattr("tools.kodi_profile.adb_command", command)
+    client = AdbEventClient("adb", 5037, "serial")
+    monkeypatch.setattr(
+        client,
+        "_android_sender_path",
+        lambda: "/data/local/tmp/mwo-kodi-event-sender-test.dex",
+    )
+
+    client.execute_builtin("Notification(test,ready)")
+
+    assert len(commands) == 1
+    assert commands[0].startswith(
+        "CLASSPATH=/data/local/tmp/mwo-kodi-event-sender-test.dex "
+        "app_process /system/bin MwoKodiEventSender "
+    )
+    assert commands[0].count("58424d43") == 3
+    assert " nc " not in commands[0]
+
+
+def test_event_client_reuses_content_addressed_android_sender(monkeypatch):
+    commands = []
+
+    def command(*args, **_kwargs):
+        commands.append(args[-1])
+        return SimpleNamespace(stdout="", returncode=0)
+
+    monkeypatch.setattr("tools.kodi_profile.adb_command", command)
+
+    sender = AdbEventClient("adb", 5037, "serial")._android_sender_path()
+
+    assert sender.startswith("/data/local/tmp/mwo-kodi-event-sender-")
+    assert sender.endswith(".dex")
+    assert commands == ["test -r '%s'" % sender]
 
 
 def test_event_client_sends_from_host_when_tv_has_no_netcat(monkeypatch):
@@ -157,6 +206,24 @@ def test_event_client_can_explicitly_retry_from_host(monkeypatch):
 
     assert len(sent) == 3
     assert all(packet.startswith(b"XBMC") for packet in sent)
+
+
+def test_event_clients_reuse_stable_identity_across_adapter_processes():
+    first = AdbEventClient("adb", 5037, "serial")
+    second = AdbEventClient("adb", 5037, "serial")
+
+    assert first.uid == second.uid
+    assert first.source_port == second.source_port
+    assert first.uid != 0
+
+
+def test_event_client_allows_explicit_identity_for_isolated_tests():
+    client = AdbEventClient(
+        "adb", 5037, "serial", source_port=40140, uid=0x12345678
+    )
+
+    assert client.uid == 0x12345678
+    assert client.source_port == 40140
 
 
 def test_profile_policy_includes_settings_and_excludes_cache():
