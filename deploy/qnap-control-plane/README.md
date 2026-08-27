@@ -25,7 +25,8 @@ monitorowania i progi świeżości. Adresy, tokeny i credentiale nie trafiają d
 Control Plane. Dotychczasowy dashboard mTLS pozostaje pod
 `https://<QNAP>:19443/`. Dla zwykłej przeglądarki działa dodatkowo kanoniczne
 `https://<QNAP>/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/`: nie
-wymaga certyfikatu klienta. QPKG `KodiCPGateway` rejestruje skrót QTS; aktywna
+wymaga certyfikatu klienta. QPKG `KodiCPGateway` rejestruje skrót **Kodi admin**
+w QTS; aktywna
 sesja administratora QTS uruchamia istniejący login hasło+TOTP serwer-serwer,
 a bez niej pozostaje ręczny formularz. CGI przekazuje ten prefiks z HTTPS QTS do
 backendu dostępnego wyłącznie na `127.0.0.1:19445`. Web/BFF używa

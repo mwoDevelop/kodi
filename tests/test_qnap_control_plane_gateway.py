@@ -15,6 +15,7 @@ import pytest
 from tools.qnap_control_plane_gateway import (
     BACKEND_PORT,
     CGI_ROOT,
+    DISPLAY_NAME,
     NAME,
     PUBLIC_BASE,
     QDK_SHA256,
@@ -46,6 +47,7 @@ def test_gateway_webui_uses_system_https_cgi_path(repository_root):
         repository_root / "deploy/qnap-control-plane-gateway/qpkg.cfg"
     ).read_text(encoding="utf-8")
     assert f'QPKG_WEBUI="{WEBUI}"' in config
+    assert f'QPKG_DISPLAY_NAME="{DISPLAY_NAME}"' in config
     assert 'QPKG_WEB_PORT="-2"' in config
     assert 'QPKG_WEB_SSL_PORT="-1"' in config
     assert 'QPKG_USE_PROXY="0"' in config
@@ -289,6 +291,8 @@ def test_qts_admin_session_performs_server_side_totp_login(repository_root, tmp_
     assert "Status: 303 See Other\n" in result.stdout
     assert "Set-Cookie: mwo_cp_csrf=csrf-value" in result.stdout
     assert "Set-Cookie: mwo_cp_session=session-value" in result.stdout
+    assert result.stdout.count("SameSite=Lax") == 2
+    assert "SameSite=Strict" not in result.stdout
     assert f"Location: {PUBLIC_BASE}/\n" in result.stdout
     assert received["login"] == {
         "username": "mwo",

@@ -47,7 +47,7 @@ Po wdrożeniu należy potwierdzić:
 4. `GET /v1/fleet` z certyfikatem nie zawiera tokenów ani kluczy;
 5. backup i restore do izolowanej bazy zachowują checkpoint audytu;
 6. drugi refresh identycznych źródeł nie zmienia ich digestu payloadu.
-7. skrót QTS z ważną sesją administratora otwiera bezpośrednio dashboard,
+7. skrót **Kodi admin** z ważną sesją administratora QTS otwiera bezpośrednio dashboard,
    natomiast `https://<QNAP>/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/login`
    zachowuje ręczny fallback bez certyfikatu klienta; port backendu
    `127.0.0.1:19445` nie jest osiągalny z LAN, a bezusługowy QPKG nie korzysta

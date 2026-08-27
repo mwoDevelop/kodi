@@ -25,7 +25,8 @@ except ModuleNotFoundError:
 
 
 NAME = "KodiCPGateway"
-VERSION = "0.3.0"
+DISPLAY_NAME = "Kodi admin"
+VERSION = "0.3.1"
 BACKEND_PORT = 19445
 CGI_ROOT = f"/cgi-bin/qpkg/{NAME}"
 PUBLIC_BASE = f"{CGI_ROOT}/gateway.cgi/control-plane"
@@ -94,6 +95,7 @@ def validate_source(repository):
     config = (root / "qpkg.cfg").read_text(encoding="utf-8")
     expected = {
         "QPKG_NAME": NAME,
+        "QPKG_DISPLAY_NAME": DISPLAY_NAME,
         "QPKG_VER": VERSION,
         "QPKG_WEBUI": WEBUI,
         "QPKG_WEB_PORT": "-2",

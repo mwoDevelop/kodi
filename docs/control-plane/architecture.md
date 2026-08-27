@@ -31,7 +31,8 @@ Proces web nie ma bazy użytkowników ani dostępu do sekretów floty. Authz ma 
 bazę, szyfruje seed TOTP AES-GCM kluczem montowanym poza bazą i nie ma portu LAN.
 Core rozpoznaje certyfikat BFF po fingerprintcie i odrzuca nim każdy odczyt poza
 allowlistą dashboardu. QTS kończy przeglądarkowy TLS na standardowym porcie 443,
-a bezusługowy QPKG `KodiCPGateway` rejestruje skrót i standardową bramę CGI.
+a bezusługowy QPKG `KodiCPGateway` rejestruje skrót **Kodi admin** i standardową
+bramę CGI.
 CGI waliduje aktywny `NAS_SID` lokalnym API QTS i tylko administratorowi
 tworzy zwykłą sesję Control Plane przez istniejący login z CSRF i TOTP.
 Poświadczenia są plikami `0600` poza WWW w wygenerowanym pakiecie; bez sesji

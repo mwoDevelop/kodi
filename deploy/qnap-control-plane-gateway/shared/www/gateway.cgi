@@ -214,8 +214,15 @@ control_plane_auto_login() {
     grep -Eq '^Set-Cookie: mwo_cp_session=' "$login_headers" || return 1
 
     printf 'Status: 303 See Other\r\n'
-    printf 'Set-Cookie: %s\r\n' "$csrf_set_cookie"
-    awk '/^Set-Cookie: mwo_cp_session=/ { sub(/\r$/, ""); print $0 "\r" }' "$login_headers"
+    printf '%s\n' "$csrf_set_cookie" | awk '{
+        gsub(/SameSite=Strict/, "SameSite=Lax")
+        printf "Set-Cookie: %s\r\n", $0
+    }'
+    awk '/^Set-Cookie: mwo_cp_session=/ {
+        sub(/\r$/, "")
+        gsub(/SameSite=Strict/, "SameSite=Lax")
+        print $0 "\r"
+    }' "$login_headers"
     printf 'Location: %s/\r\n' "$public_base"
     printf 'Cache-Control: no-store\r\nContent-Length: 0\r\n\r\n'
     exit 0
