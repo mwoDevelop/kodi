@@ -130,9 +130,12 @@ def test_watchdog_accepts_recent_success_and_active_run():
 
 
 def test_watchdog_fetches_schedule_and_manual_remediation_runs(monkeypatch):
-    observed = {}
+    observed = []
 
     class Response:
+        def __init__(self, payload):
+            self.payload = payload
+
         def __enter__(self):
             return self
 
@@ -140,18 +143,82 @@ def test_watchdog_fetches_schedule_and_manual_remediation_runs(monkeypatch):
             return None
 
         def read(self):
-            return b'{"workflow_runs":[]}'
+            return json.dumps({"workflow_runs": self.payload}).encode()
 
     def open_request(request, timeout):
-        observed["url"] = request.full_url
-        observed["timeout"] = timeout
-        return Response()
+        observed.append((request.full_url, timeout))
+        if "event=schedule" in request.full_url:
+            return Response(
+                [
+                    {
+                        "id": 1,
+                        "event": "schedule",
+                        "created_at": "2026-08-27T03:10:00Z",
+                    }
+                ]
+            )
+        if "event=workflow_dispatch" in request.full_url:
+            return Response(
+                [
+                    {
+                        "id": 2,
+                        "event": "workflow_dispatch",
+                        "created_at": "2026-08-27T04:10:00Z",
+                    }
+                ]
+            )
+        raise AssertionError(request.full_url)
 
     monkeypatch.setattr(upstream_watchdog, "urlopen", open_request)
-    assert fetch_runs("owner/repo", "sync.yml") == []
-    assert "event=" not in observed["url"]
-    assert "per_page=20" in observed["url"]
-    assert observed["timeout"] == 20
+    assert [run["id"] for run in fetch_runs("owner/repo", "sync.yml")] == [2, 1]
+    assert len(observed) == 2
+    assert all("per_page=20" in url and timeout == 20 for url, timeout in observed)
+    assert any("event=schedule" in url for url, _timeout in observed)
+    assert any("event=workflow_dispatch" in url for url, _timeout in observed)
+
+
+def test_watchdog_filtered_fetch_cannot_lose_schedule_behind_workflow_runs(
+    monkeypatch,
+):
+    requested_events = []
+
+    class Response:
+        def __init__(self, event):
+            self.event = event
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            runs = []
+            if self.event == "schedule":
+                runs = [
+                    {
+                        "id": 7,
+                        "event": "schedule",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "created_at": "2026-08-27T03:10:00Z",
+                        "updated_at": "2026-08-27T03:20:00Z",
+                    }
+                ]
+            return json.dumps({"workflow_runs": runs}).encode()
+
+    def open_request(request, timeout):
+        assert timeout == 20
+        event = request.full_url.rsplit("event=", 1)[-1]
+        requested_events.append(event)
+        return Response(event)
+
+    monkeypatch.setattr(upstream_watchdog, "urlopen", open_request)
+
+    runs = fetch_runs("owner/repo", "publish-pages.yml")
+
+    assert requested_events == ["schedule", "workflow_dispatch"]
+    assert [run["id"] for run in runs] == [7]
 
 
 def test_watchdog_dispatches_only_with_bearer_token(monkeypatch):
