@@ -101,7 +101,7 @@ Test skrótu wykazał, że QTS potrafi zastąpić właściwą regułę `app_prox
 ogólnym przekierowaniem do `/apps`, mimo poprawnych metadanych QPKG. Wariant
 0.1.x wymagał więc rekonfiguracji QNAP i nie spełniał wymagania trwałości.
 
-Korekta 0.2.0 zastępuje `QPKG_USE_PROXY` standardową przestrzenią CGI QPKG:
+Korekta 0.2.1 zastępuje `QPKG_USE_PROXY` standardową przestrzenią CGI QPKG:
 
 - skrót otwiera wyłącznie systemowy HTTPS QTS pod
   `/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/`;

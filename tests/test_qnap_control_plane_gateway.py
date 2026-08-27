@@ -56,6 +56,14 @@ def test_gateway_contains_no_credentials_or_generated_package(repository_root):
     assert "password=" not in text
 
 
+def test_gateway_uses_only_fixed_system_curl_locations(repository_root):
+    script = (
+        repository_root / "deploy/qnap-control-plane-gateway/shared/www/gateway.cgi"
+    ).read_text(encoding="utf-8")
+    assert "command -v" not in script
+    assert "for candidate in /sbin/curl /usr/bin/curl /usr/local/bin/curl" in script
+
+
 def test_gateway_http_request_redirects_to_system_https(repository_root):
     script = repository_root / "deploy/qnap-control-plane-gateway/shared/www/gateway.cgi"
     result = subprocess.run(

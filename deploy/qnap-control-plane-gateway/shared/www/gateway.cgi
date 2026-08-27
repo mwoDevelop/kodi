@@ -54,6 +54,16 @@ esac
 [ "$content_length" -le "$max_body" ] || \
     send_json_error 413 'Content Too Large' '{"error":"invalid_content_length"}'
 
+curl_bin=""
+for candidate in /sbin/curl /usr/bin/curl /usr/local/bin/curl; do
+    if [ -x "$candidate" ]; then
+        curl_bin="$candidate"
+        break
+    fi
+done
+[ -n "$curl_bin" ] || \
+    send_json_error 503 'Service Unavailable' '{"error":"gateway_unavailable"}'
+
 work_dir="/tmp/KodiCPGateway.$$"
 (umask 077 && mkdir "$work_dir") || \
     send_json_error 503 'Service Unavailable' '{"error":"gateway_unavailable"}'
@@ -61,7 +71,7 @@ trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
 headers="$work_dir/headers"
 body="$work_dir/body"
 
-set -- /usr/bin/curl --silent --show-error --max-time 15 \
+set -- "$curl_bin" --silent --show-error --max-time 15 \
     --request "$REQUEST_METHOD" --dump-header "$headers" --output "$body" \
     --header "Host: $HTTP_HOST" --header 'Accept-Encoding: identity'
 [ -z "${HTTP_ACCEPT:-}" ] || set -- "$@" --header "Accept: $HTTP_ACCEPT"
