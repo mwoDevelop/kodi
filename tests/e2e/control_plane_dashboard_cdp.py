@@ -28,6 +28,14 @@ def free_port():
 
 
 class DashboardService:
+    def __init__(self):
+        self.refreshes = 0
+
+    def refresh_once(self, include_schedules=True):
+        if include_schedules is not True:
+            raise RuntimeError("manual refresh omitted schedules")
+        self.refreshes += 1
+
     def dashboard(self):
         return {
             "schema": 1,
@@ -66,6 +74,11 @@ class DashboardService:
 
     def alerts(self):
         return self.dashboard()["alerts"]
+
+
+class AuditStore:
+    def append_audit(self, _actor, _action, _details):
+        return {"sequence": 1}
 
 
 class WebSocket:
@@ -176,10 +189,13 @@ def main(argv=None):
     from kodi_control_plane.http import Handler
 
     class BrowserHandler(Handler):
-        pass
+        def _actor(self):
+            return "e2e:chrome-cdp"
 
     BrowserHandler.surface = "api"
-    BrowserHandler.service = DashboardService()
+    dashboard_service = DashboardService()
+    BrowserHandler.service = dashboard_service
+    BrowserHandler.store = AuditStore()
     server = ThreadingHTTPServer(("127.0.0.1", free_port()), BrowserHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -212,9 +228,38 @@ def main(argv=None):
             raise RuntimeError("status sources were not rendered")
         if "github-kodi-publish-pages" not in value["schedules"]:
             raise RuntimeError("scheduled jobs were not rendered")
+        websocket.call(
+            "Runtime.evaluate",
+            {"expression": "document.querySelector('#refresh').click()"},
+        )
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and dashboard_service.refreshes != 1:
+            time.sleep(0.1)
+        if dashboard_service.refreshes != 1:
+            raise RuntimeError("manual refresh did not force source collection")
+        result = websocket.call(
+            "Runtime.evaluate",
+            {
+                "expression": (
+                    "JSON.stringify({"
+                    "busy:document.querySelector('#refresh').getAttribute('aria-busy'),"
+                    "error:document.querySelector('#error').textContent})"
+                ),
+                "returnByValue": True,
+            },
+        )
+        refresh_state = json.loads(result["result"]["value"])
+        if refresh_state != {"busy": "false", "error": ""}:
+            raise RuntimeError(f"manual refresh did not complete: {refresh_state}")
         print(
             json.dumps(
-                {"schema": 1, "status": "PASS", "browser": "Chrome CDP", **value},
+                {
+                    "schema": 1,
+                    "status": "PASS",
+                    "browser": "Chrome CDP",
+                    "manual_refresh": "PASS",
+                    **value,
+                },
                 sort_keys=True,
             )
         )
