@@ -35,6 +35,28 @@ python tools/qnap_images.py status
 python tools/qnap_images.py browser-bootstrap
 ```
 
+Kolektor procesów GitHub działa w trybie częściowym: retry błędów przejściowych
+jest ograniczone, a wynik każdego workflow i odczytu remediation ma własny stan.
+Deklaratywna macierz severity znajduje się w
+`manifests/control-plane-severity-policy.json` i jest wdrażana read-only razem z
+katalogiem harmonogramów.
+
+Uporządkowanie starych generacji enrollmentu jest osobną, zatwierdzaną operacją.
+Najpierw tworzy się prywatny plan, sprawdza widoczne generacje i SHA, a dopiero
+potem podaje ten sam SHA do atomowego apply:
+
+```bash
+python tools/qnap_profile_sync.py plan-production-revocation \
+  --logical-device-id bluestacks1 --freshness-seconds 900 \
+  --output .kodi-private/revocation-plans/bluestacks1.json
+python tools/qnap_profile_sync.py apply-production-revocation \
+  --plan .kodi-private/revocation-plans/bluestacks1.json \
+  --approve-sha256 sha256:<digest-z-poprzedniego-polecenia>
+```
+
+Polecenie apply przerywa całość bez częściowej zmiany, jeśli aktywny zbiór,
+najwyższa generacja albo jej świeżość zmieniły się od planowania.
+
 Po promocji immutable digestu wdrożenie produkcyjne wykonuje się przez zwykły
 `tools/kodi_ops.py rollout` albo diagnostycznie przez `qnap_images.py deploy`.
 

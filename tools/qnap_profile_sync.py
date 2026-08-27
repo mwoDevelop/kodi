@@ -43,17 +43,13 @@ ADMIN_PATH = re.compile(
     r"channels/[a-z0-9][a-z0-9._-]{0,63}/"
     r"(?:candidates|assignments|bootstrap-assignments|promote))$"
 )
-INSTALL_PATH = re.compile(
-    r"^/share/[A-Za-z0-9._-]+/\.qpkg/container-station$"
-)
+INSTALL_PATH = re.compile(r"^/share/[A-Za-z0-9._-]+/\.qpkg/container-station$")
 SMOKE_PORT = 28765
 PRODUCTION_PORT = 18765
 CONTAINER_STATION_SOCKET = "/var/run/docker.sock"
 SMOKE_PROJECT = "qnap-profile-sync-smoke"
 PRODUCTION_PROJECT = "qnap-profile-sync"
-PRODUCTION_ROOT = PurePosixPath(
-    "/share/CACHEDEV3_DATA/.mwodevelop/profile-sync"
-)
+PRODUCTION_ROOT = PurePosixPath("/share/CACHEDEV3_DATA/.mwodevelop/profile-sync")
 SYNTHETIC_REGISTRY = {
     "schema": 1,
     "keys": {
@@ -172,9 +168,7 @@ def qnap_connection_settings(references):
     if any(not references.get(name) for name in required):
         raise QnapError("missing private QNAP SSH key references")
     identity = Path(references["QNAP_SSH_KEY"]).expanduser().resolve()
-    known_hosts = Path(
-        references["QNAP_KNOWN_HOSTS"]
-    ).expanduser().resolve()
+    known_hosts = Path(references["QNAP_KNOWN_HOSTS"]).expanduser().resolve()
     if not identity.is_file() or not known_hosts.is_file():
         raise QnapError("QNAP SSH key files do not exist")
     if stat.S_IMODE(identity.stat().st_mode) & 0o077:
@@ -190,9 +184,7 @@ def qnap_connection_settings(references):
 
 
 def connect(repository, references_file):
-    references = load_private_references(
-        Path(repository) / references_file
-    )
+    references = load_private_references(Path(repository) / references_file)
     settings = qnap_connection_settings(references)
     try:
         import paramiko
@@ -228,10 +220,7 @@ def container_station(session):
     if not INSTALL_PATH.fullmatch(install):
         raise QnapError("unexpected Container Station installation path")
     docker = "%s/bin/docker" % install
-    prefix = (
-        "DOCKER_HOST=unix://%s " % CONTAINER_STATION_SOCKET
-        + shlex.quote(docker)
-    )
+    prefix = "DOCKER_HOST=unix://%s " % CONTAINER_STATION_SOCKET + shlex.quote(docker)
     return install, prefix
 
 
@@ -252,33 +241,26 @@ def _raid_summary(mdstat):
 def preflight(session):
     install, docker = container_station(session)
     architecture = session.execute("uname -m")
-    docker_version = session.execute(
-        docker + " version --format '{{.Server.Version}}'"
-    )
+    docker_version = session.execute(docker + " version --format '{{.Server.Version}}'")
     compose_version = session.execute(docker + " compose version --short")
     engine = session.execute(
-        docker
-        + " info --format '{{.Architecture}}|{{.Driver}}|{{.DockerRootDir}}'"
+        docker + " info --format '{{.Architecture}}|{{.Driver}}|{{.DockerRootDir}}'"
     ).split("|")
     if architecture != "armv7l" or engine[:2] != ["armv7l", "overlay2"]:
         raise QnapError("QNAP container architecture or storage driver differs")
     docker_root = PurePosixPath(engine[2]) if len(engine) == 3 else None
-    expected_suffix = PurePosixPath(
-        "Container/container-station-data/lib/docker"
-    )
-    if docker_root is None or not docker_root.is_relative_to(
-        PurePosixPath("/share")
-    ) or docker_root.parts[-4:] != expected_suffix.parts:
-        raise QnapError(
-            "QNAP Docker engine is not managed by Container Station GUI"
-        )
+    expected_suffix = PurePosixPath("Container/container-station-data/lib/docker")
+    if (
+        docker_root is None
+        or not docker_root.is_relative_to(PurePosixPath("/share"))
+        or docker_root.parts[-4:] != expected_suffix.parts
+    ):
+        raise QnapError("QNAP Docker engine is not managed by Container Station GUI")
     raid = _raid_summary(session.execute("cat /proc/mdstat"))
     return {
         "architecture": architecture,
         "compose_version": compose_version,
-        "container_station": str(
-            PurePosixPath(install).relative_to("/share")
-        ),
+        "container_station": str(PurePosixPath(install).relative_to("/share")),
         "docker_version": docker_version,
         "docker_root": str(docker_root),
         "raid": raid,
@@ -337,12 +319,9 @@ def production_environment(image, host_ip):
             "PROFILE_SYNC_PORT=%s" % PRODUCTION_PORT,
             "PROFILE_SYNC_HOST_IP=%s" % address,
             "PROFILE_SYNC_DATA=%s" % (root / "data"),
-            "PROFILE_SYNC_KEY_REGISTRY=%s"
-            % (root / "config" / "key-registry.json"),
-            "PROFILE_SYNC_TLS_CERT=%s"
-            % (root / "config" / "tls" / "server.crt"),
-            "PROFILE_SYNC_TLS_KEY=%s"
-            % (root / "config" / "tls" / "server.key"),
+            "PROFILE_SYNC_KEY_REGISTRY=%s" % (root / "config" / "key-registry.json"),
+            "PROFILE_SYNC_TLS_CERT=%s" % (root / "config" / "tls" / "server.crt"),
+            "PROFILE_SYNC_TLS_KEY=%s" % (root / "config" / "tls" / "server.key"),
             "PROFILE_SYNC_INTEGRATION_CLIENT_CA=%s"
             % (root / "config" / "tls" / "integration-clients-ca.crt"),
             "PROFILE_SYNC_SECRET_BROKER_CA=%s"
@@ -372,9 +351,7 @@ def _local_regular_file(path, description, private=False):
 
 
 def validate_production_files(key_registry, tls_certificate, tls_key):
-    registry = _local_regular_file(
-        key_registry, "key registry", private=True
-    )
+    registry = _local_regular_file(key_registry, "key registry", private=True)
     certificate = _local_regular_file(tls_certificate, "TLS certificate")
     key = _local_regular_file(tls_key, "TLS key", private=True)
     try:
@@ -431,9 +408,7 @@ def production_compose_command(docker):
 
 
 def verify_production(host_ip, ca_certificate, attempts=45):
-    ca_certificate = _local_regular_file(
-        ca_certificate, "TLS CA certificate"
-    )
+    ca_certificate = _local_regular_file(ca_certificate, "TLS CA certificate")
     context = ssl.create_default_context(cafile=str(ca_certificate))
     endpoint = "https://%s:%s/ready" % (host_ip, PRODUCTION_PORT)
     last_error = None
@@ -479,17 +454,11 @@ def deploy_production(
     report = preflight(session)
     if report["raid"] != {"array": "UU", "recovery_percent": None}:
         raise QnapError("production deployment requires healthy RAID [UU]")
-    security = validate_production_files(
-        key_registry, tls_certificate, tls_key
-    )
-    integration_ca = _local_regular_file(
-        ca_certificate, "TLS CA certificate"
-    )
+    security = validate_production_files(key_registry, tls_certificate, tls_key)
+    integration_ca = _local_regular_file(ca_certificate, "TLS CA certificate")
     secret_broker_private = Path(secret_broker_private or "")
     broker_files = {
-        "ca": _local_regular_file(
-            secret_broker_private / "ca.crt", "Secret Broker CA"
-        ),
+        "ca": _local_regular_file(secret_broker_private / "ca.crt", "Secret Broker CA"),
         "certificate": _local_regular_file(
             secret_broker_private / "client.crt",
             "Secret Broker client certificate",
@@ -509,9 +478,7 @@ def deploy_production(
     tls = config / "tls"
     marker = app / ".managed-by-mwodevelop"
     exists = session.execute(
-        "test -e {root} && printf exists".format(
-            root=shlex.quote(str(root))
-        ),
+        "test -e {root} && printf exists".format(root=shlex.quote(str(root))),
         allowed=(0, 1),
     )
     if exists:
@@ -531,20 +498,14 @@ def deploy_production(
             tls=shlex.quote(str(tls)),
         )
     )
-    session.execute(
-        "mkdir -p " + shlex.quote(str(config / "secret-broker"))
-    )
+    session.execute("mkdir -p " + shlex.quote(str(config / "secret-broker")))
     deployment = Path(repository) / "deploy" / "qnap-profile-sync"
-    compose_source = (deployment / "compose.yaml").read_text(
-        encoding="utf-8"
-    )
+    compose_source = (deployment / "compose.yaml").read_text(encoding="utf-8")
     production_overlay = (deployment / "compose.production.yaml").read_text(
         encoding="utf-8"
     )
     session.upload_text(str(app / "compose.yaml"), compose_source, 0o600)
-    session.upload_text(
-        str(app / "compose.production.yaml"), production_overlay, 0o600
-    )
+    session.upload_text(str(app / "compose.production.yaml"), production_overlay, 0o600)
     session.upload_text(
         str(app / "production.env"),
         production_environment(image, host_ip),
@@ -590,14 +551,11 @@ def deploy_production(
             registry=shlex.quote(str(config / "key-registry.json")),
             cert=shlex.quote(str(tls / "server.crt")),
             key=shlex.quote(str(tls / "server.key")),
-            integration_ca=shlex.quote(
-                str(tls / "integration-clients-ca.crt")
-            ),
+            integration_ca=shlex.quote(str(tls / "integration-clients-ca.crt")),
         )
     )
     session.execute(
-        "chown -R 10001:10001 "
-        + shlex.quote(str(config / "secret-broker"))
+        "chown -R 10001:10001 " + shlex.quote(str(config / "secret-broker"))
     )
     session.execute(
         docker
@@ -607,9 +565,7 @@ def deploy_production(
         + "mwodevelop-control >/dev/null"
     )
     compose = production_compose_command(docker)
-    rendered_payload = session.execute(
-        compose + " config --format json --no-normalize"
-    )
+    rendered_payload = session.execute(compose + " config --format json --no-normalize")
     try:
         rendered = json.loads(rendered_payload)
     except json.JSONDecodeError as error:
@@ -688,9 +644,7 @@ def download_production_backup(
         raise QnapError("local backup output already exists")
     session.download_tree(str(host_path), output)
     try:
-        epoch = json.loads(
-            (output / "inventory.json").read_text(encoding="utf-8")
-        )
+        epoch = json.loads((output / "inventory.json").read_text(encoding="utf-8"))
         database_path = output / "state.sqlite"
         digest = hashlib.sha256(database_path.read_bytes()).hexdigest()
         database = epoch.get("database")
@@ -717,9 +671,8 @@ def download_production_backup(
                 or hashlib.sha256(payload).hexdigest() != value
             ):
                 raise QnapError("downloaded backup blob differs")
-        if (
-            expected_blob_count is not None
-            and expected_blob_count != len(epoch["blobs"])
+        if expected_blob_count is not None and expected_blob_count != len(
+            epoch["blobs"]
         ):
             raise QnapError("downloaded backup blob inventory differs")
     except Exception:
@@ -735,9 +688,7 @@ def download_production_backup(
     }
 
 
-def create_production_pairing(
-    session, logical_device_id, channel, target_tags, output
-):
+def create_production_pairing(session, logical_device_id, channel, target_tags, output):
     if not SAFE_ID.fullmatch(logical_device_id):
         raise QnapError("invalid logical device id")
     if not SAFE_ID.fullmatch(channel):
@@ -815,6 +766,108 @@ def revoke_production_enrollment(session, enrollment_id):
     return document
 
 
+def plan_production_revocation(session, logical_device_id, freshness_seconds, output):
+    """Create and download a private CAS plan without exposing enrollment IDs."""
+    if not SAFE_ID.fullmatch(logical_device_id):
+        raise QnapError("invalid logical device id")
+    if not isinstance(freshness_seconds, int) or freshness_seconds < 0:
+        raise QnapError("invalid freshness threshold")
+    output = Path(output)
+    if output.exists():
+        raise QnapError("local revocation plan already exists")
+    plan_name = "%s-%s.json" % (logical_device_id, int(time.time()))
+    host_directory = production_root() / "data" / "revocation-plans"
+    host_path = host_directory / plan_name
+    container_path = PurePosixPath("/data/revocation-plans") / plan_name
+    session.execute(
+        "mkdir -p "
+        + shlex.quote(str(host_directory))
+        + " && chown 10001:10001 "
+        + shlex.quote(str(host_directory))
+        + " && chmod 700 "
+        + shlex.quote(str(host_directory))
+        + " && test ! -e "
+        + shlex.quote(str(host_path))
+    )
+    _install, docker = container_station(session)
+    command = (
+        production_compose_command(docker)
+        + " exec -T profile-sync python -m profile_sync_server.admin"
+        + " --database /data/state.sqlite plan-revoke-superseded"
+        + " --logical-device-id "
+        + shlex.quote(logical_device_id)
+        + " --freshness-seconds "
+        + str(freshness_seconds)
+        + " --output "
+        + shlex.quote(str(container_path))
+    )
+    try:
+        summary = json.loads(session.execute(command, timeout=120))
+    except json.JSONDecodeError as error:
+        raise QnapError("production revocation plan returned invalid JSON") from error
+    if (
+        summary.get("logical_device_id") != logical_device_id
+        or not re.fullmatch(r"sha256:[a-f0-9]{64}", str(summary.get("plan_sha256")))
+        or not isinstance(summary.get("target_generations"), list)
+    ):
+        raise QnapError("production revocation plan returned invalid identity")
+    session.download_file(str(host_path), output)
+    if stat.S_IMODE(output.stat().st_mode) != 0o600:
+        raise QnapError("downloaded revocation plan permissions differ")
+    return {
+        **{key: value for key, value in summary.items() if key != "output"},
+        "plan_file": str(output),
+        "remote_plan": str(host_path),
+    }
+
+
+def apply_production_revocation(session, plan_file, approved_sha256):
+    """Upload one approved private plan and apply it through the host-only CLI."""
+    plan_file = _local_regular_file(plan_file, "revocation plan", private=True)
+    try:
+        plan = json.loads(plan_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise QnapError("revocation plan is invalid JSON") from error
+    if (
+        not re.fullmatch(r"sha256:[a-f0-9]{64}", str(approved_sha256))
+        or plan.get("plan_sha256") != approved_sha256
+    ):
+        raise QnapError("revocation plan approval differs")
+    suffix = approved_sha256.removeprefix("sha256:")
+    host_directory = production_root() / "data" / "revocation-plans"
+    host_path = host_directory / ("approved-" + suffix + ".json")
+    container_path = PurePosixPath("/data/revocation-plans") / host_path.name
+    session.execute(
+        "mkdir -p "
+        + shlex.quote(str(host_directory))
+        + " && chown 10001:10001 "
+        + shlex.quote(str(host_directory))
+        + " && chmod 700 "
+        + shlex.quote(str(host_directory))
+        + " && test ! -e "
+        + shlex.quote(str(host_path))
+    )
+    session.upload_text(str(host_path), plan_file.read_text(encoding="utf-8"), 0o600)
+    session.execute("chown 10001:10001 " + shlex.quote(str(host_path)))
+    _install, docker = container_station(session)
+    command = (
+        production_compose_command(docker)
+        + " exec -T profile-sync python -m profile_sync_server.admin"
+        + " --database /data/state.sqlite apply-revoke-superseded"
+        + " --input "
+        + shlex.quote(str(container_path))
+        + " --approve-sha256 "
+        + shlex.quote(approved_sha256)
+    )
+    try:
+        result = json.loads(session.execute(command, timeout=120))
+    except json.JSONDecodeError as error:
+        raise QnapError("production revocation apply returned invalid JSON") from error
+    if result.get("plan_sha256") != approved_sha256:
+        raise QnapError("production revocation apply returned invalid identity")
+    return result
+
+
 def _production_loopback_post(
     session,
     path,
@@ -827,11 +880,13 @@ def _production_loopback_post(
         "https://127.0.0.1:8765",
     }:
         raise QnapError("invalid production loopback endpoint")
-    payload = base64.urlsafe_b64encode(
-        json.dumps(
-            document, sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
-    ).rstrip(b"=").decode("ascii")
+    payload = (
+        base64.urlsafe_b64encode(
+            json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        )
+        .rstrip(b"=")
+        .decode("ascii")
+    )
     _install, docker = container_station(session)
     program = (
         "import base64,json,ssl,sys,urllib.request;"
@@ -902,9 +957,7 @@ def production_pair_request(
     )
 
 
-def production_admin_request(
-    session, path, document, idempotency_key
-):
+def production_admin_request(session, path, document, idempotency_key):
     """Submit an already signed request through SSH and container loopback."""
     if not ADMIN_PATH.fullmatch(str(path)):
         raise QnapError("invalid production admin path")
@@ -912,9 +965,7 @@ def production_admin_request(
         raise QnapError("production admin request must be an object")
     if not isinstance(idempotency_key, str) or len(idempotency_key) < 8:
         raise QnapError("invalid production admin idempotency key")
-    return _production_loopback_post(
-        session, path, document, idempotency_key
-    )
+    return _production_loopback_post(session, path, document, idempotency_key)
 
 
 def smoke_deploy(session, repository, image, run_id):
@@ -988,13 +1039,9 @@ def smoke_deploy(session, repository, image, run_id):
         try:
             rendered = json.loads(rendered_payload)
         except json.JSONDecodeError as error:
-            raise QnapError(
-                "remote Compose returned invalid policy JSON"
-            ) from error
+            raise QnapError("remote Compose returned invalid policy JSON") from error
         rendered["_mwodevelop_source_policy"] = {
-            "bind_create_host_path_false": sorted(
-                explicit_bind_targets(compose_source)
-            )
+            "bind_create_host_path_false": sorted(explicit_bind_targets(compose_source))
         }
         policy = validate_policy(rendered, "smoke")
         session.execute(compose + " up -d --pull always", timeout=240)
@@ -1015,8 +1062,7 @@ def verify(session):
     _install, docker = container_station(session)
     for _attempt in range(30):
         payload = session.execute(
-            "wget --no-check-certificate -qO- https://127.0.0.1:%s/ready"
-            % SMOKE_PORT,
+            "wget --no-check-certificate -qO- https://127.0.0.1:%s/ready" % SMOKE_PORT,
             allowed=(0, 1, 4, 8),
             timeout=5,
         )
@@ -1058,8 +1104,7 @@ def verify(session):
         allowed=(0,),
     )
     raise QnapError(
-        "smoke readiness timed out; container state: %s"
-        % (diagnostics or "missing")
+        "smoke readiness timed out; container state: %s" % (diagnostics or "missing")
     )
 
 
@@ -1067,9 +1112,7 @@ def destroy_smoke(session, run_id, ignore_missing=False):
     install, docker = container_station(session)
     root = smoke_root(install, run_id)
     exists = session.execute(
-        "test -d {root} && printf exists".format(
-            root=shlex.quote(str(root))
-        ),
+        "test -d {root} && printf exists".format(root=shlex.quote(str(root))),
         allowed=(0, 1),
     )
     if not exists:
@@ -1090,10 +1133,7 @@ def destroy_smoke(session, run_id, ignore_missing=False):
         timeout=120,
     )
     remaining = status(session, SMOKE_PROJECT)
-    if any(
-        remaining[key]
-        for key in ("containers", "networks", "volumes")
-    ):
+    if any(remaining[key] for key in ("containers", "networks", "volumes")):
         raise QnapError("smoke resources remain after Compose down")
     if not ignore_missing:
         session.execute("test -d " + shlex.quote(str(root)))
@@ -1101,9 +1141,7 @@ def destroy_smoke(session, run_id, ignore_missing=False):
         "rm -rf -- " + shlex.quote(str(root)),
         allowed=(0, 1),
     )
-    session.execute(
-        "test ! -e " + shlex.quote(str(root))
-    )
+    session.execute("test ! -e " + shlex.quote(str(root)))
     session.execute(
         "rmdir " + shlex.quote(str(root.parent)),
         allowed=(0, 1),
@@ -1150,6 +1188,13 @@ def main():
     pairing.add_argument("--output", required=True)
     revoke = subparsers.add_parser("revoke-production-enrollment")
     revoke.add_argument("--enrollment-id", required=True)
+    plan_revoke = subparsers.add_parser("plan-production-revocation")
+    plan_revoke.add_argument("--logical-device-id", required=True)
+    plan_revoke.add_argument("--freshness-seconds", type=int, default=900)
+    plan_revoke.add_argument("--output", required=True)
+    apply_revoke = subparsers.add_parser("apply-production-revocation")
+    apply_revoke.add_argument("--plan", required=True)
+    apply_revoke.add_argument("--approve-sha256", required=True)
     admin_request = subparsers.add_parser("admin-request")
     admin_request.add_argument("--path", required=True)
     admin_request.add_argument("--document", required=True)
@@ -1184,19 +1229,13 @@ def main():
                 args.ca_certificate,
             )
         elif args.command == "verify-production":
-            result = verify_production(
-                args.host_ip, args.ca_certificate
-            )
+            result = verify_production(args.host_ip, args.ca_certificate)
         elif args.command == "production-status":
             result = status(session, PRODUCTION_PROJECT)
         elif args.command == "backup-production":
-            result = backup_production(
-                session, args.backup_id, args.output
-            )
+            result = backup_production(session, args.backup_id, args.output)
         elif args.command == "download-production-backup":
-            result = download_production_backup(
-                session, args.backup_id, args.output
-            )
+            result = download_production_backup(session, args.backup_id, args.output)
         elif args.command == "create-production-pairing":
             result = create_production_pairing(
                 session,
@@ -1209,6 +1248,17 @@ def main():
             result = revoke_production_enrollment(
                 session,
                 args.enrollment_id,
+            )
+        elif args.command == "plan-production-revocation":
+            result = plan_production_revocation(
+                session,
+                args.logical_device_id,
+                args.freshness_seconds,
+                args.output,
+            )
+        elif args.command == "apply-production-revocation":
+            result = apply_production_revocation(
+                session, args.plan, args.approve_sha256
             )
         elif args.command == "admin-request":
             result = production_admin_request(

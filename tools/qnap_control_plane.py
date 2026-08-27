@@ -28,14 +28,10 @@ except ModuleNotFoundError:
     from tools.qnap_control_plane_gateway import PUBLIC_BASE
 
 
-IMAGE = re.compile(
-    r"^ghcr\.io/mwodevelop/kodi-control-plane@sha256:[a-f0-9]{64}$"
-)
+IMAGE = re.compile(r"^ghcr\.io/mwodevelop/kodi-control-plane@sha256:[a-f0-9]{64}$")
 PROJECT = "qnap-control-plane"
 NETWORK = "mwodevelop-control"
-ROOT = PurePosixPath(
-    "/share/CACHEDEV3_DATA/.mwodevelop/control-plane"
-)
+ROOT = PurePosixPath("/share/CACHEDEV3_DATA/.mwodevelop/control-plane")
 PORT = 19443
 BROWSER_BACKEND_PORT = 19445
 BROWSER_PATH = PUBLIC_BASE + "/"
@@ -77,9 +73,7 @@ def _local_file(path, description, private=False):
     return path.resolve()
 
 
-def validate_private_files(
-    private, secret_broker_private=None, watchdog_private=None
-):
+def validate_private_files(private, secret_broker_private=None, watchdog_private=None):
     private = Path(private)
     broker = Path(secret_broker_private or private / "secret-broker")
     watchdog = Path(watchdog_private or private / "watchdog")
@@ -128,9 +122,7 @@ def validate_private_files(
         "checkpoint_key": _local_file(
             private / "audit-checkpoint.key", "audit checkpoint key", private=True
         ),
-        "profile_ca": _local_file(
-            private / "profile-sync/ca.crt", "Profile Sync CA"
-        ),
+        "profile_ca": _local_file(private / "profile-sync/ca.crt", "Profile Sync CA"),
         "profile_client_certificate": _local_file(
             private / "profile-sync/client.crt", "Profile Sync client certificate"
         ),
@@ -161,9 +153,7 @@ def validate_private_files(
         server = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         server.load_cert_chain(files["tls_certificate"], files["tls_key"])
         operator = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        operator.load_cert_chain(
-            files["operator_certificate"], files["operator_key"]
-        )
+        operator.load_cert_chain(files["operator_certificate"], files["operator_key"])
         profile = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         profile.load_cert_chain(
             files["profile_client_certificate"], files["profile_client_key"]
@@ -191,9 +181,7 @@ def validate_private_files(
     except (OSError, ssl.SSLError) as error:
         raise ControlPlaneError("certificate and key pair differs") from error
     try:
-        _verify_certificate(
-            files["client_ca"], files["tls_certificate"], "sslserver"
-        )
+        _verify_certificate(files["client_ca"], files["tls_certificate"], "sslserver")
         _verify_certificate(
             files["client_ca"], files["operator_certificate"], "sslclient"
         )
@@ -232,7 +220,9 @@ def environment(image, host_ip):
     try:
         address = ipaddress.ip_address(host_ip)
     except ValueError as error:
-        raise ControlPlaneError("Control Plane listener must be an IP address") from error
+        raise ControlPlaneError(
+            "Control Plane listener must be an IP address"
+        ) from error
     if not address.is_private or address.is_loopback or address.is_unspecified:
         raise ControlPlaneError("Control Plane listener must be a private LAN address")
     config = ROOT / "config"
@@ -276,6 +266,7 @@ def environment(image, host_ip):
             f"CONTROL_PLANE_GITHUB_TOKEN={config / 'github/token'}",
             f"CONTROL_PLANE_SCHEDULE_CATALOG={config / 'catalogs/control-plane-schedules.json'}",
             f"CONTROL_PLANE_STATUS_SOURCE_CATALOG={config / 'catalogs/control-plane-status-sources.json'}",
+            f"CONTROL_PLANE_SEVERITY_POLICY={config / 'catalogs/control-plane-severity-policy.json'}",
             f"CONTROL_PLANE_DEVICE_INVENTORY={config / 'catalogs/device-inventory.json'}",
             "CONTROL_PLANE_UID=10001",
             "CONTROL_PLANE_GID=10001",
@@ -302,7 +293,10 @@ def _absolute_bind(item, target, source_targets):
     source = str(item.get("source", ""))
     if not PurePosixPath(source).is_absolute() or source == "/":
         raise ControlPlaneError(f"{target} source must be a safe absolute path")
-    if item.get("bind", {}).get("create_host_path") is True or target not in source_targets:
+    if (
+        item.get("bind", {}).get("create_host_path") is True
+        or target not in source_targets
+    ):
         raise ControlPlaneError(f"{target} must disable host path creation")
     return source
 
@@ -325,7 +319,9 @@ def validate_policy(document):
     }
     for name, service in services.items():
         if "container_name" in service or service.get("network_mode") == "host":
-            raise ControlPlaneError("fixed container name and host network are forbidden")
+            raise ControlPlaneError(
+                "fixed container name and host network are forbidden"
+            )
         if not IMAGE.fullmatch(str(service.get("image", ""))):
             raise ControlPlaneError("Control Plane image is not immutable")
         if service.get("read_only") is not True or service.get("init") is not True:
@@ -336,9 +332,15 @@ def validate_policy(document):
             raise ControlPlaneError("Control Plane capabilities policy differs")
         if "no-new-privileges:true" not in service.get("security_opt", []):
             raise ControlPlaneError("Control Plane no-new-privileges policy differs")
-        if service.get("privileged") is True or str(service.get("user")) != "10001:10001":
+        if (
+            service.get("privileged") is True
+            or str(service.get("user")) != "10001:10001"
+        ):
             raise ControlPlaneError("Control Plane privilege policy differs")
-        if (int(service.get("mem_limit", 0)), int(service.get("pids_limit", 0))) != limits[name]:
+        if (
+            int(service.get("mem_limit", 0)),
+            int(service.get("pids_limit", 0)),
+        ) != limits[name]:
             raise ControlPlaneError("Control Plane resource policy differs")
         if any("docker.sock" in str(item) for item in service.get("volumes", [])):
             raise ControlPlaneError("Control Plane must not mount a Docker socket")
@@ -393,6 +395,7 @@ def validate_policy(document):
         "/run/control-plane/catalogs/schedules.json",
         "/run/control-plane/catalogs/status-sources.json",
         "/run/control-plane/catalogs/device-inventory.json",
+        "/run/control-plane/catalogs/severity-policy.json",
     }
     web_targets = {
         "/run/control-plane/web/core-ca.crt",
@@ -438,7 +441,10 @@ def validate_policy(document):
     if set(authz.get("networks", {})) != {"browser-auth"}:
         raise ControlPlaneError("authz network set differs")
     configured_network = document.get("networks", {}).get("control-plane", {})
-    if configured_network.get("name") != NETWORK or configured_network.get("external") is not True:
+    if (
+        configured_network.get("name") != NETWORK
+        or configured_network.get("external") is not True
+    ):
         raise ControlPlaneError("Control Plane shared network differs")
     if document.get("networks", {}).get("browser-auth", {}).get("internal") is not True:
         raise ControlPlaneError("browser auth network must be internal")
@@ -462,6 +468,8 @@ def validate_policy(document):
         "--schedule-catalog /run/control-plane/catalogs/schedules.json",
         "--status-source-catalog /run/control-plane/catalogs/status-sources.json",
         "--device-inventory /run/control-plane/catalogs/device-inventory.json",
+        "--severity-policy /run/control-plane/catalogs/severity-policy.json",
+        "--github-schedule-partial-collection",
     ):
         if required not in command:
             raise ControlPlaneError("Control Plane command policy differs")
@@ -525,7 +533,9 @@ def verify_api(host_ip, ca, client_certificate, client_key, attempts=30):
         except (OSError, URLError, ssl.SSLError, json.JSONDecodeError) as error:
             last_error = error
         time.sleep(2)
-    raise ControlPlaneError("Control Plane mTLS API verification failed") from last_error
+    raise ControlPlaneError(
+        "Control Plane mTLS API verification failed"
+    ) from last_error
 
 
 def verify_browser(host_ip, _ca=None, attempts=30):
@@ -566,9 +576,8 @@ def create_browser_bootstrap(session, reset=False):
         document = json.loads(session.execute(command, timeout=30))
     except json.JSONDecodeError as error:
         raise ControlPlaneError("browser bootstrap returned invalid JSON") from error
-    if (
-        not isinstance(document.get("code"), str)
-        or not isinstance(document.get("expires_at"), int)
+    if not isinstance(document.get("code"), str) or not isinstance(
+        document.get("expires_at"), int
     ):
         raise ControlPlaneError("browser bootstrap response differs")
     return document
@@ -593,9 +602,7 @@ def deploy(
     report = preflight(session)
     if report["raid"] != {"array": "UU", "recovery_percent": None}:
         raise ControlPlaneError("Control Plane deployment requires healthy RAID [UU]")
-    files = validate_private_files(
-        private, secret_broker_private, watchdog_private
-    )
+    files = validate_private_files(private, secret_broker_private, watchdog_private)
     if not github_token or any(char in github_token for char in "\r\n"):
         raise ControlPlaneError("Control Plane GitHub token is missing or invalid")
     if (
@@ -630,9 +637,16 @@ def deploy(
         + " ".join(
             shlex.quote(str(path))
             for path in (
-                app, data, authz_data, ROOT / "backups", config / "tls",
-                config / "web", config / "authz",
-                config / "profile-sync", config / "secret-broker", config / "watchdog",
+                app,
+                data,
+                authz_data,
+                ROOT / "backups",
+                config / "tls",
+                config / "web",
+                config / "authz",
+                config / "profile-sync",
+                config / "secret-broker",
+                config / "watchdog",
                 config / "github",
                 config / "catalogs",
             )
@@ -646,14 +660,10 @@ def deploy(
         config / "tls/server.key": (files["tls_key"], 0o400),
         config / "tls/clients-ca.crt": (files["client_ca"], 0o400),
         config / "web/core-ca.crt": (files["web_core_ca"], 0o400),
-        config / "web/core-client.crt": (
-            files["web_core_client_certificate"], 0o400
-        ),
+        config / "web/core-client.crt": (files["web_core_client_certificate"], 0o400),
         config / "web/core-client.key": (files["web_core_client_key"], 0o400),
         config / "web/authz-ca.crt": (files["web_authz_ca"], 0o400),
-        config / "web/authz-client.crt": (
-            files["web_authz_client_certificate"], 0o400
-        ),
+        config / "web/authz-client.crt": (files["web_authz_client_certificate"], 0o400),
         config / "web/authz-client.key": (files["web_authz_client_key"], 0o400),
         config / "authz/aead.key": (files["authz_key"], 0o400),
         config / "authz/server.crt": (files["authz_tls_certificate"], 0o400),
@@ -662,12 +672,14 @@ def deploy(
         config / "audit-checkpoint.key": (files["checkpoint_key"], 0o400),
         config / "profile-sync/ca.crt": (files["profile_ca"], 0o400),
         config / "profile-sync/client.crt": (
-            files["profile_client_certificate"], 0o400
+            files["profile_client_certificate"],
+            0o400,
         ),
         config / "profile-sync/client.key": (files["profile_client_key"], 0o400),
         config / "secret-broker/ca.crt": (files["broker_ca"], 0o400),
         config / "secret-broker/client.crt": (
-            files["broker_client_certificate"], 0o400
+            files["broker_client_certificate"],
+            0o400,
         ),
         config / "secret-broker/client.key": (files["broker_client_key"], 0o400),
         config / "watchdog/ca.crt": (files["watchdog_ca"], 0o400),
@@ -684,11 +696,13 @@ def deploy(
             repository / "manifests/control-plane-status-sources.json",
             0o400,
         ),
+        config / "catalogs/control-plane-severity-policy.json": (
+            repository / "manifests/control-plane-severity-policy.json",
+            0o400,
+        ),
     }
     for destination, (source, mode) in uploads.items():
-        session.upload_text(
-            str(destination), source.read_text(encoding="utf-8"), mode
-        )
+        session.upload_text(str(destination), source.read_text(encoding="utf-8"), mode)
     session.upload_text(
         str(config / "catalogs/device-inventory.json"),
         json.dumps(device_inventory, indent=2, sort_keys=True) + "\n",
@@ -717,9 +731,7 @@ def deploy(
         session.execute(compose + " config --format json --no-normalize")
     )
     rendered["_mwodevelop_source_policy"] = {
-        "bind_create_host_path_false": sorted(
-            explicit_bind_targets(compose_source)
-        )
+        "bind_create_host_path_false": sorted(explicit_bind_targets(compose_source))
     }
     policy = validate_policy(rendered)
     session.execute(compose + " up -d --pull always", timeout=360)

@@ -72,12 +72,15 @@ services:
       - "60"
       - --schedule-refresh-seconds
       - "900"
+      - --github-schedule-partial-collection
       - --schedule-catalog
       - /run/control-plane/catalogs/schedules.json
       - --status-source-catalog
       - /run/control-plane/catalogs/status-sources.json
       - --device-inventory
       - /run/control-plane/catalogs/device-inventory.json
+      - --severity-policy
+      - /run/control-plane/catalogs/severity-policy.json
     ports:
       - name: control-plane-api
         target: 9443
@@ -195,6 +198,12 @@ services:
       - type: bind
         source: ${CONTROL_PLANE_DEVICE_INVENTORY:?set redacted device inventory}
         target: /run/control-plane/catalogs/device-inventory.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CONTROL_PLANE_SEVERITY_POLICY:?set severity policy}
+        target: /run/control-plane/catalogs/severity-policy.json
         read_only: true
         bind:
           create_host_path: false

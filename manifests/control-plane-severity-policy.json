@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "rules": [
+    {
+      "condition_axis": "scheduler",
+      "reason_code": "SCHEDULE_DELAYED",
+      "severity": "warning",
+      "overall_state": "DEGRADED",
+      "condition_family": "scheduler"
+    },
+    {
+      "condition_axis": "scheduler",
+      "reason_code": "EXPECTED_RUN_NOT_STARTED",
+      "severity": "critical",
+      "overall_state": "DEGRADED",
+      "condition_family": "scheduler"
+    },
+    {
+      "condition_axis": "run",
+      "reason_code": "LAST_RUN_FAILED",
+      "severity": "critical",
+      "overall_state": "DEGRADED",
+      "condition_family": "run"
+    },
+    {
+      "condition_axis": "collection",
+      "reason_code": "GITHUB_COLLECTION_PARTIAL",
+      "severity": "warning",
+      "overall_state": "DEGRADED",
+      "condition_family": "collection"
+    },
+    {
+      "condition_axis": "collection",
+      "reason_code": "GITHUB_COLLECTION_ERROR",
+      "severity": "critical",
+      "overall_state": "DEGRADED",
+      "condition_family": "collection"
+    },
+    {
+      "condition_axis": "enrollment",
+      "reason_code": "MULTIPLE_ACTIVE_GENERATIONS",
+      "severity": "warning",
+      "overall_state": "DEGRADED",
+      "condition_family": "enrollment"
+    },
+    {
+      "condition_axis": "heartbeat",
+      "reason_code": "DEVICE_HEARTBEAT_FAILED",
+      "severity": "critical",
+      "overall_state": "DEGRADED",
+      "condition_family": "heartbeat"
+    }
+  ]
+}

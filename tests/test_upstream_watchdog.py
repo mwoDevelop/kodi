@@ -7,6 +7,7 @@ from tools import upstream_watchdog
 from tools.control_plane_catalog import (
     compare_watchdog,
     load_schedules,
+    load_severity_policy,
     load_status_sources,
 )
 from tools.upstream_watchdog import evaluate, fetch_runs, load_manifest, validate_status
@@ -360,6 +361,7 @@ def test_versioned_manifest_is_valid():
 def test_control_plane_catalogs_are_valid_and_watchdog_thresholds_match():
     schedules = load_schedules("manifests/control-plane-schedules.json")
     sources = load_status_sources("manifests/control-plane-status-sources.json")
+    severity = load_severity_policy("manifests/control-plane-severity-policy.json")
     compare_watchdog(schedules, "manifests/upstream-watchdog.json")
 
     github_jobs = [
@@ -367,6 +369,7 @@ def test_control_plane_catalogs_are_valid_and_watchdog_thresholds_match():
     ]
     assert len(github_jobs) == 11
     assert len(sources["sources"]) == 6
+    assert len(severity["rules"]) == 7
     assert {(item["repository"], item["workflow"]) for item in github_jobs} == set(
         SCHEDULED_WORKFLOWS
     )
