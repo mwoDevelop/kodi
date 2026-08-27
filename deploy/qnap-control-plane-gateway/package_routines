@@ -1,2 +1,35 @@
-# The gateway owns only QTS package metadata. The backend remains managed by
-# the qnap-control-plane Compose project and is never started from this QPKG.
+# Expose the package-owned CGI directory through QTS' stable QPKG CGI namespace.
+pkg_post_install() {
+    cgi_root="/home/httpd/cgi-bin/qpkg"
+    cgi_link="$cgi_root/$QPKG_NAME"
+    cgi_target="$SYS_QPKG_DIR/www"
+
+    $CMD_MKDIR -p "$cgi_root"
+    if [ -e "$cgi_link" ] && [ ! -L "$cgi_link" ]; then
+        err_log "Refusing to replace non-symlink CGI path: $cgi_link"
+    fi
+    $CMD_RM -f "$cgi_link"
+    $CMD_LN -s "$cgi_target" "$cgi_link"
+
+    old_init="/etc/init.d/$QPKG_NAME.sh"
+    if [ -L "$old_init" ]; then
+        init_target=`readlink "$old_init"`
+        case "$init_target" in
+            "$SYS_QPKG_DIR"/*) $CMD_RM -f "$old_init" ;;
+        esac
+    fi
+
+    # An upgrade from 0.1.x must not leave the volatile Apache proxy metadata.
+    $CMD_SETCFG "$QPKG_NAME" Use_Proxy "0" -f "$SYS_QPKG_CONFIG_FILE"
+    $CMD_SETCFG "$QPKG_NAME" Proxy_Path "" -f "$SYS_QPKG_CONFIG_FILE"
+}
+
+PKG_PRE_REMOVE="{
+    cgi_link=\"/home/httpd/cgi-bin/qpkg/$QPKG_NAME\"
+    if [ -L \"\$cgi_link\" ]; then
+        link_target=\`readlink \"\$cgi_link\"\`
+        case \"\$link_target\" in
+            \"$SYS_QPKG_DIR\"/www) $CMD_RM -f \"\$cgi_link\" ;;
+        esac
+    fi
+}"

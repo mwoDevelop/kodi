@@ -20,9 +20,11 @@ except ModuleNotFoundError:
 
 
 NAME = "KodiCPGateway"
-VERSION = "0.1.1"
+VERSION = "0.2.0"
 BACKEND_PORT = 19445
-PROXY_PATH = "/control-plane"
+CGI_ROOT = f"/cgi-bin/qpkg/{NAME}"
+PUBLIC_BASE = f"{CGI_ROOT}/gateway.cgi/control-plane"
+WEBUI = PUBLIC_BASE + "/"
 QDK_VERSION = "2.5.3"
 QDK_URL = "https://github.com/qnap-dev/QDK/releases/download/v2.5.3/qdk_2.5.3_amd64.deb"
 QDK_SHA256 = "17b3841b7d4590a4ee025844ba583304b5e3c497d9fa8934d5175131d3908022"
@@ -45,12 +47,10 @@ def validate_source(repository):
     expected = {
         "QPKG_NAME": NAME,
         "QPKG_VER": VERSION,
-        # Keep the desktop target canonical. QTS still adds a separator to the
-        # generated proxy destination; the BFF normalizes that known hop.
-        "QPKG_WEBUI": PROXY_PATH,
-        "QPKG_WEB_PORT": str(BACKEND_PORT),
-        "QPKG_USE_PROXY": "1",
-        "QPKG_PROXY_PATH": PROXY_PATH,
+        "QPKG_WEBUI": WEBUI,
+        "QPKG_WEB_PORT": "-2",
+        "QPKG_WEB_SSL_PORT": "-1",
+        "QPKG_USE_PROXY": "0",
         "QPKG_DESKTOP_APP": "0",
         "QPKG_VISIBLE": "0",
         "QPKG_FORCE_VISIBLE": "1",
@@ -58,20 +58,24 @@ def validate_source(repository):
     for key, value in expected.items():
         if not re.search(rf'^{key}="{re.escape(value)}"$', config, re.MULTILINE):
             raise GatewayError(f"unsafe or missing QPKG field: {key}")
-    service = root / "shared" / f"{NAME}.sh"
-    if not service.is_file() or service.is_symlink():
-        raise GatewayError("gateway service program is missing or unsafe")
-    forbidden = ("password", "secret", "token", "private_key")
+    if "QPKG_SERVICE_PROGRAM" in config or "QPKG_PROXY_PATH" in config:
+        raise GatewayError("gateway must not register a service or QTS proxy")
+    gateway = root / "shared/www/gateway.cgi"
+    if not gateway.is_file() or gateway.is_symlink():
+        raise GatewayError("gateway CGI is missing or unsafe")
+    forbidden_assignment = re.compile(
+        r"(?im)^\s*(password|secret|token|private_key)\s*="
+    )
     for path in root.rglob("*"):
-        if path.is_file() and any(
-            word in path.read_text(encoding="utf-8").lower() for word in forbidden
+        if path.is_file() and forbidden_assignment.search(
+            path.read_text(encoding="utf-8")
         ):
             raise GatewayError("gateway package must not contain secrets")
     return {
         "name": NAME,
         "version": VERSION,
         "backend_port": BACKEND_PORT,
-        "proxy_path": PROXY_PATH,
+        "public_base": PUBLIC_BASE,
     }
 
 
@@ -168,51 +172,8 @@ def install(session, repository):
         session.execute(
             "/sbin/setcfg " + NAME + " Enable TRUE -f /etc/config/qpkg.conf"
         )
-        session.execute(
-            "/etc/init.d/" + NAME + ".sh start",
-            allowed=(0, 1),
-            timeout=60,
-        )
         metadata = verify(session)
-    return {**metadata, **ensure_proxy(session)}
-
-
-def ensure_proxy(session):
-    """Regenerate and activate the QTS proxy rule after every deployment.
-
-    QTS can preserve valid QPKG metadata while replacing ``app_proxy.conf``
-    with a stale generic ``/apps`` rewrite after a web-server restart. Enabling
-    the package regenerates the supported rule; Qthttpd is restarted only when
-    the live route still returns 404.
-    """
-
-    rule = (
-        f'ProxyPass "{PROXY_PATH}" '
-        f'"http://127.0.0.1:{BACKEND_PORT}{PROXY_PATH}" retry=0'
-    )
-    quoted_rule = shlex.quote(rule)
-    result = session.execute(
-        "/sbin/qpkg_cli --enable "
-        + NAME
-        + " >/dev/null 2>&1 || true; sleep 3; "
-        + "grep -Fx "
-        + quoted_rule
-        + " /etc/app_proxy.conf >/dev/null || exit 41; "
-        + "code=$(curl -ksS -o /dev/null -w '%{http_code}' "
-        + f"https://127.0.0.1{PROXY_PATH}/login || true); "
-        + "if [ \"$code\" = 000 ] || [ \"$code\" = 404 ]; then "
-        + "/etc/init.d/Qthttpd.sh restart >/tmp/"
-        + NAME
-        + "-qthttpd-restart.log 2>&1; attempt=0; "
-        + "until curl -ksS -o /dev/null https://127.0.0.1/cgi-bin/; do "
-        + "attempt=$((attempt + 1)); [ $attempt -lt 30 ] || exit 42; sleep 1; done; "
-        + "fi; code=$(curl -ksS -o /dev/null -w '%{http_code}' "
-        + f"https://127.0.0.1{PROXY_PATH}/login || true); "
-        + "case \"$code\" in 200|302|303|401|403|421) ;; *) exit 43 ;; esac; "
-        + "printf '%s' \"$code\"",
-        timeout=90,
-    )
-    return {"proxy_rule": "active", "proxy_http_status": int(result)}
+    return metadata
 
 
 def verify(session):
@@ -222,8 +183,10 @@ def verify(session):
         "Enable",
         "WebUI",
         "Web_Port",
+        "Web_SSL_Port",
         "Use_Proxy",
         "Proxy_Path",
+        "Service_Program",
         "Desktop",
         "Visible",
         "Force_Visible",
@@ -239,10 +202,12 @@ def verify(session):
     expected = {
         "Version": VERSION,
         "Enable": "TRUE",
-        "WebUI": PROXY_PATH,
-        "Web_Port": str(BACKEND_PORT),
-        "Use_Proxy": "1",
-        "Proxy_Path": PROXY_PATH,
+        "WebUI": WEBUI,
+        "Web_Port": "-2",
+        "Web_SSL_Port": "-1",
+        "Use_Proxy": "0",
+        "Proxy_Path": "",
+        "Service_Program": "missing",
         "Desktop": "0",
         "Visible": "0",
         "Force_Visible": "1",
@@ -250,6 +215,22 @@ def verify(session):
     for field, value in expected.items():
         if fields.get(field) != value:
             raise GatewayError(f"installed QPKG field differs: {field}")
+    cgi_state = session.execute(
+        "install_path=$(/sbin/getcfg "
+        + NAME
+        + " Install_Path -d missing -f /etc/config/qpkg.conf); "
+        + "link=/home/httpd/cgi-bin/qpkg/"
+        + NAME
+        + "; test ! -L /etc/init.d/"
+        + NAME
+        + ".sh && test -L \"$link\" && test \"$(readlink \"$link\")\" = "
+        + "\"$install_path/www\" && test -x \"$link/gateway.cgi\" && "
+        + "printf cgi-ready",
+        allowed=(0, 1),
+    )
+    if cgi_state != "cgi-ready":
+        raise GatewayError("installed CGI link differs")
+    fields["CGI"] = cgi_state
     return fields
 
 

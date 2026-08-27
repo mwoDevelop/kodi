@@ -301,6 +301,8 @@ services:
       - ${CONTROL_PLANE_BROWSER_HOST:?set exact browser Host}
       - --expected-origin
       - ${CONTROL_PLANE_BROWSER_ORIGIN:?set exact browser origin}
+      - --base-path
+      - ${CONTROL_PLANE_BROWSER_BASE_PATH:?set canonical browser base path}
       - --allowed-network
       - ${CONTROL_PLANE_BROWSER_ALLOWED_NETWORK:?set trusted Docker proxy network}
       - --core-host

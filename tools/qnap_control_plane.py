@@ -22,6 +22,11 @@ except ModuleNotFoundError:
     from tools.qnap_compose_policy import explicit_bind_targets
     from tools.qnap_profile_sync import container_station, preflight
 
+try:
+    from qnap_control_plane_gateway import PUBLIC_BASE
+except ModuleNotFoundError:
+    from tools.qnap_control_plane_gateway import PUBLIC_BASE
+
 
 IMAGE = re.compile(
     r"^ghcr\.io/mwodevelop/kodi-control-plane@sha256:[a-f0-9]{64}$"
@@ -33,7 +38,7 @@ ROOT = PurePosixPath(
 )
 PORT = 19443
 BROWSER_BACKEND_PORT = 19445
-BROWSER_PATH = "/control-plane/"
+BROWSER_PATH = PUBLIC_BASE + "/"
 
 
 class ControlPlaneError(RuntimeError):
@@ -239,6 +244,7 @@ def environment(image, host_ip):
             f"CONTROL_PLANE_HOST_IP={address}",
             f"CONTROL_PLANE_BROWSER_HOST={address}",
             f"CONTROL_PLANE_BROWSER_ORIGIN=https://{address}",
+            f"CONTROL_PLANE_BROWSER_BASE_PATH={PUBLIC_BASE}",
             "CONTROL_PLANE_BROWSER_ALLOWED_NETWORK=172.16.0.0/12",
             f"CONTROL_PLANE_FRAME_ANCESTOR=https://{address}",
             f"CONTROL_PLANE_PROFILE_SYNC_SERVER_NAME={address}",
@@ -464,6 +470,7 @@ def validate_policy(document):
         "--plaintext-behind-loopback-proxy",
         f"--expected-host {address}",
         f"--expected-origin https://{address}",
+        f"--base-path {PUBLIC_BASE}",
         "--allowed-network 172.16.0.0/12",
         "--core-host control-plane",
         "--authz-host control-plane-authz",
@@ -633,7 +640,7 @@ def deploy(
     )
     session.upload_text(str(app / "compose.yaml"), compose_source, 0o600)
     session.upload_text(str(app / "control-plane.env"), env, 0o600)
-    session.upload_text(str(marker), "kodi-control-plane-browser-v3\n", 0o600)
+    session.upload_text(str(marker), "kodi-control-plane-browser-v4\n", 0o600)
     uploads = {
         config / "tls/server.crt": (files["tls_certificate"], 0o400),
         config / "tls/server.key": (files["tls_key"], 0o400),
