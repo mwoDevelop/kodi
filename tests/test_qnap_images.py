@@ -33,6 +33,8 @@ def watchdog_policy(image=IMAGE):
                     "/run/watchdog/tls/clients-ca.crt",
                     "--interval-seconds",
                     "900",
+                    "--remediation-recheck-seconds",
+                    "60",
                     "--remediate",
                 ],
                 "init": True,

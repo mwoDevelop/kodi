@@ -318,6 +318,15 @@ class StatusState:
             return self._report
 
 
+def next_sleep_seconds(report, interval_seconds, remediation_recheck_seconds):
+    if any(
+        item.get("remediation_state") == "DISPATCHED"
+        for item in report.get("workflows", [])
+    ):
+        return min(interval_seconds, remediation_recheck_seconds)
+    return interval_seconds
+
+
 def start_observer(listen, port, certificate, key, client_ca, state):
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
@@ -363,6 +372,7 @@ def main():
     parser.add_argument("--manifest", default="manifests/upstream-watchdog.json")
     parser.add_argument("--status")
     parser.add_argument("--interval-seconds", type=int, default=21600)
+    parser.add_argument("--remediation-recheck-seconds", type=int, default=60)
     parser.add_argument("--listen")
     parser.add_argument("--port", type=int, default=9445)
     parser.add_argument("--tls-cert")
@@ -421,7 +431,15 @@ def main():
             return 0 if report["healthy"] else 1
         if args.interval_seconds < 300:
             raise ValueError("watch interval must be at least 300 seconds")
-        time.sleep(args.interval_seconds)
+        if args.remediation_recheck_seconds < 30:
+            raise ValueError("remediation recheck must be at least 30 seconds")
+        time.sleep(
+            next_sleep_seconds(
+                report,
+                args.interval_seconds,
+                args.remediation_recheck_seconds,
+            )
+        )
 
 
 if __name__ == "__main__":

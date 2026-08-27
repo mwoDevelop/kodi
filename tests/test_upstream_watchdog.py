@@ -15,6 +15,7 @@ from tools.upstream_watchdog import (
     evaluate,
     fetch_runs,
     load_manifest,
+    next_sleep_seconds,
     validate_status,
 )
 
@@ -209,6 +210,14 @@ def test_watchdog_dispatches_stale_allowlisted_workflow_once_per_evaluation():
     assert calls == [("owner/repo", "sync.yml", "main", "token")]
     assert report["workflows"][0]["remediation_state"] == "DISPATCHED"
     assert report["workflows"][0]["remediation_error_code"] is None
+
+
+def test_watchdog_rechecks_soon_only_after_dispatch():
+    dispatched = {"workflows": [{"remediation_state": "DISPATCHED"}]}
+    steady = {"workflows": [{"remediation_state": "NOT_DUE"}]}
+
+    assert next_sleep_seconds(dispatched, 900, 60) == 60
+    assert next_sleep_seconds(steady, 900, 60) == 900
 
 
 def test_watchdog_does_not_dispatch_fresh_or_active_workflow():
@@ -515,6 +524,11 @@ def test_control_plane_catalogs_are_valid_and_watchdog_thresholds_match():
     assert len(severity["rules"]) == 7
     assert {(item["repository"], item["workflow"]) for item in github_jobs} == set(
         SCHEDULED_WORKFLOWS
+    )
+    watchdog = load_manifest("manifests/upstream-watchdog.json")
+    assert all(
+        item["max_age_seconds"] - item["remediation_after_seconds"] >= 900
+        for item in watchdog["workflows"]
     )
 
 

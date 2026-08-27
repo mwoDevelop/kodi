@@ -30,7 +30,7 @@
       "missed_windows_failure": 8,
       "grace_seconds": 900,
       "timeout_seconds": 1800,
-      "stale_after_seconds": 3600,
+      "stale_after_seconds": 4500,
       "retry_policy": "next_schedule",
       "dependencies": ["github-actions"]
     },
@@ -46,7 +46,7 @@
       "missed_windows_failure": 5,
       "grace_seconds": 1200,
       "timeout_seconds": 1800,
-      "stale_after_seconds": 7200,
+      "stale_after_seconds": 8100,
       "retry_policy": "next_schedule",
       "dependencies": ["github-actions"]
     },
@@ -158,7 +158,7 @@
       "missed_windows_failure": 8,
       "grace_seconds": 900,
       "timeout_seconds": 1800,
-      "stale_after_seconds": 3600,
+      "stale_after_seconds": 4500,
       "retry_policy": "next_schedule",
       "dependencies": ["github-actions"]
     },

@@ -51,7 +51,10 @@ Real-Debrid ani konfiguracji użytkownika Kodi. Szczegółowy kontrakt wyjątku 
 Monitorowana lista workflow jest wersjonowana w `manifests/upstream-watchdog.json`.
 Workflow jest niezdrowy, gdy brakuje ostatniego uruchomienia, zakończyło się ono
 błędem lub przekracza indywidualny próg `stale_after_seconds`. Dla procesów co
-15 minut jest to 1 godzina, co 30 minut — 2 godziny, a dla dziennych — 36 godzin.
+15 minut remediacja rozpoczyna się po 1 godzinie, a alert po 75 minutach; dla
+procesu co 30 minut odpowiednio po 2 godzinach i 2 godzinach 15 minutach. Ten
+15-minutowy margines daje obserwatorowi jeden pełny cykl na uruchomienie fallbacku.
+Próg procesów dziennych wynosi 36 godzin.
 Stan obserwatora jest jednak rozdzielony od wyniku obserwowanych workflow:
 `observer_ready` i `collection_state=READY|PARTIAL|ERROR` opisują zdolność zebrania
 pełnego, świeżego katalogu, natomiast `monitored_state=HEALTHY|FAILED|UNKNOWN`
@@ -66,7 +69,8 @@ cron GitHub nadal jest uruchamiany. Jeżeli jego wynik przekroczy jawny próg z
 `workflow_dispatch` na `main`. Udany, nowszy przebieg naprawczy jest prezentowany
 w panelu jako `REMEDIATED`; kolejne opuszczone okna ponownie otworzą alert. Pole
 `run_event=workflow_dispatch` zachowuje pochodzenie i nie pozwala pomylić fallbacku
-z natywnym harmonogramem.
+z natywnym harmonogramem. Po wysłaniu dispatchu watchdog wykonuje dodatkowy odczyt
+po 60 sekundach zamiast czekać na kolejny pełny cykl 15-minutowy.
 
 Watchdog ma uwierzytelniony dostęp do GitHub API, aby nie
 dzielić anonimowego limitu `60/h` dla adresu wyjściowego QNAP. Token jest wstrzykiwany

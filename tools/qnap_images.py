@@ -878,6 +878,7 @@ def validate_watchdog_policy(document):
         "--tls-cert /run/watchdog/tls/server.crt",
         "--client-ca /run/watchdog/tls/clients-ca.crt",
         "--interval-seconds 900",
+        "--remediation-recheck-seconds 60",
         "--remediate",
     ):
         if required not in command:

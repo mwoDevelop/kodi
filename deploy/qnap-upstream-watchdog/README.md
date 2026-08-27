@@ -9,8 +9,10 @@ workflow, zakończył się on błędem albo jest przeterminowany. Stan kontenera
 natomiast gotowość obserwatora: poprawny, kompletny i świeży raport pozostaje
 `healthy` nawet wtedy, gdy wykrył awarię monitorowanego workflow.
 
-Proces odpytuje GitHub co 15 minut; Container Station ocenia ostatni utrwalony wynik
-co pięć minut. Wersjonowany manifest obejmuje centralne uzgadnianie, audyt zaakceptowanych
+Proces odpytuje GitHub co 15 minut, a po wysłaniu remediacji ponawia odczyt po
+60 sekundach; Container Station ocenia ostatni utrwalony wynik co pięć minut.
+Wersjonowany manifest pozostawia jeden pełny cykl obserwatora między progiem
+remediacji a progiem alertu. Obejmuje centralne uzgadnianie, audyt zaakceptowanych
 providerów i artefaktów, discovery providerów, Umbrella i WatchNixtoons2. Zobacz pełny
 [katalog procesów cyklicznych](../../docs/scheduled-processes.md), aby poznać
 własność, granice zapisu i polecenia weryfikacji.
