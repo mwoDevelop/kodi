@@ -8,6 +8,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 import re
 import secrets
 import shutil
@@ -43,6 +44,13 @@ VERIFY_MARKER = "/sdcard/Download/mwo-kodi-profile-verify-result.json"
 VERIFY_STARTED = "/sdcard/Download/mwo-kodi-profile-verify-started.json"
 RESTORE_LOCK = "/sdcard/Download/mwo-kodi-profile-restore.lock"
 EXPORT_FILE_LIST = "/sdcard/Download/mwo-kodi-profile-filelist.txt"
+EVENT_CLIENT_NAME = "mwoDevelop Kodi profile restore"
+# Kodi's reference EventClient keeps one UID for the lifetime of the client
+# implementation. Keep ours stable across the short-lived rollout adapter
+# processes as well, so a retry can refresh the same logical client.
+EVENT_CLIENT_UID = struct.unpack(
+    "!I", hashlib.sha256(EVENT_CLIENT_NAME.encode("utf-8")).digest()[:4]
+)[0]
 
 
 class RestoreCommandMayBeQueued(TimeoutError):
@@ -857,12 +865,14 @@ class AdbEventClient:
     ACTION_EXECBUILTIN = 0x01
     MAX_PAYLOAD_SIZE = 1024 - HEADER_SIZE
 
-    def __init__(self, adb, port, serial, source_port=None):
+    def __init__(self, adb, port, serial, source_port=None, uid=None):
         self.adb = adb
         self.port = port
         self.serial = serial
-        self.uid = int(time.time()) & 0xFFFFFFFF
-        self.source_port = source_port or 40000 + self.uid % 20000
+        self.uid = EVENT_CLIENT_UID if uid is None else uid & 0xFFFFFFFF
+        self.source_port = (
+            40000 + self.uid % 20000 if source_port is None else source_port
+        )
 
     def _header(self, packet_type, sequence, packet_count, payload_size):
         return (
@@ -909,7 +919,7 @@ class AdbEventClient:
 
     def _builtin_packets(self, command):
         hello = (
-            b"mwoDevelop Kodi profile restore\0"
+            EVENT_CLIENT_NAME.encode("utf-8") + b"\0"
             + bytes((0,))
             + struct.pack("!H", 0)
             + struct.pack("!I", 0)
@@ -929,6 +939,100 @@ class AdbEventClient:
 
     def execute_builtin_from_host(self, command):
         self._send_from_host(self._builtin_packets(command))
+
+    def _d8_path(self):
+        configured = shutil.which("d8")
+        if configured:
+            return Path(configured)
+        candidates = []
+        adb_path = Path(self.adb).expanduser()
+        if adb_path.is_absolute():
+            candidates.extend(adb_path.parent.parent.glob("build-tools/*/d8"))
+        for variable in ("ANDROID_SDK_ROOT", "ANDROID_HOME"):
+            sdk_root = os.environ.get(variable)
+            if sdk_root:
+                candidates.extend(Path(sdk_root).glob("build-tools/*/d8"))
+        candidates = [candidate for candidate in candidates if candidate.is_file()]
+        return sorted(candidates)[-1] if candidates else None
+
+    def _android_sender_path(self):
+        source = Path(__file__).with_name("android") / "MwoKodiEventSender.java"
+        if not source.is_file():
+            return None
+        source_id = hashlib.sha256(source.read_bytes()).hexdigest()[:16]
+        remote = "/data/local/tmp/mwo-kodi-event-sender-%s.dex" % source_id
+        present = adb_command(
+            self.adb,
+            self.port,
+            self.serial,
+            "shell",
+            "test -r '%s'" % remote,
+            check=False,
+            timeout=10,
+        )
+        if present.returncode == 0:
+            return remote
+        javac = shutil.which("javac")
+        d8 = self._d8_path()
+        if not javac or d8 is None:
+            return None
+        try:
+            with tempfile.TemporaryDirectory(prefix="mwo-kodi-event-") as temporary:
+                temporary = Path(temporary)
+                classes = temporary / "classes"
+                dex = temporary / "dex"
+                classes.mkdir()
+                dex.mkdir()
+                subprocess.run(
+                    [
+                        javac,
+                        "-source",
+                        "8",
+                        "-target",
+                        "8",
+                        "-d",
+                        str(classes),
+                        str(source),
+                    ],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=30,
+                )
+                subprocess.run(
+                    [
+                        str(d8),
+                        "--output",
+                        str(dex),
+                        str(classes / "MwoKodiEventSender.class"),
+                    ],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=30,
+                )
+                staged = remote + ".tmp"
+                adb_command(
+                    self.adb,
+                    self.port,
+                    self.serial,
+                    "push",
+                    str(dex / "classes.dex"),
+                    staged,
+                    timeout=30,
+                )
+                adb_command(
+                    self.adb,
+                    self.port,
+                    self.serial,
+                    "shell",
+                    "chmod 0444 '%s' && mv '%s' '%s'"
+                    % (staged, staged, remote),
+                    timeout=10,
+                )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return remote
 
     def execute_builtin(self, command):
         listeners = adb_output(
@@ -970,6 +1074,32 @@ class AdbEventClient:
         if not nc_path:
             self._send_from_host(packets)
             return
+        sender = self._android_sender_path()
+        if sender:
+            remote = (
+                "CLASSPATH=%s app_process /system/bin MwoKodiEventSender "
+                "%d 9777 %s"
+                % (
+                    sender,
+                    self.source_port,
+                    " ".join(packet.hex() for packet in packets),
+                )
+            )
+            dispatched = adb_command(
+                self.adb,
+                self.port,
+                self.serial,
+                "shell",
+                remote,
+                check=False,
+                timeout=10,
+            )
+            if dispatched.returncode == 0:
+                return
+        # Degraded fallback for hosts without a Java/D8 toolchain. Separate
+        # netcat processes execute the action, but Android may assign different
+        # effective client addresses and leave HELO clients until Kodi's
+        # 60-second timeout. Production rollouts use the single-socket sender.
         for packet in packets:
             encoded = base64.b64encode(packet).decode("ascii")
             remote = (
