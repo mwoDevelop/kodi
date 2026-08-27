@@ -17,6 +17,9 @@ services:
       - /run/watchdog/tls/server.key
       - --client-ca
       - /run/watchdog/tls/clients-ca.crt
+      - --interval-seconds
+      - "900"
+      - --remediate
     restart: unless-stopped
     init: true
     read_only: true

@@ -31,6 +31,9 @@ def watchdog_policy(image=IMAGE):
                     "/run/watchdog/tls/server.key",
                     "--client-ca",
                     "/run/watchdog/tls/clients-ca.crt",
+                    "--interval-seconds",
+                    "900",
+                    "--remediate",
                 ],
                 "init": True,
                 "read_only": True,
@@ -161,6 +164,7 @@ def test_watchdog_credentials_accept_github_pass_only_when_it_is_a_token(
             "login": "mwoDevelop" if token == pat else "",
             "rate_limit": 5000,
             "rate_remaining": 4999,
+            "oauth_scopes": ["workflow"],
         },
     )
     monkeypatch.setattr(
@@ -179,6 +183,7 @@ def test_watchdog_credentials_accept_github_pass_only_when_it_is_a_token(
         "login": "mwoDevelop",
         "rate_limit": 5000,
         "rate_remaining": 4999,
+        "capability": "workflow_dispatch",
     }
 
 
@@ -191,6 +196,7 @@ def test_watchdog_credentials_fall_back_to_matching_gh_session(monkeypatch):
                 "login": "mwoDevelop",
                 "rate_limit": 5000,
                 "rate_remaining": 4900,
+                "oauth_scopes": ["repo", "workflow"],
             }
             if token == "gh-token"
             else (_ for _ in ()).throw(qnap_images.HTTPError(
@@ -215,6 +221,39 @@ def test_watchdog_credentials_fall_back_to_matching_gh_session(monkeypatch):
     assert credentials["rate_limit"] == 5000
 
 
+def test_watchdog_credentials_skip_authenticated_read_only_token(monkeypatch):
+    identities = {
+        "read-token": {
+            "login": "mwoDevelop",
+            "rate_limit": 5000,
+            "rate_remaining": 4900,
+            "oauth_scopes": ["repo"],
+        },
+        "write-token": {
+            "login": "mwoDevelop",
+            "rate_limit": 5000,
+            "rate_remaining": 4800,
+            "oauth_scopes": ["repo", "workflow"],
+        },
+    }
+    monkeypatch.setattr(qnap_images, "_github_identity", identities.__getitem__)
+    monkeypatch.setattr(
+        qnap_images,
+        "_run",
+        lambda *_args, **_kwargs: type(
+            "Result", (), {"stdout": "write-token\n"}
+        )(),
+    )
+
+    credentials = qnap_images.watchdog_github_credentials(
+        {"GITHUB_USER": "mwoDevelop", "GITHUB_TOKEN": "read-token"}
+    )
+
+    assert credentials["source"] == "gh-cli"
+    assert credentials["token"] == "write-token"
+    assert credentials["capability"] == "workflow_dispatch"
+
+
 def test_watchdog_credentials_bind_email_sign_in_to_repository_owner(
     monkeypatch,
 ):
@@ -225,6 +264,7 @@ def test_watchdog_credentials_bind_email_sign_in_to_repository_owner(
             "login": "mwoDevelop",
             "rate_limit": 5000,
             "rate_remaining": 4800,
+            "oauth_scopes": ["workflow"],
         },
     )
     monkeypatch.setattr(
@@ -248,6 +288,7 @@ def test_watchdog_credentials_reject_email_with_foreign_account(monkeypatch):
             "login": "different-owner",
             "rate_limit": 5000,
             "rate_remaining": 4800,
+            "oauth_scopes": ["workflow"],
         },
     )
     monkeypatch.setattr(
@@ -272,6 +313,7 @@ def test_watchdog_credentials_fail_closed_without_authenticated_token(
             "login": "mwoDevelop",
             "rate_limit": 60,
             "rate_remaining": 59,
+            "oauth_scopes": ["workflow"],
         },
     )
     monkeypatch.setattr(

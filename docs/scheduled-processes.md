@@ -47,7 +47,7 @@ Real-Debrid ani konfiguracji użytkownika Kodi. Szczegółowy kontrakt wyjątku 
 
 ## Monitorowanie na QNAP
 
-`qnap-upstream-watchdog` działa w Container Station i odpytuje GitHub co sześć godzin.
+`qnap-upstream-watchdog` działa w Container Station i odpytuje GitHub co 15 minut.
 Monitorowana lista workflow jest wersjonowana w `manifests/upstream-watchdog.json`.
 Workflow jest niezdrowy, gdy brakuje ostatniego uruchomienia, zakończyło się ono
 błędem lub przekracza indywidualny próg `stale_after_seconds`. Dla procesów co
@@ -60,17 +60,22 @@ integralność dokumentu, dlatego poprawnie działający watchdog pozostaje zdro
 kontenerem również wtedy, gdy raportuje `monitored_state=FAILED`. QTS/Container
 Station może dzięki temu odróżnić awarię sondy od alarmu domenowego.
 
-Obserwacja rozdziela dwa fakty. Najnowszy przebieg `schedule` dowodzi, że cron nadal
-jest uruchamiany; nie można go zastąpić ręcznym wywołaniem. Nowszy
-`workflow_dispatch` może natomiast potwierdzić skuteczną naprawę wcześniejszego
-błędu i staje się bieżącym wynikiem funkcjonalnym. Dzięki temu panel nie utrzymuje
-fałszywego alertu po udanym ręcznym ponowieniu, ale nadal wykryje brak schedulera.
+Obserwacja rozdziela dwa fakty. Najnowszy przebieg `schedule` dowodzi, że natywny
+cron GitHub nadal jest uruchamiany. Jeżeli jego wynik przekroczy jawny próg z
+`manifests/upstream-watchdog.json`, watchdog może wykonać wyłącznie allowlistowany
+`workflow_dispatch` na `main`. Udany, nowszy przebieg naprawczy jest prezentowany
+w panelu jako `REMEDIATED`; kolejne opuszczone okna ponownie otworzą alert. Pole
+`run_event=workflow_dispatch` zachowuje pochodzenie i nie pozwala pomylić fallbacku
+z natywnym harmonogramem.
 
-Watchdog ma uwierzytelniony, wyłącznie odczytowy dostęp do GitHub API, aby nie
+Watchdog ma uwierzytelniony dostęp do GitHub API, aby nie
 dzielić anonimowego limitu `60/h` dla adresu wyjściowego QNAP. Token jest wstrzykiwany
 z prywatnych referencji podczas wdrożenia i nie trafia do repozytorium ani raportu
-statusu. Watchdog nie może ponowić workflow, zmienić gałęzi ani naprawić artefaktu
-upstream. Pomyślne odkrycie nie maskuje
+statusu. Jedyną operacją zapisu jest `actions:write` potrzebne do wywołania
+`workflow_dispatch` dla dokładnej listy wersjonowanego manifestu; watchdog nie może
+zmienić gałęzi, PR, release ani artefaktu upstream. Workflow nadal wykonuje własne
+kontrole uprawnień, dokładnego SHA i bramek środowiska, a automatyczne merge Umbrelli
+pozostaje wyłączone bez `UMBRELLA_AUTO_MERGE_ENABLED=true`. Pomyślne odkrycie nie maskuje
 błędu audytu zaakceptowanych artefaktów; oba workflow mwoScrapers są
 monitorowane niezależnie.
 

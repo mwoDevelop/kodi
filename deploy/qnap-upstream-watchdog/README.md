@@ -9,7 +9,7 @@ workflow, zakończył się on błędem albo jest przeterminowany. Stan kontenera
 natomiast gotowość obserwatora: poprawny, kompletny i świeży raport pozostaje
 `healthy` nawet wtedy, gdy wykrył awarię monitorowanego workflow.
 
-Proces odpytuje GitHub co sześć godzin; Container Station ocenia ostatni utrwalony wynik
+Proces odpytuje GitHub co 15 minut; Container Station ocenia ostatni utrwalony wynik
 co pięć minut. Wersjonowany manifest obejmuje centralne uzgadnianie, audyt zaakceptowanych
 providerów i artefaktów, discovery providerów, Umbrella i WatchNixtoons2. Zobacz pełny
 [katalog procesów cyklicznych](../../docs/scheduled-processes.md), aby poznać
@@ -21,7 +21,9 @@ Dokument statusu schema 2 rozdziela `observer_ready`,
 nie jest fałszywie klasyfikowany jako awaria workflow — daje `UNKNOWN` i niezdrowy
 healthcheck obserwatora.
 
-Usługa korzysta wyłącznie z uwierzytelnionych odczytów API GitHub. Token nie jest
+Usługa korzysta z uwierzytelnionych odczytów API GitHub i jednej ograniczonej
+operacji zapisu: `workflow_dispatch` dla workflowów wymienionych w wersjonowanym
+manifeście. Token nie jest
 wersjonowany: narzędzie wdrożeniowe sprawdza zgodność tożsamości z `GITHUB_USER`
 i zapisuje go na QNAP wyłącznie w pliku `watchdog.env` o trybie `0600`. Zmienna
 `GITHUB_PASS` może być użyta tylko wtedy, gdy zawiera token PAT; zwykłe hasło konta
@@ -34,9 +36,13 @@ API nie może go zwrócić bez dodatkowego zakresu `user:email`. W takim przypad
 walidator akceptuje wyłącznie token należący do wersjonowanego właściciela
 repozytoriów `mwoDevelop`; token dowolnego innego konta jest odrzucany.
 
-Aplikacja wykonuje wyłącznie żądania `GET`; docelowy PAT powinien mieć tylko prawa
-odczytu publicznych repozytoriów. Migracyjny token `gh auth` może mieć szersze zakresy,
-dlatego należy zastąpić go dedykowanym PAT w `GITHUB_TOKEN` albo `GITHUB_PASS`.
+Aplikacja wymaga odczytu publicznych repozytoriów oraz `Actions: write`, ale nie
+wymaga zapisu treści, PR, release ani administracji repozytorium. Dedykowany token
+w `GITHUB_TOKEN` powinien być ograniczony do repozytoriów obecnych w manifeście.
+Migracyjny token `gh auth` może mieć szersze zakresy, dlatego należy zastąpić go
+dedykowanym PAT. Obecny walidator wdrożeniowy potrafi dowieść capability na
+podstawie klasycznego zakresu `workflow`; fine-grained PAT bez nagłówka zakresów
+jest odrzucany fail-closed zamiast ujawniać brak uprawnień dopiero po awarii crona.
 Kontener nie ma opublikowanych portów, dodatkowych capabilities ani zapisywalnego
 głównego systemu plików. Jedyne bind mounty to trzy pliki certyfikatów obserwatora,
 zamontowane read-only z zarządzanego katalogu QNAP. Prywatny endpoint

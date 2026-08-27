@@ -56,7 +56,7 @@ class DashboardService:
                 "jobs": [
                     {
                         "id": "github-kodi-publish-pages",
-                        "scheduler_status": "SEEN",
+                        "scheduler_status": "REMEDIATED",
                         "run_result": "SUCCESS",
                         "freshness": "FRESH",
                         "next_expected": "2026-08-22T03:10:00Z",
@@ -228,6 +228,8 @@ def main(argv=None):
             raise RuntimeError("status sources were not rendered")
         if "github-kodi-publish-pages" not in value["schedules"]:
             raise RuntimeError("scheduled jobs were not rendered")
+        if "REMEDIATED" not in value["schedules"]:
+            raise RuntimeError("manual scheduler remediation was not rendered")
         websocket.call(
             "Runtime.evaluate",
             {"expression": "document.querySelector('#refresh').click()"},
