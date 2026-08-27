@@ -327,6 +327,39 @@ def test_watchdog_accepts_newer_manual_success_without_hiding_scheduler():
     assert item["latest_scheduled_run"]["id"] == 1
 
 
+def test_watchdog_accepts_recent_remediation_after_stale_scheduler_run():
+    now = dt.datetime(2026, 8, 22, 8, tzinfo=dt.timezone.utc)
+
+    def fetch(_repository, _workflow, token=None):
+        return [
+            {
+                "id": 2,
+                "event": "workflow_dispatch",
+                "status": "completed",
+                "conclusion": "success",
+                "updated_at": "2026-08-22T07:30:00Z",
+            },
+            {
+                "id": 1,
+                "event": "schedule",
+                "status": "completed",
+                "conclusion": "success",
+                "updated_at": "2026-08-22T03:30:00Z",
+            },
+        ]
+
+    manifest = _manifest()
+    manifest["workflows"][0]["max_age_seconds"] = 3600
+    report = evaluate(manifest, fetcher=fetch, now=now)
+
+    assert report["healthy"] is True
+    item = report["workflows"][0]
+    assert item["monitored_state"] == "HEALTHY"
+    assert item["run_id"] == 2
+    assert item["run_event"] == "workflow_dispatch"
+    assert item["latest_scheduled_run"]["id"] == 1
+
+
 def test_watchdog_manual_run_cannot_replace_missing_scheduler():
     now = dt.datetime(2026, 8, 22, 8, tzinfo=dt.timezone.utc)
 
