@@ -1,31 +1,31 @@
 {
-  "candidate_id": "ee1e041516ad78e523f11820a4d02d61e20a95b1a3a2082178156e887579f745",
+  "candidate_id": "1b04af4070cbb093983ca72cf5723bf78d705a4033a5bea21236b807b91f62d9",
   "channel": "stable",
   "schema": 1,
   "services": {
     "control-plane": {
-      "image": "ghcr.io/mwodevelop/kodi-control-plane@sha256:5223a7f5a94d869ebd70d588ab91752e98e682388b96eda5a76664583d2dca01",
-      "input_sha256": "6aa438ac47e9bdbd5f7c1d7cbf093d0c3c960bd28b1d4f522d095b16bf2602df",
+      "image": "ghcr.io/mwodevelop/kodi-control-plane@sha256:4314662da73833b7b77939549841bdde0b8c47229262b3698f1e29d97b18adc4",
+      "input_sha256": "cea8091772953bb1493c51c1508482b897d7176758dd0837d87e6f3ab586f81c",
       "platforms": [
         "linux/amd64",
         "linux/arm/v7"
       ],
-      "security_report_sha256": "03db77273c56a3a813ece4bdb50dc071110be81060c9d3f07447eff9a500d409",
-      "source_commit": "2cba54ff987b412c3e1a7501a6b03212d21b0a26",
+      "security_report_sha256": "da552774a59eb795aa349a326b627763351414806f2a5a1972899aab38eae308",
+      "source_commit": "e7fe65534d2ad3b7f957cf591ae6855feddaf4c7",
       "source_repository": "mwoDevelop/kodi-control-plane",
-      "workflow_run_id": "33104054738"
+      "workflow_run_id": "33118713483"
     },
     "profile-sync": {
-      "image": "ghcr.io/mwodevelop/kodi-profile-sync-server@sha256:5b695331e4c20fa45a3790a9abc664968d502f6df738982ad0ebdaa65f831bea",
-      "input_sha256": "a7ae38e0a31b554b0749278f5ef3deac587da52ff7fb950b2426bad659451c20",
+      "image": "ghcr.io/mwodevelop/kodi-profile-sync-server@sha256:3c8539dd2d9e0beba6c11453bbd558f0e980ef63c6efca7d32a42b8fe6ad2252",
+      "input_sha256": "8f1b0201245c992781acc13aa15aefc5e0c17010e4903fc97043503dc0713064",
       "platforms": [
         "linux/amd64",
         "linux/arm/v7"
       ],
-      "security_report_sha256": "ea934b122c1688f1ae24884245b8af2575a1ca80b52dc8e32739b9e3a3388958",
-      "source_commit": "048bfa08edcf4404bbb0ef0950227f94c857bcc1",
+      "security_report_sha256": "5cdb16f3505d4f3e091c791c907c265f9b3d1909ee4c84c3b39fba140b00c059",
+      "source_commit": "bc067bbde847bef67eced9668525092e347c1179",
       "source_repository": "mwoDevelop/kodi-profile-sync-server",
-      "workflow_run_id": "33078398942"
+      "workflow_run_id": "33119009523"
     },
     "provider-relay": {
       "image": "ghcr.io/mwodevelop/mwoscrapers-relay@sha256:a807743e6408a0ed5763accf2d868b9be189d472bab1fed5d0c5e8dba0bc4af4",
