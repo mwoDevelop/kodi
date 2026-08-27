@@ -104,8 +104,13 @@ wdrożeniowych; panel nie polega na anonimowym limicie API. Błąd źródła nie
 poprawnego payloadu: zapisuje kod błędu, przechodzi w `degraded` i dopisuje
 zdarzenie do łańcucha audytu. Ten collector nie jest procesem aktualizacji i nie
 ma endpointu mutującego, klucza assignmentów ani dostępu do socketa Dockera.
-Dashboard mTLS rozdziela `scheduler_status`, `run_result` i `freshness`; jego
-cykliczne odczyty nie powiększają tamper-evident audit chain. Katalog określa
+Dashboard normalizuje każdy cykliczny proces do wspólnego kontraktu
+`ProcessObservation`: źródła GitHub Actions, QNAP Watchdog i heartbeat urządzenia
+raportują stan obserwatora, ostatnią próbę i sukces, następny oczekiwany termin,
+wynik, świeżość oraz bezpieczny kod błędu. Pola źródłowe, takie jak
+`scheduler_status`, pozostają w API dla kompatybilności i reguł alertowania, ale
+interfejs operatora nie używa już `NOT_APPLICABLE` do opisania działającego procesu
+Profile Sync. Jego cykliczne odczyty nie powiększają tamper-evident audit chain. Katalog określa
 osobne progi `missed_windows_warning` i `missed_windows_failure` na podstawie
 liczby opuszczonych wystąpień crona. Alerty z bezpośredniego odczytu GitHub i
 Watchdoga są deduplikowane po repozytorium, workflow i identyfikatorze
@@ -127,6 +132,9 @@ Od wersji 1.1.2 przejściowe błędy transportu, timeout, HTTP 429 i 5xx są
 ponawiane z utrwalonym backoffem 1/5/15/30 minut i jitterem. Błędy autoryzacji,
 konfiguracji oraz kontraktu są terminalne do czasu zmiany ich odcisku. Telemetria
 rozróżnia próbę, udany heartbeat i udany pełny cykl, nie zapisując sekretów.
+Od wersji 1.2.0 heartbeat przekazuje jej ograniczony, wersjonowany widok do backendu.
+Backend waliduje ścisłą listę pól i udostępnia ją Control Plane przez prywatne mTLS;
+starsi klienci pozostają obsługiwani przez bezpieczny fallback do czasu heartbeat.
 
 W tym samym cyklu Agent może pobrać krótkotrwałą kopertę HPKE z Profile Sync.
 Profile Sync uzyskuje ją z Secret Brokera przez prywatne mTLS; Control Plane sprawdza
