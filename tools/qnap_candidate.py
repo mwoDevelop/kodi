@@ -34,13 +34,12 @@ def _prior_lock(repository):
     return qnap_lock.load_lock(path) if path.is_file() else None
 
 
-def _reuse_approval(name, service, prior, input_sha256, commit):
+def _reuse_approval(name, service, prior, input_sha256):
     if not prior:
         return None
     item = prior["services"].get(name)
     if not item or (
-        item["source_commit"] != commit
-        or item["input_sha256"] != input_sha256
+        item["input_sha256"] != input_sha256
         or item["source_repository"] != service.github_repository
         or item["platforms"] != list(service.platforms)
     ):
@@ -110,7 +109,7 @@ def prepare(repository=ROOT):
             identity = qnap_images.source_identity(service, require_clean=True)
             input_sha = qnap_images.source_input_sha256(service, identity["commit"])
             reused = _reuse_approval(
-                name, service, prior, input_sha, identity["commit"]
+                name, service, prior, input_sha
             )
             approval = temporary / (name + ".json")
             if reused is not None:

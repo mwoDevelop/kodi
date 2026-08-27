@@ -70,11 +70,21 @@ def test_compose_lock_requires_exact_complete_approved_inputs(monkeypatch, tmp_p
     services = qnap_lock.qnap_images.services()
     monkeypatch.setattr(qnap_lock.qnap_images, "services", lambda: services)
     commits = {name: chr(97 + index) * 40 for index, name in enumerate(services)}
+    current_commits = {
+        name: chr(107 + index) * 40 for index, name in enumerate(services)
+    }
     inputs = {name: chr(100 + index) * 64 for index, name in enumerate(services)}
     monkeypatch.setattr(
         qnap_lock.qnap_images,
         "source_identity",
-        lambda service, require_clean=False: {"commit": commits[service.name]},
+        lambda service, require_clean=False: {
+            "commit": current_commits[service.name]
+        },
+    )
+    monkeypatch.setattr(
+        qnap_lock.qnap_images,
+        "source_commit_is_ancestor",
+        lambda service, commit: commit == commits[service.name],
     )
     monkeypatch.setattr(
         qnap_lock.qnap_images,
