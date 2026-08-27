@@ -24,16 +24,18 @@ montuje je read-only. Z prywatnego rejestru urządzeń generuje także zredagowa
 monitorowania i progi świeżości. Adresy, tokeny i credentiale nie trafiają do
 Control Plane. Dotychczasowy dashboard mTLS pozostaje pod
 `https://<QNAP>:19443/`. Dla zwykłej przeglądarki działa dodatkowo kanoniczne
-`https://<QNAP>/control-plane/`: nie wymaga certyfikatu klienta, lecz wymaga
-hasła i TOTP. QPKG `KodiCPGateway` rejestruje skrót QTS i przekazuje ten prefiks
-z HTTPS QTS do backendu dostępnego wyłącznie na `127.0.0.1:19445`. Web/BFF używa
+`https://<QNAP>/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/`: nie
+wymaga certyfikatu klienta. QPKG `KodiCPGateway` rejestruje skrót **Kodi admin**
+w QTS; aktywna
+sesja administratora QTS uruchamia istniejący login hasło+TOTP serwer-serwer,
+a bez niej pozostaje ręczny formularz. CGI przekazuje ten prefiks z HTTPS QTS do
+backendu dostępnego wyłącznie na `127.0.0.1:19445`. Web/BFF używa
 dedykowanego certyfikatu mTLS, którego core ogranicza do odczytu endpointów
 dashboardu. Authz nie publikuje żadnego portu do LAN.
 
-Wdrożenie QPKG ponownie aktywuje `KodiCPGateway`, weryfikuje dokładną regułę proxy
-`/control-plane` i wykonuje kontrolowany restart Qthttpd tylko wtedy, gdy żywa
-ścieżka zwraca brak routingu. Naprawia to stale wpisy `app_proxy.conf` po zmianach
-QTS bez otwierania prywatnego portu backendu do LAN.
+Wdrożenie QPKG weryfikuje wersję, systemowy port HTTPS, brak usługi i proxy oraz
+standardowe dowiązanie CGI. Nie edytuje konfiguracji Apache i nie restartuje
+Qthttpd, więc skrót pozostaje niezależny od regeneracji `app_proxy.conf`.
 
 Pierwszy bootstrap albo jawny reset break-glass:
 

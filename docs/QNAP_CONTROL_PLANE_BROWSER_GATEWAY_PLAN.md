@@ -16,8 +16,8 @@ udostępnić hasła, TOTP ani sesji przez jawny HTTP w sieci LAN.
 
 ## Docelowa architektura
 
-1. QTS kończy TLS na porcie 443 i przez wspierany mechanizm QPKG HTTP Proxy
-   przekazuje wyłącznie prefiks `/control-plane/`.
+1. QTS kończy TLS na porcie 443 i uruchamia bezstanowe CGI z przestrzeni QPKG.
+   CGI przekazuje wyłącznie własny prefiks panelu, bez `app_proxy.conf`.
 2. `control-plane-web` udostępnia backend HTTP tylko na `127.0.0.1` QNAP, na
    osobnym porcie technicznym. Port nie jest osiągalny z LAN.
 3. BFF nadal wymaga hasła, TOTP, sesji, CSRF, dokładnego `Host`/`Origin` i
@@ -36,8 +36,8 @@ udostępnić hasła, TOTP ani sesji przez jawny HTTP w sieci LAN.
 2. Zmienić Compose QNAP: usunąć publiczny listener web `:19444`, opublikować
    backend techniczny tylko na `127.0.0.1` i ustawić kanoniczny Host/Origin na
    `https://192.168.1.39`.
-3. Dodać odtwarzalny projekt QPKG z `QPKG_USE_PROXY=1` i
-   `QPKG_PROXY_PATH=/control-plane`, wskazujący lokalny port backendu.
+3. Dodać odtwarzalny, bezusługowy projekt QPKG z `Web_Port=-2`,
+   `Web_SSL_Port=-1` i CGI wskazującym lokalny port backendu.
 4. Rozszerzyć skrypt wdrożeniowy o instalację/aktualizację gatewaya,
    weryfikację jego własności oraz rollback konfiguracji i Compose przy
    nieudanym teście.
@@ -50,8 +50,8 @@ udostępnić hasła, TOTP ani sesji przez jawny HTTP w sieci LAN.
    Host/Origin, mutacje HTTP, brak CSRF i brak sesji.
 2. Test Compose ma potwierdzić: core tylko na prywatnym `:19443`, backend web
    tylko na loopback, authz bez portu publicznego.
-3. Test QPKG ma walidować stałą nazwę, proxy path, port backendu, widoczność
-   tylko dla administratorów i brak sekretów w pakiecie.
+3. Test QPKG ma walidować stałą nazwę, ścieżkę CGI, systemowy HTTPS, brak usługi
+   i proxy, zamkniętą powierzchnię routingu oraz brak sekretów w pakiecie.
 4. E2E QNAP: logowanie, dashboard, ręczne odświeżenie i wylogowanie przez
    `https://192.168.1.39/control-plane/`; bez użycia portu 19444.
 5. E2E Android: Chrome ma otworzyć kanoniczny adres bez
@@ -94,3 +94,21 @@ Potwierdzone bramki:
   kończy handshake alertem `certificate required`;
 - Chrome na Androidzie wyświetla stronę logowania po jednorazowym zaakceptowaniu
   istniejącego wyjątku dla certyfikatu QTS; nie instalowano osobnego CA panelu.
+
+## Korekta projektu — 27 sierpnia 2026
+
+Test skrótu wykazał, że QTS potrafi zastąpić właściwą regułę `app_proxy.conf`
+ogólnym przekierowaniem do `/apps`, mimo poprawnych metadanych QPKG. Wariant
+0.1.x wymagał więc rekonfiguracji QNAP i nie spełniał wymagania trwałości.
+
+Korekta 0.2.1 zastępuje `QPKG_USE_PROXY` standardową przestrzenią CGI QPKG:
+
+- skrót otwiera wyłącznie systemowy HTTPS QTS pod
+  `/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/`;
+- `package_routines` tworzy dowiązanie do katalogu CGI, a upgrade usuwa stare
+  metadane proxy;
+- CGI jest bezstanowe, nie zawiera danych logowania, nie uruchamia demona i
+  przekazuje tylko do loopback `127.0.0.1:19445`;
+- BFF przyjmuje jawny, walidowany `--base-path`, dzięki czemu redirecty i zakres
+  ciasteczek pozostają poprawne pod pełną ścieżką CGI;
+- deploy nie edytuje `app_proxy.conf` i nie restartuje Qthttpd.

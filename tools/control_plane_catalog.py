@@ -134,6 +134,37 @@ def load_status_sources(path):
     return payload
 
 
+def load_severity_policy(path):
+    payload = _document(path)
+    if set(payload) != {"schema", "rules"} or payload["schema"] != 1:
+        raise ValueError("unsupported severity policy")
+    fields = {
+        "condition_axis",
+        "reason_code",
+        "severity",
+        "overall_state",
+        "condition_family",
+    }
+    if not isinstance(payload["rules"], list) or not payload["rules"]:
+        raise ValueError("severity policy must contain rules")
+    seen = set()
+    for rule in payload["rules"]:
+        if not isinstance(rule, dict) or set(rule) != fields:
+            raise ValueError("invalid severity policy fields")
+        key = (rule["condition_axis"], rule["reason_code"])
+        if (
+            not IDENTIFIER.fullmatch(str(rule["condition_axis"]))
+            or not re.fullmatch(r"^[A-Z][A-Z0-9_]{1,95}$", str(rule["reason_code"]))
+            or not IDENTIFIER.fullmatch(str(rule["condition_family"]))
+            or rule["severity"] not in {"none", "warning", "critical"}
+            or rule["overall_state"] not in {"OK", "DEGRADED"}
+            or key in seen
+        ):
+            raise ValueError("invalid severity policy rule")
+        seen.add(key)
+    return payload
+
+
 def watchdog_entries(path):
     payload = _document(path)
     if payload.get("schema") != 2 or not isinstance(payload.get("workflows"), list):
@@ -161,10 +192,14 @@ def main(argv=None):
     parser.add_argument(
         "--status-sources", default="manifests/control-plane-status-sources.json"
     )
+    parser.add_argument(
+        "--severity-policy", default="manifests/control-plane-severity-policy.json"
+    )
     parser.add_argument("--watchdog", default="manifests/upstream-watchdog.json")
     args = parser.parse_args(argv)
     schedules = load_schedules(args.schedules)
     status_sources = load_status_sources(args.status_sources)
+    severity_policy = load_severity_policy(args.severity_policy)
     compare_watchdog(schedules, args.watchdog)
     print(
         json.dumps(
@@ -172,6 +207,7 @@ def main(argv=None):
                 "schema": 1,
                 "jobs": len(schedules["jobs"]),
                 "sources": len(status_sources["sources"]),
+                "severity_rules": len(severity_policy["rules"]),
                 "status": "ok",
             },
             sort_keys=True,

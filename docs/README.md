@@ -69,6 +69,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
   Sync](UPSTREAM_SYNC_FULL_RELEASE_REVIEW_2026-07-29.md)
 - [Review planu release, rollout i restore](KODI_OPS_PLAN_REVIEW.md)
 - [Review planu zdrowia usług i procesów cyklicznych](OPERATIONS_HEALTH_REMEDIATION_PLAN_REVIEW.md)
+- [Audyt korekt planu zdrowia po kontroli produkcyjnej z 27.08.2026](OPERATIONS_HEALTH_REMEDIATION_PLAN_REVIEW_2026-08-27.md)
 
 ## Dowody z testów i wdrożenia
 

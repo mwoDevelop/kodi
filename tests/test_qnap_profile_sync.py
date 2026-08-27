@@ -1,3 +1,4 @@
+import json
 from pathlib import PurePosixPath
 
 import pytest
@@ -14,6 +15,8 @@ from tools.qnap_profile_sync import (
     production_pair_request,
     production_backup_paths,
     create_production_pairing,
+    apply_production_revocation,
+    plan_production_revocation,
     revoke_production_enrollment,
     validate_production_files,
     qnap_connection_settings,
@@ -64,17 +67,13 @@ def test_production_root_is_fixed_and_never_derived_from_input():
 def test_production_backup_paths_follow_data_bind_mount():
     container, host = production_backup_paths("production-initial-20260731")
 
-    assert container == PurePosixPath(
-        "/data/backups/production-initial-20260731"
-    )
+    assert container == PurePosixPath("/data/backups/production-initial-20260731")
     assert host == PurePosixPath(
         "/share/CACHEDEV3_DATA/.mwodevelop/profile-sync/data/backups/production-initial-20260731"
     )
 
 
-def test_production_pairing_writes_code_only_to_private_file(
-    tmp_path, monkeypatch
-):
+def test_production_pairing_writes_code_only_to_private_file(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "tools.qnap_profile_sync.container_station",
         lambda _session: ("/container-station", "/usr/bin/docker"),
@@ -130,6 +129,79 @@ def test_production_revocation_uses_exact_host_only_enrollment(monkeypatch):
     assert session.command.endswith(" revoke enr:device-01234567")
 
 
+def test_production_revocation_plan_download_and_apply_are_private(
+    tmp_path, monkeypatch
+):
+    digest = "sha256:" + "a" * 64
+    private_plan = {
+        "schema": 1,
+        "operation": "revoke_superseded_enrollments",
+        "logical_device_id": "bluestacks1",
+        "expected_highest_generation": 2,
+        "minimum_last_seen_at": 1,
+        "active_set_sha256": "sha256:" + "b" * 64,
+        "targets": [{"enrollment_id": "enr:private-01234567", "generation": 1}],
+        "created_at": 2,
+        "plan_sha256": digest,
+    }
+
+    class Session:
+        commands = []
+        uploaded = None
+
+        def execute(self, command, timeout=30):
+            self.commands.append(command)
+            if "plan-revoke-superseded" in command:
+                return json.dumps(
+                    {
+                        "logical_device_id": "bluestacks1",
+                        "expected_highest_generation": 2,
+                        "target_generations": [1],
+                        "target_count": 1,
+                        "plan_sha256": digest,
+                        "output": "/data/private.json",
+                    }
+                )
+            if "apply-revoke-superseded" in command:
+                return json.dumps(
+                    {
+                        "logical_device_id": "bluestacks1",
+                        "plan_sha256": digest,
+                        "revoked_generations": [1],
+                        "revoked_count": 1,
+                        "status": "applied",
+                    }
+                )
+            return ""
+
+        def download_file(self, _remote, local):
+            local.write_text(json.dumps(private_plan), encoding="utf-8")
+            local.chmod(0o600)
+
+        def upload_text(self, remote, text, mode):
+            self.uploaded = (remote, text, mode)
+
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.container_station",
+        lambda _session: ("/container-station", "/usr/bin/docker"),
+    )
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.production_compose_command",
+        lambda _docker: "docker compose",
+    )
+    session = Session()
+    output = tmp_path / "revocation.json"
+    summary = plan_production_revocation(session, "bluestacks1", 900, output)
+    assert summary["target_generations"] == [1]
+    assert "enr:private-01234567" not in str(summary)
+    assert output.stat().st_mode & 0o077 == 0
+
+    result = apply_production_revocation(session, output, digest)
+    assert result["revoked_generations"] == [1]
+    assert session.uploaded[2] == 0o600
+    assert "enr:private-01234567" not in str(result)
+
+
 @pytest.mark.parametrize("enrollment_id", ("device-1", "../escape", "enr:x"))
 def test_production_revocation_rejects_invalid_enrollment(enrollment_id):
     with pytest.raises(QnapError, match="invalid production enrollment"):
@@ -149,8 +221,14 @@ def test_production_environment_uses_explicit_tls_listener():
     )
 
     assert "PROFILE_SYNC_HOST_IP=192.168.1.39\n" in rendered
-    assert "PROFILE_SYNC_TLS_CERT=/share/CACHEDEV3_DATA/.mwodevelop/profile-sync/config/tls/server.crt\n" in rendered
-    assert "PROFILE_SYNC_TLS_KEY=/share/CACHEDEV3_DATA/.mwodevelop/profile-sync/config/tls/server.key\n" in rendered
+    assert (
+        "PROFILE_SYNC_TLS_CERT=/share/CACHEDEV3_DATA/.mwodevelop/profile-sync/config/tls/server.crt\n"
+        in rendered
+    )
+    assert (
+        "PROFILE_SYNC_TLS_KEY=/share/CACHEDEV3_DATA/.mwodevelop/profile-sync/config/tls/server.key\n"
+        in rendered
+    )
 
 
 def test_production_files_reject_nonprivate_tls_key(tmp_path, monkeypatch):
@@ -195,8 +273,7 @@ def test_smoke_root_is_confined_to_container_station_share():
     )
 
     assert root == PurePosixPath(
-        "/share/CACHEDEV3_DATA/.mwodevelop-smoke/"
-        "profile-sync-20260727"
+        "/share/CACHEDEV3_DATA/.mwodevelop-smoke/profile-sync-20260727"
     )
 
 
@@ -287,9 +364,7 @@ def test_production_admin_uses_container_loopback_and_restricts_path(
     assert "127.0.0.1:8766" in session.command
     assert "opaque" not in session.command
     with pytest.raises(QnapError, match="invalid production admin path"):
-        production_admin_request(
-            session, "/health", {}, "admin-test-0002"
-        )
+        production_admin_request(session, "/health", {}, "admin-test-0002")
 
 
 def test_production_pairing_exchange_uses_private_container_loopback(

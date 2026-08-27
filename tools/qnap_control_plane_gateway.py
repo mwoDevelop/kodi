@@ -5,12 +5,17 @@ from __future__ import annotations
 
 import argparse
 import base64
+import binascii
 import hashlib
+import json
 import re
 import shlex
+import shutil
+import stat
 import subprocess
 import tempfile
 from pathlib import Path, PurePosixPath
+from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen
 
 try:
@@ -20,9 +25,12 @@ except ModuleNotFoundError:
 
 
 NAME = "KodiCPGateway"
-VERSION = "0.1.1"
+DISPLAY_NAME = "Kodi admin"
+VERSION = "0.3.1"
 BACKEND_PORT = 19445
-PROXY_PATH = "/control-plane"
+CGI_ROOT = f"/cgi-bin/qpkg/{NAME}"
+PUBLIC_BASE = f"{CGI_ROOT}/gateway.cgi/control-plane"
+WEBUI = PUBLIC_BASE + "/"
 QDK_VERSION = "2.5.3"
 QDK_URL = "https://github.com/qnap-dev/QDK/releases/download/v2.5.3/qdk_2.5.3_amd64.deb"
 QDK_SHA256 = "17b3841b7d4590a4ee025844ba583304b5e3c497d9fa8934d5175131d3908022"
@@ -39,18 +47,60 @@ def source_root(repository):
     return Path(repository).resolve() / "deploy/qnap-control-plane-gateway"
 
 
+def load_operator(path):
+    """Load only the credentials needed by the generated, private QPKG."""
+    path = Path(path).expanduser().resolve()
+    if not path.is_file() or path.is_symlink():
+        raise GatewayError("Control Plane operator file is missing or unsafe")
+    if stat.S_IMODE(path.stat().st_mode) & 0o077:
+        raise GatewayError("Control Plane operator file permissions are too broad")
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise GatewayError("Control Plane operator file is invalid") from error
+    username = document.get("username")
+    credential = document.get("password")
+    totp_uri = document.get("totp_uri")
+    if document.get("schema") != 1:
+        raise GatewayError("Control Plane operator schema differs")
+    if not isinstance(username, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", username):
+        raise GatewayError("Control Plane operator username is invalid")
+    if (
+        not isinstance(credential, str)
+        or not re.fullmatch(r"[A-Za-z0-9._~!@#$%^&*+=:/?-]{14,128}", credential)
+    ):
+        raise GatewayError("Control Plane operator credential is invalid")
+    if not isinstance(totp_uri, str):
+        raise GatewayError("Control Plane operator TOTP URI is invalid")
+    parsed = urlparse(totp_uri)
+    parameters = parse_qs(parsed.query, strict_parsing=True)
+    secrets = parameters.get("secret", [])
+    if parsed.scheme != "otpauth" or parsed.netloc != "totp" or len(secrets) != 1:
+        raise GatewayError("Control Plane operator TOTP URI is invalid")
+    secret = secrets[0].strip().upper().rstrip("=")
+    if not re.fullmatch(r"[A-Z2-7]{16,128}", secret):
+        raise GatewayError("Control Plane operator TOTP secret is invalid")
+    try:
+        padding = "=" * ((8 - len(secret) % 8) % 8)
+        decoded = base64.b32decode(secret + padding, casefold=False)
+    except (binascii.Error, ValueError) as error:
+        raise GatewayError("Control Plane operator TOTP secret is invalid") from error
+    if len(decoded) < 10:
+        raise GatewayError("Control Plane operator TOTP secret is too short")
+    return {"username": username, "credential": credential, "totp_secret": secret}
+
+
 def validate_source(repository):
     root = source_root(repository)
     config = (root / "qpkg.cfg").read_text(encoding="utf-8")
     expected = {
         "QPKG_NAME": NAME,
+        "QPKG_DISPLAY_NAME": DISPLAY_NAME,
         "QPKG_VER": VERSION,
-        # Keep the desktop target canonical. QTS still adds a separator to the
-        # generated proxy destination; the BFF normalizes that known hop.
-        "QPKG_WEBUI": PROXY_PATH,
-        "QPKG_WEB_PORT": str(BACKEND_PORT),
-        "QPKG_USE_PROXY": "1",
-        "QPKG_PROXY_PATH": PROXY_PATH,
+        "QPKG_WEBUI": WEBUI,
+        "QPKG_WEB_PORT": "-2",
+        "QPKG_WEB_SSL_PORT": "-1",
+        "QPKG_USE_PROXY": "0",
         "QPKG_DESKTOP_APP": "0",
         "QPKG_VISIBLE": "0",
         "QPKG_FORCE_VISIBLE": "1",
@@ -58,20 +108,24 @@ def validate_source(repository):
     for key, value in expected.items():
         if not re.search(rf'^{key}="{re.escape(value)}"$', config, re.MULTILINE):
             raise GatewayError(f"unsafe or missing QPKG field: {key}")
-    service = root / "shared" / f"{NAME}.sh"
-    if not service.is_file() or service.is_symlink():
-        raise GatewayError("gateway service program is missing or unsafe")
-    forbidden = ("password", "secret", "token", "private_key")
+    if "QPKG_SERVICE_PROGRAM" in config or "QPKG_PROXY_PATH" in config:
+        raise GatewayError("gateway must not register a service or QTS proxy")
+    gateway = root / "shared/www/gateway.cgi"
+    if not gateway.is_file() or gateway.is_symlink():
+        raise GatewayError("gateway CGI is missing or unsafe")
+    forbidden_assignment = re.compile(
+        r"(?im)^\s*(password|secret|token|private_key)\s*="
+    )
     for path in root.rglob("*"):
-        if path.is_file() and any(
-            word in path.read_text(encoding="utf-8").lower() for word in forbidden
+        if path.is_file() and forbidden_assignment.search(
+            path.read_text(encoding="utf-8")
         ):
             raise GatewayError("gateway package must not contain secrets")
     return {
         "name": NAME,
         "version": VERSION,
         "backend_port": BACKEND_PORT,
-        "proxy_path": PROXY_PATH,
+        "public_base": PUBLIC_BASE,
     }
 
 
@@ -81,8 +135,9 @@ def _download(url, destination):
             handle.write(chunk)
 
 
-def build(repository, output_directory):
+def build(repository, output_directory, operator):
     validate_source(repository)
+    operator = load_operator(operator)
     output = Path(output_directory).resolve()
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="mwodevelop-qdk-") as temporary:
@@ -95,11 +150,23 @@ def build(repository, output_directory):
         qdk_root = temporary / "qdk"
         subprocess.run(("dpkg-deb", "-x", str(archive), str(qdk_root)), check=True)
         qbuild = qdk_root / "usr/share/QDK/bin/qbuild"
+        generated_source = temporary / "source"
+        shutil.copytree(source_root(repository), generated_source)
+        private = generated_source / "shared/private"
+        private.mkdir(mode=0o700)
+        for name, value in (
+            ("operator-username", operator["username"]),
+            ("operator-credential", operator["credential"]),
+            ("totp-secret", operator["totp_secret"]),
+        ):
+            destination = private / name
+            destination.write_text(value + "\n", encoding="utf-8")
+            destination.chmod(0o600)
         subprocess.run(
             (
                 str(qbuild),
                 "--root",
-                str(source_root(repository)),
+                str(generated_source),
                 "--build-dir",
                 str(output),
                 "--build-arch",
@@ -117,102 +184,55 @@ def build(repository, output_directory):
     return packages[0]
 
 
-def install(session, repository):
+def install(session, repository, operator):
     validate_source(repository)
-    try:
-        metadata = verify(session)
-    except GatewayError:
-        with tempfile.TemporaryDirectory(prefix="mwodevelop-gateway-") as temporary:
-            package = build(repository, temporary)
-            encoded = base64.b64encode(package.read_bytes()).decode("ascii")
-            encoded_path = str(REMOTE_PACKAGE) + ".b64"
-            session.upload_text(encoded_path, encoded + "\n", 0o600)
+    with tempfile.TemporaryDirectory(prefix="mwodevelop-gateway-") as temporary:
+        package = build(repository, temporary, operator)
+        encoded = base64.b64encode(package.read_bytes()).decode("ascii")
+        encoded_path = str(REMOTE_PACKAGE) + ".b64"
+        session.upload_text(encoded_path, encoded + "\n", 0o600)
+        session.execute(
+            "base64 -d "
+            + shlex.quote(encoded_path)
+            + " > "
+            + shlex.quote(str(REMOTE_PACKAGE))
+            + " && chmod 600 "
+            + shlex.quote(str(REMOTE_PACKAGE))
+            + " && rm -f "
+            + shlex.quote(encoded_path)
+        )
+        try:
+            # QTS rejects locally built, unsigned packages in qpkgd before its
+            # documented ignore-cert flag is evaluated. Run the verified QDK
+            # self-extracting installer directly, matching qpkgd's own execution.
+            install_output = session.execute(
+                "QNAP_QPKG="
+                + NAME
+                + " /bin/sh "
+                + shlex.quote(str(REMOTE_PACKAGE))
+                + " 2>&1",
+                allowed=(0, 10),
+                timeout=180,
+            )
+        finally:
             session.execute(
-                "base64 -d "
-                + shlex.quote(encoded_path)
-                + " > "
-                + shlex.quote(str(REMOTE_PACKAGE))
-                + " && chmod 600 "
-                + shlex.quote(str(REMOTE_PACKAGE))
-                + " && rm -f "
-                + shlex.quote(encoded_path)
+                "rm -f " + shlex.quote(str(REMOTE_PACKAGE)), allowed=(0, 1)
             )
-            try:
-                # QTS rejects locally built, unsigned packages in qpkgd before its
-                # documented ignore-cert flag is evaluated. Run the verified QDK
-                # self-extracting installer directly, matching qpkgd's own execution.
-                install_output = session.execute(
-                    "QNAP_QPKG="
-                    + NAME
-                    + " /bin/sh "
-                    + shlex.quote(str(REMOTE_PACKAGE))
-                    + " 2>&1",
-                    allowed=(0, 10),
-                    timeout=180,
-                )
-            finally:
-                session.execute(
-                    "rm -f " + shlex.quote(str(REMOTE_PACKAGE)), allowed=(0, 1)
-                )
-        registered = session.execute(
-            "/sbin/getcfg " + NAME + " Version -d missing -f /etc/config/qpkg.conf",
-            allowed=(0, 1, 250),
-        )
-        if registered != VERSION:
-            detail = (
-                install_output.splitlines()[-1][:240]
-                if install_output
-                else "no diagnostic"
-            )
-            raise GatewayError("QPKG installation failed: " + detail)
-        session.execute(
-            "/sbin/setcfg " + NAME + " Enable TRUE -f /etc/config/qpkg.conf"
-        )
-        session.execute(
-            "/etc/init.d/" + NAME + ".sh start",
-            allowed=(0, 1),
-            timeout=60,
-        )
-        metadata = verify(session)
-    return {**metadata, **ensure_proxy(session)}
-
-
-def ensure_proxy(session):
-    """Regenerate and activate the QTS proxy rule after every deployment.
-
-    QTS can preserve valid QPKG metadata while replacing ``app_proxy.conf``
-    with a stale generic ``/apps`` rewrite after a web-server restart. Enabling
-    the package regenerates the supported rule; Qthttpd is restarted only when
-    the live route still returns 404.
-    """
-
-    rule = (
-        f'ProxyPass "{PROXY_PATH}" '
-        f'"http://127.0.0.1:{BACKEND_PORT}{PROXY_PATH}" retry=0'
+    registered = session.execute(
+        "/sbin/getcfg " + NAME + " Version -d missing -f /etc/config/qpkg.conf",
+        allowed=(0, 1, 250),
     )
-    quoted_rule = shlex.quote(rule)
-    result = session.execute(
-        "/sbin/qpkg_cli --enable "
-        + NAME
-        + " >/dev/null 2>&1 || true; sleep 3; "
-        + "grep -Fx "
-        + quoted_rule
-        + " /etc/app_proxy.conf >/dev/null || exit 41; "
-        + "code=$(curl -ksS -o /dev/null -w '%{http_code}' "
-        + f"https://127.0.0.1{PROXY_PATH}/login || true); "
-        + "if [ \"$code\" = 000 ] || [ \"$code\" = 404 ]; then "
-        + "/etc/init.d/Qthttpd.sh restart >/tmp/"
-        + NAME
-        + "-qthttpd-restart.log 2>&1; attempt=0; "
-        + "until curl -ksS -o /dev/null https://127.0.0.1/cgi-bin/; do "
-        + "attempt=$((attempt + 1)); [ $attempt -lt 30 ] || exit 42; sleep 1; done; "
-        + "fi; code=$(curl -ksS -o /dev/null -w '%{http_code}' "
-        + f"https://127.0.0.1{PROXY_PATH}/login || true); "
-        + "case \"$code\" in 200|302|303|401|403|421) ;; *) exit 43 ;; esac; "
-        + "printf '%s' \"$code\"",
-        timeout=90,
+    if registered != VERSION:
+        detail = (
+            install_output.splitlines()[-1][:240]
+            if install_output
+            else "no diagnostic"
+        )
+        raise GatewayError("QPKG installation failed: " + detail)
+    session.execute(
+        "/sbin/setcfg " + NAME + " Enable TRUE -f /etc/config/qpkg.conf"
     )
-    return {"proxy_rule": "active", "proxy_http_status": int(result)}
+    return verify(session)
 
 
 def verify(session):
@@ -222,8 +242,10 @@ def verify(session):
         "Enable",
         "WebUI",
         "Web_Port",
+        "Web_SSL_Port",
         "Use_Proxy",
         "Proxy_Path",
+        "Service_Program",
         "Desktop",
         "Visible",
         "Force_Visible",
@@ -239,10 +261,12 @@ def verify(session):
     expected = {
         "Version": VERSION,
         "Enable": "TRUE",
-        "WebUI": PROXY_PATH,
-        "Web_Port": str(BACKEND_PORT),
-        "Use_Proxy": "1",
-        "Proxy_Path": PROXY_PATH,
+        "WebUI": WEBUI,
+        "Web_Port": "-2",
+        "Web_SSL_Port": "-1",
+        "Use_Proxy": "0",
+        "Proxy_Path": "",
+        "Service_Program": "missing",
         "Desktop": "0",
         "Visible": "0",
         "Force_Visible": "1",
@@ -250,6 +274,29 @@ def verify(session):
     for field, value in expected.items():
         if fields.get(field) != value:
             raise GatewayError(f"installed QPKG field differs: {field}")
+    cgi_state = session.execute(
+        "install_path=$(/sbin/getcfg "
+        + NAME
+        + " Install_Path -d missing -f /etc/config/qpkg.conf); "
+        + "link=/home/httpd/cgi-bin/qpkg/"
+        + NAME
+        + "; test ! -L /etc/init.d/"
+        + NAME
+        + ".sh && test -L \"$link\" && test \"$(readlink \"$link\")\" = "
+        + "\"$install_path/www\" && test -x \"$link/gateway.cgi\" && "
+        + "install_path=$(/sbin/getcfg "
+        + NAME
+        + " Install_Path -d missing -f /etc/config/qpkg.conf); "
+        + "private=\"$install_path/private\"; "
+        + "for item in operator-username operator-credential totp-secret; do "
+        + "test -f \"$private/$item\" && test ! -L \"$private/$item\" && "
+        + "test \"$(stat -c '%a' \"$private/$item\")\" = 600 || exit 1; done; "
+        + "printf cgi-ready",
+        allowed=(0, 1),
+    )
+    if cgi_state != "cgi-ready":
+        raise GatewayError("installed CGI link differs")
+    fields["CGI"] = cgi_state
     return fields
 
 
@@ -257,6 +304,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository", default=".")
     parser.add_argument("--references", default=".env")
+    parser.add_argument(
+        "--operator", default=".kodi-private/control-plane-operator.json"
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
     build_parser = subparsers.add_parser("build")
     build_parser.add_argument("--output", required=True)
@@ -264,12 +314,12 @@ def main():
     subparsers.add_parser("status")
     args = parser.parse_args()
     if args.command == "build":
-        print(build(args.repository, args.output))
+        print(build(args.repository, args.output, args.operator))
         return
     session = connect(args.repository, args.references)
     try:
         result = (
-            install(session, args.repository)
+            install(session, args.repository, args.operator)
             if args.command == "deploy"
             else verify(session)
         )

@@ -7,6 +7,7 @@ import pytest
 
 from tools.qnap_compose_policy import explicit_bind_targets
 from tools.qnap_control_plane import (
+    BROWSER_PATH,
     ControlPlaneError,
     create_browser_bootstrap,
     environment,
@@ -105,6 +106,9 @@ def test_control_plane_environment_rejects_public_or_mutable_target():
     assert "CONTROL_PLANE_BROWSER_HOST=192.168.1.39" in environment(
         image, "192.168.1.39"
     )
+    assert "CONTROL_PLANE_BROWSER_BASE_PATH=" in environment(
+        image, "192.168.1.39"
+    )
     with pytest.raises(ControlPlaneError, match="private LAN"):
         environment(image, "8.8.8.8")
     with pytest.raises(ControlPlaneError, match="immutable"):
@@ -183,7 +187,7 @@ def test_control_plane_browser_requires_no_client_certificate(monkeypatch, tmp_p
 
     result = verify_browser("192.168.1.39", ca, attempts=1)
     assert result["status"] == "ready"
-    assert result["endpoint"] == "https://192.168.1.39/control-plane/login"
+    assert result["endpoint"] == f"https://192.168.1.39{BROWSER_PATH}login"
 
 
 def test_browser_bootstrap_runs_only_inside_authz_container(monkeypatch):
