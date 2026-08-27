@@ -120,7 +120,7 @@ flowchart LR
 | Fork Umbrella | GitHub + submoduł `umbrella/` | Minimalny downstream patch stack odtwarzany na aktualnym upstream |
 | MwoScrapers | GitHub + submoduł `mwoscrapers/` | Provider API, sześciu providerów, menedżer ustawień i obraz przekaźnika |
 | Fork WatchNixtoons2 | GitHub + submoduł `watchnixtoons2/` | Izolowany dodatek mwoDevelop i kontrolowana synchronizacja upstream |
-| Profile Sync add-on | GitHub + submoduł `profile-sync-addon/` | Klient synchronizacji działający wewnątrz Kodi |
+| Profile Sync add-on | GitHub + submoduł `profile-sync-addon/` | Klient synchronizacji i źródło ograniczonej telemetrii procesu działające wewnątrz Kodi |
 | OpenSubtitles.com add-on | GitHub + submoduł `opensubtitles-com/` | Zarządzany klient API OpenSubtitles.com dla całego Kodi |
 | GitHub Actions | GitHub-hosted runners | Testy, skany malware/secrets/SAST, budowanie repo i obrazów, propozycje upstream oraz promocja |
 | GitHub Pages | `https://mwodevelop.github.io/kodi/` | Jeden atomowy payload repozytoriów Kodi stable/testing i publicznych statusów |
@@ -148,6 +148,12 @@ digestów zapisanych w `qnap-stable.json`.
 `control-plane` komunikuje się z `profile-sync` przez prywatną zewnętrzną sieć
 Compose `mwodevelop-control` i osobne mTLS. Nie montuje bazy Profile Sync. Watchdog
 nie przekazuje danych do urządzeń i nie może naprawiać ani uruchamiać workflow.
+
+Procesy cykliczne są prezentowane we wspólnym modelu `ProcessObservation`. Adapter
+GitHub Actions obserwuje harmonogramy workflow, Watchdog publikuje własny stan
+kolektora, a Profile Sync przekazuje z urządzenia ostatnią próbę, sukces i termin
+retry. Control Plane zachowuje źródłowe pola na potrzeby alertów, lecz w panelu
+pokazuje dla wszystkich źródeł te same osie: obserwator, wynik, świeżość i termin.
 
 ### 2.3 Zaufany host operatora
 
@@ -254,7 +260,9 @@ sequenceDiagram
   O->>B: Promuj rewizję po obu poprawnych raportach canary
   B-->>F: Aktywne assignmenty dla właściwych logical_device_id
   F-->>B: Heartbeat, applied revision i bezpieczne kody błędów
+  F-->>B: Ograniczona ProcessObservation bez tokenów i credentiali
   CP->>B: Odczytaj zredagowaną flotę i rollout przez prywatne mTLS
+  CP->>CP: Znormalizuj heartbeat, Watchdog i GitHub do jednego widoku
 ```
 
 Profile Sync synchronizuje wyłącznie podpisaną, allowlistowaną konfigurację

@@ -256,6 +256,20 @@ nie tworzy pętli restartów. Utrwalona telemetria rozdziela `last_attempt`,
 `last_heartbeat_success`, `last_cycle_success`, liczbę kolejnych błędów, przyczynę
 oraz następny termin próby; nie zawiera tokenów ani credentiali.
 
+## Obserwowalność procesu od wersji 1.2.0
+
+Uwierzytelniony heartbeat zawiera opcjonalny `process_observation` schematu 1.
+Klient wysyła wyłącznie jawnie dozwolone znaczniki czasu, interwał, wynik,
+licznik kolejnych błędów i stały kod błędu. Serwer odrzuca dodatkowe pola,
+nieprawidłowe typy oraz wartości spoza kontraktu, zapisuje kanoniczny JSON i
+udostępnia go tylko w prywatnym widoku integracyjnym mTLS. Token enrollmentu,
+klucze, treści i credentiale nie należą do tego dokumentu.
+
+Control Plane używa tej obserwacji do wyliczenia ostatniej próby, sukcesu oraz
+następnego terminu na tych samych zasadach co dla GitHub Actions i QNAP Watchdog.
+Heartbeat starszego klienta pozostaje ważny; dopóki nie pojawi się telemetria 1.2.0,
+panel wylicza kompatybilny widok z czasu ostatniego heartbeat i interwału katalogu.
+
 ## Warstwowe rewizje rutynowe
 
 Schemat 2 pozostaje czytelny i eksportuje tylko przenośny wspólny podzbiór. Schemat 3
