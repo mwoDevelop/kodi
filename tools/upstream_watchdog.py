@@ -38,6 +38,28 @@ def fetch_runs(repository, workflow, token=None):
         return json.load(response).get("workflow_runs", [])
 
 
+def dispatch_workflow(repository, workflow, ref="main", token=None):
+    """Dispatch one allowlisted workflow without exposing the bearer token."""
+
+    if not token:
+        raise ValueError("GitHub token is required for workflow remediation")
+    url = "{}/repos/{}/actions/workflows/{}/dispatches".format(
+        API, quote(repository, safe="/"), quote(workflow, safe="")
+    )
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json",
+        "User-Agent": "mwoDevelop-upstream-watchdog/1",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    payload = json.dumps({"ref": ref}).encode("utf-8")
+    request = Request(url, data=payload, headers=headers, method="POST")
+    with urlopen(request, timeout=20) as response:
+        if response.status != 204:
+            raise OSError("unexpected workflow dispatch status")
+
+
 def _safe_run(run):
     return {
         "id": run.get("id"),
@@ -70,7 +92,13 @@ def _select_runs(runs):
     return scheduled, effective
 
 
-def evaluate(manifest, fetcher=fetch_runs, now=None, token=None):
+def evaluate(
+    manifest,
+    fetcher=fetch_runs,
+    now=None,
+    token=None,
+    remediator=None,
+):
     now = now or dt.datetime.now(dt.timezone.utc)
     results = []
     for config in manifest["workflows"]:
@@ -129,6 +157,33 @@ def evaluate(manifest, fetcher=fetch_runs, now=None, token=None):
                     "healthy": healthy,
                     "monitored_state": "HEALTHY" if healthy else "FAILED",
                 }
+                remediation_state = "DISABLED"
+                remediation_error_code = None
+                if remediator is not None and not active:
+                    age_seconds = max(0, int(age.total_seconds()))
+                    threshold = config["remediation_after_seconds"]
+                    cooldown = config["remediation_cooldown_seconds"]
+                    due = (
+                        conclusion == "success" and age_seconds >= threshold
+                    ) or (
+                        conclusion != "success" and age_seconds >= cooldown
+                    )
+                    if due:
+                        try:
+                            remediator(
+                                config["repository"],
+                                config["workflow"],
+                                ref="main",
+                                token=token,
+                            )
+                            remediation_state = "DISPATCHED"
+                        except (OSError, ValueError) as error:
+                            remediation_state = "FAILED"
+                            remediation_error_code = type(error).__name__
+                    else:
+                        remediation_state = "NOT_DUE"
+                result["remediation_state"] = remediation_state
+                result["remediation_error_code"] = remediation_error_code
             except (KeyError, TypeError, ValueError):
                 result = {
                     **config,
@@ -218,7 +273,13 @@ def load_manifest(path):
         raise ValueError("invalid watchdog manifest")
     seen = set()
     for item in payload["workflows"]:
-        if set(item) != {"repository", "workflow", "max_age_seconds"}:
+        if set(item) != {
+            "repository",
+            "workflow",
+            "max_age_seconds",
+            "remediation_after_seconds",
+            "remediation_cooldown_seconds",
+        }:
             raise ValueError("invalid watchdog workflow entry")
         identity = (item["repository"], item["workflow"])
         if (
@@ -226,6 +287,10 @@ def load_manifest(path):
             or not all(isinstance(value, str) and value for value in identity)
             or not isinstance(item["max_age_seconds"], int)
             or not 900 <= item["max_age_seconds"] <= 604800
+            or not isinstance(item["remediation_after_seconds"], int)
+            or not 900 <= item["remediation_after_seconds"] <= item["max_age_seconds"]
+            or not isinstance(item["remediation_cooldown_seconds"], int)
+            or not 300 <= item["remediation_cooldown_seconds"] <= 86400
         ):
             raise ValueError("invalid or duplicate watchdog workflow")
         seen.add(identity)
@@ -308,6 +373,11 @@ def main():
     parser.add_argument("--client-ca")
     parser.add_argument("--max-status-age-seconds", type=int, default=28800)
     parser.add_argument("--max-clock-skew-seconds", type=int, default=300)
+    parser.add_argument(
+        "--remediate",
+        action="store_true",
+        help="dispatch allowlisted stale workflows using workflow_dispatch",
+    )
     args = parser.parse_args()
     manifest = load_manifest(args.manifest)
     if args.command == "health":
@@ -341,7 +411,11 @@ def main():
     elif any(observer_values):
         parser.error("observer TLS files require --listen")
     while True:
-        report = evaluate(manifest, token=token)
+        report = evaluate(
+            manifest,
+            token=token,
+            remediator=dispatch_workflow if args.remediate else None,
+        )
         state.set(report)
         if args.status:
             write_status(args.status, report)

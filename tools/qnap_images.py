@@ -666,6 +666,11 @@ def _github_identity(token):
             "rate_remaining": int(
                 response.headers.get("X-RateLimit-Remaining", 0)
             ),
+            "oauth_scopes": sorted(
+                item.strip()
+                for item in response.headers.get("X-OAuth-Scopes", "").split(",")
+                if item.strip()
+            ),
         }
 
 
@@ -715,16 +720,24 @@ def watchdog_github_credentials(references):
             continue
         if identity.get("rate_limit", 0) <= 60:
             continue
+        # The remediation worker performs no repository writes, but GitHub
+        # classifies workflow_dispatch as the classic PAT ``workflow`` scope.
+        # Fine-grained tokens do not expose their permissions in response
+        # headers, so reject them here instead of deploying an unprovable
+        # capability that would fail only after a missed schedule.
+        if "workflow" not in set(identity.get("oauth_scopes", [])):
+            continue
         return {
             "token": token,
             "source": source,
             "login": identity["login"],
             "rate_limit": identity["rate_limit"],
             "rate_remaining": identity["rate_remaining"],
+            "capability": "workflow_dispatch",
         }
     raise ImageError(
-        "no authenticated GitHub API token matches GITHUB_USER; "
-        "GITHUB_PASS must be a PAT or gh must hold a valid login"
+        "no authenticated GitHub token with workflow_dispatch capability "
+        "matches GITHUB_USER; gh must hold a valid login with workflow scope"
     )
 
 
@@ -864,6 +877,8 @@ def validate_watchdog_policy(document):
         "--port 9445",
         "--tls-cert /run/watchdog/tls/server.crt",
         "--client-ca /run/watchdog/tls/clients-ca.crt",
+        "--interval-seconds 900",
+        "--remediate",
     ):
         if required not in command:
             raise ImageError("watchdog observer command policy differs")
@@ -1019,7 +1034,13 @@ def deploy_watchdog(session, repository, image, references, private):
         "policy": policy,
         "github_auth": {
             key: github[key]
-            for key in ("source", "login", "rate_limit", "rate_remaining")
+            for key in (
+                "source",
+                "login",
+                "rate_limit",
+                "rate_remaining",
+                "capability",
+            )
         },
         # Compatibility alias retained for one N/N+1 generation.
         "runtime_healthy": status["healthy"],

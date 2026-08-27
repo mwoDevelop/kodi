@@ -10,7 +10,13 @@ from tools.control_plane_catalog import (
     load_severity_policy,
     load_status_sources,
 )
-from tools.upstream_watchdog import evaluate, fetch_runs, load_manifest, validate_status
+from tools.upstream_watchdog import (
+    dispatch_workflow,
+    evaluate,
+    fetch_runs,
+    load_manifest,
+    validate_status,
+)
 
 SCHEDULED_WORKFLOWS = {
     ("mwoDevelop/kodi", "reconcile-upstreams.yml"): (
@@ -91,6 +97,8 @@ def _manifest():
                 "repository": "owner/repo",
                 "workflow": "sync.yml",
                 "max_age_seconds": 129600,
+                "remediation_after_seconds": 90000,
+                "remediation_cooldown_seconds": 900,
             },
         ],
     }
@@ -143,6 +151,108 @@ def test_watchdog_fetches_schedule_and_manual_remediation_runs(monkeypatch):
     assert "event=" not in observed["url"]
     assert "per_page=20" in observed["url"]
     assert observed["timeout"] == 20
+
+
+def test_watchdog_dispatches_only_with_bearer_token(monkeypatch):
+    observed = {}
+
+    class Response:
+        status = 204
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    def open_request(request, timeout):
+        observed["url"] = request.full_url
+        observed["headers"] = dict(request.header_items())
+        observed["payload"] = json.loads(request.data)
+        observed["method"] = request.method
+        observed["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr(upstream_watchdog, "urlopen", open_request)
+    dispatch_workflow("owner/repo", "sync.yml", token="secret-token")
+    assert observed["url"].endswith(
+        "/repos/owner/repo/actions/workflows/sync.yml/dispatches"
+    )
+    assert observed["headers"]["Authorization"] == "Bearer secret-token"
+    assert observed["payload"] == {"ref": "main"}
+    assert observed["method"] == "POST"
+    assert observed["timeout"] == 20
+
+
+def test_watchdog_dispatches_stale_allowlisted_workflow_once_per_evaluation():
+    now = dt.datetime(2026, 8, 27, 12, tzinfo=dt.timezone.utc)
+    calls = []
+
+    def remediate(repository, workflow, ref, token):
+        calls.append((repository, workflow, ref, token))
+
+    report = evaluate(
+        _manifest(),
+        fetcher=lambda *_args, **_kwargs: [
+            {
+                "id": 1,
+                "event": "schedule",
+                "status": "completed",
+                "conclusion": "success",
+                "updated_at": "2026-08-26T10:00:00Z",
+            }
+        ],
+        now=now,
+        token="token",
+        remediator=remediate,
+    )
+    assert calls == [("owner/repo", "sync.yml", "main", "token")]
+    assert report["workflows"][0]["remediation_state"] == "DISPATCHED"
+    assert report["workflows"][0]["remediation_error_code"] is None
+
+
+def test_watchdog_does_not_dispatch_fresh_or_active_workflow():
+    now = dt.datetime(2026, 8, 27, 12, tzinfo=dt.timezone.utc)
+    calls = []
+    for runs in (
+        [
+            {
+                "id": 1,
+                "event": "schedule",
+                "status": "completed",
+                "conclusion": "success",
+                "updated_at": "2026-08-27T11:00:00Z",
+            }
+        ],
+        [
+            {
+                "id": 2,
+                "event": "workflow_dispatch",
+                "status": "in_progress",
+                "conclusion": None,
+                "updated_at": "2026-08-27T11:59:00Z",
+            },
+            {
+                "id": 1,
+                "event": "schedule",
+                "status": "completed",
+                "conclusion": "success",
+                "updated_at": "2026-08-26T10:00:00Z",
+            },
+        ],
+    ):
+        report = evaluate(
+            _manifest(),
+            fetcher=lambda *_args, current=runs, **_kwargs: current,
+            now=now,
+            token="token",
+            remediator=lambda *args, **kwargs: calls.append((args, kwargs)),
+        )
+        assert report["workflows"][0]["remediation_state"] in {
+            "NOT_DUE",
+            "DISABLED",
+        }
+    assert calls == []
 
 
 def test_watchdog_rejects_failure_and_stale_success():
