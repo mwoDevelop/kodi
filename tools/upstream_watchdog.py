@@ -23,9 +23,14 @@ def _timestamp(value):
     )
 
 
-def fetch_runs(repository, workflow, token=None):
-    url = "{}/repos/{}/actions/workflows/{}/runs?per_page=20".format(
-        API, quote(repository, safe="/"), quote(workflow, safe="")
+def _fetch_runs_for_event(repository, workflow, event, token=None):
+    url = (
+        "{}/repos/{}/actions/workflows/{}/runs?per_page=20&event={}"
+    ).format(
+        API,
+        quote(repository, safe="/"),
+        quote(workflow, safe=""),
+        quote(event, safe=""),
     )
     headers = {
         "Accept": "application/vnd.github+json",
@@ -35,7 +40,32 @@ def fetch_runs(repository, workflow, token=None):
     if token:
         headers["Authorization"] = "Bearer " + token
     with urlopen(Request(url, headers=headers), timeout=20) as response:
-        return json.load(response).get("workflow_runs", [])
+        runs = json.load(response).get("workflow_runs", [])
+    if not isinstance(runs, list):
+        raise ValueError("GitHub workflow runs response is invalid")
+    return runs
+
+
+def fetch_runs(repository, workflow, token=None):
+    # A workflow may also run very frequently through workflow_run. Fetching a
+    # single unfiltered page can therefore push the daily schedule outside the
+    # result window and falsely report it as missing. The watchdog contract
+    # observes only the scheduler and its explicit manual remediation.
+    runs = []
+    for event in ("schedule", "workflow_dispatch"):
+        runs.extend(
+            _fetch_runs_for_event(
+                repository, workflow, event=event, token=token
+            )
+        )
+    return sorted(
+        runs,
+        key=lambda item: (
+            item.get("created_at") or item.get("updated_at") or "",
+            item.get("id") if isinstance(item.get("id"), int) else -1,
+        ),
+        reverse=True,
+    )
 
 
 def dispatch_workflow(repository, workflow, ref="main", token=None):
