@@ -19,6 +19,8 @@ services:
       - /run/watchdog/tls/clients-ca.crt
       - --interval-seconds
       - "900"
+      - --remediation-recheck-seconds
+      - "60"
       - --remediate
     restart: unless-stopped
     init: true

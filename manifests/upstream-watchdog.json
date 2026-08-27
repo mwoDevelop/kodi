@@ -11,14 +11,14 @@
     {
       "repository": "mwoDevelop/kodi",
       "workflow": "approve-umbrella-update.yml",
-      "max_age_seconds": 3600,
+      "max_age_seconds": 4500,
       "remediation_after_seconds": 3600,
       "remediation_cooldown_seconds": 900
     },
     {
       "repository": "mwoDevelop/kodi",
       "workflow": "approve-umbrella-promotion.yml",
-      "max_age_seconds": 7200,
+      "max_age_seconds": 8100,
       "remediation_after_seconds": 7200,
       "remediation_cooldown_seconds": 900
     },
@@ -67,7 +67,7 @@
     {
       "repository": "mwoDevelop/umbrellaplug.github.io",
       "workflow": "approve-upstream-update.yml",
-      "max_age_seconds": 3600,
+      "max_age_seconds": 4500,
       "remediation_after_seconds": 3600,
       "remediation_cooldown_seconds": 900
     },
