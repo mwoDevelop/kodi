@@ -1,19 +1,19 @@
 {
-  "candidate_id": "82d2d90b1198f217ac8c1c15378427b9a3cb69a1fb155e249f51a3886416eae5",
+  "candidate_id": "7c9040fb2068c808f5b0320ec2251b07af5f5f951374c2383ebf1b8ee056040c",
   "channel": "stable",
   "schema": 1,
   "services": {
     "control-plane": {
-      "image": "ghcr.io/mwodevelop/kodi-control-plane@sha256:5c59eb6ff5cd0d145947f4513d8aa14b8284470c2238b68bcab80311534cd781",
-      "input_sha256": "6a12f742bde51015e309647a29796bd7dd6d5411e22e13cb5c1fd8d041f0c2f7",
+      "image": "ghcr.io/mwodevelop/kodi-control-plane@sha256:9583761046558b575d525abccf8befe9882ab78145244c29ccf99d316c37b516",
+      "input_sha256": "6b9560305d8e0b4c8f37eed1aff6011256b9a17dd52e5b7376d8a079d10bf230",
       "platforms": [
         "linux/amd64",
         "linux/arm/v7"
       ],
-      "security_report_sha256": "83f19d7993f6326e40e905ffea5fffe3d29b45db9034cc3736d95f876a6be279",
-      "source_commit": "451dffe43ebf00d90d816cab7a733c7d5e2ad14d",
+      "security_report_sha256": "5046f4679859e42b3f53cb12db1a42f730b5e6a83f16bc00245810d54d6622ed",
+      "source_commit": "9ddb44fbcff57040bf9cae3588e4b16ca8a04ca4",
       "source_repository": "mwoDevelop/kodi-control-plane",
-      "workflow_run_id": "33078040743"
+      "workflow_run_id": "33081985851"
     },
     "profile-sync": {
       "image": "ghcr.io/mwodevelop/kodi-profile-sync-server@sha256:5b695331e4c20fa45a3790a9abc664968d502f6df738982ad0ebdaa65f831bea",
