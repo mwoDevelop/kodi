@@ -221,6 +221,29 @@ def source_identity(service, require_clean=True):
     return {"commit": commit, "dirty": dirty}
 
 
+def source_commit_is_ancestor(service, commit):
+    """Return whether an approved source commit belongs to the current history."""
+    exists = _run(
+        ("git", "-C", service.repository, "cat-file", "-e", commit + "^{commit}"),
+        check=False,
+    )
+    if exists.returncode:
+        return False
+    ancestor = _run(
+        (
+            "git",
+            "-C",
+            service.repository,
+            "merge-base",
+            "--is-ancestor",
+            commit,
+            "HEAD",
+        ),
+        check=False,
+    )
+    return ancestor.returncode == 0
+
+
 def source_input_sha256(service, commit=None):
     """Hash exact tracked build inputs and build policy at an exact commit."""
     identity = source_identity(service, require_clean=False)

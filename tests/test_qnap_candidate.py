@@ -28,7 +28,7 @@ def test_prepare_reuses_unchanged_approved_image_without_build(monkeypatch, tmp_
     monkeypatch.setattr(
         qnap_candidate.qnap_images,
         "source_identity",
-        lambda *_args, **_kwargs: {"commit": "b" * 40},
+        lambda *_args, **_kwargs: {"commit": "f" * 40},
     )
     monkeypatch.setattr(
         qnap_candidate.qnap_images,

@@ -106,14 +106,21 @@ def compose_lock(approval_paths):
         service = services[name]
         if document["source_repository"] != service.github_repository:
             raise ValueError("QNAP approval source repository differs")
-        if document["source_commit"] != qnap_images.source_identity(
+        current_commit = qnap_images.source_identity(
             service, require_clean=False
-        )["commit"]:
-            raise ValueError("QNAP approval is not for the checked-out source commit")
-        expected_input = qnap_images.source_input_sha256(
+        )["commit"]
+        if not qnap_images.source_commit_is_ancestor(
+            service, document["source_commit"]
+        ):
+            raise ValueError("QNAP approval source commit is not in current history")
+        approved_input = qnap_images.source_input_sha256(
             service, document["source_commit"]
         )
-        if document["input_sha256"] != expected_input:
+        current_input = qnap_images.source_input_sha256(service, current_commit)
+        if (
+            document["input_sha256"] != approved_input
+            or document["input_sha256"] != current_input
+        ):
             raise ValueError("QNAP approval build input digest differs")
         approvals[name] = {
             key: document[key]
