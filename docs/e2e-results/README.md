@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-08
 
+- [Odnowienie sesji Kodi admin przez QTS](2026-08-28-control-plane-session-renewal.md)
 - [Korekty semantyki kondycji operacyjnej, enrollmentów i panelu](2026-08-27-operational-health-corrections.md)
 - [Przywrócenie zdrowia providerów, watchdoga, heartbeatów i harmonogramów](2026-08-26-operations-health-remediation.md)
 - [QNAP Control Plane 3A2a — dostęp przeglądarkowy bez certyfikatu klienta](2026-08-22-control-plane-3a2a-release.md)
