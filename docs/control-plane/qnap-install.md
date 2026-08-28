@@ -73,7 +73,9 @@ Po wdrożeniu należy potwierdzić:
    natomiast `https://<QNAP>/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/login`
    zachowuje ręczny fallback bez certyfikatu klienta; port backendu
    `127.0.0.1:19445` nie jest osiągalny z LAN, a bezusługowy QPKG nie korzysta
-   z `app_proxy.conf`;
+   z `app_proxy.conf`; wygasłe cookie Control Plane jest weryfikowane przez loopback
+   i odnawiane z aktywnego administratorskiego `NAS_SID` zamiast pokazywać ponownie
+   formularz logowania;
 8. bootstrap, login, logout, restart i odzyskanie TOTP zachowują kontrakt sesji.
 
 Po aktualizacji z wydania `0.1.x` baza jest migrowana expand-only ze schematu 1

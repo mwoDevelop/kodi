@@ -20,6 +20,12 @@ pliku `.kodi-private/control-plane-operator.json` wyłącznie do generowanego QP
 instalowane jako pliki `0600` poza katalogiem WWW i nigdy nie trafiają do DOM,
 adresu URL ani logów.
 
+Przed pominięciem logowania gateway sprawdza istniejące cookie sesyjne bezpośrednio
+w backendzie loopback. Wygasłe cookie nie blokuje odnowienia: przy nadal ważnym
+administratorskim `NAS_SID` jest zastępowane nową sesją i CSRF. Walidacja nie
+podąża za przekierowaniami i nie wysyła cookie Control Plane poza
+`127.0.0.1:19445`.
+
 Tylko ciasteczka wydawane przez zweryfikowany skrót QTS otrzymują
 `SameSite=Lax`, aby bezpieczna nawigacja najwyższego poziomu z pulpitu QTS po
 HTTP do systemowego HTTPS mogła dokończyć przekierowanie. Ręczny login nadal
