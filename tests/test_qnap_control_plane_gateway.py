@@ -181,7 +181,13 @@ def test_gateway_proxies_only_the_public_cgi_route(repository_root):
     assert "Status: 404 Not Found\n" in rejected.stdout
 
 
-def test_qts_admin_session_performs_server_side_totp_login(repository_root, tmp_path):
+@pytest.mark.parametrize(
+    ("control_plane_cookie", "validates_existing_session"),
+    (("", False), ("; mwo_cp_session=stale_session_token_value_123456", True)),
+)
+def test_qts_admin_session_performs_server_side_totp_login(
+    repository_root, tmp_path, control_plane_cookie, validates_existing_session
+):
     received = {}
     secret_bytes = b"12345678901234567890"
     secret = base64.b32encode(secret_bytes).decode("ascii").rstrip("=")
@@ -195,6 +201,13 @@ def test_qts_admin_session_performs_server_side_totp_login(repository_root, tmp_
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
+            if self.path == PUBLIC_BASE + "/":
+                received["validated_cookie"] = self.headers.get("Cookie")
+                self.send_response(303)
+                self.send_header("Location", PUBLIC_BASE + "/login")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             if self.path == PUBLIC_BASE + "/auth/status":
                 payload = b'{"csrf":"csrf-value"}'
                 self.send_response(200)
@@ -276,7 +289,7 @@ def test_qts_admin_session_performs_server_side_totp_login(repository_root, tmp_
                 "REQUEST_METHOD": "GET",
                 "REQUEST_URI": PUBLIC_BASE + "/",
                 "HTTP_HOST": "192.168.1.39",
-                "HTTP_COOKIE": "NAS_SID=QTSSESSION123",
+                "HTTP_COOKIE": "NAS_SID=QTSSESSION123" + control_plane_cookie,
                 "HTTPS": "on",
                 "SERVER_PORT": "443",
             },
@@ -304,4 +317,86 @@ def test_qts_admin_session_performs_server_side_totp_login(repository_root, tmp_
         "origin": "https://192.168.1.39",
         "csrf": "csrf-value",
         "cookie": "mwo_cp_csrf=csrf-value",
+        **(
+            {"validated_cookie": "mwo_cp_session=stale_session_token_value_123456"}
+            if validates_existing_session
+            else {}
+        ),
+    }
+
+
+def test_valid_control_plane_session_skips_qts_reauthentication(
+    repository_root, tmp_path
+):
+    received = {"qts_auth": 0, "cookies": []}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == PUBLIC_BASE + "/":
+                received["cookies"].append(self.headers.get("Cookie"))
+                payload = b"<title>Kodi Control Plane</title>"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+            self.send_error(404)
+
+        def do_POST(self):
+            if self.path == "/cgi-bin/authLogin.cgi":
+                received["qts_auth"] += 1
+            self.send_error(500)
+
+        def log_message(self, _format, *_args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    shared = tmp_path / "shared"
+    www = shared / "www"
+    www.mkdir(parents=True)
+    source = (
+        repository_root / "deploy/qnap-control-plane-gateway/shared/www/gateway.cgi"
+    ).read_text(encoding="utf-8")
+    source = source.replace(
+        'backend="http://127.0.0.1:19445"',
+        f'backend="http://127.0.0.1:{server.server_port}"',
+    ).replace(
+        'qts_auth="https://127.0.0.1/cgi-bin/authLogin.cgi"',
+        f'qts_auth="http://127.0.0.1:{server.server_port}/cgi-bin/authLogin.cgi"',
+    )
+    script = www / "gateway.cgi"
+    script.write_text(source, encoding="utf-8")
+    script.chmod(0o755)
+    session = "valid_session_token_value_1234567890"
+    try:
+        result = subprocess.run(
+            (str(script),),
+            env={
+                **os.environ,
+                "REQUEST_METHOD": "GET",
+                "REQUEST_URI": PUBLIC_BASE + "/",
+                "HTTP_HOST": "192.168.1.39",
+                "HTTP_COOKIE": f"NAS_SID=QTSSESSION123; mwo_cp_session={session}",
+                "HTTPS": "on",
+                "SERVER_PORT": "443",
+            },
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+    assert "Status: 200\n" in result.stdout
+    assert result.stdout.endswith("<title>Kodi Control Plane</title>")
+    assert received == {
+        "qts_auth": 0,
+        "cookies": [
+            f"mwo_cp_session={session}",
+            f"NAS_SID=QTSSESSION123; mwo_cp_session={session}",
+        ],
     }

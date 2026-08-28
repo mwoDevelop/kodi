@@ -14,6 +14,7 @@ publikację head przez CAS. Nie jest to jeszcze assignment dla urządzenia.
 - [Model zagrożeń](threat-model.md)
 - [Instalacja pierwszego przyrostu na QNAP](qnap-install.md)
 - [Plan migracji panelu na QTS HTTPS gateway](../QNAP_CONTROL_PLANE_BROWSER_GATEWAY_PLAN.md)
+- [Plan odnawiania wygasłej sesji panelu przez QTS](../QNAP_CONTROL_PLANE_SESSION_RENEWAL_PLAN.md)
 - [ADR](adr/README.md)
 - [Review planu panelu administracyjnego z 2026-08-21](../QNAP_ADMIN_MODULE_PLAN_REVIEW_2026-08-21.md)
 

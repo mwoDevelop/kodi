@@ -26,7 +26,7 @@ except ModuleNotFoundError:
 
 NAME = "KodiCPGateway"
 DISPLAY_NAME = "Kodi admin"
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 BACKEND_PORT = 19445
 CGI_ROOT = f"/cgi-bin/qpkg/{NAME}"
 PUBLIC_BASE = f"{CGI_ROOT}/gateway.cgi/control-plane"

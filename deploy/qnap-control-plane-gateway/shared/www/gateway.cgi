@@ -106,6 +106,21 @@ qts_admin_session() {
     grep -Eq '<isAdmin>(<!\[CDATA\[)?1(\]\]>)?</isAdmin>' "$qts_body"
 }
 
+control_plane_session_valid() {
+    session_cookie=$(cookie_value mwo_cp_session) || return 1
+    case "$session_cookie" in
+        ""|*[!A-Za-z0-9_-]*) return 1 ;;
+    esac
+    [ "${#session_cookie}" -ge 32 ] && [ "${#session_cookie}" -le 128 ] || return 1
+    session_headers="$work_dir/session-headers"
+    "$curl_bin" --silent --max-time 10 --request GET \
+        --dump-header "$session_headers" --output /dev/null \
+        --header "Host: $HTTP_HOST" --header 'Accept-Encoding: identity' \
+        --header "Cookie: mwo_cp_session=$session_cookie" \
+        "$backend$public_base/" || return 1
+    [ "$(awk '/^HTTP\// { code=$2 } END { print code }' "$session_headers")" = 200 ]
+}
+
 base32_hex() {
     awk -v encoded="$1" 'BEGIN {
         alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
@@ -238,7 +253,7 @@ done
 
 case "${REQUEST_METHOD:-}:${REQUEST_URI:-}" in
     "GET:$public_base"|"GET:$public_base/")
-        if [ -n "$openssl_bin" ] && ! cookie_value mwo_cp_session >/dev/null && qts_admin_session; then
+        if [ -n "$openssl_bin" ] && ! control_plane_session_valid && qts_admin_session; then
             control_plane_auto_login || true
         fi
         ;;
