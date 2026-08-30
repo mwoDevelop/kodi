@@ -1,6 +1,40 @@
 import sony_watchnixtoons2
 
 
+def test_playback_method_prefers_user_override(monkeypatch):
+    payloads = iter(
+        [
+            '<setting id="playbackMethod">2</setting>',
+        ]
+    )
+    monkeypatch.setattr(
+        sony_watchnixtoons2,
+        "shell",
+        lambda *_args, **_kwargs: next(payloads),
+    )
+
+    assert sony_watchnixtoons2.playback_method("adb", "serial") == "2"
+
+
+def test_playback_method_uses_addon_default_without_user_override(monkeypatch):
+    payloads = iter(
+        [
+            "",
+            (
+                '<setting id="playbackMethod" type="enum" default="1" '
+                'values="Select|Highest|Lowest" />'
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        sony_watchnixtoons2,
+        "shell",
+        lambda *_args, **_kwargs: next(payloads),
+    )
+
+    assert sony_watchnixtoons2.playback_method("adb", "serial") == "1"
+
+
 def test_quality_dialog_uses_adb_fallback_when_jsonrpc_does_not_close(
     monkeypatch,
 ):

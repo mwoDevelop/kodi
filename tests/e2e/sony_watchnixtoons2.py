@@ -27,19 +27,34 @@ from sony_kodi_matrix import (
 ADDON_ID = "plugin.video.watchnixtoons2.mwodevelop"
 
 def playback_method(adb: str, serial: str) -> str | None:
-    path = (
+    user_path = (
         "/sdcard/Android/data/org.xbmc.kodi/files/.kodi/userdata/addon_data/"
         + ADDON_ID
         + "/settings.xml"
     )
-    payload = shell(
+    user_payload = shell(
         adb,
         serial,
-        "grep 'id=\"playbackMethod\"' '%s'" % path,
+        "grep 'id=\"playbackMethod\"' '%s'" % user_path,
         check=False,
     )
-    match = re.search(r">([^<]+)<", payload)
-    return match.group(1) if match else None
+    user_match = re.search(r">\s*([^<\s]+)\s*<", user_payload)
+    if user_match:
+        return user_match.group(1)
+
+    addon_path = (
+        "/sdcard/Android/data/org.xbmc.kodi/files/.kodi/addons/"
+        + ADDON_ID
+        + "/resources/settings.xml"
+    )
+    addon_payload = shell(
+        adb,
+        serial,
+        "grep 'id=\"playbackMethod\"' '%s'" % addon_path,
+        check=False,
+    )
+    default_match = re.search(r'\bdefault="([^"]+)"', addon_payload)
+    return default_match.group(1) if default_match else None
 
 
 def accept_quality_dialog(
@@ -105,8 +120,11 @@ def main() -> int:
     if rpc.call("JSONRPC.Ping") != "pong":
         raise RuntimeError("Kodi JSON-RPC did not return pong")
     method = playback_method(args.adb, args.serial)
-    if method not in (None, "0", "1", "2"):
-        raise RuntimeError("unexpected WatchNixtoons2 playbackMethod: %r" % method)
+    if method != "1":
+        raise RuntimeError(
+            "WatchNixtoons2 playbackMethod must resolve to auto-highest (1), "
+            "got %r" % method
+        )
 
     start_line = log_line_count(args.adb, args.serial) + 1
     root = rpc.call(
