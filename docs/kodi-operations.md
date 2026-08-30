@@ -211,7 +211,10 @@ niezależnym review oraz merge PR wznów ten sam run:
 
 Wznowienie sprawdza exact-head CI, merge SHA, immutable attestation ID i
 SHA-256, dokładne bajty QNAP candidate, zakończenie deployu oraz publiczne
-bajty. Dopiero potem wykonuje pełny rollout. Orchestrator nie zatwierdza i nie
+bajty. Po deployu stable czeka dodatkowo na wyciszenie pojedynczej kolejki
+Pages i wymaga, aby publiczny manifest wskazywał dokładne SHA z nowego stable
+locka; spójny, ale jeszcze stary payload nie może uruchomić urządzeń. Dopiero
+potem wykonuje pełny rollout. Orchestrator nie zatwierdza i nie
 scala własnego PR.
 
 Wariant bez promocji stable:
