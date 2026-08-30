@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mwodevelop.github.io/kodi/schemas/nordvpn-android-tv-policy.schema.json",
+  "title": "mwoDevelop NordVPN Android TV split-tunnel policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "device_id", "platform", "expected", "vpn"],
+  "properties": {
+    "schema": {"const": 1},
+    "device_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+    "platform": {"const": "android-tv"},
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "android_user_id"],
+      "properties": {
+        "model": {"type": "string", "minLength": 1},
+        "android_user_id": {"const": 0}
+      }
+    },
+    "vpn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "split_tunneling", "excluded_packages", "required_tunneled_packages", "require_active_validated_tunnel"],
+      "properties": {
+        "package": {"const": "com.nordvpn.android"},
+        "split_tunneling": {"const": true},
+        "excluded_packages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)+$"}
+        },
+        "required_tunneled_packages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)+$"}
+        },
+        "require_active_validated_tunnel": {"type": "boolean"}
+      }
+    }
+  }
+}

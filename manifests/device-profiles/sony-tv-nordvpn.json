@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "device_id": "sony-tv",
+  "platform": "android-tv",
+  "expected": {"model": "BRAVIA 4K GB ATV3", "android_user_id": 0},
+  "vpn": {
+    "package": "com.nordvpn.android",
+    "split_tunneling": true,
+    "excluded_packages": ["com.netflix.ninja"],
+    "required_tunneled_packages": ["org.xbmc.kodi"],
+    "require_active_validated_tunnel": true
+  }
+}

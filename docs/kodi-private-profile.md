@@ -471,6 +471,28 @@ Ustawienia systemowe znajdujące się poza Kodi są wersjonowane oddzielnie w ra
 `manifests/device-profiles/`. Profile zawierają nazwy pakietów, żądane zasady i
 odniesienia do prywatnych wartości `.env`, ale nigdy same dane uwierzytelniające.
 
+Sony TV i Bedroom TV mają osobne, jawne profile natywnego klienta NordVPN:
+`sony-tv-nordvpn.json` oraz `bedroom-tv-nordvpn.json`. Oba wymagają włączonego
+dzielonego tunelowania, wykluczenia wyłącznie pakietu Netflix
+`com.netflix.ninja` i pozostawienia Kodi `org.xbmc.kodi` wewnątrz tunelu. Audyt
+nie odczytuje prywatnego magazynu NordVPN. Porównuje właściciela aktywnej,
+zweryfikowanej sieci VPN oraz zakresy UID publikowane przez Androida, dzięki
+czemu wykrywa zarówno brak wykluczenia Netflixa, jak i każdą dodatkowo
+wykluczoną aplikację:
+
+```bash
+.venv/bin/python tools/nordvpn_android_tv_policy.py \
+  --profile manifests/device-profiles/sony-tv-nordvpn.json \
+  --serial "$KODI_DEVICE_SONY_TV_ADB" \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --adb-server-port 5038
+```
+
+Zmiana samej listy aplikacji pozostaje operacją w interfejsie NordVPN, ponieważ
+aplikacja nie udostępnia obsługiwanego API zarządzania tą prywatną preferencją.
+Po zmianie należy zawsze uruchomić powyższy audyt; zgodny wynik jest
+deterministyczny i nie opiera się na obrazie ekranu.
+
 Zastosuj i zweryfikuj politykę X88 Pro 20 za pomocą:
 
 ```bash
@@ -504,6 +526,13 @@ zatwierdzonego przez Android interfejsu `tun0`; Same zapisane ustawienia nie są
 akceptowane jako dowód autostartu. Polityka X88 wymaga również, aby `192.168.1.0/24`
 korzystał z `net_gateway`, co odpowiada wykluczeniu sieci LAN NordVPN, więc QNAP Profile
 Sync pozostaje osiągalny poza VPN.
+
+X88 pozostaje udokumentowanym wyjątkiem: natywny klient NordVPN zgłasza na tym
+urządzeniu niekompatybilność, dlatego używany jest OpenVPN Connect. Klient ten
+nie udostępnia równoważnej, stabilnej konfiguracji wykluczającej pojedynczą
+aplikację Android TV. Nie wolno więc raportować X88 jako zgodnego z profilem
+natywnego dzielonego tunelowania; jego odrębny profil zapewnia tunel całego
+ruchu z obejściem wyłącznie lokalnego CIDR.
 
 Profile połączeń OpenVPN i dane uwierzytelniające usługi NordVPN pozostają w
 `.kodi-private/` i `.env`; wersjonowane są tylko ich nazwy i odniesienia. Polecenie
