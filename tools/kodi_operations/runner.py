@@ -45,6 +45,7 @@ from tools.kodi_reinstall import (
     preflight_target,
     uninstall_and_clean,
 )
+from tools.kodi_stable_artifacts import prepare as prepare_stable_artifacts
 from tools.kodi_sync_inventory import load_sync_inventory
 from tools.kodi_transports import TransportError
 from tools.kodi_umbrella_rd_probe import probe as rd_probe
@@ -102,6 +103,19 @@ def release_rollout_result(child_report: dict[str, Any], child_code: int) -> Ste
     if StepResult.DEFERRED.value in results:
         return StepResult.DEFERRED
     raise RuntimeError("partial post-release rollout has no classified cause")
+
+
+def wait_public_stable_channel(repository: Path, attempts=30, delay=5) -> dict:
+    """Wait until Pages exposes artifacts matching the promoted stable lock."""
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return prepare_stable_artifacts(repository, channel="stable")
+        except (OSError, ValueError) as error:
+            last_error = error
+            if attempt < attempts:
+                time.sleep(delay)
+    raise RuntimeError("public stable channel did not converge") from last_error
 
 
 class OperationLock:
@@ -1060,13 +1074,27 @@ class ProductionExecutor:
             raise RuntimeError("stable promotion is not merged")
         if action == "deploy":
             deployed = self.github.wait_deploy(merge_commit)
+            # deploy-stable publishes an immutable release payload, while the
+            # workflow_run Pages writer exposes it asynchronously.  An
+            # internally consistent old Pages manifest is not sufficient:
+            # wait for the single-writer queue and then require exact lock
+            # convergence before any device is allowed to reconcile stable.
+            self.github.wait_publication_queue_idle()
+            public = wait_public_stable_channel(self.repository)
             subprocess.run(
                 (sys.executable, "tools/smoke_public.py"),
                 cwd=self.repository,
                 check=True,
                 timeout=600,
             )
-            return StepOutcome(StepResult.PASS, {"merge_commit": merge_commit, **deployed})
+            return StepOutcome(
+                StepResult.PASS,
+                {
+                    "merge_commit": merge_commit,
+                    "public_lock_sha256": public["lock_sha256"],
+                    **deployed,
+                },
+            )
         if action == "rollout":
             child_plan = rollout_plan(self.repository, full_diagnostics=True)
             child_report, child_code = OperationRunner(

@@ -15,6 +15,7 @@ from tools.kodi_operations.runner import (
     StepOutcome,
     qnap_service_is_operational,
     release_rollout_result,
+    wait_public_stable_channel,
 )
 from tools.kodi_operations.store import RunStore, StoreError
 
@@ -264,6 +265,42 @@ def test_qnap_reconcile_deploys_before_health_evaluation(monkeypatch, tmp_path):
         "--lock",
         "manifests/locks/qnap-stable.json",
     ]
+
+
+def test_public_stable_waits_for_exact_lock_convergence(monkeypatch, tmp_path):
+    attempts = []
+    sleeps = []
+
+    def prepare(selected, channel):
+        attempts.append((selected, channel))
+        if len(attempts) < 3:
+            raise ValueError("public artifact manifest differs from channel lock")
+        return {"lock_sha256": "a" * 64}
+
+    monkeypatch.setattr(operation_runner, "prepare_stable_artifacts", prepare)
+    monkeypatch.setattr(
+        operation_runner.time,
+        "sleep",
+        lambda seconds: sleeps.append(seconds),
+    )
+
+    assert wait_public_stable_channel(tmp_path, attempts=3, delay=2) == {
+        "lock_sha256": "a" * 64
+    }
+    assert attempts == [(tmp_path, "stable")] * 3
+    assert sleeps == [2, 2]
+
+
+def test_public_stable_fails_closed_after_bounded_retries(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        operation_runner,
+        "prepare_stable_artifacts",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ValueError("stale")),
+    )
+    monkeypatch.setattr(operation_runner.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(RuntimeError, match="did not converge"):
+        wait_public_stable_channel(tmp_path, attempts=2, delay=0)
 
 
 def test_watchdog_security_alert_is_operational_but_remains_visible():
