@@ -353,6 +353,24 @@ profil można odtworzyć z szablonu bez wypisywania danych usługi:
 .venv/bin/python tools/kodi_rapideo_token.py export --device sony-tv
 ```
 
+Na Sony TV i Bedroom TV natywny NordVPN używa dzielonego tunelowania. Jedyną
+aplikacją poza VPN ma być Netflix; Kodi i wszystkie pozostałe aplikacje mają
+pozostać w tunelu. Stan Sony można potwierdzić bez dostępu do poświadczeń:
+
+```bash
+.venv/bin/python tools/nordvpn_android_tv_policy.py \
+  --profile manifests/device-profiles/sony-tv-nordvpn.json \
+  --serial "$KODI_DEVICE_SONY_TV_ADB" \
+  --adb /home/mwo/android-sdk/platform-tools/adb \
+  --adb-server-port 5038
+```
+
+Analogiczny audyt Bedroom TV używa profilu
+`manifests/device-profiles/bedroom-tv-nordvpn.json` i zmiennej
+`KODI_DEVICE_BEDROOM_TV_ADB`. X88 nie jest celem tego audytu, ponieważ jego
+natywna aplikacja NordVPN jest niekompatybilna i urządzenie korzysta z osobnej
+polityki OpenVPN Connect.
+
 ## Wyniki i raport
 
 | Kod | Stan | Znaczenie |
