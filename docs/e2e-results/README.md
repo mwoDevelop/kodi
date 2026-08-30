@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-08
 
+- [Dokończenie rolloutu Bedroom TV](2026-08-30-bedroom-tv-completion.md)
 - [NordVPN Android TV — polityka dzielonego tunelowania](2026-08-30-nordvpn-split-tunnel-policy.md)
 - [Odnowienie sesji Kodi admin przez QTS](2026-08-28-control-plane-session-renewal.md)
 - [Korekty semantyki kondycji operacyjnej, enrollmentów i panelu](2026-08-27-operational-health-corrections.md)

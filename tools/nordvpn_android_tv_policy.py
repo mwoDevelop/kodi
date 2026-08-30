@@ -15,6 +15,10 @@ DEVICE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 PACKAGE = re.compile(r"^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+$")
 ANDROID_USER_UID_MIN = 0
 ANDROID_USER_UID_MAX = 99999
+FIRST_APPLICATION_UID = 10000
+LAST_APPLICATION_UID = 19999
+SDK_SANDBOX_UID_OFFSET = 10000
+SDK_SANDBOX_MIN_API = 33
 
 
 def _require_string(value, label):
@@ -107,13 +111,19 @@ class AdbClient:
 
 def _package_uid(client, package):
     output = client.shell("pm", "list", "packages", "-U", package)
-    match = re.fullmatch(rf"package:{re.escape(package)} uid:(\d+)", output)
+    match = re.fullmatch(
+        rf"package:{re.escape(package)} uid:(\d+)(?:,\d+)*", output
+    )
     return int(match.group(1)) if match else None
 
 
 def _connected_vpn_network(connectivity):
     for line in connectivity.splitlines():
-        if "type: VPN[]" in line and "state: CONNECTED/CONNECTED" in line:
+        legacy_connected = (
+            "type: VPN[]" in line and "state: CONNECTED/CONNECTED" in line
+        )
+        modern_connected = re.search(r"\bni\{VPN CONNECTED\b", line)
+        if legacy_connected or modern_connected:
             return line
     return ""
 
@@ -145,9 +155,21 @@ def _excluded_uids(ranges):
     return excluded
 
 
+def _expected_excluded_uids(package_uids, android_sdk):
+    expected = {uid for uid in package_uids if uid is not None}
+    if android_sdk >= SDK_SANDBOX_MIN_API:
+        expected.update(
+            uid + SDK_SANDBOX_UID_OFFSET
+            for uid in tuple(expected)
+            if FIRST_APPLICATION_UID <= uid <= LAST_APPLICATION_UID
+        )
+    return expected
+
+
 def audit_profile(profile, client):
     vpn = profile["vpn"]
     model = client.shell("getprop", "ro.product.model")
+    android_sdk = int(client.shell("getprop", "ro.build.version.sdk"))
     current_user = client.shell("am", "get-current-user")
     vpn_uid = _package_uid(client, vpn["package"])
     excluded_package_uids = {
@@ -161,10 +183,12 @@ def audit_profile(profile, client):
     vpn_network = _connected_vpn_network(connectivity)
     ranges = _uid_ranges(vpn_network)
     excluded_uids = _excluded_uids(ranges) if ranges else None
-    expected_excluded_uids = {
-        uid for uid in excluded_package_uids.values() if uid is not None
-    }
-    owner_match = re.search(r"EstablishingAppUid: (\d+)", vpn_network)
+    expected_excluded_uids = _expected_excluded_uids(
+        excluded_package_uids.values(), android_sdk
+    )
+    owner_match = re.search(
+        r"(?:EstablishingAppUid|OwnerUid): (\d+)", vpn_network
+    )
     owner_uid = int(owner_match.group(1)) if owner_match else None
     packages_available = all(
         uid is not None
