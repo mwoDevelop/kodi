@@ -179,9 +179,11 @@ i Umbrella. Najpierw przekaż port TCP JSON-RPC Kodi:
   --result docs/e2e-results/sony-umbrella-matrix.json
 ```
 
-W przypadku deterministycznego testu odtwarzania WatchNixtoons2, najpierw wybierz `Auto
-Play Highest Quality` w ustawieniu metody odtwarzania dodatku. Biegacz sprawdza aktualny
-katalog `Latest Releases` i znany odcinek w mediach Kodi:
+W przypadku deterministycznego testu odtwarzania WatchNixtoons2 biegacz wymaga
+efektywnego ustawienia `Auto Play Highest Quality` (domyślnego od wersji mwoDevelop
+0.29.2). Gdy profil użytkownika nie nadpisuje tej wartości, biegacz odczytuje ją z
+definicji zainstalowanego dodatku. Następnie sprawdza aktualny katalog `Latest Releases`
+i znany odcinek w mediach Kodi:
 
 ```bash
 .venv/bin/python tests/e2e/sony_watchnixtoons2.py \

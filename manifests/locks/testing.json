@@ -7,9 +7,9 @@
       "zip_sha256": "3eda5c1cbb8f04386ea9f8ddf869dad75a4842c7a6ee1d0b51e5dc3b56ebbcc9"
     },
     "plugin.video.watchnixtoons2.mwodevelop": {
-      "commit": "2b4087f1db712762e1ae9a59a5c194f2ab1b1b15",
-      "version": "0.29.1",
-      "zip_sha256": "fec698fc7e5aae1684e145d64fdd187c75d180b6ed61d5a1cf9aac2e4c777668"
+      "commit": "edb6553a25becf25e30b5c291441a81818d9ead8",
+      "version": "0.29.2",
+      "zip_sha256": "0f2217a4e03519394a321229dabe328f93271c715bcaa0784de331acfe4d4f97"
     },
     "script.module.mwoscrapers": {
       "commit": "357c1e6df7d8414768a69ba8108fe84b44ef5804",
