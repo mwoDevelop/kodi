@@ -493,6 +493,11 @@ aplikacja nie udostępnia obsługiwanego API zarządzania tą prywatną preferen
 Po zmianie należy zawsze uruchomić powyższy audyt; zgodny wynik jest
 deterministyczny i nie opiera się na obrazie ekranu.
 
+Audyt obsługuje zarówno starszy format `dumpsys connectivity` używany przez
+Sony, jak i format Androida 14 z `ni{VPN CONNECTED}` i `OwnerUid`. W Androidzie
+13+ uznaje powiązany UID SDK Sandbox za część tej samej wykluczonej aplikacji;
+nie interpretuje go błędnie jako dodatkowego wykluczenia.
+
 Zastosuj i zweryfikuj politykę X88 Pro 20 za pomocą:
 
 ```bash
