@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "addons": {
+    "plugin.video.watchnixtoons2.mwodevelop": {
+      "version_range": {
+        "min_inclusive": "0.29.2",
+        "max_exclusive": "1.0.0"
+      },
+      "settings": {
+        "playbackMethod": "1"
+      }
+    }
+  }
+}

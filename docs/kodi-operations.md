@@ -92,6 +92,16 @@ oraz ustawia go jako domyślną usługę filmów i seriali; błąd zachowuje pop
 pliki ustawień. Ogólne sondy providera i Real-Debrid są obecnie częścią adaptera
 Android, a nie adaptera Flatpak.
 
+Wąski zestaw ustawień dodatków, które mają być jednakowe na istniejących i
+nowych profilach, definiuje publiczna polityka
+`manifests/kodi-managed-addon-settings.json`. Adapter Androida stosuje ją
+transakcyjnie dopiero po instalacji dokładnie przypiętej wersji dodatku,
+zmienia wyłącznie wymienione klucze przez API Kodi i zachowuje wszystkie
+pozostałe ustawienia użytkownika. Zakres wersji zapobiega przeniesieniu starej
+wartości do niezgodnego przyszłego API dodatku. Obecna polityka ustawia
+`playbackMethod=1` (Auto Play Highest Quality) dla WatchNixtoons2 od wersji
+0.29.2; kolejny przebieg musi zwrócić `managed_settings.status=NO_CHANGE`.
+
 Preflight Androida usuwa z `advancedsettings.xml` wyłącznie stare sekcje
 `videodatabase` i `musicdatabase`. Biblioteka oraz wyszukiwanie nie zależą dzięki
 temu od dostępności MariaDB na QNAP; pozostałe ustawienia zaawansowane są
