@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-08
 
+- [Pełny rollout synchronizacji stanu odtwarzania](2026-08-31-playback-state-sync-full-rollout.md)
 - [Synchronizacja stanu odtwarzania — BlueStacks i X88](2026-08-31-playback-state-sync-canary.md)
 - [WatchNixtoons2 0.29.2 — domyślne autoodtwarzanie najwyższej jakości na Sony](2026-08-30-watchnixtoons2-0.29.2-sony.md)
 - [Dokończenie rolloutu Bedroom TV](2026-08-30-bedroom-tv-completion.md)

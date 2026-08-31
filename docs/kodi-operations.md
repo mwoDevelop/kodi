@@ -354,14 +354,14 @@ recovery tylko wtedy, gdy brakuje któregoś wymaganego pola. Ustawia wtedy prze
 API Kodi wyłącznie pięć pól uwierzytelnienia oraz flagę włączenia. Nie kopiuje
 całego pliku ustawień i nie nadpisuje tokenów legalnie odświeżonych lokalnie.
 
-X88 używa profilu `NordVPN-PL314-TCP443-Auto-X88`, z wyłączeniem
+X88 używa profilu `NordVPN PL145 UDP Auto X88`, z wyłączeniem
 `192.168.1.0/24` z tunelu, always-on i `connect_latest` po restarcie. Prywatny
 profil można odtworzyć z szablonu bez wypisywania danych usługi:
 
 ```bash
 .venv/bin/python tools/nordvpn_openvpn_profile.py \
-  .kodi-private/devices/x88pro20/vpn/nordvpn/pl314.nordvpn.com.tcp443.openvpn-connect.ovpn \
-  .kodi-private/devices/x88pro20/vpn/nordvpn/pl314.nordvpn.com.tcp443.autologin.openvpn-connect.ovpn \
+  .kodi-private/devices/x88pro20/vpn/nordvpn/pl145.nordvpn.com.udp.openvpn-connect.ovpn \
+  .kodi-private/devices/x88pro20/vpn/nordvpn/pl145.nordvpn.com.udp.autologin.openvpn-connect.ovpn \
   --bypass-cidr 192.168.1.0/24
 
 .venv/bin/python tools/kodi_rapideo_token.py export --device sony-tv

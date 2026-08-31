@@ -1,9 +1,9 @@
 # Plan synchronizacji stanu odtwarzania
 
-Status: zaimplementowany, zakwalifikowany i wydany w stable na BlueStacks/X88.
-Release domknięto po naprawie bramy originów i deterministycznym przywracaniu RD
-w canary. Po utrzymaniu stabilnego stanu obu canary kolejnym etapem jest pełny
-rollout na pozostałe dostępne urządzenia oraz konwergencja wymaganych usług QNAP.
+Status: zaimplementowany, zakwalifikowany, wydany w stable i wdrożony na całej
+flocie. Release domknięto po naprawie bramy originów i deterministycznym
+przywracaniu RD w canary, a następnie wykonano pełny rollout na sześć urządzeń oraz
+konwergencję wymaganych usług QNAP.
 
 ## 1. Cel i decyzje projektowe
 
@@ -340,4 +340,20 @@ panel nie zgłasza nowych realnych błędów. Nie tworzy się nowego release, je
 promowane bajty i locki nie uległy zmianie.
 
 Zredagowany, odtwarzalny raport znajduje się w
+`docs/e2e-results/2026-08-31-playback-state-sync-full-rollout.md`; osobny raport
+canary pozostaje w
 `docs/e2e-results/2026-08-31-playback-state-sync-canary.md`.
+
+### Wynik realizacji etapu
+
+- rollout `c92631c91bb54a488eca2cee51be2281` zakończył się `COMPLETE` dla
+  BlueStacks, X88, Sony TV, Bedroom TV oraz obu profili NUC;
+- playback LWW jest włączony dla dokładnie jednej aktywnej generacji każdego
+  urządzenia, we wspólnym `scope:home`; wszystkie klienty raportują `HEALTHY`,
+  cursor 9, zero oczekujących eventów i brak błędów;
+- starsza generacja 15 X88 została unieważniona bezpiecznym plan/apply CAS dopiero
+  po potwierdzeniu świeżej generacji 16;
+- Control Plane raportuje `overall_state=OK`, 6/6 świeżych urządzeń, zdrowe usługi
+  i harmonogramy oraz zero alertów;
+- nie było potrzeby tworzenia kolejnego release dodatków ani wdrażania nowych
+  obrazów QNAP, ponieważ promowane bajty i locki pozostały bez zmian.
