@@ -94,6 +94,12 @@ def test_probe_accepts_schema_2_and_reports_only_redacted_secret_health(tmp_path
                 "secret_type": "youtube-session-v1",
                 "secret_set_generation": 1,
                 "secret_last_verified_utc": "2026-08-21T18:00:00Z",
+                "playback_status": "HEALTHY",
+                "playback_last_success_utc": "2026-08-21T18:01:00Z",
+                "playback_cursor": 4,
+                "playback_pending_events": 0,
+                "playback_pending_mapping": 1,
+                "playback_pending_application": 2,
             }
         ),
         encoding="utf-8",
@@ -106,6 +112,10 @@ def test_probe_accepts_schema_2_and_reports_only_redacted_secret_health(tmp_path
     assert result["encryption_key_registered"] is True
     assert result["secret_state"] == "SHADOW_VERIFIED"
     assert result["secret_set_generation"] == 1
+    assert result["playback_status"] == "HEALTHY"
+    assert result["playback_cursor"] == 4
+    assert result["playback_pending_mapping"] == 1
+    assert result["playback_pending_application"] == 2
     assert "never-print" not in serialized
 
 

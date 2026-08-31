@@ -113,6 +113,23 @@ def _requires_reenrollment(result):
     )
 
 
+def _can_replace_quarantined_enrollment(observed, active_revision):
+    """Allow an explicit replacement only for a failed first assignment.
+
+    A quarantine after any successfully applied revision remains immutable: it
+    may represent a genuinely unsafe or broken configuration and must not be
+    erased by a routine convergence run.
+    """
+
+    return bool(
+        observed.get("paired")
+        and observed.get("identity_consistent")
+        and observed.get("status") == "QUARANTINED"
+        and observed.get("applied_revision") is None
+        and observed.get("assigned_revision") == active_revision
+    )
+
+
 def _replace_config(path, config):
     temporary = path.with_suffix(path.suffix + ".tmp")
     with temporary.open("w", encoding="utf-8") as handle:
@@ -132,7 +149,13 @@ def _revoke(repository, enrollment_id):
         session.close()
 
 
-def converge(repository, device_id, adb, port):
+def converge(
+    repository,
+    device_id,
+    adb,
+    port,
+    replace_quarantined_enrollment=False,
+):
     inventory = load_sync_inventory(repository)
     if device_id not in inventory["devices"]:
         raise ValueError("unknown Profile Sync Android device")
@@ -146,7 +169,23 @@ def converge(repository, device_id, adb, port):
     policy = inventory["profile_sync"]
     previous_enrollment_id = observed.get("enrollment_id")
     pairing = None
-    if not observed.get("paired"):
+    replace_enrollment = False
+    if replace_quarantined_enrollment:
+        current_assignment = bootstrap_active(repository, device_id)
+        if not _can_replace_quarantined_enrollment(
+            observed, current_assignment["active_revision"]
+        ):
+            raise RuntimeError(
+                "Profile Sync quarantine is not eligible for safe replacement"
+            )
+        replace_enrollment = True
+        pairing = _pairing(
+            repository,
+            device_id,
+            policy["channel"],
+            _target_tags(device, adb, port, serial),
+        )
+    elif not observed.get("paired"):
         pairing = _pairing(
             repository,
             device_id,
@@ -165,6 +204,7 @@ def converge(repository, device_id, adb, port):
         "interval_hours": policy["interval_hours"],
         "read_only": policy["read_only"],
         **({"pairing_code": pairing["code"]} if pairing else {}),
+        **({"replace_enrollment": True} if replace_enrollment else {}),
     }
     private = repository / ".kodi-private/profile-sync-production/runtime"
     private.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -221,17 +261,6 @@ def converge(repository, device_id, adb, port):
                 check=False,
             )
             result = _run_until_marker(adb, port, serial, command)
-            if result and result.get("ok"):
-                # Pairing codes are single-use. The next pass may be needed to
-                # pick up a freshly assigned revision, but it must operate on
-                # the new enrollment instead of deleting it and replaying the
-                # consumed code.
-                config.pop("replace_enrollment", None)
-                config.pop("pairing_code", None)
-                _replace_config(local, config)
-                adb_command(
-                    adb, port, serial, "push", str(local), REMOTE_CONFIG
-                )
         if not result or not result.get("ok"):
             raise RuntimeError(
                 "Profile Sync Android convergence failed: %s/%s/%s"
@@ -241,8 +270,16 @@ def converge(repository, device_id, adb, port):
                     (result or {}).get("http_status", "none"),
                 )
             )
-        verified = _profile_sync_probe(adb, port, serial)
         assignment = bootstrap_active(repository, device_id)
+        if pairing is not None:
+            # Pairing codes are single-use. A following pass may be needed to
+            # fetch a newly assigned revision, but it must use the enrollment
+            # created above instead of replaying the consumed code.
+            config.pop("replace_enrollment", None)
+            config.pop("pairing_code", None)
+            _replace_config(local, config)
+            adb_command(adb, port, serial, "push", str(local), REMOTE_CONFIG)
+        verified = _profile_sync_probe(adb, port, serial)
         if (
             verified.get("assigned_revision") != assignment["active_revision"]
             or verified.get("applied_revision") != assignment["active_revision"]
@@ -309,10 +346,26 @@ def main():
     parser.add_argument("--device", required=True)
     parser.add_argument("--adb", default="/home/mwo/android-sdk/platform-tools/adb")
     parser.add_argument("--adb-server-port", type=int, default=5038)
+    parser.add_argument(
+        "--replace-quarantined-enrollment",
+        action="store_true",
+        help=(
+            "replace only a quarantined enrollment that has never applied "
+            "the current active revision"
+        ),
+    )
     args = parser.parse_args()
     print(
         json.dumps(
-            converge(ROOT, args.device, args.adb, args.adb_server_port),
+            converge(
+                ROOT,
+                args.device,
+                args.adb,
+                args.adb_server_port,
+                replace_quarantined_enrollment=(
+                    args.replace_quarantined_enrollment
+                ),
+            ),
             indent=2,
             sort_keys=True,
         )
