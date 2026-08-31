@@ -52,6 +52,25 @@ Prywatność: raport nie zawiera tytułów, URL-i, tokenów ani identyfikatorów
 11. Końcowa lokalna macierz na niemutowalnym snapshocie przeszła 5/5 kontroli na
     każdym canary: inventory, wersje/originy, Umbrella search, Umbrella
     resolver/playback i WatchNixtoons2 playback.
+12. Release `ed22e86823794da39bf463f3e3e18a67` zakończył się `COMPLETE`. Snapshot
+    `6e8ca80bc5a19529b133ccec77cc36f25eed2c3fcd0be546433728400aba9414`
+    został promowany przez PR #299 i opublikowany w stable. Publiczny lock ma SHA-256
+    `d27052a65ad22a0716f9258bc1640f59831ce95fb3cf99489002f34c59ab3b11`.
+13. Rollout stable najpierw na BlueStacks, potem X88 potwierdził oczekiwane wersje
+    siedmiu dodatków i 6/6 pochodzeń stable. Drugi przebieg obu urządzeń zwrócił
+    `NO_CHANGE`; produkcyjny sync przez TLS także zwrócił `NO_CHANGE` bez
+    oczekującego raportu.
+14. Po wdrożeniu locka QNAP Control Plane działa na obrazie
+    `sha256:98dff2ec8a676b571591ca6058ba4fce3255ffb92b6a0533d56d4de684928404`,
+    a Profile Sync na
+    `sha256:042ba838d1ab06274d276751bde67776d5fbae10081908e294731f185bbb8d20`;
+    oba oraz pozostałe usługi raportują `healthy`.
+15. Końcowa sonda z wdrożonym backendem raportuje na obu urządzeniach
+    `playback_status=HEALTHY`, cursor 9, zero pending eventów i brak błędu.
+    BlueStacks ma zero odłożonych aplikacji. X88 zachowuje jeden rekord jako
+    `pending_application`, ponieważ odpowiadająca mu ścieżka nie ma jeszcze natywnego
+    wiersza w bazie Kodi; rekord pozostaje widoczny przez cache WatchNixtoons2 i nie
+    obniża zdrowia synchronizacji.
 
 ## Testy regresji
 

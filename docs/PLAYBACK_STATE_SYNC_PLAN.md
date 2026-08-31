@@ -1,7 +1,8 @@
 # Plan synchronizacji stanu odtwarzania
 
-Status: zaimplementowany i zakwalifikowany na BlueStacks/X88; release w toku po
-naprawie bramy originów i deterministycznym przywracaniu RD w canary.
+Status: zaimplementowany, zakwalifikowany i wydany w stable na BlueStacks/X88.
+Release domknięto po naprawie bramy originów i deterministycznym przywracaniu RD
+w canary.
 
 ## 1. Cel i decyzje projektowe
 
@@ -292,6 +293,12 @@ Stan z 2026-08-31:
 - na obu canary wymuszono zgodną politykę Umbrella i lokalną/zdalną historię YouTube;
   heartbeat jest zredagowany. Sama autoryzacja Trakt wymaga późniejszego działania
   użytkownika i pozostaje jawnie `false`.
+- certyfikowany snapshot
+  `6e8ca80bc5a19529b133ccec77cc36f25eed2c3fcd0be546433728400aba9414`
+  został opublikowany jako stable; Profile Sync 1.3.3 i WatchNixtoons2 0.30.3
+  mają na obu canary źródło stable, a ponowne rollouty zwracają `NO_CHANGE`;
+- certyfikowane obrazy Control Plane i Profile Sync wdrożono z locka
+  `manifests/locks/qnap-stable.json`; wszystkie usługi QNAP raportują `healthy`.
 
 Zredagowany, odtwarzalny raport znajduje się w
 `docs/e2e-results/2026-08-31-playback-state-sync-canary.md`.
