@@ -7,9 +7,9 @@
       "zip_sha256": "3eda5c1cbb8f04386ea9f8ddf869dad75a4842c7a6ee1d0b51e5dc3b56ebbcc9"
     },
     "plugin.video.watchnixtoons2.mwodevelop": {
-      "commit": "8abf6afb87c4e5c1c39011445ccd73df9d480f9d",
-      "version": "0.30.0",
-      "zip_sha256": "466298a7a49cfc5e7be4a9cf23f0feb339fcb49b78e28ae3265c48706e937411"
+      "commit": "ad7e201bf2296195ea27f325f8a13793646fd605",
+      "version": "0.30.1",
+      "zip_sha256": "72c38404399366c56a6ab9fba99ee13a80e3b7e55edb7bbb43a86e51336129ec"
     },
     "script.module.mwoscrapers": {
       "commit": "357c1e6df7d8414768a69ba8108fe84b44ef5804",
@@ -23,9 +23,9 @@
       "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
     },
     "service.mwodevelop.profilesync": {
-      "commit": "8dce537d7d98107ec33d8852bda9eb607e4f9823",
-      "version": "1.3.1",
-      "zip_sha256": "6a85521c16f393ab6c1ee7644ff7984f39b7aa8717e98985538f9912133d657b"
+      "commit": "fb179e00ea4ecd5403fe2b76c7c14dbad0d6d34e",
+      "version": "1.3.2",
+      "zip_sha256": "32268a76458a8ed273a5b6b9f4592946c2cc51caec5ae06be99083c9f224ab23"
     },
     "service.subtitles.opensubtitles-com": {
       "commit": "27b00fc2ba9c1637f6cd4c858a1c702bee786280",

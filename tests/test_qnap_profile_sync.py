@@ -18,6 +18,7 @@ from tools.qnap_profile_sync import (
     apply_production_revocation,
     plan_production_revocation,
     revoke_production_enrollment,
+    set_production_playback_state,
     validate_production_files,
     verify_production,
     qnap_connection_settings,
@@ -184,6 +185,55 @@ def test_production_revocation_uses_exact_host_only_enrollment(monkeypatch):
     }
     assert "profile_sync_server.admin" in session.command
     assert session.command.endswith(" revoke enr:device-01234567")
+
+
+def test_production_playback_state_uses_exact_host_only_enrollment(monkeypatch):
+    class Session:
+        command = None
+
+        def execute(self, command, timeout=30):
+            self.command = command
+            assert timeout == 120
+            return json.dumps(
+                {
+                    "enrollment_id": "enr:device-01234567",
+                    "playback_state_enabled": True,
+                    "playback_scope_id": "scope:home",
+                }
+            )
+
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.container_station",
+        lambda _session: ("/container-station", "/usr/bin/docker"),
+    )
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.production_compose_command",
+        lambda _docker: "docker compose",
+    )
+    session = Session()
+
+    result = set_production_playback_state(
+        session, "enr:device-01234567", True, "scope:home"
+    )
+
+    assert result["playback_state_enabled"] is True
+    assert " set-playback-state enr:device-01234567 " in session.command
+    assert session.command.endswith("--enabled true --scope-id scope:home")
+
+
+@pytest.mark.parametrize(
+    "enrollment_id,enabled,scope_id",
+    (
+        ("device-1", True, "scope:home"),
+        ("enr:device-01234567", "true", "scope:home"),
+        ("enr:device-01234567", True, "../escape"),
+    ),
+)
+def test_production_playback_state_rejects_invalid_input(
+    enrollment_id, enabled, scope_id
+):
+    with pytest.raises(QnapError):
+        set_production_playback_state(None, enrollment_id, enabled, scope_id)
 
 
 def test_production_revocation_plan_download_and_apply_are_private(
