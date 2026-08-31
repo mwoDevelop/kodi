@@ -220,7 +220,7 @@ def test_current_bundle_pointer_is_content_addressed_and_path_safe(tmp_path):
 
 
 @pytest.mark.parametrize("running", [True, False])
-def test_portable_publisher_starts_kodi_only_when_not_running(
+def test_portable_operation_wakes_device_and_starts_kodi_only_when_not_running(
     monkeypatch, running
 ):
     commands = []
@@ -245,5 +245,15 @@ def test_portable_publisher_starts_kodi_only_when_not_running(
 
     _ensure_kodi_started("adb", 5038, "device")
 
-    assert len(commands) == (1 if running else 2)
-    assert ready == ([] if running else [True])
+    assert commands[:3] == [
+        ("shell", "input keyevent KEYCODE_WAKEUP"),
+        ("shell", "wm dismiss-keyguard"),
+        ("shell", "pidof org.xbmc.kodi"),
+    ]
+    assert len(commands) == (3 if running else 4)
+    if not running:
+        assert commands[-1] == (
+            "shell",
+            "monkey -p org.xbmc.kodi -c android.intent.category.LAUNCHER 1 >/dev/null",
+        )
+    assert ready == [True]

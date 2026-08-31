@@ -86,7 +86,7 @@ def run_kodi_script(adb, port, serial, command, timeout=120):
         "rm -f '%s'" % REMOTE_MARKER,
         check=False,
     )
-    _wait_for_kodi_ready(adb, port, serial)
+    _ensure_kodi_started(adb, port, serial)
     try:
         with AdbJsonRpcClient(adb, port, serial) as jsonrpc:
             jsonrpc.call(
@@ -213,6 +213,18 @@ def _restart(adb, port, serial):
 
 
 def _ensure_kodi_started(adb, port, serial):
+    for command in (
+        "input keyevent KEYCODE_WAKEUP",
+        "wm dismiss-keyguard",
+    ):
+        adb_command(
+            adb,
+            port,
+            serial,
+            "shell",
+            command,
+            check=False,
+        )
     running = adb_command(
         adb,
         port,
@@ -222,16 +234,15 @@ def _ensure_kodi_started(adb, port, serial):
         check=False,
         text=True,
     )
-    if running.returncode == 0 and (running.stdout or "").strip():
-        return
-    adb_command(
-        adb,
-        port,
-        serial,
-        "shell",
-        "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
-        % KODI_PACKAGE,
-    )
+    if running.returncode != 0 or not (running.stdout or "").strip():
+        adb_command(
+            adb,
+            port,
+            serial,
+            "shell",
+            "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
+            % KODI_PACKAGE,
+        )
     _wait_for_kodi_ready(adb, port, serial)
 
 
