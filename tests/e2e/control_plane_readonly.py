@@ -453,7 +453,7 @@ def main():
             status, fleet = wait_for(endpoint + "/v1/fleet", context, control)
             if status != 200 or fleet["profile_sync"]["status"] != "ok":
                 raise RuntimeError("Profile Sync fleet did not cross mTLS")
-            if fleet["profile_sync"]["data"]["database_schema"] != 5:
+            if fleet["profile_sync"]["data"]["database_schema"] != 7:
                 raise RuntimeError("unexpected Profile Sync database schema")
             no_client = ssl.create_default_context(cafile=operator_tls / "ca.crt")
             try:
@@ -509,7 +509,7 @@ def main():
                         "schema": 1,
                         "status": "PASS",
                         "fleet_devices": len(fleet["profile_sync"]["data"]["devices"]),
-                        "profile_sync_database_schema": 5,
+                        "profile_sync_database_schema": 7,
                         "mtls_without_client": "REJECTED",
                         "mutation": "REJECTED",
                         "bundle_lifecycle": "PREPARING_READY_PUBLISHED",
