@@ -106,7 +106,8 @@ Preflight Androida usuwa z `advancedsettings.xml` wyłącznie stare sekcje
 `videodatabase` i `musicdatabase`. Biblioteka oraz wyszukiwanie nie zależą dzięki
 temu od dostępności MariaDB na QNAP; pozostałe ustawienia zaawansowane są
 zachowywane. Ten sam przebieg usuwa kod i `addon_data` jawnie wycofanych
-FenLight/Coco, oryginalnego WatchNixtoons2 oraz nieobsługiwanych repozytoriów,
+FenLight, YouTube2KodiLibrary, Coco, oryginalnego WatchNixtoons2 oraz
+nieobsługiwanych repozytoriów,
 ale odmawia usunięcia repozytorium, które nadal jest źródłem zainstalowanego
 dodatku.
 

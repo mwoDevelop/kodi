@@ -21,6 +21,7 @@ from tools.kodi_profile import adb_command
 # to delete a repository that still owns any installed add-on.
 RETIRED_ADDONS = (
     "plugin.video.fenlight",
+    "plugin.youtube2kodilibrary",
     "script.module.cocoscrapers",
     "plugin.video.watchnixtoons2",
     "repository.cocoscrapers",

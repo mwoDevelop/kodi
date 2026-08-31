@@ -1,6 +1,6 @@
 # Stan wdrożenia Profile Sync
 
-Data: 2026-07-31
+Data: 2026-08-31
 
 To jest chronologiczny zapis wdrożenia, a nie strona statusu na żywo. Poniższe
 stwierdzenia dotyczące wersji opisują bramę osiągniętą w zarejestrowanym dniu. Bieżący
@@ -10,6 +10,31 @@ tools/qnap_images.py status` i kontroli urządzenia udokumentowanych w
 w `docs/README.md`.
 
 ## Zaimplementowano
+
+### Przyrost 2026-08-31: stan odtwarzania
+
+- Profile Sync 1.3.0 ma osobny, pięciominutowy cykl playback i lokalny journal
+  SQLite; awaria sieci nie usuwa zdarzenia;
+- WatchNixtoons2 0.30.0 przekazuje wyłącznie wersjonowany namespace,
+  deterministyczny hash strony odcinka i dokładną ścieżkę `plugin://`;
+- serwer 0.9.0 nadaje rewizje LWW, odrzuca stary `based_on_revision`, obsługuje
+  idempotentny replay i trzyma tombstone `unwatched`;
+- funkcja jest domyślnie wyłączona per enrollment; włączenie wymaga capability
+  `playback-state-lww-v1` i hostowej komendy `set-playback-state`;
+- Umbrella nadal korzysta z Trakt, a YouTube z historii konta. Profile Sync
+  wymusza politykę i raportuje wyłącznie zredagowane booleany;
+- Fen Light oraz YouTube2KodiLibrary są wycofane i usuwane przez preflight
+  Android bez adaptera historii;
+- Rapideo pozostaje fail-closed do czasu wydzielenia stabilnej trasy opartej na
+  `file.id`; nazwa i rozmiar pliku nie są dopuszczalną tożsamością.
+
+Powtarzalny test backendu obejmujący HTTP, idempotencję i konwergencję:
+
+```bash
+cd /home/mwo/projects/kodi-profile-sync-server
+PYTHONPATH=src /home/mwo/projects/kodi/.venv/bin/python \
+  tests/e2e/verified_loopback.py
+```
 
 - `manifests/devices.schema.json` z walidacją kompatybilnego schematu 1/2 i zredagowanym
   przykładem schematu 2 Android/Flatpak;
