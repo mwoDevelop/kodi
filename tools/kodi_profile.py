@@ -1155,6 +1155,27 @@ class AdbJsonRpcClient:
                 check=False,
             )
 
+    @staticmethod
+    def _matching_response(payload, request_id):
+        """Return this request's response while ignoring TCP notifications."""
+        try:
+            text = payload.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        decoder = json.JSONDecoder()
+        offset = 0
+        while True:
+            while offset < len(text) and text[offset].isspace():
+                offset += 1
+            if offset >= len(text):
+                return None
+            try:
+                document, offset = decoder.raw_decode(text, offset)
+            except json.JSONDecodeError:
+                return None
+            if isinstance(document, dict) and document.get("id") == request_id:
+                return document
+
     def call(self, method, params=None):
         self.request_id += 1
         request = {
@@ -1177,10 +1198,9 @@ class AdbJsonRpcClient:
                 if not block:
                     break
                 response += block
-                try:
-                    document = json.loads(response)
-                except json.JSONDecodeError:
-                    pass
+                if len(response) > 8 * 1024 * 1024:
+                    raise RuntimeError("Kodi JSON-RPC response exceeded size policy")
+                document = self._matching_response(response, self.request_id)
         if document is None:
             raise RuntimeError("Kodi JSON-RPC returned an incomplete response")
         if "error" in document:
