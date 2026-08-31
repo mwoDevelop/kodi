@@ -2,7 +2,8 @@
 
 Status: zaimplementowany, zakwalifikowany i wydany w stable na BlueStacks/X88.
 Release domknięto po naprawie bramy originów i deterministycznym przywracaniu RD
-w canary.
+w canary. Po utrzymaniu stabilnego stanu obu canary kolejnym etapem jest pełny
+rollout na pozostałe dostępne urządzenia oraz konwergencja wymaganych usług QNAP.
 
 ## 1. Cel i decyzje projektowe
 
@@ -275,6 +276,22 @@ Rollout pozostałej floty nie rozpoczyna się, dopóki wszystkie powyższe kryte
 BlueStacks i X88 nie przejdą. Niedostępność jednego z dwóch urządzeń blokuje promocję,
 ale nie uzasadnia osłabienia testu ani ręcznego wpisania sukcesu.
 
+Po przejściu tej bramki rollout floty jest jednym kontrolowanym etapem, a nie serią
+osobnych wydań dodatków. Orchestrator obejmuje wszystkie urządzenia z prywatnego
+rejestru; aktualnie osiągalne cele otrzymują dokładnie te same artefakty stable,
+natomiast niedostępne kończą jako `DEFERRED` i nie są zastępowane innym urządzeniem.
+Capability `playback_state_lww_v1` jest włączana dla aktywnego enrollmentu dopiero po
+potwierdzeniu Profile Sync 1.3.3, zgodnego źródła stable i zdrowego sync na danym celu.
+Nowe urządzenia wykonują pull-only bootstrap — canary pozostają jedynym źródłem seeda.
+
+Usługi QNAP nie są bezwarunkowo restartowane. `tools/qnap_images.py status` porównuje
+uruchomione digesty z `manifests/locks/qnap-stable.json`; deploy następuje tylko przy
+drifcie lub niezdrowej usłudze. Po rolloutcie wymagane są: zdrowy backend i Control
+Plane, świeży heartbeat każdego osiągalnego celu, brak pending eventów, brak błędu
+playback oraz drugi idempotentny przebieg zakończony `NO_CHANGE`. Wynik częściowy jest
+uczciwie raportowany z listą `DEFERRED`, a po powrocie urządzenia wznawiany przez
+`kodi_ops.py rollout --resume RUN_ID`.
+
 ## 9. Wynik implementacji canary
 
 Stan z 2026-08-31:
@@ -299,6 +316,28 @@ Stan z 2026-08-31:
   mają na obu canary źródło stable, a ponowne rollouty zwracają `NO_CHANGE`;
 - certyfikowane obrazy Control Plane i Profile Sync wdrożono z locka
   `manifests/locks/qnap-stable.json`; wszystkie usługi QNAP raportują `healthy`.
+
+## 10. Końcowy full rollout floty
+
+Etap jest wykonywany po stabilizacji canary w następującej kolejności:
+
+1. sprawdzenie czystych repozytoriów, zgodności publicznych artefaktów stable, zdrowia
+   QNAP i odczytowy `kodi_ops.py rollout --dry-run`;
+2. jeden rollout wszystkich celów z prywatnego rejestru przez `kodi_ops.py rollout`;
+3. dla każdego osiągalnego celu potwierdzenie dokładnych wersji i originów stable,
+   stanu Profile Sync, usunięcia legacy oraz zgodnej konfiguracji dodatków;
+4. włączenie playback LWW na dokładnie aktywnym enrollmencie celu, wymuszenie sync i
+   potwierdzenie wspólnego scope bez importowania lokalnej historii;
+5. wdrożenie usług QNAP wyłącznie wtedy, gdy status wykryje drift względem locka;
+6. ponowny rollout/sync jako test idempotencji oraz kontrola Control Plane, procesów
+   cyklicznych i zredagowanej telemetrii;
+7. zapis odtwarzalnego raportu E2E. `DEFERRED` pozostaje otwartym zadaniem do wznowienia,
+   nie blokuje poprawnego wdrożenia na pozostałych dostępnych urządzeniach.
+
+Rollout jest zakończony, gdy wszystkie osiągalne urządzenia mają stable, aktywny i
+zdrowy playback sync, ponowienie jest bez zmian, QNAP pozostaje zgodny z lockiem, a
+panel nie zgłasza nowych realnych błędów. Nie tworzy się nowego release, jeżeli
+promowane bajty i locki nie uległy zmianie.
 
 Zredagowany, odtwarzalny raport znajduje się w
 `docs/e2e-results/2026-08-31-playback-state-sync-canary.md`.
