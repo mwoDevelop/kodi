@@ -402,6 +402,19 @@ class ProductionExecutor:
             ],
             adapter="default-addons",
         )
+        managed_settings = self._run_json_with_retry(
+            [
+                sys.executable,
+                "tools/kodi_managed_addon_settings.py",
+                "--serial",
+                serial,
+                "--adb",
+                self.adb,
+                "--adb-server-port",
+                str(self.adb_server_port),
+            ],
+            adapter="managed-settings",
+        )
         rapideo = self._run_json(
             [
                 sys.executable,
@@ -504,7 +517,7 @@ class ProductionExecutor:
             or opensubtitles_com.get("changed")
             or youtube.get("changed")
             or providers.get("changed")
-        )
+        ) or managed_settings.get("status") == "UPDATED"
         attempts = int(getattr(self, "external_attempts", 3))
         retry_seconds = int(getattr(self, "retry_seconds", 5))
         diagnostics = None
@@ -541,6 +554,7 @@ class ProductionExecutor:
                 "platform": "android",
                 "stable": stable.get("result"),
                 "default_addons": defaults.get("result"),
+                "managed_settings": managed_settings.get("status"),
                 "rapideo": (
                     "pass"
                     if rapideo.get("ok")

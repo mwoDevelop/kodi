@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-08
 
+- [YouTube 7.4.4 — obejście zatrzymywania MPEG-DASH](2026-08-31-youtube-744-buffering-workaround.md)
 - [Pełny rollout synchronizacji stanu odtwarzania](2026-08-31-playback-state-sync-full-rollout.md)
 - [Synchronizacja stanu odtwarzania — BlueStacks i X88](2026-08-31-playback-state-sync-canary.md)
 - [WatchNixtoons2 0.29.2 — domyślne autoodtwarzanie najwyższej jakości na Sony](2026-08-30-watchnixtoons2-0.29.2-sony.md)

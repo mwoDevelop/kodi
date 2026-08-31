@@ -1,6 +1,5 @@
-from types import SimpleNamespace
-
 from pathlib import Path
+from types import SimpleNamespace
 
 from tools.kodi_android_stable_rollout import (
     ADDON_ORDER,
@@ -149,9 +148,12 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
             {ADDON_ORDER[0]: {"from": "1.0.0", "to": "2.0.0"}},
         ),
     )
+    def reconcile_settings(*_args):
+        return {"status": "UPDATED", "addons": 1, "settings": 1}
+
     monkeypatch.setattr(
-        "tools.kodi_android_stable_rollout.reconcile_android_managed_settings",
-        lambda *_args: {"status": "UPDATED", "addons": 1, "settings": 1},
+        "tools.kodi_android_stable_rollout.reconcile_installed_android_managed_settings",
+        reconcile_settings,
     )
 
     result = reconcile(

@@ -3,18 +3,25 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
+import sys
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from tools.kodi_addon_settings_rollout import (
     load_setting_sources,
+)
+from tools.kodi_addon_settings_rollout import (
     rollout as rollout_settings,
 )
-from tools.kodi_profile import adb_command
-
+from tools.kodi_profile import AdbJsonRpcClient, adb_command
 
 SCHEMA = 1
 SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -163,3 +170,69 @@ def reconcile_android_managed_settings(
         "changed_addons": sorted(pending),
         "changed_settings": sum(len(item) for item in pending.values()),
     }
+
+
+def installed_android_addon_versions(adb, port, serial, addon_ids):
+    requested = set(addon_ids)
+    with AdbJsonRpcClient(adb, port, serial) as rpc:
+        result = rpc.call(
+            "Addons.GetAddons",
+            {"enabled": "all", "properties": ["version", "enabled"]},
+        )
+    versions = {}
+    for item in result.get("addons", []):
+        addon_id = item.get("addonid")
+        if (
+            addon_id in requested
+            and item.get("enabled")
+            and item.get("version")
+        ):
+            versions[addon_id] = str(item["version"])
+    return versions
+
+
+def reconcile_installed_android_managed_settings(
+    adb, port, serial, policy_path, device_script
+):
+    policy = load_policy(policy_path)
+    versions = installed_android_addon_versions(
+        adb, port, serial, policy["addons"]
+    )
+    return reconcile_android_managed_settings(
+        adb,
+        port,
+        serial,
+        versions,
+        policy_path,
+        device_script,
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--serial", required=True)
+    parser.add_argument(
+        "--adb", default="/home/mwo/android-sdk/platform-tools/adb"
+    )
+    parser.add_argument("--adb-server-port", type=int, default=5038)
+    parser.add_argument(
+        "--policy",
+        default=str(ROOT / "manifests/kodi-managed-addon-settings.json"),
+    )
+    parser.add_argument(
+        "--device-script",
+        default=str(ROOT / "tools/kodi_profile_restore_device.py"),
+    )
+    args = parser.parse_args()
+    result = reconcile_installed_android_managed_settings(
+        args.adb,
+        args.adb_server_port,
+        args.serial,
+        Path(args.policy),
+        Path(args.device_script),
+    )
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()

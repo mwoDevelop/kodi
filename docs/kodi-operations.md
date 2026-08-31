@@ -100,7 +100,10 @@ zmienia wyłącznie wymienione klucze przez API Kodi i zachowuje wszystkie
 pozostałe ustawienia użytkownika. Zakres wersji zapobiega przeniesieniu starej
 wartości do niezgodnego przyszłego API dodatku. Obecna polityka ustawia
 `playbackMethod=1` (Auto Play Highest Quality) dla WatchNixtoons2 od wersji
-0.29.2; kolejny przebieg musi zwrócić `managed_settings.status=NO_CHANGE`.
+0.29.2 oraz wyłącza wadliwą ścieżkę MPEG-DASH w YouTube 7.4.4; kolejny przebieg musi
+zwrócić `managed_settings.status=NO_CHANGE`. Obejście YouTube jest przypięte do
+dokładnej wersji i ogranicza zwykłe filmy do 720p; szczegóły i test znajdują się w
+[runbooku YouTube](youtube.md#obejście-zatrzymywania-odtwarzania-w-744).
 
 Preflight Androida usuwa z `advancedsettings.xml` wyłącznie stare sekcje
 `videodatabase` i `musicdatabase`. Biblioteka oraz wyszukiwanie nie zależą dzięki

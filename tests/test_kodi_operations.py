@@ -745,6 +745,8 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
             return {"status": "NO_CHANGE"}
         if adapter == "umbrella-private":
             return {"status": "NO_CHANGE"}
+        if adapter == "managed-settings":
+            return {"status": "NO_CHANGE"}
         return {"result": "pass", "actions": []}
 
     def run_json_with_retry(argv, timeout=900, adapter=None, attempts=2):
@@ -786,12 +788,14 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
     assert retry_adapters == [
         "stable-addons",
         "default-addons",
+        "managed-settings",
         "opensubtitles",
         "opensubtitles-com",
         "profile-sync",
     ]
     assert outcome.summary["opensubtitles"] == "pass"
     assert outcome.summary["opensubtitles_com"] == "pass"
+    assert outcome.summary["managed_settings"] == "NO_CHANGE"
 
 
 def test_android_rollout_retries_sanitized_provider_network_error(monkeypatch):

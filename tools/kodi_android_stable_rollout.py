@@ -18,8 +18,9 @@ from tools.kodi_advancedsettings_policy import reconcile_android_advancedsetting
 from tools.kodi_default_addons import addon_details
 from tools.kodi_devices import load_registry, resolve_device, resolve_private_endpoint
 from tools.kodi_inventory import load_private_references
-from tools.kodi_managed_addon_settings import reconcile_android_managed_settings
-from tools.kodi_retired_addons import reconcile_retired_addons
+from tools.kodi_managed_addon_settings import (
+    reconcile_installed_android_managed_settings,
+)
 from tools.kodi_profile import (
     KODI_PACKAGE,
     _wait_for_kodi_ready,
@@ -29,8 +30,8 @@ from tools.kodi_reinstall import (
     assign_addon_origins_in_kodi,
     installed_addon_origins_in_kodi,
 )
+from tools.kodi_retired_addons import reconcile_retired_addons
 from tools.kodi_stable_artifacts import prepare
-
 
 ADDON_ORDER = (
     "script.module.mwoscrapers",
@@ -306,15 +307,12 @@ def reconcile(
             }
         )
     origin_result = reconcile_origins(adb, port, serial, prepared, channel)
-    managed_settings = reconcile_android_managed_settings(
+    policy_path = ROOT / "manifests/kodi-managed-addon-settings.json"
+    managed_settings = reconcile_installed_android_managed_settings(
         adb,
         port,
         serial,
-        {
-            addon_id: artifact["version"]
-            for addon_id, artifact in prepared["addons"].items()
-        },
-        ROOT / "manifests/kodi-managed-addon-settings.json",
+        policy_path,
         ROOT / "tools/kodi_profile_restore_device.py",
     )
     return {

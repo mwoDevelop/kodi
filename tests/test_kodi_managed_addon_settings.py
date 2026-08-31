@@ -53,6 +53,21 @@ def test_repository_policy_manages_watchnixtoons2_auto_highest():
     }
 
 
+def test_repository_policy_disables_broken_youtube_744_mpd_path():
+    policy = managed.load_policy(
+        Path("manifests/kodi-managed-addon-settings.json")
+    )
+
+    assert managed.applicable_settings(
+        policy,
+        {"plugin.video.youtube": "7.4.4"},
+    ) == {"plugin.video.youtube": {"kodion.mpd.videos": "false"}}
+    assert managed.applicable_settings(
+        policy,
+        {"plugin.video.youtube": "7.4.5"},
+    ) == {}
+
+
 def test_policy_rejects_an_empty_version_range(tmp_path):
     path = _policy(tmp_path)
     document = json.loads(path.read_text(encoding="utf-8"))
@@ -141,3 +156,50 @@ def test_read_android_settings_accepts_text_and_value_attributes(monkeypatch):
         "first": "one",
         "second": "two",
     }
+
+
+def test_installed_versions_select_enabled_policy_addons(monkeypatch):
+    class FakeRpc:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def call(self, method, params):
+            assert method == "Addons.GetAddons"
+            assert params == {
+                "enabled": "all",
+                "properties": ["version", "enabled"],
+            }
+            return {
+                "addons": [
+                    {
+                        "addonid": "plugin.video.youtube",
+                        "enabled": True,
+                        "version": "7.4.4",
+                    },
+                    {
+                        "addonid": "plugin.video.disabled",
+                        "enabled": False,
+                        "version": "1.0.0",
+                    },
+                    {
+                        "addonid": "plugin.video.unmanaged",
+                        "enabled": True,
+                        "version": "1.0.0",
+                    },
+                ]
+            }
+
+    monkeypatch.setattr(managed, "AdbJsonRpcClient", FakeRpc)
+
+    assert managed.installed_android_addon_versions(
+        "adb",
+        5038,
+        "serial",
+        {"plugin.video.youtube", "plugin.video.disabled"},
+    ) == {"plugin.video.youtube": "7.4.4"}
