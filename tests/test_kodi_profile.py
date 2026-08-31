@@ -7,6 +7,7 @@ import pytest
 
 from tools.kodi_profile import (
     AdbEventClient,
+    AdbJsonRpcClient,
     RestoreCommandMayBeQueued,
     _addon_inventory,
     _activate_skin,
@@ -80,6 +81,38 @@ def test_kodi_ready_uses_jsonrpc_when_scoped_storage_hides_userdata(
 
     assert any("guisettings.xml" in item for item in commands)
     assert any(":9777" in item for item in commands)
+
+
+def test_adb_jsonrpc_ignores_notifications_before_matching_response():
+    notification = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "method": "Other.playback-identity-v1",
+            "params": {"data": {"content_key": "redacted"}},
+        },
+        separators=(",", ":"),
+    )
+    response = json.dumps(
+        {"jsonrpc": "2.0", "id": 7, "result": {"files": [1, 2]}},
+        separators=(",", ":"),
+    )
+
+    assert AdbJsonRpcClient._matching_response(notification.encode(), 7) is None
+    assert AdbJsonRpcClient._matching_response(
+        (notification + response).encode(), 7
+    ) == {"jsonrpc": "2.0", "id": 7, "result": {"files": [1, 2]}}
+
+
+def test_adb_jsonrpc_waits_for_a_fragmented_matching_response():
+    first = b'{"jsonrpc":"2.0","method":"Other.event"}'
+    partial = first + b'{"jsonrpc":"2.0","id":3,"result":'
+
+    assert AdbJsonRpcClient._matching_response(partial, 3) is None
+    assert AdbJsonRpcClient._matching_response(partial + b'"OK"}', 3) == {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": "OK",
+    }
 
 
 def test_event_client_uses_ipv4_mapped_loopback_for_android_ipv6_listener(
