@@ -118,6 +118,14 @@ def main():
             "applied_revision": local.get("applied_revision"),
             "pending_report": bool(local.get("pending_report")),
             "sync_status": sync_result.get("status") if sync_result else None,
+            "playback_status": local.get("playback_status"),
+            "playback_cursor": local.get("playback_cursor"),
+            "playback_pending_events": local.get("playback_pending_events"),
+            "playback_pending_mapping": local.get("playback_pending_mapping"),
+            "playback_pending_application": local.get(
+                "playback_pending_application"
+            ),
+            "playback_error_code": local.get("playback_error_code"),
         }
     except Exception as error:
         result = {
