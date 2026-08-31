@@ -19,9 +19,66 @@ from tools.qnap_profile_sync import (
     plan_production_revocation,
     revoke_production_enrollment,
     validate_production_files,
+    verify_production,
     qnap_connection_settings,
     smoke_root,
 )
+
+
+class ReadyResponse:
+    def __init__(self, database_schema):
+        self.database_schema = database_schema
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self):
+        return json.dumps(
+            {
+                "api_version": "v1",
+                "build": "test",
+                "database_schema": self.database_schema,
+                "mode": "verified-tls",
+                "service": "kodi-profile-sync-server",
+                "status": "ready",
+                "version": "test",
+            }
+        ).encode("utf-8")
+
+
+def test_production_readiness_accepts_additive_schema_upgrade(tmp_path, monkeypatch):
+    ca = tmp_path / "ca.crt"
+    ca.write_text("fixture", encoding="utf-8")
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.ssl.create_default_context", lambda **_kwargs: object()
+    )
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.urlopen",
+        lambda *_args, **_kwargs: ReadyResponse(7),
+    )
+
+    result = verify_production("192.168.1.39", ca, attempts=1)
+
+    assert result["database_schema"] == 7
+
+
+def test_production_readiness_rejects_legacy_schema(tmp_path, monkeypatch):
+    ca = tmp_path / "ca.crt"
+    ca.write_text("fixture", encoding="utf-8")
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.ssl.create_default_context", lambda **_kwargs: object()
+    )
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync.urlopen",
+        lambda *_args, **_kwargs: ReadyResponse(4),
+    )
+    monkeypatch.setattr("tools.qnap_profile_sync.time.sleep", lambda _seconds: None)
+
+    with pytest.raises(QnapError, match="production HTTPS readiness failed"):
+        verify_production("192.168.1.39", ca, attempts=1)
 
 
 class ContainerStationSession:

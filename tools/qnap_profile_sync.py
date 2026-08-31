@@ -46,6 +46,7 @@ ADMIN_PATH = re.compile(
 INSTALL_PATH = re.compile(r"^/share/[A-Za-z0-9._-]+/\.qpkg/container-station$")
 SMOKE_PORT = 28765
 PRODUCTION_PORT = 18765
+MINIMUM_DATABASE_SCHEMA = 5
 CONTAINER_STATION_SOCKET = "/var/run/docker.sock"
 SMOKE_PROJECT = "qnap-profile-sync-smoke"
 PRODUCTION_PROJECT = "qnap-profile-sync"
@@ -419,7 +420,9 @@ def verify_production(host_ip, ca_certificate, attempts=45):
             if (
                 document.get("status") == "ready"
                 and document.get("mode") == "verified-tls"
-                and document.get("database_schema") == 5
+                and isinstance(document.get("database_schema"), int)
+                and not isinstance(document.get("database_schema"), bool)
+                and document["database_schema"] >= MINIMUM_DATABASE_SCHEMA
                 and document.get("service") == "kodi-profile-sync-server"
             ):
                 return {
@@ -1074,7 +1077,9 @@ def verify(session):
             if (
                 document.get("status") == "ready"
                 and document.get("service") == "kodi-profile-sync-server"
-                and document.get("database_schema") == 4
+                and isinstance(document.get("database_schema"), int)
+                and not isinstance(document.get("database_schema"), bool)
+                and document["database_schema"] >= MINIMUM_DATABASE_SCHEMA
             ):
                 state = status(session, SMOKE_PROJECT)
                 if (
