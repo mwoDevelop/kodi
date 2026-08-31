@@ -35,11 +35,30 @@ Prywatność: raport nie zawiera tytułów, URL-i, tokenów ani identyfikatorów
    aktywną sesję oraz włączoną historię lokalną i zdalną. Autoryzacja Trakt pozostaje
    wyłączona, dlatego test historii konta Umbrella wymaga późniejszej jawnej
    autoryzacji użytkownika; nie blokuje to wydania adaptera WatchNixtoons2.
+8. Publiczny kanał testing wystawił dokładnie Profile Sync 1.3.3 i WatchNixtoons2
+   0.30.3; pobrane ZIP-y miały sumy identyczne z `manifests/locks/testing.json`.
+9. Pierwsza automatyczna certyfikacja release została bezpiecznie zatrzymana przez
+   brak metadanych `origin` czterech niezmienionych dodatków na X88. Rollout został
+   uogólniony do pełnej polityki: artefakty identyczne ze stable należą do stable,
+   a różniące się do testing. BlueStacks zwrócił `NO_CHANGE`, X88 wykonał naprawę,
+   a powtórzenie na X88 również zwróciło `NO_CHANGE`; oba urządzenia mają 6/6
+   dozwolonych originów.
+10. Kolejna próba ujawniła brak prywatnych ustawień Real-Debrid na X88. Istniejący
+    adapter przywrócił autorytatywny zestaw bez ujawniania wartości, po czym ten sam
+    canary Big Buck Bunny przeszedł z `resolve_timeout` do poprawnego playbacku.
+    Workflow certyfikacji przed macierzą przywraca teraz dokładny autorytatywny stan
+    Umbrella na obu urządzeniach i akceptuje `NO_CHANGE` dopiero po porównaniu
+    wartości, nie samej obecności pól.
+11. Końcowa lokalna macierz na niemutowalnym snapshocie przeszła 5/5 kontroli na
+    każdym canary: inventory, wersje/originy, Umbrella search, Umbrella
+    resolver/playback i WatchNixtoons2 playback.
 
 ## Testy regresji
 
 - Profile Sync: 61 testów;
 - WatchNixtoons2: 25 testów, w tym odtwarzalny import drzewa downstream;
+- wspólne narzędzia repozytorium: po poprawce originów i przywracania prywatnych
+  ustawień pełny hermetyczny przebieg zakończył się wynikiem 691 testów;
 - jawny tryb naprawy kwarantanny jest dozwolony tylko dla pierwszego nieudanego
   assignmentu bez wcześniej zastosowanej rewizji;
 - stare generacje enrollmentu X88 zostały unieważnione dopiero po pomyślnej

@@ -40,6 +40,8 @@ ADDON_ORDER = (
     "service.subtitles.opensubtitles-com",
     "service.mwodevelop.profilesync",
 )
+STABLE_ORIGIN = "repository.mwodevelop"
+TESTING_ORIGIN = "repository.mwodevelop.testing"
 
 
 def reconcile_origins(adb, port, serial, prepared, channel):
@@ -53,6 +55,11 @@ def reconcile_origins(adb, port, serial, prepared, channel):
         origins,
         ROOT / "tools/kodi_profile_origin_device.py",
     )
+    if all(
+        current_origins.get(addon_id) == origin
+        for addon_id, origin in origins.items()
+    ):
+        return {"status": "NO_CHANGE", "origins": len(origins)}
     previous_origins, version_transitions = origin_transition(
         prepared, channel, origins, current_origins
     )
@@ -72,12 +79,13 @@ def reconcile_origins(adb, port, serial, prepared, channel):
 
 
 def desired_origins(prepared, channel, stable_components=None):
-    """Return only origins that the selected channel must own.
+    """Return the complete origin policy for every managed add-on.
 
     Testing reuses stable artifacts for unchanged components. Keeping their
     stable origin avoids needless repository ownership churn and lets Kodi
-    update them from the stable channel. Only artifacts that differ from the
-    stable lock are owned by the testing repository.
+    update them from the stable channel. Artifacts that differ from the stable
+    lock are owned by testing. Returning both groups is intentional: rollout
+    must also repair missing origin metadata on an otherwise correct install.
     """
     if channel == "stable":
         return {addon_id: prepared["repository_id"] for addon_id in prepared["addons"]}
@@ -87,10 +95,13 @@ def desired_origins(prepared, channel, stable_components=None):
         )
         stable_components = stable_lock["components"]
     return {
-        addon_id: prepared["repository_id"]
+        addon_id: (
+            STABLE_ORIGIN
+            if stable_components.get(addon_id, {}).get("zip_sha256")
+            == artifact.get("sha256")
+            else prepared["repository_id"]
+        )
         for addon_id, artifact in prepared["addons"].items()
-        if stable_components.get(addon_id, {}).get("zip_sha256")
-        != artifact.get("sha256")
     }
 
 
@@ -105,11 +116,6 @@ def origin_transition(
     if not origins:
         return {}, {}
     opposite_channel = "testing" if channel == "stable" else "stable"
-    opposite_repository = (
-        "repository.mwodevelop.testing"
-        if opposite_channel == "testing"
-        else "repository.mwodevelop"
-    )
     if opposite_components is None:
         opposite_lock = json.loads(
             (ROOT / "manifests/locks" / (opposite_channel + ".json")).read_text(
@@ -119,14 +125,21 @@ def origin_transition(
         opposite_components = opposite_lock["components"]
     previous = {}
     transitions = {}
-    for addon_id in origins:
+    supported_repositories = {STABLE_ORIGIN, TESTING_ORIGIN}
+    for addon_id, target_origin in origins.items():
+        if target_origin not in supported_repositories:
+            raise RuntimeError("%s has an unsupported target repository" % addon_id)
         current_origin = current_origins.get(addon_id)
-        if current_origin in (None, "", prepared["repository_id"]):
+        if current_origin in (None, "", target_origin):
             continue
-        if current_origin != opposite_repository:
+        if current_origin not in supported_repositories:
             raise RuntimeError("%s has an unexpected repository origin" % addon_id)
         previous[addon_id] = current_origin
-        previous_version = opposite_components.get(addon_id, {}).get("version")
+        previous_version = (
+            prepared["addons"][addon_id]["version"]
+            if current_origin == prepared["repository_id"]
+            else opposite_components.get(addon_id, {}).get("version")
+        )
         target_version = prepared["addons"][addon_id]["version"]
         if previous_version and previous_version != target_version:
             transitions[addon_id] = {

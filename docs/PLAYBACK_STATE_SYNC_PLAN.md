@@ -1,6 +1,7 @@
 # Plan synchronizacji stanu odtwarzania
 
-Status: zaimplementowany i zakwalifikowany na BlueStacks/X88; release w toku.
+Status: zaimplementowany i zakwalifikowany na BlueStacks/X88; release w toku po
+naprawie bramy originów i deterministycznym przywracaniu RD w canary.
 
 ## 1. Cel i decyzje projektowe
 

@@ -46,8 +46,17 @@ REQUIRED_PRIVATE = {
 }
 
 
-def _device(repository, device_id):
-    inventory = load_sync_inventory(repository)
+def _device(
+    repository,
+    device_id,
+    devices_file=".kodi-private/devices.json",
+    references_file=".env",
+):
+    inventory = load_sync_inventory(
+        repository,
+        devices_file=devices_file,
+        references_file=references_file,
+    )
     if device_id not in inventory["devices"]:
         raise ValueError("unknown Umbrella settings device")
     device = inventory["devices"][device_id]
@@ -202,8 +211,16 @@ def _atomic_private_write(output, payload):
         raise RuntimeError("Umbrella settings permissions differ")
 
 
-def export_settings(repository, device_id, output, adb, port):
-    device = _device(repository, device_id)
+def export_settings(
+    repository,
+    device_id,
+    output,
+    adb,
+    port,
+    devices_file=".kodi-private/devices.json",
+    references_file=".env",
+):
+    device = _device(repository, device_id, devices_file, references_file)
     serial = device["endpoints"]["adb"]
     with tempfile.TemporaryDirectory(prefix="umbrella-export-") as temporary:
         downloaded = Path(temporary) / "settings.xml"
@@ -219,8 +236,23 @@ def export_settings(repository, device_id, output, adb, port):
     }
 
 
-def apply_settings(repository, device_id, source_path, adb, port):
-    device = _device(repository, device_id)
+def _private_settings_match(observed_values, authoritative_values):
+    return observed_values.get("realdebrid.enable") == "true" and all(
+        observed_values.get(key) == authoritative_values.get(key)
+        for key in REQUIRED_PRIVATE
+    )
+
+
+def apply_settings(
+    repository,
+    device_id,
+    source_path,
+    adb,
+    port,
+    devices_file=".kodi-private/devices.json",
+    references_file=".env",
+):
+    device = _device(repository, device_id, devices_file, references_file)
     serial = device["endpoints"]["adb"]
     source = _validated_source(source_path)
     observed_values = {}
@@ -230,9 +262,7 @@ def apply_settings(repository, device_id, source_path, adb, port):
             observed_values = load_setting_sources(
                 [ADDON_ID + "=" + str(observed)]
             )[ADDON_ID]["values"]
-        if all(observed_values.get(key) for key in REQUIRED_PRIVATE) and (
-            observed_values.get("realdebrid.enable") == "true"
-        ):
+        if _private_settings_match(observed_values, source["values"]):
             return {
                 "schema": 1,
                 "device": device_id,
@@ -255,6 +285,10 @@ def main():
     parser.add_argument(
         "--settings", default=".kodi-private/umbrella/settings.xml"
     )
+    parser.add_argument(
+        "--devices", default=".kodi-private/devices.json"
+    )
+    parser.add_argument("--references", default=".env")
     parser.add_argument("--adb", default="/home/mwo/android-sdk/platform-tools/adb")
     parser.add_argument("--adb-server-port", type=int, default=5038)
     args = parser.parse_args()
@@ -263,11 +297,23 @@ def main():
         settings = ROOT / settings
     if args.command == "export":
         result = export_settings(
-            ROOT, args.device, settings, args.adb, args.adb_server_port
+            ROOT,
+            args.device,
+            settings,
+            args.adb,
+            args.adb_server_port,
+            args.devices,
+            args.references,
         )
     else:
         result = apply_settings(
-            ROOT, args.device, settings, args.adb, args.adb_server_port
+            ROOT,
+            args.device,
+            settings,
+            args.adb,
+            args.adb_server_port,
+            args.devices,
+            args.references,
         )
     print(json.dumps(result, indent=2, sort_keys=True))
 
