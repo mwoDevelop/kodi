@@ -38,6 +38,7 @@ RUN_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,47}$")
 SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 TARGET_TAG = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,63}$")
 ENROLLMENT = re.compile(r"^enr:[A-Za-z0-9._-]{8,128}$")
+PLAYBACK_SCOPE = re.compile(r"^scope:[A-Za-z0-9._:-]{1,128}$")
 ADMIN_PATH = re.compile(
     r"^/v1/(?:revisions|blobs/sha256:[a-f0-9]{64}|"
     r"channels/[a-z0-9][a-z0-9._-]{0,63}/"
@@ -769,6 +770,43 @@ def revoke_production_enrollment(session, enrollment_id):
     return document
 
 
+def set_production_playback_state(
+    session, enrollment_id, enabled, scope_id="scope:home"
+):
+    """Enable or disable LWW playback state for one active enrollment."""
+
+    if not ENROLLMENT.fullmatch(enrollment_id):
+        raise QnapError("invalid production enrollment id")
+    if not isinstance(enabled, bool):
+        raise QnapError("invalid playback state flag")
+    if not isinstance(scope_id, str) or not PLAYBACK_SCOPE.fullmatch(scope_id):
+        raise QnapError("invalid playback scope id")
+    _install, docker = container_station(session)
+    command = (
+        production_compose_command(docker)
+        + " exec -T profile-sync python -m profile_sync_server.admin"
+        + " --database /data/state.sqlite set-playback-state "
+        + shlex.quote(enrollment_id)
+        + " --enabled "
+        + ("true" if enabled else "false")
+        + " --scope-id "
+        + shlex.quote(scope_id)
+    )
+    payload = session.execute(command, timeout=120)
+    try:
+        document = json.loads(payload)
+    except json.JSONDecodeError as error:
+        raise QnapError("playback state update returned invalid JSON") from error
+    expected = {
+        "enrollment_id": enrollment_id,
+        "playback_state_enabled": enabled,
+        "playback_scope_id": scope_id,
+    }
+    if document != expected:
+        raise QnapError("playback state update returned invalid identity")
+    return document
+
+
 def plan_production_revocation(session, logical_device_id, freshness_seconds, output):
     """Create and download a private CAS plan without exposing enrollment IDs."""
     if not SAFE_ID.fullmatch(logical_device_id):
@@ -1193,6 +1231,10 @@ def main():
     pairing.add_argument("--output", required=True)
     revoke = subparsers.add_parser("revoke-production-enrollment")
     revoke.add_argument("--enrollment-id", required=True)
+    playback = subparsers.add_parser("set-production-playback-state")
+    playback.add_argument("--enrollment-id", required=True)
+    playback.add_argument("--enabled", choices=("true", "false"), required=True)
+    playback.add_argument("--scope-id", default="scope:home")
     plan_revoke = subparsers.add_parser("plan-production-revocation")
     plan_revoke.add_argument("--logical-device-id", required=True)
     plan_revoke.add_argument("--freshness-seconds", type=int, default=900)
@@ -1253,6 +1295,13 @@ def main():
             result = revoke_production_enrollment(
                 session,
                 args.enrollment_id,
+            )
+        elif args.command == "set-production-playback-state":
+            result = set_production_playback_state(
+                session,
+                args.enrollment_id,
+                args.enabled == "true",
+                args.scope_id,
             )
         elif args.command == "plan-production-revocation":
             result = plan_production_revocation(
