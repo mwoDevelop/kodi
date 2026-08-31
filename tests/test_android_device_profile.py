@@ -53,6 +53,7 @@ class FakeAdb:
         self.lockdown = "null"
         self.reconnect_on_reboot = "none"
         self.private_dns_mode = "opportunistic"
+        self.active_profile = "NordVPN PL145 UDP Auto X88"
 
     def shell(self, *arguments):
         if arguments == ("getprop", "ro.product.model"):
@@ -105,6 +106,9 @@ class FakeAdb:
         if desired is not None:
             self.reconnect_on_reboot = desired
         return self.reconnect_on_reboot
+
+    def openvpn_active_profile(self, _package):
+        return self.active_profile
 
 
 def repository_profile():
@@ -162,6 +166,19 @@ def test_apply_sets_always_on_without_lockdown_and_is_idempotent(tmp_path):
     assert client.reconnect_on_reboot == "connect_latest"
     assert client.private_dns_mode == "off"
     assert second["checks"]["validated_vpn_tunnel"] is True
+    assert second["checks"]["connection_profile"] is True
+
+
+def test_audit_rejects_a_different_active_openvpn_profile(tmp_path):
+    client = FakeAdb()
+    client.active_profile = "NordVPN-PL314-TCP443-Auto-X88"
+
+    report = audit_profile(
+        repository_profile(), client, configured_environment(tmp_path)
+    )
+
+    assert report["compliant"] is False
+    assert report["checks"]["connection_profile"] is False
 
 
 def test_audit_reports_missing_environment_without_exposing_values():

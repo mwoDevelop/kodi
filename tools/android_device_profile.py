@@ -271,6 +271,32 @@ class AdbClient:
             time.sleep(0.5)
         raise RuntimeError("could not reach OpenVPN Launch Options")
 
+    def openvpn_active_profile(self, package):
+        prefix = "Connection Status: Connected. Active profile "
+        self.shell(
+            "am",
+            "start",
+            "-W",
+            "--activity-reorder-to-front",
+            "-n",
+            "%s/net.openvpn.unified.MainActivity" % package,
+        )
+        time.sleep(1.5)
+        for _attempt in range(8):
+            document = self._dump_ui()
+            root = ElementTree.fromstring(document)
+            for node in root.iter("node"):
+                description = node.attrib.get("content-desc", "")
+                if description.startswith(prefix):
+                    active = description[len(prefix) :]
+                    if active:
+                        return active
+            if self._tap_node(document, "content-desc", "Cancel"):
+                continue
+            self.shell("input", "keyevent", "KEYCODE_BACK")
+            time.sleep(0.5)
+        raise RuntimeError("could not identify the active OpenVPN profile")
+
 
 def audit_profile(profile, client, environment):
     vpn = profile["vpn"]
@@ -284,6 +310,7 @@ def audit_profile(profile, client, environment):
         "settings", "get", "global", "private_dns_mode"
     )
     reconnect_on_reboot = client.openvpn_reboot_action(vpn["package"])
+    active_profile = client.openvpn_active_profile(vpn["package"])
     try:
         tunnel = client.shell("ip", "addr", "show", vpn["tunnel_interface"])
     except subprocess.CalledProcessError:
@@ -299,6 +326,7 @@ def audit_profile(profile, client, environment):
         "lockdown": lockdown == expected_lockdown,
         "reconnect_on_reboot": reconnect_on_reboot
         == vpn["reconnect_on_reboot"],
+        "connection_profile": active_profile == vpn["connection_profile_name"],
         "private_dns_mode": private_dns_mode == vpn["private_dns_mode"],
         "required_env": not missing_env,
         "private_vpn_profile": private_profile_is_ready(vpn, environment),
@@ -314,6 +342,7 @@ def audit_profile(profile, client, environment):
         "device_id": profile["device_id"],
         "serial": client.serial,
         "connection_profile_name": vpn["connection_profile_name"],
+        "active_connection_profile": active_profile,
         "checks": checks,
         "missing_env": missing_env,
         "compliant": all(checks.values()),
