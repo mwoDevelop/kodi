@@ -25,7 +25,10 @@ def test_retired_addons_are_removed_leaf_first(monkeypatch):
     result = reconcile_retired_addons("adb", 5038, "device")
 
     assert [item[0] for item in calls] == list(RETIRED_ADDONS)
-    assert calls[0][0] == "plugin.video.fenlight"
+    assert [item[0] for item in calls[:2]] == [
+        "plugin.video.fenlight",
+        "plugin.youtube2kodilibrary",
+    ]
     assert calls[-1][0] == "repository.universalscrapers"
     assert result == {
         "status": "UPDATED",

@@ -45,6 +45,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | Domknięcie credentiali YouTube | [Plan migracji OAuth na QNAP](../YOUTUBE_CREDENTIAL_ROLLOUT_COMPLETION_PLAN.md) |
 | QNAP Secret Broker | [Wdrożenie prywatnego brokera](../deploy/qnap-secret-broker/README.md) |
 | Dziennik wdrożenia Profile Sync | [Zapis stanu realizacji](profile-sync-implementation.md) |
+| Synchronizacja stanu odtwarzania | [Plan playback LWW](PLAYBACK_STATE_SYNC_PLAN.md) |
 | Synchronizacja upstream | [Plan synchronizacji upstream](../UPSTREAM_SYNC_PLAN.md) |
 | Automatyczny release Umbrelli | [Plan automatyzacji Umbrelli](../UMBRELLA_AUTOMATED_RELEASE_PLAN.md) |
 | Bramka bezpieczeństwa upstream | [Projekt skanowania w poszukiwaniu złośliwego oprogramowania](UPSTREAM_MALWARE_SCANNING_PLAN.md) |
@@ -61,6 +62,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 - [Review planu administracji QNAP i autonomicznej konwergencji](QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN_REVIEW.md)
 - [Review planu usunięcia kodu legacy](LEGACY_REMOVAL_PLAN_REVIEW.md)
 - [Review architektury Profile Sync](PROFILE_SYNC_PLAN_REVIEW.md)
+- [Review synchronizacji stanu odtwarzania](PLAYBACK_STATE_SYNC_PLAN_REVIEW.md)
 - [Review Profile Sync na QNAP](PROFILE_SYNC_QNAP_PLAN_REVIEW.md)
 - [Review Profile Sync na NUC/Flatpak](PROFILE_SYNC_NUC_PLAN_REVIEW.md)
 - [Review architektury Upstream Sync](UPSTREAM_SYNC_PLAN_REVIEW.md)

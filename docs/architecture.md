@@ -94,8 +94,8 @@ flowchart LR
 | Nadawca | Odbiorca | Kanał | Przenoszone dane | Rola |
 |---|---|---|---|---|
 | Repozytorium Kodi na urządzeniu | GitHub Pages | HTTPS | Indeks, metadane i ZIP-y stable/testing | Instalacja i aktualizacja kodu dodatków |
-| Profile Sync w Kodi | Profile Sync na QNAP | HTTPS z walidacją prywatnego CA, token urządzenia i podpisy | Assignment, rewizja, heartbeat i raport zastosowania | Rutynowa synchronizacja konfiguracji |
-| Control Plane | Integration API Profile Sync | Prywatne mTLS na `mwodevelop-control:8767` | Zredagowana flota i rollouty | Dashboard i obserwowalność |
+| Profile Sync w Kodi | Profile Sync na QNAP | HTTPS z walidacją prywatnego CA, token urządzenia i podpisy | Assignment, rewizja, heartbeat, raport zastosowania i opt-in playback LWW | Rutynowa synchronizacja konfiguracji i stanu WatchNixtoons2 |
+| Control Plane | Integration API Profile Sync | Prywatne mTLS na `mwodevelop-control:8767` | Zredagowana flota, rollouty i liczniki playback | Dashboard i obserwowalność |
 | Control Plane | GitHub API | HTTPS read-only | Statusy workflow i harmonogramów | Dashboard i freshness |
 | Upstream Watchdog | GitHub API | HTTPS, publiczny odczyt | Ostatnie wyniki 11 workflow | Alarm fail-closed |
 | Przeglądarka operatora | QTS HTTPS / QPKG CGI → Control Plane Web/BFF | HTTPS `:443/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/`, następnie HTTP tylko po loopback `:19445`; zweryfikowany admin `NAS_SID` albo ręczne hasło+TOTP, sesja i CSRF | Statyczny panel i odczytowe API | Administracyjny podgląd bez certyfikatu klienta i bez osobnego CA panelu |
@@ -267,7 +267,10 @@ sequenceDiagram
 
 Profile Sync synchronizuje wyłącznie podpisaną, allowlistowaną konfigurację
 rutynową: wybrane ustawienia Kodi/Umbrella, kanoniczne favourites i lokalne grafiki
-WatchNixtoons2. Każde urządzenie ma własny enrollment, token i klucz podpisujący;
+WatchNixtoons2. Osobny opt-in `playback-state-lww-v1` synchronizuje dla tego dodatku
+małe rekordy watched/resume przez serwerowe rewizje i prostą zasadę remote-wins dla
+starego eventu; nie kopiuje bazy `MyVideos`. Umbrella zachowuje Trakt jako źródło
+prawdy, a YouTube zdalną historię konta. Każde urządzenie ma własny enrollment, token i klucz podpisujący;
 nie są one klonowane przez backup.
 
 Osobną warstwą pozostają sekrety i pełne odtworzenie:
