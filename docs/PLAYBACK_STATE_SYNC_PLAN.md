@@ -1,6 +1,6 @@
 # Plan synchronizacji stanu odtwarzania
 
-Status: po niezależnym review; uwagi K1-K10 zastosowane, gotowy do implementacji.
+Status: zaimplementowany i zakwalifikowany na BlueStacks/X88; release w toku.
 
 ## 1. Cel i decyzje projektowe
 
@@ -140,8 +140,10 @@ Brak jawnego seeda oznacza pusty stan serwera, bez masowego nadpisania.
   notification/registration. Nie zakładamy, że niestandardowa właściwość ListItem
   przetrwa rozwiązanie URL.
 - Adapter Profile Sync zapisuje zdarzenia odtwarzacza i stosuje `playcount`/resume
-  przez publiczne API Kodi. BlueStacks i X88 muszą zakwalifikować read-after-write dla
-  dokładnej ścieżki `plugin://`; brak kwalifikacji wyłącza adapter.
+  przez publiczne API Kodi. Dla adresu, którego Kodi jeszcze nie zna w lokalnej bazie,
+  zachowuje cały rekord jako oczekujący zamiast zgłaszać awarię. WatchNixtoons2 czyta
+  ten zredagowany lokalny cache podczas budowania listy; po utworzeniu wpisu przez Kodi
+  natywny zapis jest ponawiany. Nie ma bezpośrednich zapisów do bazy Kodi.
 - `recently_watched.dat` nie wchodzi do pierwszego releasu: zawiera tytuły i URL-e oraz
   jest stanem nawigacyjnym, nie playback.
 - Nie wykonujemy bezpośrednich zapisów SQL do `MyVideos*.db`.
@@ -270,3 +272,25 @@ Najpierw testy jednostkowe i loopback, następnie wyłącznie BlueStacks i X88:
 Rollout pozostałej floty nie rozpoczyna się, dopóki wszystkie powyższe kryteria dla
 BlueStacks i X88 nie przejdą. Niedostępność jednego z dwóch urządzeń blokuje promocję,
 ale nie uzasadnia osłabienia testu ani ręcznego wpisania sukcesu.
+
+## 9. Wynik implementacji canary
+
+Stan z 2026-08-31:
+
+- Fen Light i YouTube2KodiLibrary są wyłącznie na liście wycofanych dodatków;
+  powtórny preflight obu urządzeń zwrócił `NO_CHANGE`;
+- backend QNAP działa na schemacie 7 i udostępnia jeden prywatny scope domowy;
+- Profile Sync 1.3.3 oraz WatchNixtoons2 0.30.3 przeszły testy na BlueStacks i X88;
+- odłożony zapis dla nieznanej jeszcze ścieżki Kodi nie degraduje zdrowia procesu,
+  a stan jest widoczny na liście dodatku;
+- zapis X88 został odczytany na BlueStacks, po czym kontrolowany konflikt dwóch
+  eventów opartych na tej samej rewizji zakończył się pełnym nadpisaniem rekordem
+  zaakceptowanym jako pierwszy; X88 zgłosił `SUPERSEDED_BY_REMOTE`;
+- Rapideo pozostaje świadomie fail-closed, Umbrella używa Trakt, a YouTube historii
+  konta; nie powstało dla nich równoległe źródło historii na QNAP.
+- na obu canary wymuszono zgodną politykę Umbrella i lokalną/zdalną historię YouTube;
+  heartbeat jest zredagowany. Sama autoryzacja Trakt wymaga późniejszego działania
+  użytkownika i pozostaje jawnie `false`.
+
+Zredagowany, odtwarzalny raport znajduje się w
+`docs/e2e-results/2026-08-31-playback-state-sync-canary.md`.

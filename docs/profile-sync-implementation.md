@@ -13,10 +13,13 @@ w `docs/README.md`.
 
 ### Przyrost 2026-08-31: stan odtwarzania
 
-- Profile Sync 1.3.0 ma osobny, pięciominutowy cykl playback i lokalny journal
+- Profile Sync 1.3.3 ma osobny, pięciominutowy cykl playback i lokalny journal
   SQLite; awaria sieci nie usuwa zdarzenia;
-- WatchNixtoons2 0.30.0 przekazuje wyłącznie wersjonowany namespace,
+- WatchNixtoons2 0.30.3 przekazuje wyłącznie wersjonowany namespace,
   deterministyczny hash strony odcinka i dokładną ścieżkę `plugin://`;
+- zdalny rekord nieznanej jeszcze ścieżki pozostaje w cache Profile Sync i jest
+  nanoszony na listę WatchNixtoons2; natywny zapis Kodi jest ponawiany po utworzeniu
+  lokalnego wpisu zamiast degradować cały proces do `ERROR`;
 - serwer 0.9.0 nadaje rewizje LWW, odrzuca stary `based_on_revision`, obsługuje
   idempotentny replay i trzyma tombstone `unwatched`;
 - funkcja jest domyślnie wyłączona per enrollment; włączenie wymaga capability
@@ -27,6 +30,9 @@ w `docs/README.md`.
   Android bez adaptera historii;
 - Rapideo pozostaje fail-closed do czasu wydzielenia stabilnej trasy opartej na
   `file.id`; nazwa i rozmiar pliku nie są dopuszczalną tożsamością.
+
+Zredagowany test dwukierunkowy i konfliktowy BlueStacks/X88 jest zapisany w
+`docs/e2e-results/2026-08-31-playback-state-sync-canary.md`.
 
 Powtarzalny test backendu obejmujący HTTP, idempotencję i konwergencję:
 

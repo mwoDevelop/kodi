@@ -35,3 +35,34 @@ def test_invalid_report_signature_requires_exact_reenrollment_signal():
             "http_status": 401,
         }
     )
+
+
+def test_quarantined_first_assignment_is_eligible_for_explicit_replacement():
+    active = "sha256:" + "a" * 64
+    observed = {
+        "paired": True,
+        "identity_consistent": True,
+        "status": "QUARANTINED",
+        "applied_revision": None,
+        "assigned_revision": active,
+    }
+
+    assert profile_sync._can_replace_quarantined_enrollment(observed, active)
+
+
+def test_applied_or_stale_quarantine_is_not_eligible_for_replacement():
+    active = "sha256:" + "a" * 64
+    base = {
+        "paired": True,
+        "identity_consistent": True,
+        "status": "QUARANTINED",
+        "applied_revision": None,
+        "assigned_revision": active,
+    }
+
+    assert not profile_sync._can_replace_quarantined_enrollment(
+        {**base, "applied_revision": "sha256:" + "b" * 64}, active
+    )
+    assert not profile_sync._can_replace_quarantined_enrollment(
+        {**base, "assigned_revision": "sha256:" + "c" * 64}, active
+    )

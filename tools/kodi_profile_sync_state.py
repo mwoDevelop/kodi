@@ -140,6 +140,20 @@ def probe(addon, profile):
         "last_check_utc": state.get("last_check_utc"),
         "assigned_revision": state.get("assigned_revision"),
         "applied_revision": state.get("applied_revision"),
+        "playback_status": state.get("playback_status"),
+        "playback_last_success_utc": state.get(
+            "playback_last_success_utc"
+        ),
+        "playback_last_attempt_utc": state.get(
+            "playback_last_attempt_utc"
+        ),
+        "playback_error_code": state.get("playback_error_code"),
+        "playback_cursor": state.get("playback_cursor"),
+        "playback_pending_events": state.get("playback_pending_events"),
+        "playback_pending_mapping": state.get("playback_pending_mapping"),
+        "playback_pending_application": state.get(
+            "playback_pending_application"
+        ),
     }
 
 

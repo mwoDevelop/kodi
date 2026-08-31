@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-08
 
+- [Synchronizacja stanu odtwarzania — BlueStacks i X88](2026-08-31-playback-state-sync-canary.md)
 - [WatchNixtoons2 0.29.2 — domyślne autoodtwarzanie najwyższej jakości na Sony](2026-08-30-watchnixtoons2-0.29.2-sony.md)
 - [Dokończenie rolloutu Bedroom TV](2026-08-30-bedroom-tv-completion.md)
 - [NordVPN Android TV — polityka dzielonego tunelowania](2026-08-30-nordvpn-split-tunnel-policy.md)
