@@ -107,6 +107,29 @@ Brak obu źródeł daje `API_CONFIG_REQUIRED`; częściowy zestaw jest błędem 
 Uzgadnianie oficjalnego dodatku porównuje jego pliki z przypiętym ZIP-em, dzięki czemu
 potrafi naprawić uszkodzoną instalację tej samej wersji bez zmiany originu Kodi.
 
+### Obejście zatrzymywania odtwarzania w 7.4.4
+
+YouTube 7.4.4 potrafi otrzymać z profilu `ANDROID_VR` adresy MPEG-DASH, dla których
+serwer GVS odrzuca kolejne zakresy HTTP kodem 403 po początkowym fragmencie. Objaw
+wygląda jak zbyt mały bufor, ale zwiększenie cache Kodi nie naprawia niedostępnych
+segmentów. InputStream Adaptive ponawia pobieranie sześć razy, po czym obraz może się
+zatrzymać, a błąd synchronizacji audio narasta.
+
+Do czasu wydania i zakwalifikowania poprawki upstream polityka
+`manifests/kodi-managed-addon-settings.json` ustawia wyłącznie dla wersji 7.4.4
+`kodion.mpd.videos=false`. Dodatek używa wtedy pojedynczego strumienia progresywnego,
+który odtwarza się stabilnie, ale ogranicza jakość zwykłych filmów do 720p. Przyszła
+wersja nie dziedziczy obejścia automatycznie: najpierw musi przejść sondę MPEG-DASH,
+a następnie można jawnie usunąć lub przesunąć zakres polityki.
+
+Odtwarzalny test Androida uruchamia co najmniej 90 sekund filmu i wymaga postępu bez
+HTTP 403, błędów pobierania segmentów i dużych błędów synchronizacji audio:
+
+```bash
+.venv/bin/python tests/e2e/kodi_youtube_playback.py \
+  --serial "$KODI_DEVICE_BLUESTACKS1_ADB" --observe-seconds 100
+```
+
 ## Utworzenie i rotacja sesji OAuth
 
 Na zaufanym hoście uruchom:
@@ -147,6 +170,9 @@ bez zmian i nie może ponownie żądać kodu.
   rollout; token został unieważniony lub wygasł.
 - timeout na urządzeniu przy poprawnej sesji: sprawdź trasę Google przez VPN i zegar;
   adapter nie zastępuje wtedy poprzedniego działającego stanu.
+- zatrzymanie po początkowym buforze oraz `Client: 28`, HTTP 403 i sześć prób
+  segmentu: sprawdź, czy dla YouTube 7.4.4 aktywne jest zarządzane
+  `kodion.mpd.videos=false`; nie zwiększaj globalnego cache Kodi jako obejścia.
 - niekwalifikowana wersja: nie wykonuj downgrade'u ani migracji tokenu; zakwalifikuj
   nowy oficjalny ZIP najpierw na BlueStacks i X88.
 

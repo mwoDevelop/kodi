@@ -12,6 +12,15 @@
         "markwatched.percent": "85"
       }
     },
+    "plugin.video.youtube": {
+      "version_range": {
+        "min_inclusive": "7.4.4",
+        "max_exclusive": "7.4.5"
+      },
+      "settings": {
+        "kodion.mpd.videos": "false"
+      }
+    },
     "plugin.video.watchnixtoons2.mwodevelop": {
       "version_range": {
         "min_inclusive": "0.29.2",
