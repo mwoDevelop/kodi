@@ -187,7 +187,7 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     ]
 
 
-def test_testing_channel_owns_only_artifacts_that_differ_from_stable():
+def test_testing_channel_assigns_complete_mixed_origin_policy():
     prepared = {
         "repository_id": "repository.mwodevelop.testing",
         "addons": {
@@ -201,7 +201,38 @@ def test_testing_channel_owns_only_artifacts_that_differ_from_stable():
     }
 
     assert desired_origins(prepared, "testing", stable) == {
+        "unchanged": "repository.mwodevelop",
         "candidate": "repository.mwodevelop.testing"
+    }
+
+
+def test_reconcile_origins_is_no_op_when_complete_policy_matches(monkeypatch):
+    prepared = {
+        "repository_id": "repository.mwodevelop.testing",
+        "addons": {},
+    }
+    expected = {
+        "unchanged": "repository.mwodevelop",
+        "candidate": "repository.mwodevelop.testing",
+    }
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.desired_origins",
+        lambda _prepared, _channel: expected,
+    )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.installed_addon_origins_in_kodi",
+        lambda *_args: dict(expected),
+    )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.assign_addon_origins_in_kodi",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("unexpected write")
+        ),
+    )
+
+    assert reconcile_origins("adb", 5038, "device", prepared, "testing") == {
+        "status": "NO_CHANGE",
+        "origins": 2,
     }
 
 
@@ -221,6 +252,24 @@ def test_testing_origin_transition_allows_the_pinned_version_change():
 
     assert previous == {"candidate": "repository.mwodevelop"}
     assert transitions == {"candidate": {"from": "1.0.0", "to": "2.0.0"}}
+
+
+def test_testing_origin_transition_repairs_unchanged_component_to_stable():
+    prepared = {
+        "repository_id": "repository.mwodevelop.testing",
+        "addons": {"unchanged": {"version": "2.0.0"}},
+    }
+
+    previous, transitions = origin_transition(
+        prepared,
+        "testing",
+        {"unchanged": "repository.mwodevelop"},
+        {"unchanged": "repository.mwodevelop.testing"},
+        {"unchanged": {"version": "1.0.0"}},
+    )
+
+    assert previous == {"unchanged": "repository.mwodevelop.testing"}
+    assert transitions == {}
 
 
 def test_stable_transition_ignores_addons_already_owned_by_stable():

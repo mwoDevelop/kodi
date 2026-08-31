@@ -67,16 +67,30 @@ jobs:
           test -n "$KODI_ADB"
           test -n "$KODI_DEVICES_FILE"
           test -n "$KODI_REFERENCES_FILE"
+          umbrella_settings="$(dirname "$KODI_REFERENCES_FILE")/.kodi-private/umbrella/settings.xml"
+          test -f "$umbrella_settings"
           python tools/kodi_android_stable_rollout.py \
             --device bluestacks1 \
             --adb "$KODI_ADB" \
             --channel testing \
             --devices "$KODI_DEVICES_FILE" \
             --references "$KODI_REFERENCES_FILE"
+          python tools/kodi_umbrella_settings.py apply \
+            --device bluestacks1 \
+            --settings "$umbrella_settings" \
+            --adb "$KODI_ADB" \
+            --devices "$KODI_DEVICES_FILE" \
+            --references "$KODI_REFERENCES_FILE"
           python tools/kodi_android_stable_rollout.py \
             --device "$ANDROID_TV" \
             --adb "$KODI_ADB" \
             --channel testing \
+            --devices "$KODI_DEVICES_FILE" \
+            --references "$KODI_REFERENCES_FILE"
+          python tools/kodi_umbrella_settings.py apply \
+            --device "$ANDROID_TV" \
+            --settings "$umbrella_settings" \
+            --adb "$KODI_ADB" \
             --devices "$KODI_DEVICES_FILE" \
             --references "$KODI_REFERENCES_FILE"
           python tools/certify_device_matrix.py \
