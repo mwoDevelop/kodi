@@ -94,7 +94,8 @@ def main():
         ):
             raise ValueError("Profile Sync enrollment identity differs")
         sync_result = None
-        if config["action"] == "sync":
+        favourites_result = None
+        if config["action"] in {"sync", "sync-favourites"}:
             applier = TransactionalApplier(
                 profile,
                 state,
@@ -107,6 +108,29 @@ def main():
             applier.recover()
             sync_result = ReadOnlySync(addon, state, applier=applier)()
             local = state.read()
+        if config["action"] == "sync-favourites":
+            from resources.lib.mwoprofilesync.favourites_state import (
+                FavouritesApplier,
+                FavouritesJournal,
+                FavouritesSync,
+            )
+            from resources.lib.mwoprofilesync.portable import (
+                PortableFavouritesExporter,
+            )
+
+            kodi_profile = xbmcvfs.translatePath("special://profile")
+            kodi_favourites = KodiFavourites(xbmc.executeJSONRPC)
+            portable = PortableFavouritesAdapter(kodi_profile, kodi_favourites)
+            favourites_applier = FavouritesApplier(profile, portable)
+            favourites_applier.recover()
+            favourites_result = FavouritesSync(
+                addon,
+                state,
+                FavouritesJournal(profile),
+                PortableFavouritesExporter(kodi_profile, kodi_favourites),
+                favourites_applier,
+            )()
+            local = state.read()
         result = {
             "ok": True,
             "addon_version": addon.getAddonInfo("version"),
@@ -118,6 +142,9 @@ def main():
             "applied_revision": local.get("applied_revision"),
             "pending_report": bool(local.get("pending_report")),
             "sync_status": sync_result.get("status") if sync_result else None,
+            "favourites_sync_status": (
+                favourites_result.get("status") if favourites_result else None
+            ),
             "playback_status": local.get("playback_status"),
             "playback_cursor": local.get("playback_cursor"),
             "playback_pending_events": local.get("playback_pending_events"),
@@ -126,6 +153,21 @@ def main():
                 "playback_pending_application"
             ),
             "playback_error_code": local.get("playback_error_code"),
+            "favourites_status": local.get("favourites_status"),
+            "favourites_last_success_utc": local.get(
+                "favourites_last_success_utc"
+            ),
+            "favourites_last_attempt_utc": local.get(
+                "favourites_last_attempt_utc"
+            ),
+            "favourites_error_code": local.get("favourites_error_code"),
+            "favourites_cursor": local.get("favourites_cursor"),
+            "favourites_pending_count": local.get(
+                "favourites_pending_count"
+            ),
+            "favourites_dynamic_fence": bool(
+                local.get("favourites_dynamic_fence")
+            ),
         }
     except Exception as error:
         result = {

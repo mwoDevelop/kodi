@@ -154,6 +154,19 @@ def probe(addon, profile):
         "playback_pending_application": state.get(
             "playback_pending_application"
         ),
+        "favourites_status": state.get("favourites_status"),
+        "favourites_last_success_utc": state.get(
+            "favourites_last_success_utc"
+        ),
+        "favourites_last_attempt_utc": state.get(
+            "favourites_last_attempt_utc"
+        ),
+        "favourites_error_code": state.get("favourites_error_code"),
+        "favourites_cursor": state.get("favourites_cursor"),
+        "favourites_pending_count": state.get("favourites_pending_count"),
+        "favourites_dynamic_fence": bool(
+            state.get("favourites_dynamic_fence")
+        ),
     }
 
 

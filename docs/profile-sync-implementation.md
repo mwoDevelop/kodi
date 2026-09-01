@@ -13,7 +13,7 @@ w `docs/README.md`.
 
 ### Przyrost 2026-09-01: wielokierunkowe Kodi Favourites
 
-- Profile Sync 1.4.0 dodaje osobny, minutowy kanał
+- Profile Sync 1.4.1 dodaje osobny, minutowy kanał
   `favourites-state-lww-v1`; każda jawnie włączona instalacja może publikować cały
   kanoniczny dokument Favourites i pobierać nowszą wersję bez urządzenia nadrzędnego;
 - wspólne z playback WatchNixtoons2 są enrollment, scope, bearer, podpis urządzenia,
@@ -38,6 +38,8 @@ w `docs/README.md`.
 - migracja jest świadomie ręczna i jednorazowa: operator seeduje aktywny statyczny
   adapter, a następnie włącza dokładne enrollmenty. Nie ma automatycznego dual-read,
   dual-write ani niejawnego fallbacku po cutover.
+- poprawka 1.4.1 normalizuje zwracane przez Kodi 21 puste `thumbnail` do braku
+  opcjonalnego pola; każda niepusta wartość nadal przechodzi ścisłą walidację.
 
 Powtarzalne testy modułowe i HTTP:
 
