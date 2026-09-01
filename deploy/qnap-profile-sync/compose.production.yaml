@@ -10,6 +10,8 @@ services:
       - /data/state.sqlite
       - --key-registry
       - /run/profile-sync/key-registry.json
+      - --favourites-authority-file
+      - /run/profile-sync/favourites-authority.json
       - --tls-cert
       - /run/profile-sync/tls/server.crt
       - --tls-key

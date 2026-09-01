@@ -46,6 +46,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | QNAP Secret Broker | [Wdrożenie prywatnego brokera](../deploy/qnap-secret-broker/README.md) |
 | Dziennik wdrożenia Profile Sync | [Zapis stanu realizacji](profile-sync-implementation.md) |
 | Synchronizacja stanu odtwarzania | [Plan playback LWW](PLAYBACK_STATE_SYNC_PLAN.md) |
+| Wielokierunkowa synchronizacja ulubionych | [Plan Favourites LWW bez urządzenia nadrzędnego](FAVOURITES_MULTIWRITER_SYNC_PLAN.md) |
 | Katalog możliwości runtime Kodi | [Plan automatycznej kwalifikacji wydań](KODI_RUNTIME_CAPABILITY_CATALOG_PLAN.md) |
 | Synchronizacja upstream | [Plan synchronizacji upstream](../UPSTREAM_SYNC_PLAN.md) |
 | Automatyczny release Umbrelli | [Plan automatyzacji Umbrelli](../UMBRELLA_AUTOMATED_RELEASE_PLAN.md) |
@@ -66,6 +67,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 - [Review planu usunięcia kodu legacy](LEGACY_REMOVAL_PLAN_REVIEW.md)
 - [Review architektury Profile Sync](PROFILE_SYNC_PLAN_REVIEW.md)
 - [Review synchronizacji stanu odtwarzania](PLAYBACK_STATE_SYNC_PLAN_REVIEW.md)
+- [Review wielokierunkowej synchronizacji ulubionych](FAVOURITES_MULTIWRITER_SYNC_PLAN_REVIEW.md)
 - [Review Profile Sync na QNAP](PROFILE_SYNC_QNAP_PLAN_REVIEW.md)
 - [Review Profile Sync na NUC/Flatpak](PROFILE_SYNC_NUC_PLAN_REVIEW.md)
 - [Review architektury Upstream Sync](UPSTREAM_SYNC_PLAN_REVIEW.md)

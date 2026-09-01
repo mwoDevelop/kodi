@@ -21,6 +21,7 @@ PLACEHOLDER_IMAGE = (
 )
 SMOKE_LABEL = "io.mwodevelop.profile-sync.mode"
 KEY_TARGET = "/run/profile-sync/key-registry.json"
+FAVOURITES_AUTHORITY_TARGET = "/run/profile-sync/favourites-authority.json"
 TLS_CERT_TARGET = "/run/profile-sync/tls/server.crt"
 TLS_KEY_TARGET = "/run/profile-sync/tls/server.key"
 INTEGRATION_CA_TARGET = "/run/profile-sync/integration/clients-ca.crt"
@@ -145,6 +146,7 @@ def validate_policy(document, mode, allow_placeholder=False):
     expected_targets = {
         "/data",
         KEY_TARGET,
+        FAVOURITES_AUTHORITY_TARGET,
         TLS_CERT_TARGET,
         TLS_KEY_TARGET,
     }
@@ -176,6 +178,11 @@ def validate_policy(document, mode, allow_placeholder=False):
     key_source = _absolute_source(
         by_target[KEY_TARGET],
         KEY_TARGET,
+        explicit_bind_targets_from_source,
+    )
+    favourites_authority_source = _absolute_source(
+        by_target[FAVOURITES_AUTHORITY_TARGET],
+        FAVOURITES_AUTHORITY_TARGET,
         explicit_bind_targets_from_source,
     )
     tls_cert_source = _absolute_source(
@@ -225,6 +232,8 @@ def validate_policy(document, mode, allow_placeholder=False):
             raise PolicyError("production data path is outside ProfileSync")
         if not key_source.startswith(production_root + "/config/"):
             raise PolicyError("production key registry is outside ProfileSync")
+        if not favourites_authority_source.startswith(production_root + "/config/"):
+            raise PolicyError("production favourites authority is outside ProfileSync")
         for source in (tls_cert_source, tls_key_source):
             if not source.startswith(production_root + "/config/tls/"):
                 raise PolicyError("production TLS file is outside ProfileSync")
@@ -241,6 +250,8 @@ def validate_policy(document, mode, allow_placeholder=False):
         command = " ".join(str(item) for item in service.get("command", []))
         if (
             "--integration-listen 0.0.0.0" not in command
+            or "--favourites-authority-file " + FAVOURITES_AUTHORITY_TARGET
+            not in command
             or "--integration-client-ca " + INTEGRATION_CA_TARGET not in command
             or "--secret-broker-url https://secret-broker:9444" not in command
             or "--secret-broker-ca " + SECRET_BROKER_CA_TARGET not in command
@@ -258,6 +269,7 @@ def validate_policy(document, mode, allow_placeholder=False):
         for source in (
             data_source,
             key_source,
+            favourites_authority_source,
             tls_cert_source,
             tls_key_source,
         ):

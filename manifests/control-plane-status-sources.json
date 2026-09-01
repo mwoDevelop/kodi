@@ -22,6 +22,26 @@
       "reason_codes": ["PROFILE_SYNC_TRANSPORT_ERROR", "STALE", "UNAVAILABLE"]
     },
     {
+      "id": "profile-sync-playback",
+      "owner": "profile-sync",
+      "adapter": "profile_sync_integration_mtls",
+      "auth": "mtls_read_only",
+      "stale_after_seconds": 900,
+      "trust_level": "authenticated_observation",
+      "fallback": "last_success",
+      "reason_codes": ["PROFILE_SYNC_TRANSPORT_ERROR", "STALE", "UNAVAILABLE"]
+    },
+    {
+      "id": "profile-sync-favourites",
+      "owner": "profile-sync",
+      "adapter": "profile_sync_integration_mtls",
+      "auth": "mtls_read_only",
+      "stale_after_seconds": 900,
+      "trust_level": "authenticated_observation",
+      "fallback": "last_success",
+      "reason_codes": ["PROFILE_SYNC_TRANSPORT_ERROR", "STALE", "UNAVAILABLE"]
+    },
+    {
       "id": "secret-broker",
       "owner": "secret-broker",
       "adapter": "secret_broker_readiness_mtls",
