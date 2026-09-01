@@ -66,3 +66,23 @@ def test_applied_or_stale_quarantine_is_not_eligible_for_replacement():
     assert not profile_sync._can_replace_quarantined_enrollment(
         {**base, "assigned_revision": "sha256:" + "c" * 64}, active
     )
+
+
+def test_explicit_replacement_requires_same_enrolled_identity():
+    assert profile_sync._can_replace_enrollment(
+        {
+            "paired": True,
+            "identity_consistent": True,
+            "enrollment_id": "enr:current",
+        }
+    )
+    assert not profile_sync._can_replace_enrollment(
+        {
+            "paired": True,
+            "identity_consistent": False,
+            "enrollment_id": "enr:foreign",
+        }
+    )
+    assert not profile_sync._can_replace_enrollment(
+        {"paired": False, "identity_consistent": False, "enrollment_id": None}
+    )

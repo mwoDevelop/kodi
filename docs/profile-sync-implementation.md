@@ -70,6 +70,15 @@ Każdy klient-writer musi zostać sparowany kodem wygenerowanym po tej zmianie (
   --enrollment-id 'enr:...' --enabled true
 ```
 
+Istniejącego klienta `read` można podczas tego ręcznego cutover wymienić jedną
+komendą. Skrypt dopuszcza wyłącznie tę samą logiczną tożsamość, a starą
+generację unieważnia dopiero po poprawnym sparowaniu i konwergencji nowej:
+
+```bash
+.venv/bin/python tools/kodi_android_profile_sync.py \
+  --device bluestacks1 --replace-enrollment
+```
+
 Rollback jest również jawny: najpierw `--enabled false`, potem ręczne usunięcie
 `favourites_dynamic_fence` z prywatnego stanu klienta i dopiero zastosowanie aktywnej
 rewizji statycznej. Nie wykonuje się downgrade'u schematu bazy.
