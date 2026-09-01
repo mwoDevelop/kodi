@@ -140,7 +140,11 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.android_runtime_facts",
-        lambda *_args, **_kwargs: {},
+        lambda *_args, **_kwargs: {"kodi_version": "21.3"},
+    )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.attest_android_runtime",
+        lambda *_args, **_kwargs: {"status": "ATTESTATION_PASS"},
     )
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.load_policy", lambda _path: {}
@@ -150,6 +154,7 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
         lambda *_args, **_kwargs: {
             "status": "AUDIT_PASS",
             "policy_sha256": "c" * 64,
+            "catalog_sha256": "e" * 64,
             "graph_sha256": "d" * 64,
             "order": [*ADDON_IDS, repository_id],
         },

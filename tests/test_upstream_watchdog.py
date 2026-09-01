@@ -45,6 +45,11 @@ SCHEDULED_WORKFLOWS = {
         "29 4 * * *",
         "04:29 codziennie",
     ),
+    ("mwoDevelop/kodi", "check-kodi-runtime-upstream.yml"): (
+        Path(".github/workflows/check-kodi-runtime-upstream.yml"),
+        "11 4 * * *",
+        "04:11 codziennie",
+    ),
     (
         "mwoDevelop/script.module.mwoscrapers",
         "check-provider-upstreams.yml",
@@ -571,7 +576,7 @@ def test_watchdog_health_rejects_stale_future_and_incomplete_reports():
 
 def test_versioned_manifest_is_valid():
     loaded = load_manifest("manifests/upstream-watchdog.json")
-    assert len(loaded["workflows"]) == 11
+    assert len(loaded["workflows"]) == 12
     assert {
         (item["repository"], item["workflow"]) for item in loaded["workflows"]
     } == set(SCHEDULED_WORKFLOWS)
@@ -586,7 +591,7 @@ def test_control_plane_catalogs_are_valid_and_watchdog_thresholds_match():
     github_jobs = [
         item for item in schedules["jobs"] if item["kind"] == "github_actions"
     ]
-    assert len(github_jobs) == 11
+    assert len(github_jobs) == 12
     assert len(sources["sources"]) == 6
     assert len(severity["rules"]) == 7
     assert {(item["repository"], item["workflow"]) for item in github_jobs} == set(
@@ -639,6 +644,23 @@ def test_youtube_upstream_scans_zip_and_expanded_tree_before_review_pr():
     assert "gh pr create" in workflow
     assert "gh pr merge" not in workflow
     assert "pull_request:" in workflow
+    assert "github.event_name != 'pull_request'" in workflow
+
+
+def test_kodi_runtime_upstream_is_append_only_review_with_exact_ci_head():
+    workflow = Path(
+        ".github/workflows/check-kodi-runtime-upstream.yml"
+    ).read_text(encoding="utf-8")
+    assert "tools/kodi_runtime_catalog.py discover" in workflow
+    assert "tools/kodi_runtime_catalog.py verify" in workflow
+    assert "tools/kodi_runtime_catalog.py apply" in workflow
+    assert "manifests/kodi-runtime-capabilities.json" in workflow
+    assert "automation/kodi-runtime-$VERSION" in workflow
+    assert "gh pr create" in workflow
+    assert "gh workflow run test.yml" in workflow
+    assert "headSha == env.HEAD_SHA" in workflow
+    assert "gh run watch" in workflow
+    assert "gh pr merge" not in workflow
     assert "github.event_name != 'pull_request'" in workflow
 
 

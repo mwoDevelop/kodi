@@ -17,6 +17,7 @@ from tools.kodi_addon_candidate_rollout import android_runtime_facts, rollout
 from tools.kodi_addon_runtime_compatibility import (
     assert_compatible,
     inspect_archive,
+    load_catalog,
     load_policy,
 )
 from tools.kodi_advancedsettings_policy import reconcile_android_advancedsettings
@@ -31,6 +32,7 @@ from tools.kodi_profile import (
     _wait_for_kodi_ready,
     adb_command,
 )
+from tools.kodi_runtime_attestation import attest_android_runtime
 from tools.kodi_reinstall import (
     assign_addon_origins_in_kodi,
     installed_addon_origins_in_kodi,
@@ -232,18 +234,7 @@ def reconcile(
     if device["platform"] not in {"android", "android-emulator"}:
         raise ValueError("Android stable rollout requires an Android device")
     serial = device["endpoints"]["adb"]
-    advancedsettings = reconcile_android_advancedsettings(adb, port, serial)
-    if advancedsettings["status"] == "UPDATED":
-        adb_command(
-            adb,
-            port,
-            serial,
-            "shell",
-            "am force-stop %s" % KODI_PACKAGE,
-        )
-        time.sleep(2)
     kodi_preflight = ensure_kodi_ready(adb, port, serial)
-    retired_addons = reconcile_retired_addons(adb, port, serial)
     prepared = prepare(ROOT, channel=channel)
     repository_id = prepared["repository_id"]
     available = {
@@ -262,14 +253,42 @@ def reconcile(
         addon_id: artifact["version"]
         for addon_id, artifact in available.items()
     }
+    runtime = android_runtime_facts(
+        adb, port, serial, platform=device["platform"]
+    )
+    catalog = load_catalog(
+        ROOT / "manifests/kodi-runtime-capabilities.json"
+    )
     compatibility = assert_compatible(
         descriptors,
-        android_runtime_facts(
-            adb, port, serial, platform=device["platform"]
-        ),
+        runtime,
         load_policy(ROOT / "manifests/kodi-addon-runtime-compatibility.json"),
+        catalog,
         planned_versions=planned_versions,
     )
+    runtime_attestation = attest_android_runtime(
+        adb_command,
+        adb,
+        port,
+        serial,
+        runtime["kodi_version"],
+        catalog,
+        ROOT / ".kodi-private/cache/runtime-attestation",
+    )
+    # Everything above this line is read-only. Runtime compatibility and the
+    # packaged distribution are both attested before the first managed write.
+    advancedsettings = reconcile_android_advancedsettings(adb, port, serial)
+    if advancedsettings["status"] == "UPDATED":
+        adb_command(
+            adb,
+            port,
+            serial,
+            "shell",
+            "am force-stop %s" % KODI_PACKAGE,
+        )
+        time.sleep(2)
+        ensure_kodi_ready(adb, port, serial)
+    retired_addons = reconcile_retired_addons(adb, port, serial)
     actions = []
     deployment_order = [
         repository_id,
@@ -352,8 +371,10 @@ def reconcile(
         "compatibility": {
             "status": compatibility["status"],
             "policy_sha256": compatibility["policy_sha256"],
+            "catalog_sha256": compatibility["catalog_sha256"],
             "graph_sha256": compatibility["graph_sha256"],
             "order": compatibility["order"],
+            "runtime_attestation": runtime_attestation,
         },
         "kodi_preflight": kodi_preflight,
         "advancedsettings": advancedsettings,

@@ -22,6 +22,7 @@ if str(ROOT) not in sys.path:
 from tools.kodi_addon_runtime_compatibility import (
     assert_compatible,
     inspect_archive,
+    load_catalog,
     load_policy,
 )
 
@@ -324,18 +325,39 @@ def load_build_targets(path=None):
     profiles = document["runtime_profiles"]
     if not isinstance(external, dict) or not isinstance(profiles, list) or not profiles:
         raise ValueError("Kodi add-on build targets are empty")
-    expected = {"name", "platform", "kodi_version", "abis"}
+    expected = {"name", "platform", "runtime_releases", "abis"}
     if any(not isinstance(item, dict) or set(item) != expected for item in profiles):
         raise ValueError("invalid Kodi add-on build runtime profile")
     if len({item["name"] for item in profiles}) != len(profiles):
         raise ValueError("Kodi add-on build runtime profile names differ")
+    if any(
+        not isinstance(item["runtime_releases"], list)
+        or not item["runtime_releases"]
+        or len(item["runtime_releases"])
+        != len(set(item["runtime_releases"]))
+        or any(
+            not isinstance(release, str)
+            or not re.fullmatch(r"[0-9]+\.[0-9]+", release)
+            for release in item["runtime_releases"]
+        )
+        for item in profiles
+    ):
+        raise ValueError("invalid Kodi build runtime releases")
     return document
 
 
-def validate_runtime_compatibility(artifacts, targets=None, policy=None):
+def validate_runtime_compatibility(
+    artifacts,
+    targets=None,
+    policy=None,
+    catalog=None,
+):
     targets = targets or load_build_targets()
     policy = policy or load_policy(
         ROOT / "manifests/kodi-addon-runtime-compatibility.json"
+    )
+    catalog = catalog or load_catalog(
+        ROOT / "manifests/kodi-runtime-capabilities.json"
     )
     descriptors = [inspect_archive(path) for path in artifacts]
     planned = {
@@ -344,23 +366,26 @@ def validate_runtime_compatibility(artifacts, targets=None, policy=None):
     }
     reports = {}
     for profile in targets["runtime_profiles"]:
-        report = assert_compatible(
-            descriptors,
-            {
-                "platform": profile["platform"],
-                "kodi_version": profile["kodi_version"],
-                "abis": profile["abis"],
-                "installed_addons": {},
-            },
-            policy,
-            planned_versions=planned,
-        )
-        reports[profile["name"]] = {
-            "status": report["status"],
-            "policy_sha256": report["policy_sha256"],
-            "graph_sha256": report["graph_sha256"],
-            "order": report["order"],
-        }
+        for release in profile["runtime_releases"]:
+            report = assert_compatible(
+                descriptors,
+                {
+                    "platform": profile["platform"],
+                    "kodi_version": release + ".0",
+                    "abis": profile["abis"],
+                    "installed_addons": {},
+                },
+                policy,
+                catalog,
+                planned_versions=planned,
+            )
+            reports["%s-kodi-%s" % (profile["name"], release)] = {
+                "status": report["status"],
+                "policy_sha256": report["policy_sha256"],
+                "catalog_sha256": report["catalog_sha256"],
+                "graph_sha256": report["graph_sha256"],
+                "order": report["order"],
+            }
     return reports
 
 

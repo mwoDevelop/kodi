@@ -14,7 +14,7 @@ od planów architektury, zapisów przeglądów i historycznych dowodów E2E.
 | Zainstaluj, zbuduj lub uruchom repozytorium E2E | Ten plik README |
 | Przywróć lub zsynchronizuj konfigurację użytkownika Kodi | [Prywatne profile Kodi](docs/kodi-private-profile.md) |
 | Skonfiguruj oficjalny dodatek YouTube | [YouTube w Kodi](docs/youtube.md) |
-| Zrozum kontrolę zgodności dodatków z Kodi | [Plan kompatybilności runtime](docs/KODI_ADDON_RUNTIME_COMPATIBILITY_PLAN.md) i [niezależny review](docs/KODI_ADDON_RUNTIME_COMPATIBILITY_PLAN_REVIEW.md) |
+| Zrozum kontrolę zgodności dodatków z Kodi | [Bieżący katalog możliwości runtime](docs/KODI_RUNTIME_CAPABILITY_CATALOG_PLAN.md), jego [niezależny review](docs/KODI_RUNTIME_CAPABILITY_CATALOG_PLAN_REVIEW.md) oraz [pierwotny plan bramy](docs/KODI_ADDON_RUNTIME_COMPATIBILITY_PLAN.md) |
 | Obsługuj obrazy QNAP | [Cykl życia obrazu QNAP](docs/qnap-images.md) |
 | Sprawdź zaplanowaną automatyzację i kontrole stanu | [Procesy cykliczne](docs/scheduled-processes.md) |
 | Uruchom lub rozszerz testy E2E | [Przewodnik po testach E2E](tests/e2e/README.md) |

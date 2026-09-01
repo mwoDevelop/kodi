@@ -17,6 +17,7 @@ workflow obsługuje również `workflow_dispatch`, umożliwiający kontrolowane 
 | 03:10 codziennie | `mwoDevelop/kodi` | `publish-pages.yml` | Odświeża jeden atomowy payload stable, testing i publicznego statusu Umbrelli. | To jedyny writer GitHub Pages; dokładne komponenty pochodzą z locków i cały payload przechodzi wspólną bramę malware. |
 | co 15 minut | `mwoDevelop/kodi` | `approve-umbrella-update.yml` | Sprawdza ścisłą allowlistę PR aktualizującego wyłącznie lock Umbrelli. | Domyślnie obserwacyjny. Mutacja wymaga `UMBRELLA_AUTO_MERGE_ENABLED=true` i osobnej App bez bypassu rulesetów. |
 | co 30 minut | `mwoDevelop/kodi` | `approve-umbrella-promotion.yml` | Sprawdza PR stable związany z dokładnym snapshotem, hermetyczną atestacją i niezmienionym lockiem QNAP. | Forward rollback nigdy nie kwalifikuje się do automatycznego approval; normalna promocja używa tej samej chronionej App i native auto-merge. |
+| 04:11 codziennie | `mwoDevelop/kodi` | `check-kodi-runtime-upstream.yml` | Odkrywa najnowsze stabilne wydanie `xbmc/xbmc` i porównuje jego systemowe ABI z append-only katalogiem runtime. | `NO_CHANGE` nie zapisuje niczego. Nowe wydanie tworzy PR zmieniający wyłącznie katalog; dokładny head przechodzi pełne CI, a merge wymaga osobnej atestacji binariów APK/Flatpak. Prerelease i tag drift są odrzucane. |
 | 04:20 codziennie | `mwoDevelop/kodi` | `reconcile-upstreams.yml` | Wykrywa stan wszystkich zarządzanych komponentów i przygotowuje dokładnego kandydata na lock kanału testing. | Ogólny kandydat trafia na `automation/testing-lock` i wymaga review. |
 | 04:35 codziennie | `mwoDevelop/kodi` | `reconcile-upstreams.yml` w trybie komponentowym | Przygotowuje lock zmieniający wyłącznie `plugin.video.umbrella`. | PR `automation/testing-lock-plugin-video-umbrella` może otrzymać automatyczne approval dopiero po pełnej weryfikacji allowlisty i CI. |
 | 04:29 codziennie | `mwoDevelop/kodi` | `check-youtube-upstream.yml` | Pobiera oficjalny ZIP YouTube z mirroru Kodi, materializuje jego drzewo i porównuje wersję, hash oraz zależności z kwalifikacją. | ZIP i rozpakowane pliki przechodzą wspólną bramę malware. Zmiana może utworzyć PR `automation/youtube-upstream`, ale nie jest automatycznie scalana, promowana ani publikowana przez mwoDevelop. |
@@ -95,7 +96,7 @@ harmonogramów aktualizacji:
 | Secret Broker | 30 sekund | mTLS `/ready`, klucz główny i integralność SQLite |
 
 Control Plane odświeża co 60 sekund read-only widoki Profile Sync, Secret Brokera,
-watchdoga przez prywatne mTLS i zbiorczy stan GitHub, a szczegóły 11 harmonogramów
+watchdoga przez prywatne mTLS i zbiorczy stan GitHub, a szczegóły 12 harmonogramów
 co 15 minut. Heartbeat procesu Profile Sync urządzeń wylicza z najnowszej generacji
 enrollmentu każdego logicznego urządzenia, więc stare generacje nie tworzą
 fałszywego alertu. Odczyty GitHub Control Plane i Watchdoga używają tego samego
@@ -163,6 +164,8 @@ gh run list --repo mwoDevelop/kodi \
   --workflow publish-pages.yml --event schedule --limit 1
 gh run list --repo mwoDevelop/kodi \
   --workflow check-youtube-upstream.yml --event schedule --limit 1
+gh run list --repo mwoDevelop/kodi \
+  --workflow check-kodi-runtime-upstream.yml --event schedule --limit 1
 gh run list --repo mwoDevelop/script.module.mwoscrapers \
   --workflow check-provider-upstreams.yml --event schedule --limit 1
 gh run list --repo mwoDevelop/script.module.mwoscrapers \

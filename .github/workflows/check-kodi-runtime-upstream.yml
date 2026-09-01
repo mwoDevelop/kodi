@@ -1,0 +1,191 @@
+name: check Kodi runtime upstream
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Optional exact stable xbmc/xbmc release tag
+        required: false
+        type: string
+  pull_request:
+    paths:
+      - ".github/workflows/check-kodi-runtime-upstream.yml"
+      - "manifests/kodi-addon-build-targets.json"
+      - "manifests/kodi-addon-runtime-compatibility.json"
+      - "manifests/kodi-addon-runtime-compatibility.schema.json"
+      - "manifests/kodi-runtime-capabilities.json"
+      - "manifests/kodi-runtime-capabilities.schema.json"
+      - "tools/kodi_addon_runtime_compatibility.py"
+      - "tools/kodi_runtime_attestation.py"
+      - "tools/kodi_runtime_catalog.py"
+  schedule:
+    - cron: "11 4 * * *"
+
+concurrency:
+  group: kodi-runtime-upstream-qualification
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      action: ${{ steps.candidate.outputs.action }}
+      base_sha: ${{ steps.candidate.outputs.base_sha }}
+      candidate_id: ${{ steps.candidate.outputs.candidate_id }}
+      version: ${{ steps.candidate.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Discover exact stable runtime candidate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          arguments=()
+          if [ -n "$RELEASE_TAG" ]; then
+            arguments+=(--release-tag "$RELEASE_TAG")
+          fi
+          python tools/kodi_runtime_catalog.py discover \
+            --candidate kodi-runtime-candidate.json \
+            --report kodi-runtime-report.json \
+            --base-sha "$GITHUB_SHA" \
+            "${arguments[@]}"
+      - name: Export immutable candidate identity
+        id: candidate
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          value = json.loads(Path("kodi-runtime-candidate.json").read_text())
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+              output.write("action=%s\n" % value["action"])
+              output.write("base_sha=%s\n" % value["base_sha"])
+              output.write("candidate_id=%s\n" % value["candidate_id"])
+              output.write("version=%s\n" % value["version"])
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kodi-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            kodi-runtime-candidate.json
+            kodi-runtime-report.json
+          retention-days: 14
+
+  write-review-branch:
+    needs: qualify
+    if: >-
+      github.event_name != 'pull_request' &&
+      needs.qualify.outputs.action == 'REVIEW'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    outputs:
+      branch: ${{ steps.writer.outputs.branch }}
+      head_sha: ${{ steps.writer.outputs.head_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.qualify.outputs.base_sha }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: kodi-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Re-verify and atomically apply catalog only
+        run: |
+          python tools/kodi_runtime_catalog.py verify \
+            --candidate kodi-runtime-candidate.json \
+            --base-sha '${{ needs.qualify.outputs.base_sha }}'
+          python tools/kodi_runtime_catalog.py apply \
+            --candidate kodi-runtime-candidate.json \
+            --base-sha '${{ needs.qualify.outputs.base_sha }}'
+          python - <<'PY'
+          from tools.kodi_addon_runtime_compatibility import load_catalog
+          from tools.build_repo import load_build_targets
+          catalog = load_catalog("manifests/kodi-runtime-capabilities.json")
+          releases = set(catalog["releases"])
+          for profile in load_build_targets()["runtime_profiles"]:
+              if not set(profile["runtime_releases"]).issubset(releases):
+                  raise SystemExit("build profile references an unknown runtime")
+          PY
+          test -z "$(git status --short --untracked-files=no | grep -v '^ M manifests/kodi-runtime-capabilities.json$' || true)"
+      - name: Open or update review PR
+        id: writer
+        env:
+          BASE_SHA: ${{ needs.qualify.outputs.base_sha }}
+          CANDIDATE_ID: ${{ needs.qualify.outputs.candidate_id }}
+          VERSION: ${{ needs.qualify.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE_SHA"
+          branch="automation/kodi-runtime-$VERSION"
+          git config user.name "mwoDevelop update bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add manifests/kodi-runtime-capabilities.json
+          git diff --cached --quiet && { echo "Candidate produced no catalog change"; exit 1; }
+          git commit -m "Qualify Kodi $VERSION runtime catalog" \
+            -m "Candidate-ID: $CANDIDATE_ID"
+          git fetch origin "$branch:refs/remotes/origin/$branch" || true
+          remote_sha="$(git show-ref --hash "refs/remotes/origin/$branch" 2>/dev/null || true)"
+          if [ -n "$remote_sha" ]; then
+            git push origin "HEAD:refs/heads/$branch" \
+              "--force-with-lease=refs/heads/$branch:$remote_sha"
+          else
+            git push origin "HEAD:refs/heads/$branch"
+          fi
+          head_sha="$(git rev-parse HEAD)"
+          body="Official Kodi runtime catalog candidate for \`$VERSION\`. Candidate-ID: \`$CANDIDATE_ID\`. The entry is append-only and CI is dispatched for exact head \`$head_sha\`. Merge additionally requires live APK and Flatpak distribution attestation; no Kodi device is mutated by this workflow."
+          number="$(gh pr list --state open --head "$branch" --base main --json number --jq '.[0].number // empty')"
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --title "Qualify Kodi $VERSION runtime" --body "$body"
+          else
+            gh pr create --base main --head "$branch" \
+              --title "Qualify Kodi $VERSION runtime" --body "$body"
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+
+  dispatch-exact-ci:
+    needs: [qualify, write-review-branch]
+    if: >-
+      github.event_name != 'pull_request' &&
+      needs.qualify.outputs.action == 'REVIEW'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch and verify CI for exact candidate head
+        env:
+          BRANCH: ${{ needs.write-review-branch.outputs.branch }}
+          HEAD_SHA: ${{ needs.write-review-branch.outputs.head_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run test.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+          run_id=""
+          for attempt in $(seq 1 30); do
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" \
+              --workflow test.yml --branch "$BRANCH" --event workflow_dispatch \
+              --limit 5 --json databaseId,headSha \
+              --jq '.[] | select(.headSha == env.HEAD_SHA) | .databaseId' | head -n 1)"
+            if [ -n "$run_id" ]; then
+              break
+            fi
+            sleep 2
+          done
+          test -n "$run_id"
+          test "$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json headSha --jq .headSha)" = "$HEAD_SHA"
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status

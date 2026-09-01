@@ -99,7 +99,7 @@ flowchart LR
 | Profile Sync w Kodi | Profile Sync na QNAP | HTTPS z walidacją prywatnego CA, token urządzenia i podpisy | Assignment, rewizja, heartbeat, raport zastosowania i opt-in playback LWW | Rutynowa synchronizacja konfiguracji i stanu WatchNixtoons2 |
 | Control Plane | Integration API Profile Sync | Prywatne mTLS na `mwodevelop-control:8767` | Zredagowana flota, rollouty i liczniki playback | Dashboard i obserwowalność |
 | Control Plane | GitHub API | HTTPS read-only | Statusy workflow i harmonogramów | Dashboard i freshness |
-| Upstream Watchdog | GitHub API | HTTPS, publiczny odczyt | Ostatnie wyniki 11 workflow | Alarm fail-closed |
+| Upstream Watchdog | GitHub API | HTTPS, uwierzytelniony odczyt | Ostatnie wyniki 12 workflow | Alarm fail-closed |
 | Przeglądarka operatora | QTS HTTPS / QPKG CGI → Control Plane Web/BFF | HTTPS `:443/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/`, następnie HTTP tylko po loopback `:19445`; zweryfikowany admin `NAS_SID` albo ręczne hasło+TOTP, sesja i CSRF | Statyczny panel i odczytowe API | Administracyjny podgląd bez certyfikatu klienta i bez osobnego CA panelu |
 | Control Plane Web/BFF | Control Plane core | Prywatne mTLS, certyfikat o ograniczonym scope | Wyłącznie endpointy dashboardu | Separacja przeglądarki od API operatorskiego |
 | Control Plane Web/BFF | Control Plane Authz | Prywatne mTLS bez portu LAN | Bootstrap, login, sesja, recovery | Uwierzytelnienie przeglądarkowe |
@@ -184,21 +184,24 @@ Instalatory nie interpretują kompatybilności każdy na własny sposób. Wspól
 niezależny od transportu moduł buduje deskryptory dokładnych ZIP-ów lub katalogów
 snapshotu, łączy je z faktami runtime i ocenia końcową projekcję grafu. Planowana
 wersja przesłania zainstalowaną, zależności są porządkowane topologicznie, a
-nieznany major Kodi, platforma, ABI, format wersji albo niezakwalifikowany kod
+niewpisane dokładne wydanie Kodi, platforma, ABI, format wersji albo niezakwalifikowany kod
 natywny kończy przebieg fail-closed.
 
 ```mermaid
 sequenceDiagram
   participant O as Adapter build/rollout/restore
   participant G as Runtime compatibility gate
+  participant C as Append-only runtime catalog
   participant K as Kodi / system docelowy
   participant T as Trwała transakcja dodatku
 
   O->>G: Dokładne ZIP-y + lock/policy
+  G->>C: Wybierz exact major.minor
+  C-->>G: Przedziały ABI + digest źródła
   O->>K: Read-only runtime facts
-  K-->>O: Kodi version, platform, ABI, installed add-ons
+  K-->>O: Kodi version, platform, ABI, installed add-ons + manifesty dystrybucji
   O->>G: RuntimeFacts + projected planned versions
-  G-->>O: AUDIT_PASS + policy/graph SHA-256
+  G-->>O: AUDIT_PASS + ATTESTATION_PASS + digests
   O->>T: prepare exact artifact
   T->>K: atomowy rename, backup pozostaje
   O->>K: restart, UpdateLocalAddons, verify
@@ -212,7 +215,11 @@ sequenceDiagram
 
 Android zapisuje journal i backup pod `special://home`, na tym samym filesystemie
 co katalog dodatków. Flatpak i build używają tego samego evaluator-a, lecz własnych
-adapterów faktów. Restore dodatkowo sprawdza każdy katalog dodatku objęty snapshotem
+adapterów faktów. Android porównuje `assets/addons/*/addon.xml` zainstalowanego
+`base.apk`, a Flatpak pliki `share/kodi/addons/*/addon.xml`, z generowanym katalogiem
+`manifests/kodi-runtime-capabilities.json`. Codzienny workflow może dopisać nowe
+stabilne wydanie bez zmiany evaluatora; prerelease, zmiana istniejącego wpisu i
+niezgodna dystrybucja pozostają fail-closed. Restore dodatkowo sprawdza każdy katalog dodatku objęty snapshotem
 przed destrukcyjną fazą i ponownie po instalacji rzeczywistego runtime, zanim
 skopiuje profil. Szczegóły operatorskie opisuje
 [runbook operacji](kodi-operations.md#brama-kompatybilności-dodatków).
