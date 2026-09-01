@@ -103,7 +103,11 @@ def main():
     parser.add_argument("--pairing-file", type=Path)
     parser.add_argument("--replace-enrollment", action="store_true")
     parser.add_argument("--channel", default="home-stable")
-    parser.add_argument("--action", choices=("configure", "sync"), required=True)
+    parser.add_argument(
+        "--action",
+        choices=("configure", "sync", "sync-favourites"),
+        required=True,
+    )
     parser.add_argument("--read-only", action="store_true")
     parser.add_argument("--result", type=Path)
     parser.add_argument(

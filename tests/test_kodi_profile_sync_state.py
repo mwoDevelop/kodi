@@ -100,6 +100,11 @@ def test_probe_accepts_schema_2_and_reports_only_redacted_secret_health(tmp_path
                 "playback_pending_events": 0,
                 "playback_pending_mapping": 1,
                 "playback_pending_application": 2,
+                "favourites_status": "HEALTHY",
+                "favourites_last_success_utc": "2026-09-01T18:01:00Z",
+                "favourites_cursor": 7,
+                "favourites_pending_count": 0,
+                "favourites_dynamic_fence": True,
             }
         ),
         encoding="utf-8",
@@ -116,6 +121,10 @@ def test_probe_accepts_schema_2_and_reports_only_redacted_secret_health(tmp_path
     assert result["playback_cursor"] == 4
     assert result["playback_pending_mapping"] == 1
     assert result["playback_pending_application"] == 2
+    assert result["favourites_status"] == "HEALTHY"
+    assert result["favourites_cursor"] == 7
+    assert result["favourites_pending_count"] == 0
+    assert result["favourites_dynamic_fence"] is True
     assert "never-print" not in serialized
 
 
