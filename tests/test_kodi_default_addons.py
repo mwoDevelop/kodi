@@ -20,7 +20,16 @@ def compatibility_boundary(monkeypatch):
             "version": expected_version,
         },
     )
-    monkeypatch.setattr(defaults, "android_runtime_facts", lambda *_a, **_k: {})
+    monkeypatch.setattr(
+        defaults,
+        "android_runtime_facts",
+        lambda *_a, **_k: {"kodi_version": "21.3"},
+    )
+    monkeypatch.setattr(
+        defaults,
+        "attest_android_runtime",
+        lambda *_a, **_k: {"status": "ATTESTATION_PASS"},
+    )
     monkeypatch.setattr(defaults, "load_policy", lambda _path: {})
     monkeypatch.setattr(
         defaults,
@@ -28,6 +37,7 @@ def compatibility_boundary(monkeypatch):
         lambda descriptors, *_args, **_kwargs: {
             "status": "AUDIT_PASS",
             "policy_sha256": "a" * 64,
+            "catalog_sha256": "c" * 64,
             "graph_sha256": "b" * 64,
             "order": [item["id"] for item in descriptors],
         },

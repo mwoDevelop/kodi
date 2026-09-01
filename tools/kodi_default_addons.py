@@ -21,10 +21,12 @@ try:
     from kodi_addon_runtime_compatibility import (
         assert_compatible,
         inspect_archive,
+        load_catalog,
         load_policy,
     )
     from kodi_addon_remove import remove_addon
     from kodi_profile import AdbEventClient, AdbJsonRpcClient, adb_command
+    from kodi_runtime_attestation import attest_android_runtime
     from kodi_reinstall import (
         assign_addon_origins_in_kodi,
         installed_addon_origins_in_kodi,
@@ -34,10 +36,12 @@ except ModuleNotFoundError:
     from tools.kodi_addon_runtime_compatibility import (
         assert_compatible,
         inspect_archive,
+        load_catalog,
         load_policy,
     )
     from tools.kodi_addon_remove import remove_addon
     from tools.kodi_profile import AdbEventClient, AdbJsonRpcClient, adb_command
+    from tools.kodi_runtime_attestation import attest_android_runtime
     from tools.kodi_reinstall import (
         assign_addon_origins_in_kodi,
         installed_addon_origins_in_kodi,
@@ -533,14 +537,32 @@ def reconcile_android(
                     dependency_id, requirement["minimum_version"]
                 )
     runtime_platform = "android"
+    runtime = android_runtime_facts(
+        adb, port, serial, platform=runtime_platform
+    )
+    catalog = load_catalog(
+        Path(__file__).resolve().parents[1]
+        / "manifests/kodi-runtime-capabilities.json"
+    )
     compatibility = assert_compatible(
         descriptors,
-        android_runtime_facts(adb, port, serial, platform=runtime_platform),
+        runtime,
         load_policy(
             Path(__file__).resolve().parents[1]
             / "manifests/kodi-addon-runtime-compatibility.json"
         ),
+        catalog,
         planned_versions=planned_versions,
+    )
+    runtime_attestation = attest_android_runtime(
+        adb_command,
+        adb,
+        port,
+        serial,
+        runtime["kodi_version"],
+        catalog,
+        Path(__file__).resolve().parents[1]
+        / ".kodi-private/cache/runtime-attestation",
     )
     dependency_actions = (
         reconcile_official_dependencies(
@@ -802,8 +824,10 @@ def reconcile_android(
         "compatibility": {
             "status": compatibility["status"],
             "policy_sha256": compatibility["policy_sha256"],
+            "catalog_sha256": compatibility["catalog_sha256"],
             "graph_sha256": compatibility["graph_sha256"],
             "order": compatibility["order"],
+            "runtime_attestation": runtime_attestation,
         },
         "addons": verified,
         "actions": [*dependency_actions, *results],

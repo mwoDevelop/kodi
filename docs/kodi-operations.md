@@ -65,13 +65,18 @@ kontroluje bezpieczną strukturę archiwum, wersję Kodi, platformę/ABI, zależ
 wirtualne, zainstalowane i planowane oraz jawnie kwalifikowane dodatki natywne.
 Źródłami prawdy są:
 
-- `manifests/kodi-addon-runtime-compatibility.json` — runtime i wyjątki natywne;
+- `manifests/kodi-addon-runtime-compatibility.json` — mapowania platform/ABI i
+  wyjątki natywne;
+- `manifests/kodi-runtime-capabilities.json` — append-only możliwości dokładnych
+  stabilnych wydań Kodi wygenerowane z `xbmc/xbmc`;
 - `manifests/kodi-addon-build-targets.json` — wspierane cele builda i przypięte
   zależności zewnętrzne;
 - dokładne ZIP-y oraz lock kanału;
-- fakty live odczytane z JSON-RPC Kodi, Androida albo probe Flatpak.
+- fakty live odczytane z JSON-RPC Kodi, Androida albo probe Flatpak oraz
+  atestacja systemowych `addon.xml` z faktycznego APK/katalogu Flatpak.
 
-`AUDIT_PASS` ze skrótem polityki i projektowanego grafu jest warunkiem instalacji.
+`AUDIT_PASS` ze skrótem polityki, katalogu i projektowanego grafu oraz
+`ATTESTATION_PASS` faktycznej dystrybucji są warunkiem instalacji.
 `INCOMPATIBLE` kończy adapter przed push/rename. Bezpośrednia instalacja na
 Androidzie jest sagą jednego dodatku: trwały journal i backup znajdują się pod
 `special://home/.mwodevelop-transactions`, a host wykonuje
@@ -96,12 +101,32 @@ Przykłady:
 # Testy parsera, grafu, braku mutacji i crash-safe rollbacku.
 .venv/bin/python -m pytest -q \
   tests/test_kodi_addon_runtime_compatibility.py \
+  tests/test_kodi_runtime_catalog.py \
+  tests/test_kodi_runtime_attestation.py \
   tests/test_kodi_addon_candidate_apply.py \
   tests/test_kodi_addon_candidate_rollout.py
 ```
 
-Nowy major Kodi wymaga osobnego wpisu `runtimes`, nowa platforma mapowania ABI,
-a ZIP z `.so/.dll/.dylib/.pyd` — jawnej kwalifikacji ID, platformy i ABI.
+Nowe stabilne wydanie Kodi nie wymaga zmiany kodu. Codzienny workflow proponuje
+append-only wpis danych, a operator przed merge atestuje rzeczywiste dystrybucje:
+
+```bash
+# Deterministyczny no-op albo kandydat do review.
+.venv/bin/python tools/kodi_runtime_catalog.py discover \
+  --candidate /tmp/kodi-runtime-candidate.json \
+  --report /tmp/kodi-runtime-report.json --base-sha local
+
+# Jawna kontrola pobranego APK; dla Flatpak rollout wykonuje odpowiednik po SFTP.
+.venv/bin/python tools/kodi_runtime_attestation.py \
+  --apk /path/to/base.apk --kodi-version 21.3
+```
+
+`RUNTIME_CATALOG_MISS` oznacza niezakwalifikowane dokładne `major.minor`, a
+`DISTRIBUTION_MISMATCH` rozbieżność binariów względem oficjalnego źródła. Oba
+stany zatrzymują mutację. Dodatkowa dystrybucyjna możliwość (np. `game.libretro`
+w Flatpak) jest raportowana, ale nie trafia automatycznie do zbioru możliwości
+używanego przez evaluator. Nowa platforma nadal wymaga mapowania ABI, a ZIP z
+`.so/.dll/.dylib/.pyd` — jawnej kwalifikacji ID, platformy i ABI.
 Nie wolno dodawać ogólnego wyjątku wyłączającego kontrolę kodu natywnego.
 
 Pełny rollout wykonuje następujące fazy:

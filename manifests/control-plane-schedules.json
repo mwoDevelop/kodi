@@ -83,6 +83,22 @@
       "dependencies": ["github-actions"]
     },
     {
+      "id": "github-kodi-check-runtime-upstream",
+      "kind": "github_actions",
+      "owner": "runtime",
+      "repository": "mwoDevelop/kodi",
+      "workflow": "check-kodi-runtime-upstream.yml",
+      "event": "schedule",
+      "cron": ["11 4 * * *"],
+      "missed_windows_warning": 1,
+      "missed_windows_failure": 2,
+      "grace_seconds": 1800,
+      "timeout_seconds": 7200,
+      "stale_after_seconds": 129600,
+      "retry_policy": "manual",
+      "dependencies": ["github-actions"]
+    },
+    {
       "id": "github-mwoscrapers-check-provider-upstreams",
       "kind": "github_actions",
       "owner": "providers",

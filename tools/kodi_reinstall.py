@@ -20,10 +20,15 @@ try:
     from kodi_addon_runtime_compatibility import (
         assert_compatible,
         inspect_directory,
+        load_catalog as load_runtime_catalog,
         load_policy as load_runtime_policy,
     )
     from kodi_devices import load_registry, resolve_device, resolve_private_endpoint
     from kodi_inventory import load_private_references
+    from kodi_runtime_attestation import (
+        assert_apk_attested,
+        attest_android_runtime,
+    )
     from kodi_profile import (
         KODI_ROOT,
         KODI_PACKAGE,
@@ -44,6 +49,7 @@ except ModuleNotFoundError:
     from tools.kodi_addon_runtime_compatibility import (
         assert_compatible,
         inspect_directory,
+        load_catalog as load_runtime_catalog,
         load_policy as load_runtime_policy,
     )
     from tools.kodi_devices import (
@@ -52,6 +58,10 @@ except ModuleNotFoundError:
         resolve_private_endpoint,
     )
     from tools.kodi_inventory import load_private_references
+    from tools.kodi_runtime_attestation import (
+        assert_apk_attested,
+        attest_android_runtime,
+    )
     from tools.kodi_profile import (
         KODI_ROOT,
         KODI_PACKAGE,
@@ -467,6 +477,9 @@ def preflight_target(target, repository, adb, port):
             facts["kodi_version"] = target["expected_kodi_version"]
             if packaged_abis:
                 facts["abis"] = packaged_abis
+            catalog = load_runtime_catalog(
+                repository / "manifests/kodi-runtime-capabilities.json"
+            )
             report = assert_compatible(
                 snapshot_addons,
                 facts,
@@ -474,12 +487,20 @@ def preflight_target(target, repository, adb, port):
                     repository
                     / "manifests/kodi-addon-runtime-compatibility.json"
                 ),
+                catalog,
+            )
+            runtime_attestation = assert_apk_attested(
+                apk_path,
+                target["expected_kodi_version"],
+                catalog,
             )
             compatibility = {
                 "status": report["status"],
                 "addons": len(snapshot_addons),
                 "policy_sha256": report["policy_sha256"],
+                "catalog_sha256": report["catalog_sha256"],
                 "graph_sha256": report["graph_sha256"],
+                "runtime_attestation": runtime_attestation,
             }
         finally:
             if not running_before:
@@ -527,12 +548,25 @@ def verify_target_runtime_compatibility(adb, port, target, repository):
             target["serial"],
             platform=target["runtime_platform"],
         )
+        catalog = load_runtime_catalog(
+            repository / "manifests/kodi-runtime-capabilities.json"
+        )
         report = assert_compatible(
             target["snapshot_addons"],
             facts,
             load_runtime_policy(
                 repository / "manifests/kodi-addon-runtime-compatibility.json"
             ),
+            catalog,
+        )
+        runtime_attestation = attest_android_runtime(
+            adb_command,
+            adb,
+            port,
+            target["serial"],
+            facts["kodi_version"],
+            catalog,
+            repository / ".kodi-private/cache/runtime-attestation",
         )
     finally:
         adb_command(
@@ -547,7 +581,9 @@ def verify_target_runtime_compatibility(adb, port, target, repository):
         "status": report["status"],
         "addons": len(target["snapshot_addons"]),
         "policy_sha256": report["policy_sha256"],
+        "catalog_sha256": report["catalog_sha256"],
         "graph_sha256": report["graph_sha256"],
+        "runtime_attestation": runtime_attestation,
     }
 
 

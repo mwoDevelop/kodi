@@ -31,6 +31,7 @@ from tools import build_repo
 from tools.kodi_addon_runtime_compatibility import (
     assert_compatible,
     inspect_directory,
+    load_catalog as load_runtime_catalog,
     load_policy as load_runtime_policy,
 )
 from tools.kodi_flatpak_profile_sync_rollout import (
@@ -43,6 +44,7 @@ from tools.kodi_flatpak_profile_sync_rollout import (
 )
 from tools.kodi_inventory import load_private_references
 from tools.kodi_lifecycle import lifecycle_for_device
+from tools.kodi_runtime_attestation import attest_flatpak_runtime
 from tools.kodi_profile import (
     canonical_json,
     digest,
@@ -485,6 +487,9 @@ def audit_snapshot_runtime(target, manifest, repository):
         **build_repo.load_build_targets()["external_addons"],
         **{item["id"]: item["version"] for item in descriptors},
     }
+    catalog = load_runtime_catalog(
+        repository / "manifests/kodi-runtime-capabilities.json"
+    )
     report = assert_compatible(
         descriptors,
         {
@@ -496,13 +501,23 @@ def audit_snapshot_runtime(target, manifest, repository):
         load_runtime_policy(
             repository / "manifests/kodi-addon-runtime-compatibility.json"
         ),
+        catalog,
         planned_versions=planned,
+    )
+    runtime_attestation = attest_flatpak_runtime(
+        target["transport"],
+        _connect_sftp,
+        installer["app_id"],
+        installer["version"],
+        catalog,
     )
     return {
         "status": report["status"],
         "addons": len(descriptors),
         "policy_sha256": report["policy_sha256"],
+        "catalog_sha256": report["catalog_sha256"],
         "graph_sha256": report["graph_sha256"],
+        "runtime_attestation": runtime_attestation,
     }
 
 

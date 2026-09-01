@@ -32,6 +32,7 @@ from tools import build_repo
 from tools.kodi_addon_runtime_compatibility import (
     assert_compatible,
     inspect_archive,
+    load_catalog as load_runtime_catalog,
     load_policy as load_runtime_policy,
 )
 from tools.kodi_devices import (
@@ -48,6 +49,7 @@ from tools.kodi_youtube_configure import (
     resolve_credentials as resolve_youtube_credentials,
 )
 from tools.kodi_lifecycle import lifecycle_for_device
+from tools.kodi_runtime_attestation import attest_flatpak_runtime
 from tools.kodi_transports import transport_for_device
 from tools.profile_sync_portable_release import bootstrap_active
 from tools.qnap_profile_sync import (
@@ -1382,6 +1384,9 @@ def rollout(args):
                 for descriptor in compatibility_descriptors
             },
         }
+        runtime_catalog = load_runtime_catalog(
+            repository / "manifests/kodi-runtime-capabilities.json"
+        )
         compatibility = assert_compatible(
             compatibility_descriptors,
             {
@@ -1394,7 +1399,15 @@ def rollout(args):
                 repository
                 / "manifests/kodi-addon-runtime-compatibility.json"
             ),
+            runtime_catalog,
             planned_versions=planned_versions,
+        )
+        runtime_attestation = attest_flatpak_runtime(
+            transport,
+            _connect_sftp,
+            device["expected"]["flatpak_app_id"],
+            probe["kodi_version"],
+            runtime_catalog,
         )
         expected = {
             "logical_device_id": args.device,
@@ -1699,8 +1712,10 @@ def rollout(args):
                 "compatibility": {
                     "status": compatibility["status"],
                     "policy_sha256": compatibility["policy_sha256"],
+                    "catalog_sha256": compatibility["catalog_sha256"],
                     "graph_sha256": compatibility["graph_sha256"],
                     "order": compatibility["order"],
+                    "runtime_attestation": runtime_attestation,
                 },
                 "server_url_sha256": hashlib.sha256(
                     server_url.encode("utf-8")

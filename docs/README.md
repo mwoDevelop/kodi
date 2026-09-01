@@ -46,6 +46,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | QNAP Secret Broker | [Wdrożenie prywatnego brokera](../deploy/qnap-secret-broker/README.md) |
 | Dziennik wdrożenia Profile Sync | [Zapis stanu realizacji](profile-sync-implementation.md) |
 | Synchronizacja stanu odtwarzania | [Plan playback LWW](PLAYBACK_STATE_SYNC_PLAN.md) |
+| Katalog możliwości runtime Kodi | [Plan automatycznej kwalifikacji wydań](KODI_RUNTIME_CAPABILITY_CATALOG_PLAN.md) |
 | Synchronizacja upstream | [Plan synchronizacji upstream](../UPSTREAM_SYNC_PLAN.md) |
 | Automatyczny release Umbrelli | [Plan automatyzacji Umbrelli](../UMBRELLA_AUTOMATED_RELEASE_PLAN.md) |
 | Bramka bezpieczeństwa upstream | [Projekt skanowania w poszukiwaniu złośliwego oprogramowania](UPSTREAM_MALWARE_SCANNING_PLAN.md) |
@@ -59,6 +60,8 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 ## Recenzje i zapisy decyzji
 
 - [Review planu domyślnej instalacji YouTube](YOUTUBE_DEFAULT_ADDON_PLAN_REVIEW.md)
+- [Review automatycznego katalogu możliwości runtime Kodi](KODI_RUNTIME_CAPABILITY_CATALOG_PLAN_REVIEW.md)
+- [Review pierwotnej bramy kompatybilności dodatków](KODI_ADDON_RUNTIME_COMPATIBILITY_PLAN_REVIEW.md)
 - [Review planu administracji QNAP i autonomicznej konwergencji](QNAP_CONTROL_PLANE_DEVICE_CONVERGENCE_PLAN_REVIEW.md)
 - [Review planu usunięcia kodu legacy](LEGACY_REMOVAL_PLAN_REVIEW.md)
 - [Review architektury Profile Sync](PROFILE_SYNC_PLAN_REVIEW.md)

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mwodevelop.github.io/kodi/schemas/kodi-runtime-capabilities.schema.json",
+  "title": "Official Kodi runtime capability catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "source_repository", "releases"],
+  "properties": {
+    "schema": {"const": 1},
+    "source_repository": {"const": "xbmc/xbmc"},
+    "releases": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[0-9]+\\.[0-9]+$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "version",
+            "tag",
+            "commit",
+            "prerelease",
+            "source_archive_sha256",
+            "source_files_sha256",
+            "capabilities",
+            "entry_sha256"
+          ],
+          "properties": {
+            "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+            "tag": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+            "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+            "prerelease": {"const": false},
+            "source_archive_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "source_files_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "entry_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "capabilities": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {"pattern": "^[A-Za-z0-9._-]+$"},
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["min_compatible", "provided", "addon_xml_sha256"],
+                "properties": {
+                  "min_compatible": {"type": "string", "minLength": 1},
+                  "provided": {"type": "string", "minLength": 1},
+                  "addon_xml_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

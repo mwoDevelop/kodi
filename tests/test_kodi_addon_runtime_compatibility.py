@@ -10,13 +10,19 @@ from tools.kodi_addon_runtime_compatibility import (
     evaluate,
     inspect_archive,
     inspect_directory,
+    load_catalog,
     load_policy,
     policy_digest,
+    release_digest,
+    runtime_release,
+    validate_catalog,
     version_at_least,
+    version_intervals_overlap,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "manifests/kodi-addon-runtime-compatibility.json"
+CATALOG_PATH = ROOT / "manifests/kodi-runtime-capabilities.json"
 
 
 def runtime(**overrides):
@@ -85,6 +91,13 @@ def test_policy_is_strict_and_has_a_stable_digest(tmp_path):
     with pytest.raises(ValueError, match="fields differ"):
         load_policy(invalid_path)
 
+    catalog = load_catalog(CATALOG_PATH)
+    assert set(catalog["releases"]) == {"21.2", "21.3"}
+    assert all(
+        len(entry["capabilities"]) == 26
+        for entry in catalog["releases"].values()
+    )
+
 
 def test_archive_inspection_and_projected_dependency_graph(tmp_path):
     dependency_path = write_zip(
@@ -110,7 +123,12 @@ def test_archive_inspection_and_projected_dependency_graph(tmp_path):
         inspect_archive(addon_path),
         inspect_archive(dependency_path),
     ]
-    report = assert_compatible(descriptors, runtime(), load_policy(POLICY_PATH))
+    report = assert_compatible(
+        descriptors,
+        runtime(),
+        load_policy(POLICY_PATH),
+        load_catalog(CATALOG_PATH),
+    )
     assert report["status"] == "AUDIT_PASS"
     assert report["order"] == ["script.module.test", "plugin.video.test"]
     assert len(report["graph_sha256"]) == 64
@@ -132,6 +150,7 @@ def test_planned_version_overrides_installed_version(tmp_path):
         [inspect_archive(addon_path)],
         facts,
         load_policy(POLICY_PATH),
+        load_catalog(CATALOG_PATH),
         planned_versions={"script.module.test": "2.0.0"},
     )
     dependency = report["checks"][0]["dependencies"][0]
@@ -155,10 +174,13 @@ def test_present_optional_dependency_must_still_satisfy_version(tmp_path):
         }
     )
     report = evaluate(
-        [inspect_archive(addon_path)], facts, load_policy(POLICY_PATH)
+        [inspect_archive(addon_path)],
+        facts,
+        load_policy(POLICY_PATH),
+        load_catalog(CATALOG_PATH),
     )
     assert report["status"] == "INCOMPATIBLE"
-    assert report["reasons"] == ["DEPENDENCY_VERSION_TOO_OLD"]
+    assert report["reasons"] == ["DEPENDENCY_VERSION_MISMATCH"]
 
 
 def test_native_payload_and_unknown_platform_fail_closed(tmp_path):
@@ -166,7 +188,10 @@ def test_native_payload_and_unknown_platform_fail_closed(tmp_path):
         tmp_path / "native.zip", files={"resources/libaddon.so": b"ELF"}
     )
     native = evaluate(
-        [inspect_archive(native_path)], runtime(), load_policy(POLICY_PATH)
+        [inspect_archive(native_path)],
+        runtime(),
+        load_policy(POLICY_PATH),
+        load_catalog(CATALOG_PATH),
     )
     assert "NATIVE_PAYLOAD_UNQUALIFIED" in native["reasons"]
 
@@ -174,7 +199,10 @@ def test_native_payload_and_unknown_platform_fail_closed(tmp_path):
         tmp_path / "unknown.zip", xml=addon_xml(platforms="android future-os")
     )
     unknown = evaluate(
-        [inspect_archive(unknown_path)], runtime(), load_policy(POLICY_PATH)
+        [inspect_archive(unknown_path)],
+        runtime(),
+        load_policy(POLICY_PATH),
+        load_catalog(CATALOG_PATH),
     )
     assert "UNKNOWN_ADDON_PLATFORM" in unknown["reasons"]
 
@@ -201,7 +229,12 @@ def test_cycle_and_archive_escape_are_rejected(tmp_path):
         )
     )
     with pytest.raises(ValueError, match="contains a cycle"):
-        evaluate([first, second], runtime(), load_policy(POLICY_PATH))
+        evaluate(
+            [first, second],
+            runtime(),
+            load_policy(POLICY_PATH),
+            load_catalog(CATALOG_PATH),
+        )
 
     unsafe = tmp_path / "unsafe.zip"
     with ZipFile(unsafe, "w") as archive:
@@ -246,3 +279,75 @@ def test_directory_inspection_rejects_symlink(tmp_path):
     (addon / "link").symlink_to("target")
     with pytest.raises(ValueError, match="symlink"):
         inspect_directory(addon)
+
+
+def test_kodi_dependency_intervals_follow_meets_version(tmp_path):
+    assert version_intervals_overlap("3.0.0", "3.0.0", "3.0.0", "3.0.1")
+    assert version_intervals_overlap("3.0.1", "3.0.1", "3.0.0", "3.0.1")
+    assert not version_intervals_overlap("2.0.0", "2.0.0", "3.0.0", "3.0.1")
+    assert not version_intervals_overlap("3.0.2", "3.0.2", "3.0.0", "3.0.1")
+
+    archive = write_zip(
+        tmp_path / "range.zip",
+        xml=(
+            '<addon id="plugin.video.test" version="1.0.0">'
+            "<requires>"
+            '<import addon="xbmc.python" minversion="3.0.0" '
+            'version="3.0.1"/>'
+            "</requires>"
+            "</addon>"
+        ),
+    )
+    descriptor = inspect_archive(archive)
+    assert descriptor["requirements"] == [
+        {
+            "id": "xbmc.python",
+            "minimum_version": "3.0.0",
+            "maximum_version": "3.0.1",
+            "optional": False,
+        }
+    ]
+    assert_compatible(
+        [descriptor],
+        runtime(kodi_version="21.3+official.revision"),
+        load_policy(POLICY_PATH),
+        load_catalog(CATALOG_PATH),
+    )
+
+
+def test_runtime_catalog_exact_release_and_future_fixture(tmp_path):
+    policy = load_policy(POLICY_PATH)
+    catalog = load_catalog(CATALOG_PATH)
+    descriptor = inspect_archive(write_zip(tmp_path / "addon.zip"))
+
+    missing = evaluate(
+        [descriptor],
+        runtime(kodi_version="22.0.0"),
+        policy,
+        catalog,
+    )
+    assert missing["status"] == "INCOMPATIBLE"
+    assert missing["reasons"] == ["RUNTIME_CATALOG_MISS"]
+    assert runtime_release("21.3+20251031.a3a448d26b") == "21.3"
+
+    future = json.loads(json.dumps(catalog))
+    entry = json.loads(json.dumps(future["releases"]["21.3"]))
+    entry.update(
+        {
+            "version": "22.0",
+            "tag": "22.0-Fixture",
+            "commit": "f" * 40,
+            "source_archive_sha256": "e" * 64,
+            "source_files_sha256": "d" * 64,
+        }
+    )
+    entry["entry_sha256"] = release_digest(entry)
+    future["releases"]["22.0"] = entry
+    validate_catalog(future)
+    report = assert_compatible(
+        [descriptor],
+        runtime(kodi_version="22.0.0"),
+        policy,
+        future,
+    )
+    assert report["runtime"]["catalog_release"] == "22.0"

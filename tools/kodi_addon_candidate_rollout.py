@@ -26,13 +26,16 @@ from tools.kodi_profile import (
 from tools.kodi_addon_runtime_compatibility import (
     assert_compatible,
     inspect_archive,
+    load_catalog,
     load_policy,
 )
+from tools.kodi_runtime_attestation import attest_android_runtime
 
 REMOTE_SCRIPT = "/sdcard/Download/mwo-addon-transaction.py"
 REMOTE_ZIP = "/sdcard/Download/mwo-addon-candidate.zip"
 REMOTE_MARKER = "/sdcard/Download/mwo-addon-candidate-result.json"
 POLICY_PATH = ROOT / "manifests/kodi-addon-runtime-compatibility.json"
+CATALOG_PATH = ROOT / "manifests/kodi-runtime-capabilities.json"
 
 
 def _restart_kodi(adb, port, serial):
@@ -323,6 +326,7 @@ def rollout(
     planned_versions=None,
     runtime_platform="android",
     policy_path=POLICY_PATH,
+    catalog_path=CATALOG_PATH,
     inject_test_failure_after_activation=False,
 ):
     descriptor = inspect_archive(
@@ -333,11 +337,22 @@ def rollout(
     runtime = android_runtime_facts(
         adb, port, serial, platform=runtime_platform
     )
+    catalog = load_catalog(catalog_path)
     compatibility = assert_compatible(
         [descriptor],
         runtime,
         load_policy(policy_path),
+        catalog,
         planned_versions=planned_versions,
+    )
+    runtime_attestation = attest_android_runtime(
+        adb_command,
+        adb,
+        port,
+        serial,
+        runtime["kodi_version"],
+        catalog,
+        ROOT / ".kodi-private/cache/runtime-attestation",
     )
     script = ROOT / "tools/device/kodi_addon_transaction.py"
     for source, destination in (
@@ -444,7 +459,9 @@ def rollout(
             "compatibility": {
                 "status": compatibility["status"],
                 "policy_sha256": compatibility["policy_sha256"],
+                "catalog_sha256": compatibility["catalog_sha256"],
                 "graph_sha256": compatibility["graph_sha256"],
+                "runtime_attestation": runtime_attestation,
             },
             **result,
             "transaction_status": committed["status"],

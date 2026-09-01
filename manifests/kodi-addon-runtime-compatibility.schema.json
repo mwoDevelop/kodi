@@ -4,29 +4,9 @@
   "title": "Kodi add-on runtime compatibility policy",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "runtimes", "platforms", "native_addons"],
+  "required": ["schema", "platforms", "native_addons"],
   "properties": {
-    "schema": {"const": 1},
-    "runtimes": {
-      "type": "object",
-      "minProperties": 1,
-      "additionalProperties": false,
-      "patternProperties": {
-        "^[0-9]+$": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["virtual_dependencies"],
-          "properties": {
-            "virtual_dependencies": {
-              "type": "object",
-              "minProperties": 1,
-              "propertyNames": {"pattern": "^[A-Za-z0-9._-]+$"},
-              "additionalProperties": {"type": "string", "minLength": 1}
-            }
-          }
-        }
-      }
-    },
+    "schema": {"const": 2},
     "platforms": {
       "type": "object",
       "minProperties": 1,

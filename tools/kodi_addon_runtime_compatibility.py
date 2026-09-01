@@ -12,7 +12,9 @@ from functools import total_ordering
 from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 
-SCHEMA = 1
+REPORT_SCHEMA = 2
+POLICY_SCHEMA = 2
+CATALOG_SCHEMA = 1
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 SAFE_VERSION = re.compile(r"^[A-Za-z0-9.+_@~:-]{1,128}$")
 NATIVE_SUFFIXES = {".dll", ".dylib", ".pyd", ".so"}
@@ -21,10 +23,24 @@ MAX_UNCOMPRESSED = 64 * 1024 * 1024
 MAX_DIRECTORY_UNCOMPRESSED = 256 * 1024 * 1024
 MAX_XML = 2 * 1024 * 1024
 MAX_COMPRESSION_RATIO = 500
-POLICY_KEYS = {"schema", "runtimes", "platforms", "native_addons"}
+POLICY_KEYS = {"schema", "platforms", "native_addons"}
 PLATFORM_KEYS = {"base", "abi_tokens"}
-RUNTIME_KEYS = {"virtual_dependencies"}
 NATIVE_RULE_KEYS = {"platforms", "abis"}
+CATALOG_KEYS = {"schema", "source_repository", "releases"}
+RELEASE_KEYS = {
+    "version",
+    "tag",
+    "commit",
+    "prerelease",
+    "source_archive_sha256",
+    "source_files_sha256",
+    "capabilities",
+    "entry_sha256",
+}
+CAPABILITY_KEYS = {"min_compatible", "provided", "addon_xml_sha256"}
+RELEASE = re.compile(r"^(\d+)\.(\d+)$")
+HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+HEX_COMMIT = re.compile(r"^[0-9a-f]{40}$")
 
 
 def canonical_json(value) -> bytes:
@@ -145,21 +161,8 @@ def load_policy(path):
     document = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(document, dict) or set(document) != POLICY_KEYS:
         raise ValueError("runtime compatibility policy fields differ")
-    if document["schema"] != SCHEMA:
+    if document["schema"] != POLICY_SCHEMA:
         raise ValueError("unsupported runtime compatibility policy schema")
-    runtimes = document["runtimes"]
-    if not isinstance(runtimes, dict) or not runtimes:
-        raise ValueError("runtime compatibility policy has no runtimes")
-    for major, runtime in runtimes.items():
-        if not str(major).isdigit() or not isinstance(runtime, dict) or set(runtime) != RUNTIME_KEYS:
-            raise ValueError("invalid runtime compatibility entry")
-        virtual = runtime["virtual_dependencies"]
-        if not isinstance(virtual, dict) or not virtual:
-            raise ValueError("runtime virtual dependency catalog is empty")
-        for addon_id, version in virtual.items():
-            if not SAFE_ID.fullmatch(addon_id):
-                raise ValueError("invalid virtual dependency id")
-            _validate_version(version)
     platforms = document["platforms"]
     if not isinstance(platforms, dict) or not platforms:
         raise ValueError("runtime platform policy is empty")
@@ -199,6 +202,84 @@ def load_policy(path):
     return document
 
 
+def _release_identity(entry):
+    # Archive compression is transport evidence, not canonical release
+    # identity. The pinned commit, selected source-file digest and normalized
+    # capabilities remain stable when GitHub recompresses equivalent bytes.
+    return {
+        key: entry[key]
+        for key in sorted(
+            RELEASE_KEYS - {"entry_sha256", "source_archive_sha256"}
+        )
+    }
+
+
+def release_digest(entry):
+    return hashlib.sha256(canonical_json(_release_identity(entry))).hexdigest()
+
+
+def validate_catalog(document):
+    if not isinstance(document, dict) or set(document) != CATALOG_KEYS:
+        raise ValueError("runtime capability catalog fields differ")
+    if document["schema"] != CATALOG_SCHEMA:
+        raise ValueError("unsupported runtime capability catalog schema")
+    if document["source_repository"] != "xbmc/xbmc":
+        raise ValueError("runtime capability catalog source differs")
+    releases = document["releases"]
+    if not isinstance(releases, dict) or not releases:
+        raise ValueError("runtime capability catalog has no releases")
+    for key, entry in releases.items():
+        if (
+            not isinstance(key, str)
+            or not RELEASE.fullmatch(key)
+            or not isinstance(entry, dict)
+            or set(entry) != RELEASE_KEYS
+            or entry["version"] != key
+            or not isinstance(entry["tag"], str)
+            or not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", entry["tag"])
+            or not isinstance(entry["commit"], str)
+            or not HEX_COMMIT.fullmatch(entry["commit"])
+            or entry["prerelease"] is not False
+            or not isinstance(entry["source_archive_sha256"], str)
+            or not HEX_SHA256.fullmatch(entry["source_archive_sha256"])
+            or not isinstance(entry["source_files_sha256"], str)
+            or not HEX_SHA256.fullmatch(entry["source_files_sha256"])
+            or not isinstance(entry["entry_sha256"], str)
+            or not HEX_SHA256.fullmatch(entry["entry_sha256"])
+        ):
+            raise ValueError("invalid runtime capability release")
+        capabilities = entry["capabilities"]
+        if not isinstance(capabilities, dict) or not capabilities:
+            raise ValueError("runtime capability release is empty")
+        for addon_id, capability in capabilities.items():
+            if (
+                not isinstance(addon_id, str)
+                or not SAFE_ID.fullmatch(addon_id)
+                or not isinstance(capability, dict)
+                or set(capability) != CAPABILITY_KEYS
+                or not isinstance(capability["addon_xml_sha256"], str)
+                or not HEX_SHA256.fullmatch(capability["addon_xml_sha256"])
+            ):
+                raise ValueError("invalid runtime capability")
+            minimum = _validate_version(capability["min_compatible"])
+            provided = _validate_version(capability["provided"])
+            if KodiVersion(minimum) > KodiVersion(provided):
+                raise ValueError("runtime capability version interval is empty")
+        if release_digest(entry) != entry["entry_sha256"]:
+            raise ValueError("runtime capability release digest differs")
+    return document
+
+
+def load_catalog(path):
+    return validate_catalog(
+        json.loads(Path(path).read_text(encoding="utf-8"))
+    )
+
+
+def catalog_digest(catalog):
+    return hashlib.sha256(canonical_json(catalog)).hexdigest()
+
+
 def policy_digest(policy):
     return hashlib.sha256(canonical_json(policy)).hexdigest()
 
@@ -228,13 +309,22 @@ def _descriptor(root, artifact_sha256, native_files):
         if not SAFE_ID.fullmatch(dependency_id) or dependency_id in seen:
             raise ValueError("invalid or duplicate add-on dependency")
         seen.add(dependency_id)
-        minimum = item.attrib.get("version", "0.0.0")
+        maximum = item.attrib.get("version", "0.0.0")
+        minimum = item.attrib.get("minversion", maximum)
         _validate_version(minimum)
+        _validate_version(maximum)
+        if KodiVersion(minimum) > KodiVersion(maximum):
+            raise ValueError("add-on dependency version interval is empty")
         optional = item.attrib.get("optional", "false") == "true"
         if item.attrib.get("optional", "false") not in {"true", "false"}:
             raise ValueError("invalid optional dependency flag")
         requirements.append(
-            {"id": dependency_id, "minimum_version": minimum, "optional": optional}
+            {
+                "id": dependency_id,
+                "minimum_version": minimum,
+                "maximum_version": maximum,
+                "optional": optional,
+            }
         )
     platform_node = root.find("./extension[@point='xbmc.addon.metadata']/platform")
     platforms = (
@@ -360,17 +450,22 @@ def inspect_directory(path, expected_id=None, expected_version=None):
     return descriptor
 
 
-def _runtime_context(runtime, policy):
+def runtime_release(kodi_version):
+    if not isinstance(kodi_version, str):
+        raise TypeError("invalid Kodi runtime version facts")
+    _validate_version(kodi_version)
+    match = re.match(r"^(\d+)\.(\d+)", kodi_version)
+    return "%s.%s" % match.groups() if match else None
+
+
+def _runtime_context(runtime, policy, catalog):
     if not isinstance(runtime, dict) or set(runtime) != {
         "platform", "kodi_version", "abis", "installed_addons"
     }:
         raise ValueError("invalid runtime facts")
-    if not isinstance(runtime["kodi_version"], str):
-        raise TypeError("invalid Kodi runtime version facts")
-    _validate_version(runtime["kodi_version"])
-    match = re.match(r"^(\d+)", runtime["kodi_version"])
-    if not match or match.group(1) not in policy["runtimes"]:
-        return None, ["UNSUPPORTED_KODI_MAJOR"]
+    release = runtime_release(runtime["kodi_version"])
+    if release is None or release not in catalog["releases"]:
+        return None, ["RUNTIME_CATALOG_MISS"]
     platform = policy["platforms"].get(runtime["platform"])
     if platform is None:
         return None, ["UNSUPPORTED_RUNTIME_PLATFORM"]
@@ -399,11 +494,24 @@ def _runtime_context(runtime, policy):
     for metadata in installed.values():
         _validate_version(metadata["version"])
     return {
-        "major": match.group(1),
+        "release": release,
+        "capabilities": catalog["releases"][release]["capabilities"],
         "base_platform": platform["base"],
         "platform_tokens": tokens,
         "recognized_abis": recognized_abis,
     }, []
+
+
+def version_intervals_overlap(
+    requirement_minimum,
+    requirement_maximum,
+    provider_minimum,
+    provider_maximum,
+):
+    return not (
+        KodiVersion(requirement_minimum) > KodiVersion(provider_maximum)
+        or KodiVersion(requirement_maximum) < KodiVersion(provider_minimum)
+    )
 
 
 def _topological_order(descriptors):
@@ -429,7 +537,7 @@ def _topological_order(descriptors):
     return order
 
 
-def evaluate(descriptors, runtime, policy, planned_versions=None):
+def evaluate(descriptors, runtime, policy, catalog, planned_versions=None):
     if not isinstance(descriptors, list) or not descriptors:
         raise ValueError("compatibility evaluation requires add-ons")
     if planned_versions is None:
@@ -443,7 +551,7 @@ def evaluate(descriptors, runtime, policy, planned_versions=None):
         raise ValueError("invalid planned add-on versions")
     for version in planned_versions.values():
         _validate_version(version)
-    context, reasons = _runtime_context(runtime, policy)
+    context, reasons = _runtime_context(runtime, policy, catalog)
     order = _topological_order(descriptors)
     descriptor_versions = {item["id"]: item["version"] for item in descriptors}
     conflicts = {
@@ -460,9 +568,35 @@ def evaluate(descriptors, runtime, policy, planned_versions=None):
         for addon_id, metadata in runtime["installed_addons"].items()
         if metadata["enabled"]
     }
-    available = {**installed, **planned}
+    available = {
+        addon_id: {
+            "min_compatible": "0.0.0",
+            "provided": version,
+            "source": "installed",
+        }
+        for addon_id, version in installed.items()
+    }
+    available.update(
+        {
+            addon_id: {
+                "min_compatible": "0.0.0",
+                "provided": version,
+                "source": "planned",
+            }
+            for addon_id, version in planned.items()
+        }
+    )
     if context is not None:
-        available.update(policy["runtimes"][context["major"]]["virtual_dependencies"])
+        available.update(
+            {
+                addon_id: {
+                    "min_compatible": capability["min_compatible"],
+                    "provided": capability["provided"],
+                    "source": "virtual",
+                }
+                for addon_id, capability in context["capabilities"].items()
+            }
+        )
     checks = []
     for descriptor in sorted(descriptors, key=lambda item: item["id"]):
         addon_reasons = []
@@ -489,24 +623,28 @@ def evaluate(descriptors, runtime, policy, planned_versions=None):
                     addon_reasons.append("NATIVE_PAYLOAD_ABI_MISMATCH")
         dependency_checks = []
         for requirement in descriptor["requirements"]:
-            actual = available.get(requirement["id"])
-            if actual is None:
+            provider = available.get(requirement["id"])
+            if provider is None:
                 if not requirement["optional"]:
                     addon_reasons.append("MISSING_REQUIRED_DEPENDENCY")
                 dependency_checks.append(
                     {"id": requirement["id"], "source": "absent", "status": "OPTIONAL_ABSENT" if requirement["optional"] else "MISSING"}
                 )
                 continue
-            source = (
-                "virtual"
-                if context is not None and requirement["id"] in policy["runtimes"][context["major"]]["virtual_dependencies"]
-                else "planned" if requirement["id"] in planned else "installed"
+            compatible = version_intervals_overlap(
+                requirement["minimum_version"],
+                requirement["maximum_version"],
+                provider["min_compatible"],
+                provider["provided"],
             )
-            compatible = version_at_least(actual, requirement["minimum_version"])
             if not compatible:
-                addon_reasons.append("DEPENDENCY_VERSION_TOO_OLD")
+                addon_reasons.append("DEPENDENCY_VERSION_MISMATCH")
             dependency_checks.append(
-                {"id": requirement["id"], "source": source, "status": "PASS" if compatible else "TOO_OLD"}
+                {
+                    "id": requirement["id"],
+                    "source": provider["source"],
+                    "status": "PASS" if compatible else "INCOMPATIBLE",
+                }
             )
         checks.append(
             {"id": descriptor["id"], "status": "PASS" if not addon_reasons else "INCOMPATIBLE", "reasons": sorted(set(addon_reasons)), "dependencies": dependency_checks}
@@ -525,13 +663,15 @@ def evaluate(descriptors, runtime, policy, planned_versions=None):
         "order": order,
     }
     return {
-        "schema": SCHEMA,
+        "schema": REPORT_SCHEMA,
         "status": "AUDIT_PASS" if not reasons else "INCOMPATIBLE",
         "policy_sha256": policy_digest(policy),
+        "catalog_sha256": catalog_digest(catalog),
         "graph_sha256": hashlib.sha256(canonical_json(graph_document)).hexdigest(),
         "runtime": {
             "platform": runtime["platform"],
             "kodi_version": runtime["kodi_version"],
+            "catalog_release": context["release"] if context is not None else None,
             "abis": sorted(runtime["abis"]),
         },
         "order": order,
@@ -540,11 +680,18 @@ def evaluate(descriptors, runtime, policy, planned_versions=None):
     }
 
 
-def assert_compatible(descriptors, runtime, policy, planned_versions=None):
+def assert_compatible(
+    descriptors,
+    runtime,
+    policy,
+    catalog,
+    planned_versions=None,
+):
     report = evaluate(
         descriptors,
         runtime,
         policy,
+        catalog,
         planned_versions=planned_versions,
     )
     if report["status"] != "AUDIT_PASS":

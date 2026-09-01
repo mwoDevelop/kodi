@@ -13,7 +13,10 @@
     {
       "name": "android-arm64",
       "platform": "android",
-      "kodi_version": "21.2.0",
+      "runtime_releases": [
+        "21.2",
+        "21.3"
+      ],
       "abis": [
         "arm64-v8a",
         "armeabi-v7a"
@@ -22,7 +25,10 @@
     {
       "name": "android-emulator-x86_64",
       "platform": "android-emulator",
-      "kodi_version": "21.2.0",
+      "runtime_releases": [
+        "21.2",
+        "21.3"
+      ],
       "abis": [
         "x86_64",
         "x86"
@@ -31,7 +37,10 @@
     {
       "name": "linux-flatpak-x86_64",
       "platform": "linux-flatpak",
-      "kodi_version": "21.2.0",
+      "runtime_releases": [
+        "21.2",
+        "21.3"
+      ],
       "abis": [
         "x86_64"
       ]
