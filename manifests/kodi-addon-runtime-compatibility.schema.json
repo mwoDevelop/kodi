@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mwodevelop.github.io/kodi/schemas/kodi-addon-runtime-compatibility.schema.json",
+  "title": "Kodi add-on runtime compatibility policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "runtimes", "platforms", "native_addons"],
+  "properties": {
+    "schema": {"const": 1},
+    "runtimes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[0-9]+$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["virtual_dependencies"],
+          "properties": {
+            "virtual_dependencies": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {"pattern": "^[A-Za-z0-9._-]+$"},
+              "additionalProperties": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "platforms": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"enum": ["android", "android-emulator", "linux-flatpak"]},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["base", "abi_tokens"],
+        "properties": {
+          "base": {"enum": ["android", "linux"]},
+          "abi_tokens": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": {"pattern": "^[A-Za-z0-9._-]+$"},
+            "additionalProperties": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "native_addons": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[A-Za-z0-9._-]+$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["platforms", "abis"],
+        "properties": {
+          "platforms": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"enum": ["android", "linux"]}
+          },
+          "abis": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    }
+  }
+}

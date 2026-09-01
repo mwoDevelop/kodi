@@ -13,7 +13,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools.kodi_addon_candidate_rollout import rollout
+from tools.kodi_addon_candidate_rollout import android_runtime_facts, rollout
+from tools.kodi_addon_runtime_compatibility import (
+    assert_compatible,
+    inspect_archive,
+    load_policy,
+)
 from tools.kodi_advancedsettings_policy import reconcile_android_advancedsettings
 from tools.kodi_default_addons import addon_details
 from tools.kodi_devices import load_registry, resolve_device, resolve_private_endpoint
@@ -33,14 +38,6 @@ from tools.kodi_reinstall import (
 from tools.kodi_retired_addons import reconcile_retired_addons
 from tools.kodi_stable_artifacts import prepare
 
-ADDON_ORDER = (
-    "script.module.mwoscrapers",
-    "script.mwoscrapers",
-    "plugin.video.umbrella",
-    "plugin.video.watchnixtoons2.mwodevelop",
-    "service.subtitles.opensubtitles-com",
-    "service.mwodevelop.profilesync",
-)
 STABLE_ORIGIN = "repository.mwodevelop"
 TESTING_ORIGIN = "repository.mwodevelop.testing"
 
@@ -253,9 +250,36 @@ def reconcile(
         repository_id: prepared["repository"],
         **prepared["addons"],
     }
+    descriptors = [
+        inspect_archive(
+            artifact["path"],
+            expected_id=addon_id,
+            expected_version=artifact["version"],
+        )
+        for addon_id, artifact in available.items()
+    ]
+    planned_versions = {
+        addon_id: artifact["version"]
+        for addon_id, artifact in available.items()
+    }
+    compatibility = assert_compatible(
+        descriptors,
+        android_runtime_facts(
+            adb, port, serial, platform=device["platform"]
+        ),
+        load_policy(ROOT / "manifests/kodi-addon-runtime-compatibility.json"),
+        planned_versions=planned_versions,
+    )
     actions = []
-    managed = tuple(addon_id for addon_id in ADDON_ORDER if addon_id in available)
-    for addon_id in (repository_id, *managed):
+    deployment_order = [
+        repository_id,
+        *(
+            addon_id
+            for addon_id in compatibility["order"]
+            if addon_id != repository_id
+        ),
+    ]
+    for addon_id in deployment_order:
         artifact = available[addon_id]
         current = addon_details(adb, port, serial, addon_id)
         if (
@@ -281,6 +305,8 @@ def reconcile(
                 artifact["version"],
                 240,
                 repair_orphan=False,
+                planned_versions=planned_versions,
+                runtime_platform=device["platform"],
             )
         except RuntimeError as error:
             if (
@@ -297,6 +323,8 @@ def reconcile(
                 artifact["version"],
                 240,
                 repair_orphan=True,
+                planned_versions=planned_versions,
+                runtime_platform=device["platform"],
             )
         actions.append(
             {
@@ -321,6 +349,12 @@ def reconcile(
         "channel": channel,
         "result": "pass",
         "lock_sha256": prepared["lock_sha256"],
+        "compatibility": {
+            "status": compatibility["status"],
+            "policy_sha256": compatibility["policy_sha256"],
+            "graph_sha256": compatibility["graph_sha256"],
+            "order": compatibility["order"],
+        },
         "kodi_preflight": kodi_preflight,
         "advancedsettings": advancedsettings,
         "retired_addons": retired_addons,

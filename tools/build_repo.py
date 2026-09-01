@@ -10,11 +10,21 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.kodi_addon_runtime_compatibility import (
+    assert_compatible,
+    inspect_archive,
+    load_policy,
+)
+
 COMPONENT_ROOT = Path(os.environ.get("KODI_COMPONENT_ROOT", ROOT))
 ZIP_TIME = (2020, 1, 1, 0, 0, 0)
 EXCLUDED_PARTS = {
@@ -302,6 +312,58 @@ def validate_dependency_closure(addons):
                 )
 
 
+def load_build_targets(path=None):
+    document = load_json(
+        "manifests/kodi-addon-build-targets.json"
+    ) if path is None else json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(document, dict) or set(document) != {
+        "schema", "external_addons", "runtime_profiles"
+    } or document["schema"] != 1:
+        raise ValueError("invalid Kodi add-on build targets")
+    external = document["external_addons"]
+    profiles = document["runtime_profiles"]
+    if not isinstance(external, dict) or not isinstance(profiles, list) or not profiles:
+        raise ValueError("Kodi add-on build targets are empty")
+    expected = {"name", "platform", "kodi_version", "abis"}
+    if any(not isinstance(item, dict) or set(item) != expected for item in profiles):
+        raise ValueError("invalid Kodi add-on build runtime profile")
+    if len({item["name"] for item in profiles}) != len(profiles):
+        raise ValueError("Kodi add-on build runtime profile names differ")
+    return document
+
+
+def validate_runtime_compatibility(artifacts, targets=None, policy=None):
+    targets = targets or load_build_targets()
+    policy = policy or load_policy(
+        ROOT / "manifests/kodi-addon-runtime-compatibility.json"
+    )
+    descriptors = [inspect_archive(path) for path in artifacts]
+    planned = {
+        **targets["external_addons"],
+        **{item["id"]: item["version"] for item in descriptors},
+    }
+    reports = {}
+    for profile in targets["runtime_profiles"]:
+        report = assert_compatible(
+            descriptors,
+            {
+                "platform": profile["platform"],
+                "kodi_version": profile["kodi_version"],
+                "abis": profile["abis"],
+                "installed_addons": {},
+            },
+            policy,
+            planned_versions=planned,
+        )
+        reports[profile["name"]] = {
+            "status": report["status"],
+            "policy_sha256": report["policy_sha256"],
+            "graph_sha256": report["graph_sha256"],
+            "order": report["order"],
+        }
+    return reports
+
+
 def copy_repository_addon(addon_id, channel_root, output_root):
     source = ROOT / "repository" / addon_id
     addon, parsed_id, version = parse_addon(source / "addon.xml")
@@ -362,6 +424,10 @@ def build(output, lock_overrides=None, release_status=None):
         channel_root = output / channel / "omega"
         channel_root.mkdir(parents=True)
         addons = [copy_repository_addon(config["repository_addon"], channel_root, output)]
+        channel_artifacts = [
+            output
+            / ("%s-%s.zip" % (addons[0].attrib["id"], addons[0].attrib["version"]))
+        ]
         channel_provenance = {"lock": config["lock"], "components": {}}
         for addon_id, pin in sorted(lock["components"].items()):
             if addon_id not in components:
@@ -388,6 +454,7 @@ def build(output, lock_overrides=None, release_status=None):
             addon_root = channel_root / addon_id
             target = addon_root / ("%s-%s.zip" % (addon_id, version))
             write_deterministic_zip(target, addon_id, files)
+            channel_artifacts.append(target)
             digest = sha256(target)
             expected_digest = pin.get("zip_sha256")
             if expected_digest and digest != expected_digest:
@@ -404,6 +471,9 @@ def build(output, lock_overrides=None, release_status=None):
                 "zip_sha256": digest,
             }
         validate_dependency_closure(addons)
+        channel_provenance["runtime_compatibility"] = (
+            validate_runtime_compatibility(channel_artifacts)
+        )
         index = render_addons(addons)
         (channel_root / "addons.xml").write_bytes(index)
         (channel_root / "addons.xml.sha256").write_text(

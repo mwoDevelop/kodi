@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "external_addons": {
+    "inputstream.adaptive": "21.5.9",
+    "metadata.common.allmusic.com": "3.1.0",
+    "metadata.common.musicbrainz.org": "2.1.2",
+    "metadata.common.theaudiodb.com": "2.0.0",
+    "plugin.video.youtube": "7.4.4",
+    "script.module.requests": "2.31.0",
+    "script.module.six": "1.16.0+matrix.1"
+  },
+  "runtime_profiles": [
+    {
+      "name": "android-arm64",
+      "platform": "android",
+      "kodi_version": "21.2.0",
+      "abis": [
+        "arm64-v8a",
+        "armeabi-v7a"
+      ]
+    },
+    {
+      "name": "android-emulator-x86_64",
+      "platform": "android-emulator",
+      "kodi_version": "21.2.0",
+      "abis": [
+        "x86_64",
+        "x86"
+      ]
+    },
+    {
+      "name": "linux-flatpak-x86_64",
+      "platform": "linux-flatpak",
+      "kodi_version": "21.2.0",
+      "abis": [
+        "x86_64"
+      ]
+    }
+  ]
+}

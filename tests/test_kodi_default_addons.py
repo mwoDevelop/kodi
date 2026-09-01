@@ -10,6 +10,30 @@ from tools import kodi_default_addons as defaults
 MANIFEST = Path("manifests/kodi-default-addons.json")
 
 
+@pytest.fixture(autouse=True)
+def compatibility_boundary(monkeypatch):
+    monkeypatch.setattr(
+        defaults,
+        "inspect_archive",
+        lambda _path, expected_id, expected_version: {
+            "id": expected_id,
+            "version": expected_version,
+        },
+    )
+    monkeypatch.setattr(defaults, "android_runtime_facts", lambda *_a, **_k: {})
+    monkeypatch.setattr(defaults, "load_policy", lambda _path: {})
+    monkeypatch.setattr(
+        defaults,
+        "assert_compatible",
+        lambda descriptors, *_args, **_kwargs: {
+            "status": "AUDIT_PASS",
+            "policy_sha256": "a" * 64,
+            "graph_sha256": "b" * 64,
+            "order": [item["id"] for item in descriptors],
+        },
+    )
+
+
 def archive(addon_id, version):
     output = io.BytesIO()
     with ZipFile(output, "w") as zipped:
@@ -169,6 +193,9 @@ def test_native_official_addon_is_installed_by_kodi_and_origin_is_audited(
         defaults,
         "installed_addon_origins_in_kodi",
         lambda *_args, **_kwargs: {"plugin.video.youtube": "repository.xbmc.org"},
+    )
+    monkeypatch.setattr(
+        defaults, "installed_archive_matches", lambda *_args: True
     )
 
     result = defaults.reconcile_android(
@@ -412,28 +439,27 @@ def test_native_official_addon_reinstalls_non_official_origin(monkeypatch, tmp_p
     )
     current = {"enabled": True, "version": "7.4.4"}
     monkeypatch.setattr(defaults, "addon_details", lambda *_args: current)
-    removed = []
+    origin = ["repository.third"]
+    applied = []
     monkeypatch.setattr(
         defaults,
         "installed_addon_origins_in_kodi",
         lambda *_args, **_kwargs: {
-            "plugin.video.youtube": (
-                "repository.xbmc.org" if removed else "repository.third"
-            )
+            "plugin.video.youtube": origin[0]
         },
     )
-    monkeypatch.setattr(
-        defaults,
-        "remove_addon",
-        lambda *_args, **_kwargs: removed.append(_args[3]),
-    )
-    monkeypatch.setattr(defaults, "install_official_addon", lambda *_args, **_kwargs: None)
+    def rollout(*args, **_kwargs):
+        applied.append(args[4])
+        origin[0] = "repository.xbmc.org"
+        return {}
+
+    monkeypatch.setattr(defaults, "rollout", rollout)
 
     result = defaults.reconcile_android(
         "adb", 5038, "device", {"addons": [addon]}, tmp_path
     )
 
-    assert removed == ["plugin.video.youtube"]
+    assert applied == ["plugin.video.youtube"]
     assert result["actions"][-1]["action"] == "reinstalled"
 
 

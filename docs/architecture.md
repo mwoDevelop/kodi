@@ -49,6 +49,7 @@ flowchart LR
 
   subgraph Host["Zaufany host operatora / WSL"]
     Ops["kodi_ops.py i adaptery rollout/restore"]
+    Compat["Brama kompatybilności runtime<br/>parser, graf, polityka i transakcja"]
     Private[".env i .kodi-private<br/>inventory, sekrety, snapshoty"]
     Browser["Przeglądarka operatora<br/>hasło + TOTP"]
   end
@@ -68,8 +69,9 @@ flowchart LR
   GHCR -->|"digest z qnap-stable.json"| Engine
 
   Private --> Ops
+  Ops --> Compat
   Ops -->|"SSH i bezpieczne Compose"| Engine
-  Ops -->|"ADB lub SSH, bootstrap i restore"| Fleet
+  Compat -->|"AUDIT_PASS: ADB lub SSH<br/>exact artifact transaction"| Fleet
   Browser -->|"HTTPS przez LAN :443"| QTSGateway
   CPWeb -->|"dedykowane mTLS, allowlista dashboardu"| CP
   CPWeb -->|"prywatne mTLS"| CPAuth
@@ -175,6 +177,45 @@ aktualnym miejscem wykonywania administracji:
 Sekrety nie są publikowane do GitHub, GitHub Pages, GHCR ani raportów E2E. Planowane
 przeniesienie administracji i zaszyfrowanych sekretów do QNAP nie jest jeszcze
 wdrożoną funkcją Control Plane.
+
+### 2.3.1 Brama kompatybilności runtime
+
+Instalatory nie interpretują kompatybilności każdy na własny sposób. Wspólny,
+niezależny od transportu moduł buduje deskryptory dokładnych ZIP-ów lub katalogów
+snapshotu, łączy je z faktami runtime i ocenia końcową projekcję grafu. Planowana
+wersja przesłania zainstalowaną, zależności są porządkowane topologicznie, a
+nieznany major Kodi, platforma, ABI, format wersji albo niezakwalifikowany kod
+natywny kończy przebieg fail-closed.
+
+```mermaid
+sequenceDiagram
+  participant O as Adapter build/rollout/restore
+  participant G as Runtime compatibility gate
+  participant K as Kodi / system docelowy
+  participant T as Trwała transakcja dodatku
+
+  O->>G: Dokładne ZIP-y + lock/policy
+  O->>K: Read-only runtime facts
+  K-->>O: Kodi version, platform, ABI, installed add-ons
+  O->>G: RuntimeFacts + projected planned versions
+  G-->>O: AUDIT_PASS + policy/graph SHA-256
+  O->>T: prepare exact artifact
+  T->>K: atomowy rename, backup pozostaje
+  O->>K: restart, UpdateLocalAddons, verify
+  alt weryfikacja poprawna
+    O->>T: commit
+  else błąd lub przerwanie
+    O->>T: rollback
+    T->>K: przywróć poprzedni katalog
+  end
+```
+
+Android zapisuje journal i backup pod `special://home`, na tym samym filesystemie
+co katalog dodatków. Flatpak i build używają tego samego evaluator-a, lecz własnych
+adapterów faktów. Restore dodatkowo sprawdza każdy katalog dodatku objęty snapshotem
+przed destrukcyjną fazą i ponownie po instalacji rzeczywistego runtime, zanim
+skopiuje profil. Szczegóły operatorskie opisuje
+[runbook operacji](kodi-operations.md#brama-kompatybilności-dodatków).
 
 ### 2.4 Urządzenia Kodi
 

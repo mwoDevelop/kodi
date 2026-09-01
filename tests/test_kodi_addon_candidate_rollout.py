@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from tools import kodi_addon_candidate_rollout as rollout
 
 
@@ -110,3 +112,111 @@ def test_execute_falls_back_to_host_eventserver_for_lan_target(monkeypatch):
         ("device", "RunScript(x)"),
         ("host", "RunScript(x)"),
     ]
+
+
+def test_android_runtime_facts_bind_kodi_version_abi_and_enabled_addons(
+    monkeypatch,
+):
+    class Rpc:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def call(self, method, _params):
+            if method == "Application.GetProperties":
+                return {
+                    "version": {
+                        "major": 21,
+                        "minor": 2,
+                        "revision": "20251031-a3a448d26b",
+                        "tag": "stable",
+                        "tagversion": "",
+                    }
+                }
+            return {
+                "addons": [
+                    {
+                        "addonid": "plugin.video.test",
+                        "version": "1.2.3",
+                        "enabled": True,
+                    },
+                    {
+                        "addonid": "plugin.video.disabled",
+                        "version": "2.0.0",
+                        "enabled": False,
+                    },
+                ]
+            }
+
+    outputs = iter(
+        [
+            "primaryCpuAbi=arm64-v8a\n",
+            "arm64-v8a,armeabi-v7a\n",
+        ]
+    )
+    monkeypatch.setattr(rollout, "AdbJsonRpcClient", Rpc)
+    monkeypatch.setattr(
+        rollout,
+        "adb_command",
+        lambda *_args, **_kwargs: SimpleNamespace(stdout=next(outputs)),
+    )
+
+    assert rollout.android_runtime_facts(
+        "adb", 5038, "device", platform="android"
+    ) == {
+        "platform": "android",
+        "kodi_version": "21.2+20251031.a3a448d26b",
+        "abis": ["arm64-v8a", "armeabi-v7a"],
+        "installed_addons": {
+            "plugin.video.test": {"version": "1.2.3", "enabled": True},
+            "plugin.video.disabled": {
+                "version": "2.0.0",
+                "enabled": False,
+            },
+        },
+    }
+
+
+def test_candidate_compatibility_failure_happens_before_any_device_write(
+    monkeypatch, tmp_path
+):
+    candidate = tmp_path / "candidate.zip"
+    candidate.write_bytes(b"candidate")
+    writes = []
+    monkeypatch.setattr(
+        rollout,
+        "inspect_archive",
+        lambda *_args, **_kwargs: {"id": "plugin.video.test"},
+    )
+    monkeypatch.setattr(
+        rollout, "android_runtime_facts", lambda *_args, **_kwargs: {}
+    )
+    monkeypatch.setattr(rollout, "load_policy", lambda _path: {})
+    monkeypatch.setattr(
+        rollout,
+        "assert_compatible",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("INCOMPATIBLE")
+        ),
+    )
+    monkeypatch.setattr(
+        rollout, "adb_command", lambda *_args, **_kwargs: writes.append(_args)
+    )
+
+    with pytest.raises(RuntimeError, match="INCOMPATIBLE"):
+        rollout.rollout(
+            "adb",
+            5038,
+            "device",
+            candidate,
+            "plugin.video.test",
+            "1.0.0",
+            30,
+        )
+
+    assert writes == []

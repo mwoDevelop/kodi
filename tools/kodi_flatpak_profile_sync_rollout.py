@@ -29,6 +29,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools import build_repo
+from tools.kodi_addon_runtime_compatibility import (
+    assert_compatible,
+    inspect_archive,
+    load_policy as load_runtime_policy,
+)
 from tools.kodi_devices import (
     load_registry,
     resolve_device,
@@ -1344,6 +1349,53 @@ def rollout(args):
             )
             if artifact_version != artifact["version"]:
                 raise ValueError("Kodi official add-on version differs")
+        compatibility_descriptors = [
+            inspect_archive(
+                profile_sync_zip,
+                expected_id=PROFILE_SYNC_ID,
+                expected_version=profile_version,
+            ),
+            inspect_archive(
+                repository / args.repository_zip,
+                expected_id=REPOSITORY_ID,
+                expected_version=repository_version,
+            ),
+            *[
+                inspect_archive(
+                    artifact["path"],
+                    expected_id=addon_id,
+                    expected_version=artifact["version"],
+                )
+                for artifacts in (
+                    required_artifacts,
+                    dependency_artifacts,
+                    official_artifacts,
+                )
+                for addon_id, artifact in artifacts.items()
+            ],
+        ]
+        build_targets = build_repo.load_build_targets()
+        planned_versions = {
+            **build_targets["external_addons"],
+            **{
+                descriptor["id"]: descriptor["version"]
+                for descriptor in compatibility_descriptors
+            },
+        }
+        compatibility = assert_compatible(
+            compatibility_descriptors,
+            {
+                "platform": device["platform"],
+                "kodi_version": probe["kodi_version"],
+                "abis": probe["abi"],
+                "installed_addons": {},
+            },
+            load_runtime_policy(
+                repository
+                / "manifests/kodi-addon-runtime-compatibility.json"
+            ),
+            planned_versions=planned_versions,
+        )
         expected = {
             "logical_device_id": args.device,
             "profile_sync_version": profile_version,
@@ -1644,6 +1696,12 @@ def rollout(args):
                 "official_addons": result["official_addons"],
                 "youtube": result["youtube"],
                 "opensubtitles_com": opensubtitles_com,
+                "compatibility": {
+                    "status": compatibility["status"],
+                    "policy_sha256": compatibility["policy_sha256"],
+                    "graph_sha256": compatibility["graph_sha256"],
+                    "order": compatibility["order"],
+                },
                 "server_url_sha256": hashlib.sha256(
                     server_url.encode("utf-8")
                 ).hexdigest(),

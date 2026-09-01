@@ -8,6 +8,10 @@ pod kątem stanu działania.
 
 Wróć do [indeks dokumentacji](../README.md).
 
+## 2026-09
+
+- [Brama kompatybilności dodatków Kodi](2026-09-01-addon-runtime-compatibility.md)
+
 ## 2026-08
 
 - [YouTube 7.4.4 — obejście zatrzymywania MPEG-DASH](2026-08-31-youtube-744-buffering-workaround.md)
