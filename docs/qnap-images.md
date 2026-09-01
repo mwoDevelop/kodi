@@ -130,7 +130,7 @@ czterousługowego locka.
   lokalnej gotowości, aby tolerować wyścigi podczas uruchamiania i odpowiedzi upstream;
 - wdrożenie watchdoga sprawdza wzmocnione zasady Compose i wycofuje poprzednie
   pliki Compose, jeśli nowy kontener nie może opublikować pełnego dokumentu statusu
-  dokładnie 11 workflow z wersjonowanego manifestu;
+  dokładnie 12 workflow z wersjonowanego manifestu;
 - healthcheck watchdoga sprawdza gotowość obserwatora, pełny katalog, świeżość i
   spójność schema; wykryta awaria workflow jest publikowana osobno jako
   `monitored_state=FAILED` i nie psuje kondycji kontenera. Wdrożenie nadal nie
