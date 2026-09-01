@@ -27,6 +27,12 @@ from tools.kodi_devices import (
     resolve_device,
     resolve_private_endpoint,
 )
+from tools import build_repo
+from tools.kodi_addon_runtime_compatibility import (
+    assert_compatible,
+    inspect_directory,
+    load_policy as load_runtime_policy,
+)
 from tools.kodi_flatpak_profile_sync_rollout import (
     _connect_sftp,
     _exists,
@@ -443,7 +449,61 @@ def install_binary(target, snapshot_manifest):
     finally:
         sftp.close()
         client.close()
-    return {"binary_action": action}
+    compatibility = audit_snapshot_runtime(
+        target,
+        snapshot_manifest,
+        Path(__file__).resolve().parents[1],
+    )
+    return {"binary_action": action, "compatibility": compatibility}
+
+
+def audit_snapshot_runtime(target, manifest, repository):
+    repository = Path(repository).resolve()
+    snapshot = target.get("operation_backup")
+    if snapshot is None:
+        raise RuntimeError("Flatpak compatibility audit requires snapshot path")
+    snapshot = Path(snapshot)
+    addon_root = snapshot / "payload/addons"
+    descriptors = []
+    if addon_root.exists():
+        if addon_root.is_symlink() or not addon_root.is_dir():
+            raise RuntimeError("Flatpak snapshot add-on root is unsafe")
+        for addon in sorted(addon_root.iterdir()):
+            if not addon.is_dir():
+                raise RuntimeError(
+                    "Flatpak snapshot add-on root contains a non-directory"
+                )
+            descriptors.append(inspect_directory(addon))
+    if {item["id"] for item in descriptors} != {
+        item["id"] for item in manifest["addons"]
+    }:
+        raise RuntimeError("Flatpak snapshot add-on inventory differs")
+    installer = _installer_probe(
+        target["transport"], manifest["installer"]["flatpak"]["app_id"]
+    )
+    planned = {
+        **build_repo.load_build_targets()["external_addons"],
+        **{item["id"]: item["version"] for item in descriptors},
+    }
+    report = assert_compatible(
+        descriptors,
+        {
+            "platform": "linux-flatpak",
+            "kodi_version": installer["version"],
+            "abis": [installer["architecture"]],
+            "installed_addons": {},
+        },
+        load_runtime_policy(
+            repository / "manifests/kodi-addon-runtime-compatibility.json"
+        ),
+        planned_versions=planned,
+    )
+    return {
+        "status": report["status"],
+        "addons": len(descriptors),
+        "policy_sha256": report["policy_sha256"],
+        "graph_sha256": report["graph_sha256"],
+    }
 
 
 def restore_snapshot(target, snapshot):
@@ -455,6 +515,10 @@ def restore_snapshot(target, snapshot):
         or expected.get("principal_uid") != target["principal_uid"]
     ):
         raise RuntimeError("Flatpak restore snapshot target differs")
+    target["operation_backup"] = Path(snapshot)
+    compatibility = audit_snapshot_runtime(
+        target, manifest, Path(__file__).resolve().parents[1]
+    )
     client, sftp = _connect_sftp(target["transport"])
     try:
         _mkdirs(sftp, target["data_root"], mode=0o700)
@@ -465,6 +529,7 @@ def restore_snapshot(target, snapshot):
     return {
         "snapshot_id": manifest["snapshot_id"],
         "restored_files": len(manifest["files"]),
+        "compatibility": compatibility,
     }
 
 

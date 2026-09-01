@@ -254,6 +254,11 @@ def test_deploy_uses_direct_adb_restore_mode(monkeypatch):
         lambda *_args: calls.append("install"),
     )
     monkeypatch.setattr(
+        "tools.kodi_reinstall.verify_target_runtime_compatibility",
+        lambda *_args: calls.append("compatibility")
+        or {"status": "AUDIT_PASS"},
+    )
+    monkeypatch.setattr(
         "tools.kodi_reinstall.restore_snapshot_via_adb",
         lambda *_args: calls.append("restore") or {"snapshot_id": "id"},
     )
@@ -277,11 +282,13 @@ def test_deploy_uses_direct_adb_restore_mode(monkeypatch):
         "device-script",
         "origin-script",
     ) == {
-        "result": "pass"
+        "result": "pass",
+        "compatibility": {"status": "AUDIT_PASS"},
     }
     assert calls == [
         "clean",
         "install",
+        "compatibility",
         "restore",
         "defaults",
         "private",

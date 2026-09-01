@@ -17,7 +17,12 @@ from xml.etree import ElementTree
 from zipfile import ZipFile
 
 try:
-    from kodi_addon_candidate_rollout import rollout
+    from kodi_addon_candidate_rollout import android_runtime_facts, rollout
+    from kodi_addon_runtime_compatibility import (
+        assert_compatible,
+        inspect_archive,
+        load_policy,
+    )
     from kodi_addon_remove import remove_addon
     from kodi_profile import AdbEventClient, AdbJsonRpcClient, adb_command
     from kodi_reinstall import (
@@ -25,7 +30,12 @@ try:
         installed_addon_origins_in_kodi,
     )
 except ModuleNotFoundError:
-    from tools.kodi_addon_candidate_rollout import rollout
+    from tools.kodi_addon_candidate_rollout import android_runtime_facts, rollout
+    from tools.kodi_addon_runtime_compatibility import (
+        assert_compatible,
+        inspect_archive,
+        load_policy,
+    )
     from tools.kodi_addon_remove import remove_addon
     from tools.kodi_profile import AdbEventClient, AdbJsonRpcClient, adb_command
     from tools.kodi_reinstall import (
@@ -318,6 +328,8 @@ def reconcile_official_dependencies(
     dependencies,
     cache_dir,
     timeout,
+    planned_versions=None,
+    runtime_platform="android",
 ):
     actions = []
     for dependency in dependencies:
@@ -352,6 +364,8 @@ def reconcile_official_dependencies(
             dependency["id"],
             dependency["version"],
             timeout,
+            planned_versions=planned_versions,
+            runtime_platform=runtime_platform,
         )
         actions.append(
             {
@@ -491,6 +505,43 @@ def reconcile_android(
     assign_origins=True,
     official_dependencies=None,
 ):
+    prepared_dependencies = [
+        (dependency, fetch_artifact(dependency, cache_dir))
+        for dependency in (official_dependencies or [])
+    ]
+    prepared = [
+        (addon, fetch_artifact(addon, cache_dir)) for addon in manifest["addons"]
+    ]
+    descriptors = [
+        inspect_archive(
+            artifact,
+            expected_id=metadata["id"],
+            expected_version=metadata["version"],
+        )
+        for metadata, artifact in [*prepared_dependencies, *prepared]
+    ]
+    planned_versions = {
+        metadata["id"]: metadata["version"]
+        for metadata, _artifact in [*prepared_dependencies, *prepared]
+    }
+    for addon, _artifact in prepared:
+        for dependency_id, requirement in addon.get(
+            "dependency_requirements", {}
+        ).items():
+            if requirement.get("type") == "platform":
+                planned_versions.setdefault(
+                    dependency_id, requirement["minimum_version"]
+                )
+    runtime_platform = "android"
+    compatibility = assert_compatible(
+        descriptors,
+        android_runtime_facts(adb, port, serial, platform=runtime_platform),
+        load_policy(
+            Path(__file__).resolve().parents[1]
+            / "manifests/kodi-addon-runtime-compatibility.json"
+        ),
+        planned_versions=planned_versions,
+    )
     dependency_actions = (
         reconcile_official_dependencies(
             adb,
@@ -499,13 +550,12 @@ def reconcile_android(
             official_dependencies,
             cache_dir,
             timeout,
+            planned_versions=planned_versions,
+            runtime_platform=runtime_platform,
         )
         if official_dependencies
         else []
     )
-    prepared = [
-        (addon, fetch_artifact(addon, cache_dir)) for addon in manifest["addons"]
-    ]
     results = []
     events = AdbEventClient(adb, port, serial)
     for addon, artifact in prepared:
@@ -583,6 +633,8 @@ def reconcile_android(
                     addon["id"],
                     addon["version"],
                     timeout,
+                    planned_versions=planned_versions,
+                    runtime_platform=runtime_platform,
                 )
                 results.append(
                     {
@@ -605,29 +657,41 @@ def reconcile_android(
         if install_mode == "kodi-native-official":
             reinstalled = current is not None
             if reinstalled:
-                # A native Kodi install cannot downgrade an already installed
-                # beta/newer build. Remove the known add-on identity first, then
-                # let the official repository install the pinned qualification.
-                # The removal helper updates scoped storage and Addons*.db
-                # transactionally and verifies absence after Kodi restarts.
-                remove_addon(
-                    adb, port, serial, addon["id"], timeout=timeout
+                rollout(
+                    adb,
+                    port,
+                    serial,
+                    artifact,
+                    addon["id"],
+                    addon["version"],
+                    timeout,
+                    planned_versions=planned_versions,
+                    runtime_platform=runtime_platform,
                 )
-            install_official_addon(
-                adb,
-                port,
-                serial,
-                addon["id"],
-                minimum_version=addon["version"],
-                timeout=timeout,
-            )
-            installed = _wait_addon_version(
-                adb, port, serial, addon["id"], addon["version"], timeout
-            )
-            if str(installed.get("version")) != addon["version"]:
-                raise RuntimeError(
-                    "Kodi installed an unqualified official add-on version"
+            else:
+                install_official_addon(
+                    adb,
+                    port,
+                    serial,
+                    addon["id"],
+                    minimum_version=addon["version"],
+                    timeout=timeout,
                 )
+                installed = _wait_addon_version(
+                    adb, port, serial, addon["id"], addon["version"], timeout
+                )
+                if (
+                    str(installed.get("version")) != addon["version"]
+                    or not installed_archive_matches(
+                        adb, port, serial, artifact, addon["id"]
+                    )
+                ):
+                    remove_addon(
+                        adb, port, serial, addon["id"], timeout=timeout
+                    )
+                    raise RuntimeError(
+                        "Kodi installed bytes differing from the audited artifact"
+                    )
             results.append(
                 {
                     "addon": addon["id"],
@@ -639,7 +703,15 @@ def reconcile_android(
             continue
         try:
             applied = rollout(
-                adb, port, serial, artifact, addon["id"], addon["version"], timeout
+                adb,
+                port,
+                serial,
+                artifact,
+                addon["id"],
+                addon["version"],
+                timeout,
+                planned_versions=planned_versions,
+                runtime_platform=runtime_platform,
             )
         except RuntimeError as error:
             if (
@@ -656,6 +728,8 @@ def reconcile_android(
                 addon["version"],
                 timeout,
                 repair_orphan=True,
+                planned_versions=planned_versions,
+                runtime_platform=runtime_platform,
             )
         results.append(
             {
@@ -725,6 +799,12 @@ def reconcile_android(
         "schema": 1,
         "serial": serial,
         "result": "pass",
+        "compatibility": {
+            "status": compatibility["status"],
+            "policy_sha256": compatibility["policy_sha256"],
+            "graph_sha256": compatibility["graph_sha256"],
+            "order": compatibility["order"],
+        },
         "addons": verified,
         "actions": [*dependency_actions, *results],
     }

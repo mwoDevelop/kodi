@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "runtimes": {
+    "21": {
+      "virtual_dependencies": {
+        "kodi.binary.global.filesystem": "1.1.9",
+        "kodi.binary.global.general": "1.0.5",
+        "kodi.binary.global.gui": "5.15.0",
+        "kodi.binary.global.main": "2.0.2",
+        "kodi.binary.global.tools": "1.0.4",
+        "kodi.binary.instance.inputstream": "3.3.0",
+        "kodi.binary.instance.peripheral": "3.0.2",
+        "kodi.binary.instance.videocodec": "2.1.0",
+        "kodi.resource": "1.0.0",
+        "xbmc.addon": "12.0.0",
+        "xbmc.core": "0.1.0",
+        "xbmc.gui": "5.17.0",
+        "xbmc.metadata": "2.1.0",
+        "xbmc.python": "3.0.0"
+      }
+    }
+  },
+  "platforms": {
+    "android": {
+      "base": "android",
+      "abi_tokens": {
+        "arm64-v8a": "android-aarch64",
+        "armeabi-v7a": "android-armv7",
+        "x86": "android-i686",
+        "x86_64": "android-x86_64"
+      }
+    },
+    "android-emulator": {
+      "base": "android",
+      "abi_tokens": {
+        "arm64-v8a": "android-aarch64",
+        "armeabi-v7a": "android-armv7",
+        "x86": "android-i686",
+        "x86_64": "android-x86_64"
+      }
+    },
+    "linux-flatpak": {
+      "base": "linux",
+      "abi_tokens": {
+        "aarch64": "linux-aarch64",
+        "x86_64": "linux-x86_64"
+      }
+    }
+  },
+  "native_addons": {
+    "inputstream.adaptive": {
+      "platforms": [
+        "android",
+        "linux"
+      ],
+      "abis": [
+        "aarch64",
+        "arm64-v8a",
+        "armeabi-v7a",
+        "x86_64"
+      ]
+    },
+    "peripheral.joystick": {
+      "platforms": [
+        "android",
+        "linux"
+      ],
+      "abis": [
+        "aarch64",
+        "arm64-v8a",
+        "armeabi-v7a",
+        "x86_64"
+      ]
+    }
+  }
+}

@@ -57,6 +57,53 @@ Wykrycie złośliwego lub wymagającego review kandydata pozostaje widoczne w po
 Brak procesu/statusu watchdog, niedostępny Profile Sync, control plane lub provider
 relay nadal daje `DIAGNOSTIC_FAILED`.
 
+### Brama kompatybilności dodatków
+
+Każdy zarządzany ZIP przechodzi przed pierwszą mutacją wspólną bramę
+`tools/kodi_addon_runtime_compatibility.py`. Brama czyta dokładny `addon.xml`,
+kontroluje bezpieczną strukturę archiwum, wersję Kodi, platformę/ABI, zależności
+wirtualne, zainstalowane i planowane oraz jawnie kwalifikowane dodatki natywne.
+Źródłami prawdy są:
+
+- `manifests/kodi-addon-runtime-compatibility.json` — runtime i wyjątki natywne;
+- `manifests/kodi-addon-build-targets.json` — wspierane cele builda i przypięte
+  zależności zewnętrzne;
+- dokładne ZIP-y oraz lock kanału;
+- fakty live odczytane z JSON-RPC Kodi, Androida albo probe Flatpak.
+
+`AUDIT_PASS` ze skrótem polityki i projektowanego grafu jest warunkiem instalacji.
+`INCOMPATIBLE` kończy adapter przed push/rename. Bezpośrednia instalacja na
+Androidzie jest sagą jednego dodatku: trwały journal i backup znajdują się pod
+`special://home/.mwodevelop-transactions`, a host wykonuje
+`prepare -> restart/verify -> commit`. Przerwany przebieg jest wykrywany po ID
+dodatku i najpierw kompensowany. Nieudana kompensacja daje
+`RECOVERY_REQUIRED`; tego katalogu nie należy usuwać ręcznie przed zebraniem
+diagnozy.
+
+Brama działa również przy `NO_CHANGE`, w buildzie repo, stable/testing, dodatkach
+domyślnych, Android restore i Flatpak. Restore audytuje każdy kopiowany katalog
+`payload/addons/<id>`, nie tylko listę dodatków wymaganych po uruchomieniu.
+Przykłady:
+
+```bash
+# Hermetyczna kwalifikacja wszystkich ZIP-ów dla Android arm64,
+# emulatora x86_64 i Flatpak x86_64.
+.venv/bin/python tools/build_repo.py --output dist
+
+# Live audit i idempotentne uzgodnienie jednego Androida.
+.venv/bin/python tools/kodi_android_stable_rollout.py --device bluestacks1
+
+# Testy parsera, grafu, braku mutacji i crash-safe rollbacku.
+.venv/bin/python -m pytest -q \
+  tests/test_kodi_addon_runtime_compatibility.py \
+  tests/test_kodi_addon_candidate_apply.py \
+  tests/test_kodi_addon_candidate_rollout.py
+```
+
+Nowy major Kodi wymaga osobnego wpisu `runtimes`, nowa platforma mapowania ABI,
+a ZIP z `.so/.dll/.dylib/.pyd` — jawnej kwalifikacji ID, platformy i ABI.
+Nie wolno dodawać ogólnego wyjątku wyłączającego kontrolę kodu natywnego.
+
 Pełny rollout wykonuje następujące fazy:
 
 1. przypina commit planu oraz SHA locków stable i QNAP;

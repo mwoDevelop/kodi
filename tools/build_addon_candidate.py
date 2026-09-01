@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools import build_repo
+from tools.kodi_addon_runtime_compatibility import inspect_archive
 
 
 def build(addon_id, output, root=ROOT):
@@ -43,6 +44,9 @@ def build(addon_id, output, root=ROOT):
     if output == source or source in output.parents:
         raise ValueError("candidate output must be outside component source")
     build_repo.write_deterministic_zip(output, addon_id, files)
+    descriptor = inspect_archive(
+        output, expected_id=addon_id, expected_version=version
+    )
     checkout = root / source_path.parts[0]
     commit = subprocess.check_output(
         ["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True
@@ -62,6 +66,7 @@ def build(addon_id, output, root=ROOT):
         "source_commit": commit,
         "source_dirty": dirty,
         "files": len(files),
+        "artifact_descriptor_sha256": descriptor["artifact_sha256"],
     }
 
 

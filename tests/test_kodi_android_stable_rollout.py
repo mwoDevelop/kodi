@@ -2,12 +2,20 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from tools.kodi_android_stable_rollout import (
-    ADDON_ORDER,
     desired_origins,
     ensure_kodi_ready,
     origin_transition,
     reconcile,
     reconcile_origins,
+)
+
+ADDON_IDS = (
+    "script.module.mwoscrapers",
+    "script.mwoscrapers",
+    "plugin.video.umbrella",
+    "plugin.video.watchnixtoons2.mwodevelop",
+    "service.subtitles.opensubtitles-com",
+    "service.mwodevelop.profilesync",
 )
 
 
@@ -69,10 +77,10 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     addons = {
         addon_id: {
             "path": tmp_path / (addon_id + ".zip"),
-            "sha256": ("1" if addon_id == ADDON_ORDER[0] else "2") * 64,
+            "sha256": ("1" if addon_id == ADDON_IDS[0] else "2") * 64,
             "version": "2.0.0",
         }
-        for addon_id in ADDON_ORDER
+        for addon_id in ADDON_IDS
     }
     prepared = {
         "channel": "testing",
@@ -123,6 +131,29 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
         "tools.kodi_android_stable_rollout.addon_details",
         lambda *_args: None,
     )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.inspect_archive",
+        lambda _path, expected_id, expected_version: {
+            "id": expected_id,
+            "version": expected_version,
+        },
+    )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.android_runtime_facts",
+        lambda *_args, **_kwargs: {},
+    )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.load_policy", lambda _path: {}
+    )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.assert_compatible",
+        lambda *_args, **_kwargs: {
+            "status": "AUDIT_PASS",
+            "policy_sha256": "c" * 64,
+            "graph_sha256": "d" * 64,
+            "order": [*ADDON_IDS, repository_id],
+        },
+    )
 
     def rollout(_adb, _port, _serial, path, addon_id, version, *_args, **_kwargs):
         installed.append((addon_id, Path(path), version))
@@ -135,17 +166,17 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.desired_origins",
-        lambda _prepared, _channel: {ADDON_ORDER[0]: repository_id},
+        lambda _prepared, _channel: {ADDON_IDS[0]: repository_id},
     )
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.installed_addon_origins_in_kodi",
-        lambda *_args: {ADDON_ORDER[0]: "repository.mwodevelop"},
+        lambda *_args: {ADDON_IDS[0]: "repository.mwodevelop"},
     )
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.origin_transition",
         lambda _prepared, _channel, _origins, _current: (
-            {ADDON_ORDER[0]: "repository.mwodevelop"},
-            {ADDON_ORDER[0]: {"from": "1.0.0", "to": "2.0.0"}},
+            {ADDON_IDS[0]: "repository.mwodevelop"},
+            {ADDON_IDS[0]: {"from": "1.0.0", "to": "2.0.0"}},
         ),
     )
     def reconcile_settings(*_args):
@@ -175,15 +206,15 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     }
     assert [item[0] for item in installed] == [
         repository_id,
-        *(addon_id for addon_id in ADDON_ORDER if addon_id in prepared["addons"]),
+        *ADDON_IDS,
     ]
     assert assigned == [
         {
             "serial": "device",
-            "addon_origins": {ADDON_ORDER[0]: repository_id},
-            "addon_previous_origins": {ADDON_ORDER[0]: "repository.mwodevelop"},
+            "addon_origins": {ADDON_IDS[0]: repository_id},
+            "addon_previous_origins": {ADDON_IDS[0]: "repository.mwodevelop"},
             "addon_version_transitions": {
-                ADDON_ORDER[0]: {"from": "1.0.0", "to": "2.0.0"}
+                ADDON_IDS[0]: {"from": "1.0.0", "to": "2.0.0"}
             },
         }
     ]

@@ -16,6 +16,12 @@ import zipfile
 from pathlib import Path
 
 try:
+    from kodi_addon_candidate_rollout import android_runtime_facts
+    from kodi_addon_runtime_compatibility import (
+        assert_compatible,
+        inspect_directory,
+        load_policy as load_runtime_policy,
+    )
     from kodi_devices import load_registry, resolve_device, resolve_private_endpoint
     from kodi_inventory import load_private_references
     from kodi_profile import (
@@ -34,6 +40,12 @@ try:
         verify_snapshot,
     )
 except ModuleNotFoundError:
+    from tools.kodi_addon_candidate_rollout import android_runtime_facts
+    from tools.kodi_addon_runtime_compatibility import (
+        assert_compatible,
+        inspect_directory,
+        load_policy as load_runtime_policy,
+    )
     from tools.kodi_devices import (
         load_registry,
         resolve_device,
@@ -258,6 +270,7 @@ def load_config(path, repository):
                 "name": logical_id,
                 "serial": device["endpoints"]["adb"],
                 "expected_model": device["expected"]["model"],
+                "runtime_platform": device["platform"],
             }
         )
     return path, resolved
@@ -378,6 +391,23 @@ def preflight_target(target, repository, adb, port):
         )
     snapshot_path = resolve_private_path(repository, target["snapshot"])
     manifest = verify_snapshot(snapshot_path)
+    addon_root = snapshot_path / "payload/addons"
+    snapshot_addons = []
+    if addon_root.exists():
+        if addon_root.is_symlink() or not addon_root.is_dir():
+            raise ValueError("%s snapshot add-on root is unsafe" % target["name"])
+        for addon_path in sorted(addon_root.iterdir()):
+            if addon_path.is_dir():
+                snapshot_addons.append(inspect_directory(addon_path))
+            else:
+                raise ValueError(
+                    "%s snapshot add-on root contains a non-directory"
+                    % target["name"]
+                )
+    snapshot_ids = {item["id"] for item in snapshot_addons}
+    manifest_ids = {item["id"] for item in manifest["addons"]}
+    if snapshot_ids != manifest_ids:
+        raise ValueError("%s snapshot add-on inventory differs" % target["name"])
     allow_upgrade = bool(target.get("allow_kodi_upgrade"))
     if not kodi_versions_compatible(
         manifest["device"]["kodi_version"],
@@ -411,6 +441,56 @@ def preflight_target(target, repository, adb, port):
         "dumpsys package %s" % KODI_PACKAGE,
     )
     version = re.search(r"versionName=([^\s]+)", package)
+    compatibility = {
+        "status": "PENDING_POST_INSTALL",
+        "addons": len(snapshot_addons),
+    }
+    if version:
+        process = adb_command(
+            adb,
+            port,
+            serial,
+            "shell",
+            "pidof %s" % KODI_PACKAGE,
+            check=False,
+            text=True,
+        )
+        running_before = bool((process.stdout or "").strip())
+        _start_kodi(adb, port, serial)
+        try:
+            facts = android_runtime_facts(
+                adb,
+                port,
+                serial,
+                platform=target.get("runtime_platform", "android"),
+            )
+            facts["kodi_version"] = target["expected_kodi_version"]
+            if packaged_abis:
+                facts["abis"] = packaged_abis
+            report = assert_compatible(
+                snapshot_addons,
+                facts,
+                load_runtime_policy(
+                    repository
+                    / "manifests/kodi-addon-runtime-compatibility.json"
+                ),
+            )
+            compatibility = {
+                "status": report["status"],
+                "addons": len(snapshot_addons),
+                "policy_sha256": report["policy_sha256"],
+                "graph_sha256": report["graph_sha256"],
+            }
+        finally:
+            if not running_before:
+                adb_command(
+                    adb,
+                    port,
+                    serial,
+                    "shell",
+                    "am force-stop %s" % KODI_PACKAGE,
+                    check=False,
+                )
     return {
         "name": target["name"],
         "serial": serial,
@@ -432,6 +512,42 @@ def preflight_target(target, repository, adb, port):
         ),
         "default_addon_private_profiles": private_profiles,
         "private_references_file": references_path,
+        "runtime_platform": target.get("runtime_platform", "android"),
+        "snapshot_addons": snapshot_addons,
+        "compatibility": compatibility,
+    }
+
+
+def verify_target_runtime_compatibility(adb, port, target, repository):
+    _start_kodi(adb, port, target["serial"])
+    try:
+        facts = android_runtime_facts(
+            adb,
+            port,
+            target["serial"],
+            platform=target["runtime_platform"],
+        )
+        report = assert_compatible(
+            target["snapshot_addons"],
+            facts,
+            load_runtime_policy(
+                repository / "manifests/kodi-addon-runtime-compatibility.json"
+            ),
+        )
+    finally:
+        adb_command(
+            adb,
+            port,
+            target["serial"],
+            "shell",
+            "am force-stop %s" % KODI_PACKAGE,
+            check=False,
+        )
+    return {
+        "status": report["status"],
+        "addons": len(target["snapshot_addons"]),
+        "policy_sha256": report["policy_sha256"],
+        "graph_sha256": report["graph_sha256"],
     }
 
 
@@ -1200,6 +1316,12 @@ def deploy_target(
             target["apk"],
             target["expected_version"],
         )
+    compatibility = verify_target_runtime_compatibility(
+        adb,
+        port,
+        target,
+        Path(__file__).resolve().parents[1],
+    )
     if target["restore_mode"] == "adb-push":
         restore_result = restore_snapshot_via_adb(
             adb,
@@ -1231,6 +1353,7 @@ def deploy_target(
     )
     if private_addons:
         result["private_addons"] = private_addons
+    result["compatibility"] = compatibility
     return result
 
 
@@ -1293,6 +1416,7 @@ def main():
                 "new_version": item["expected_version"],
                 "snapshot_id": item["snapshot_manifest"]["snapshot_id"],
                 "apk_abis": item["apk_abis"],
+                "compatibility": item["compatibility"],
             }
             for item in preflight
         ]

@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from tools import build_repo
+from tools.kodi_addon_runtime_compatibility import inspect_archive
 from tools.upstream_sync.versioning import require_strictly_newer
 
 
@@ -50,6 +51,7 @@ def _artifact(component, addon_id, commit, output):
         raise ValueError("component ID drift: %s" % addon_id)
     target = Path(output) / ("%s-%s.zip" % (addon_id, version))
     build_repo.write_deterministic_zip(target, addon_id, files)
+    inspect_archive(target, expected_id=addon_id, expected_version=version)
     return {
         "commit": commit,
         "version": version,

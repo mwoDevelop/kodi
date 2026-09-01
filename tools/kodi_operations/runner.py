@@ -554,6 +554,12 @@ class ProductionExecutor:
                 "platform": "android",
                 "stable": stable.get("result"),
                 "default_addons": defaults.get("result"),
+                "runtime_compatibility": {
+                    "stable": stable.get("compatibility", {}).get("status"),
+                    "default_addons": defaults.get("compatibility", {}).get(
+                        "status"
+                    ),
+                },
                 "managed_settings": managed_settings.get("status"),
                 "rapideo": (
                     "pass"
@@ -666,6 +672,9 @@ class ProductionExecutor:
                     "installed_version": target["installed_version"],
                     "target_version": target["expected_version"],
                     "snapshot_id": target["snapshot_manifest"]["snapshot_id"],
+                    "runtime_compatibility": target.get(
+                        "compatibility", {}
+                    ).get("status"),
                     "action": step.action,
                 },
             )
@@ -1281,6 +1290,9 @@ class ProductionExecutor:
                     "platform": "linux-flatpak",
                     "rollout_mode": status,
                     "sync_status": result.get("sync_status"),
+                    "runtime_compatibility": result.get(
+                        "compatibility", {}
+                    ).get("status"),
                     "opensubtitles_com": (
                         result.get("opensubtitles_com", {}).get("login")
                     ),
