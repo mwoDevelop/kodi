@@ -63,14 +63,16 @@ class GitHubClient:
         return {"commit": commit, "branch": branch, "clean": True}
 
     def wait_publication_queue_idle(
-        self, *, quiet_polls=3, poll_seconds=5, max_polls=360
+        self, *, quiet_polls=8, poll_seconds=5, max_polls=360
     ):
         """Wait for the shared kodi-pages concurrency group to become stable-idle.
 
-        GitHub retains only one pending run per concurrency group.  A delayed
+        GitHub retains only one pending run per concurrency group. A delayed
         workflow_run event can therefore replace a manual pending dispatch even
-        when cancel-in-progress is false.  Requiring consecutive idle polls
-        closes that race without weakening the single-writer contract.
+        when cancel-in-progress is false. Observed delivery lag reached about
+        17 seconds after the triggering run completed, so the default requires
+        40 seconds of consecutive idle observations. This closes that race
+        without weakening the single-writer contract.
         """
         idle_polls = 0
         active_states = {"queued", "pending", "in_progress", "waiting", "requested"}

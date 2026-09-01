@@ -52,6 +52,31 @@ def test_publication_dispatch_waits_for_stable_idle_queue(monkeypatch, tmp_path)
     assert sleeps == [2, 2, 2]
 
 
+def test_default_idle_window_catches_a_delayed_workflow_run(monkeypatch, tmp_path):
+    client = GitHubClient(tmp_path)
+    calls = 0
+    sleeps = []
+
+    def gh_json(*_args):
+        nonlocal calls
+        calls += 1
+        # Three complete empty polls have already happened when the delayed
+        # workflow_run becomes visible in the fourth poll.
+        if calls == 10:
+            return [{"databaseId": 7, "status": "in_progress"}]
+        return []
+
+    client.gh_json = gh_json
+    monkeypatch.setattr(
+        "tools.kodi_operations.github.time.sleep", sleeps.append
+    )
+
+    client.wait_publication_queue_idle()
+
+    assert len(sleeps) == 11
+    assert calls == 36
+
+
 def test_promotion_content_is_bound_to_exact_pr_head(tmp_path):
     client = GitHubClient(tmp_path)
     stable = json.dumps(

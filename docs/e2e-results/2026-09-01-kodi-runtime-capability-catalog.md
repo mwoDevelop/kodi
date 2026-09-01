@@ -48,4 +48,8 @@ Plane i Upstream Watchdoga.
 ## Granica wydania
 
 Nie zmieniono ZIP-ów dodatków ani wersji repozytorium Kodi, więc release dodatku
-nie jest wymagany. Wdrożenia QNAP dotyczą wyłącznie obserwacji nowego workflow.
+nie był wymagany. Bootstrap został scalony w PR `#306` (`f324ef8`), a certyfikowany
+snapshot `073293ce…` i QNAP candidate `517d3b3d…` zostały promowane przez PR
+`#307` (`9f348e8`). Release run `711595292e4847309b75b23209d694e9`
+zakończył się `COMPLETE` po bezpiecznym wznowieniu przejściowego wyścigu
+single-writera Pages. Wdrożenia QNAP dotyczą wyłącznie obserwacji nowego workflow.
