@@ -1,5 +1,21 @@
 services:
   profile-sync:
+    command:
+      - --listen
+      - 0.0.0.0
+      - --allow-non-loopback
+      - --port
+      - "8765"
+      - --database
+      - /data/state.sqlite
+      - --key-registry
+      - /run/profile-sync/key-registry.json
+      - --favourites-authority-file
+      - /run/profile-sync/favourites-authority.json
+      - --tls-cert
+      - /run/profile-sync/tls/server.crt
+      - --tls-key
+      - /run/profile-sync/tls/server.key
     restart: "no"
     labels:
       io.mwodevelop.profile-sync.mode: smoke

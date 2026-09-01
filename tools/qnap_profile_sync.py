@@ -39,6 +39,7 @@ SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 TARGET_TAG = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,63}$")
 ENROLLMENT = re.compile(r"^enr:[A-Za-z0-9._-]{8,128}$")
 PLAYBACK_SCOPE = re.compile(r"^scope:[A-Za-z0-9._:-]{1,128}$")
+FAVOURITES_SCOPE = PLAYBACK_SCOPE
 ADMIN_PATH = re.compile(
     r"^/v1/(?:revisions|blobs/sha256:[a-f0-9]{64}|"
     r"channels/[a-z0-9][a-z0-9._-]{0,63}/"
@@ -322,6 +323,8 @@ def production_environment(image, host_ip):
             "PROFILE_SYNC_HOST_IP=%s" % address,
             "PROFILE_SYNC_DATA=%s" % (root / "data"),
             "PROFILE_SYNC_KEY_REGISTRY=%s" % (root / "config" / "key-registry.json"),
+            "PROFILE_SYNC_FAVOURITES_AUTHORITY=%s"
+            % (root / "config" / "favourites-authority.json"),
             "PROFILE_SYNC_TLS_CERT=%s" % (root / "config" / "tls" / "server.crt"),
             "PROFILE_SYNC_TLS_KEY=%s" % (root / "config" / "tls" / "server.key"),
             "PROFILE_SYNC_INTEGRATION_CLIENT_CA=%s"
@@ -352,10 +355,15 @@ def _local_regular_file(path, description, private=False):
     return path.resolve()
 
 
-def validate_production_files(key_registry, tls_certificate, tls_key):
+def validate_production_files(
+    key_registry, tls_certificate, tls_key, favourites_authority
+):
     registry = _local_regular_file(key_registry, "key registry", private=True)
     certificate = _local_regular_file(tls_certificate, "TLS certificate")
     key = _local_regular_file(tls_key, "TLS key", private=True)
+    authority = _local_regular_file(
+        favourites_authority, "favourites authority", private=True
+    )
     try:
         document = json.loads(registry.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
@@ -368,12 +376,35 @@ def validate_production_files(key_registry, tls_certificate, tls_key):
     ):
         raise QnapError("key registry has an invalid contract")
     try:
+        authority_document = json.loads(authority.read_text(encoding="utf-8"))
+        seed = authority_document["seed"]
+        decoded_seed = base64.b64decode(
+            seed + "=" * (-len(seed) % 4), altchars=b"-_", validate=True
+        )
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise QnapError("favourites authority has an invalid contract") from error
+    if (
+        set(authority_document) != {"schema", "key_id", "seed"}
+        or authority_document.get("schema") != 1
+        or not re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}",
+            str(authority_document.get("key_id", "")),
+        )
+        or not isinstance(seed, str)
+        or "=" in seed
+        or len(decoded_seed) != 32
+        or base64.urlsafe_b64encode(decoded_seed).rstrip(b"=").decode("ascii")
+        != seed
+    ):
+        raise QnapError("favourites authority has an invalid contract")
+    try:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(str(certificate), str(key))
     except (OSError, ssl.SSLError) as error:
         raise QnapError("TLS certificate and key do not form a valid pair") from error
     return {
         "key_registry": registry,
+        "favourites_authority": authority,
         "tls_certificate": certificate,
         "tls_key": key,
     }
@@ -452,13 +483,16 @@ def deploy_production(
     key_registry,
     tls_certificate,
     tls_key,
+    favourites_authority,
     ca_certificate,
     secret_broker_private=None,
 ):
     report = preflight(session)
     if report["raid"] != {"array": "UU", "recovery_percent": None}:
         raise QnapError("production deployment requires healthy RAID [UU]")
-    security = validate_production_files(key_registry, tls_certificate, tls_key)
+    security = validate_production_files(
+        key_registry, tls_certificate, tls_key, favourites_authority
+    )
     integration_ca = _local_regular_file(ca_certificate, "TLS CA certificate")
     secret_broker_private = Path(secret_broker_private or "")
     broker_files = {
@@ -521,6 +555,11 @@ def deploy_production(
         security["key_registry"].read_text(encoding="utf-8"),
         0o400,
     )
+    session.upload_text(
+        str(config / "favourites-authority.json"),
+        security["favourites_authority"].read_text(encoding="utf-8"),
+        0o400,
+    )
     for name, source in broker_files.items():
         target_name = {
             "ca": "ca.crt",
@@ -549,10 +588,11 @@ def deploy_production(
     )
     session.execute(
         "chown -R 10001:10001 {data} {backups} "
-        "&& chown 10001:10001 {registry} {cert} {key} {integration_ca}".format(
+        "&& chown 10001:10001 {registry} {authority} {cert} {key} {integration_ca}".format(
             data=shlex.quote(str(data)),
             backups=shlex.quote(str(backups)),
             registry=shlex.quote(str(config / "key-registry.json")),
+            authority=shlex.quote(str(config / "favourites-authority.json")),
             cert=shlex.quote(str(tls / "server.crt")),
             key=shlex.quote(str(tls / "server.key")),
             integration_ca=shlex.quote(str(tls / "integration-clients-ca.crt")),
@@ -712,6 +752,7 @@ def create_production_pairing(session, logical_device_id, channel, target_tags, 
         + shlex.quote(logical_device_id)
         + " --channel "
         + shlex.quote(channel)
+        + " --role publish"
     )
     for target_tag in target_tags:
         command += " --target-tag " + shlex.quote(target_tag)
@@ -804,6 +845,75 @@ def set_production_playback_state(
     }
     if document != expected:
         raise QnapError("playback state update returned invalid identity")
+    return document
+
+
+def set_production_favourites_state(
+    session, enrollment_id, enabled, scope_id="scope:home"
+):
+    """Enable or disable whole-document Favourites state for one enrollment."""
+    if not ENROLLMENT.fullmatch(enrollment_id):
+        raise QnapError("invalid production enrollment id")
+    if not isinstance(enabled, bool):
+        raise QnapError("invalid favourites state flag")
+    if not isinstance(scope_id, str) or not FAVOURITES_SCOPE.fullmatch(scope_id):
+        raise QnapError("invalid favourites scope id")
+    _install, docker = container_station(session)
+    command = (
+        production_compose_command(docker)
+        + " exec -T profile-sync python -m profile_sync_server.admin"
+        + " --database /data/state.sqlite set-favourites-state "
+        + shlex.quote(enrollment_id)
+        + " --enabled "
+        + ("true" if enabled else "false")
+        + " --scope-id "
+        + shlex.quote(scope_id)
+    )
+    payload = session.execute(command, timeout=120)
+    try:
+        document = json.loads(payload)
+    except json.JSONDecodeError as error:
+        raise QnapError("favourites state update returned invalid JSON") from error
+    expected = {
+        "enrollment_id": enrollment_id,
+        "favourites_state_enabled": enabled,
+        "favourites_scope_id": scope_id,
+    }
+    if document != expected:
+        raise QnapError("favourites state update returned invalid identity")
+    return document
+
+
+def seed_production_favourites_state(
+    session, channel, scope_id="scope:home"
+):
+    """Run the explicit one-shot seed from the active static base revision."""
+    if not SAFE_ID.fullmatch(channel):
+        raise QnapError("invalid profile sync channel")
+    if not isinstance(scope_id, str) or not FAVOURITES_SCOPE.fullmatch(scope_id):
+        raise QnapError("invalid favourites scope id")
+    _install, docker = container_station(session)
+    command = (
+        production_compose_command(docker)
+        + " exec -T profile-sync python -m profile_sync_server.admin"
+        + " --database /data/state.sqlite seed-favourites-from-active"
+        + " --channel "
+        + shlex.quote(channel)
+        + " --scope-id "
+        + shlex.quote(scope_id)
+    )
+    payload = session.execute(command, timeout=120)
+    try:
+        document = json.loads(payload)
+    except json.JSONDecodeError as error:
+        raise QnapError("favourites seed returned invalid JSON") from error
+    if (
+        document.get("channel") != channel
+        or document.get("scope_id") != scope_id
+        or document.get("server_revision") != 1
+        or not re.fullmatch(r"sha256:[a-f0-9]{64}", document.get("payload_sha256", ""))
+    ):
+        raise QnapError("favourites seed returned invalid identity")
     return document
 
 
@@ -1017,6 +1127,7 @@ def smoke_deploy(session, repository, image, run_id):
     root = smoke_root(install, run_id)
     data = root / "data"
     registry = root / "key-registry.json"
+    authority = root / "favourites-authority.json"
     env = "\n".join(
         (
             "PROFILE_SYNC_IMAGE=%s" % image,
@@ -1024,6 +1135,7 @@ def smoke_deploy(session, repository, image, run_id):
             "PROFILE_SYNC_HOST_IP=127.0.0.1",
             "PROFILE_SYNC_DATA=%s" % data,
             "PROFILE_SYNC_KEY_REGISTRY=%s" % registry,
+            "PROFILE_SYNC_FAVOURITES_AUTHORITY=%s" % authority,
             "PROFILE_SYNC_TLS_CERT=%s" % (root / "server.crt"),
             "PROFILE_SYNC_TLS_KEY=%s" % (root / "server.key"),
             "PROFILE_SYNC_UID=10001",
@@ -1065,10 +1177,26 @@ def smoke_deploy(session, repository, image, run_id):
             json.dumps(SYNTHETIC_REGISTRY, sort_keys=True) + "\n",
             0o400,
         )
+        session.upload_text(
+            str(authority),
+            json.dumps(
+                {
+                    "schema": 1,
+                    "key_id": "smoke-favourites-authority",
+                    "seed": base64.urlsafe_b64encode(os.urandom(32))
+                    .rstrip(b"=")
+                    .decode("ascii"),
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            0o400,
+        )
         session.execute(
-            "chown -R 10001:10001 {data} {registry} {cert} {key}".format(
+            "chown -R 10001:10001 {data} {registry} {authority} {cert} {key}".format(
                 data=shlex.quote(str(data)),
                 registry=shlex.quote(str(registry)),
+                authority=shlex.quote(str(authority)),
                 cert=shlex.quote(str(root / "server.crt")),
                 key=shlex.quote(str(root / "server.key")),
             )
@@ -1213,6 +1341,7 @@ def main():
     production.add_argument("--key-registry", required=True)
     production.add_argument("--tls-certificate", required=True)
     production.add_argument("--tls-key", required=True)
+    production.add_argument("--favourites-authority", required=True)
     production.add_argument("--ca-certificate", required=True)
     production_verify = subparsers.add_parser("verify-production")
     production_verify.add_argument("--host-ip", required=True)
@@ -1235,6 +1364,13 @@ def main():
     playback.add_argument("--enrollment-id", required=True)
     playback.add_argument("--enabled", choices=("true", "false"), required=True)
     playback.add_argument("--scope-id", default="scope:home")
+    favourites = subparsers.add_parser("set-production-favourites-state")
+    favourites.add_argument("--enrollment-id", required=True)
+    favourites.add_argument("--enabled", choices=("true", "false"), required=True)
+    favourites.add_argument("--scope-id", default="scope:home")
+    seed_favourites = subparsers.add_parser("seed-production-favourites-state")
+    seed_favourites.add_argument("--channel", default="home-stable")
+    seed_favourites.add_argument("--scope-id", default="scope:home")
     plan_revoke = subparsers.add_parser("plan-production-revocation")
     plan_revoke.add_argument("--logical-device-id", required=True)
     plan_revoke.add_argument("--freshness-seconds", type=int, default=900)
@@ -1273,6 +1409,7 @@ def main():
                 args.key_registry,
                 args.tls_certificate,
                 args.tls_key,
+                args.favourites_authority,
                 args.ca_certificate,
             )
         elif args.command == "verify-production":
@@ -1302,6 +1439,17 @@ def main():
                 args.enrollment_id,
                 args.enabled == "true",
                 args.scope_id,
+            )
+        elif args.command == "set-production-favourites-state":
+            result = set_production_favourites_state(
+                session,
+                args.enrollment_id,
+                args.enabled == "true",
+                args.scope_id,
+            )
+        elif args.command == "seed-production-favourites-state":
+            result = seed_production_favourites_state(
+                session, args.channel, args.scope_id
             )
         elif args.command == "plan-production-revocation":
             result = plan_production_revocation(

@@ -78,7 +78,7 @@ flowchart LR
 
   Android --> Addons
   Flatpak --> Addons
-  Addons -->|"HTTPS: assignment, rewizja, heartbeat, raport"| PS
+  Addons -->|"HTTPS: assignment, heartbeat,<br/>playback i Favourites LWW"| PS
   CP -->|"mTLS, prywatna sieć Compose"| PS
   CP -->|"HTTPS read-only"| API
   Watchdog -->|"publiczne API read-only"| API
@@ -96,8 +96,8 @@ flowchart LR
 | Nadawca | Odbiorca | Kanał | Przenoszone dane | Rola |
 |---|---|---|---|---|
 | Repozytorium Kodi na urządzeniu | GitHub Pages | HTTPS | Indeks, metadane i ZIP-y stable/testing | Instalacja i aktualizacja kodu dodatków |
-| Profile Sync w Kodi | Profile Sync na QNAP | HTTPS z walidacją prywatnego CA, token urządzenia i podpisy | Assignment, rewizja, heartbeat, raport zastosowania i opt-in playback LWW | Rutynowa synchronizacja konfiguracji i stanu WatchNixtoons2 |
-| Control Plane | Integration API Profile Sync | Prywatne mTLS na `mwodevelop-control:8767` | Zredagowana flota, rollouty i liczniki playback | Dashboard i obserwowalność |
+| Profile Sync w Kodi | Profile Sync na QNAP | HTTPS z walidacją prywatnego CA, token urządzenia i podpisy | Assignment, rewizja, heartbeat, raport, opt-in playback oraz whole-document Favourites LWW | Rutynowa konfiguracja i synchronizacja stanu bez urządzenia nadrzędnego |
+| Control Plane | Integration API Profile Sync | Prywatne mTLS na `mwodevelop-control:8767` | Zredagowana flota, rollouty, playback oraz cursor/ACK Favourites | Dashboard i obserwowalność |
 | Control Plane | GitHub API | HTTPS read-only | Statusy workflow i harmonogramów | Dashboard i freshness |
 | Upstream Watchdog | GitHub API | HTTPS, uwierzytelniony odczyt | Ostatnie wyniki 12 workflow | Alarm fail-closed |
 | Przeglądarka operatora | QTS HTTPS / QPKG CGI → Control Plane Web/BFF | HTTPS `:443/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/`, następnie HTTP tylko po loopback `:19445`; zweryfikowany admin `NAS_SID` albo ręczne hasło+TOTP, sesja i CSRF | Statyczny panel i odczytowe API | Administracyjny podgląd bez certyfikatu klienta i bez osobnego CA panelu |
@@ -143,7 +143,7 @@ digestów zapisanych w `qnap-stable.json`.
 | `control-plane` | LAN `HTTPS/mTLS :19443`; wewnętrzne `/ready` | Agreguje zredagowany stan floty, rolloutów, usług, harmonogramów i audytu. Maszynowy dashboard oraz API są tylko do odczytu. Własna baza SQLite |
 | `KodiCPGateway` + `control-plane-web` | QTS `HTTPS :443/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/` → CGI → `127.0.0.1:19445`; prywatne mTLS BFF do core/authz | Bezusługowy QPKG rejestruje skrót **Kodi admin** i CGI bez `app_proxy.conf`. CGI najpierw weryfikuje cookie sesyjne przez loopback; wygasłą sesję odnawia po walidacji administratorskiego `NAS_SID`, wykonując istniejący login z TOTP serwer-serwer. Prywatne pliki `0600` są poza WWW. Read-only BFF nadal wymusza Host/Origin, CSRF i sesję, a backend nie ma portu w LAN ani dostępu do sekretów floty |
 | `control-plane-authz` | Brak opublikowanego portu; prywatne mTLS | Hasło scrypt, TOTP, recovery codes, rate limit i sesje. Osobna baza SQLite; seed TOTP szyfrowany AES-GCM |
-| `profile-sync` | LAN `HTTPS :18765`; prywatne mTLS `:8767` tylko w sieci Compose | Enrollmenty, podpisane rewizje i assignmenty, heartbeat oraz raporty zastosowania. Trwała baza SQLite/blob |
+| `profile-sync` | LAN `HTTPS :18765`; prywatne mTLS `:8767` tylko w sieci Compose | Enrollmenty, podpisane rewizje i assignmenty, heartbeat, playback LWW oraz podpisany whole-document Favourites LWW z CAS artwork. Trwała baza SQLite/blob |
 | `provider-relay` | Prywatny adres LAN `HTTP :18766` | Bezstanowy, opcjonalny fallback wyłącznie dla allowlistowanych zapytań providerów, obecnie przede wszystkim Torrentio |
 | `upstream-watchdog` | Brak opublikowanego portu | Co sześć godzin sprawdza 11 cyklicznych workflow GitHub; healthcheck QTS odczytuje wynik co pięć minut |
 

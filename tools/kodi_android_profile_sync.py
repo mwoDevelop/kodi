@@ -130,6 +130,17 @@ def _can_replace_quarantined_enrollment(observed, active_revision):
     )
 
 
+def _can_replace_enrollment(observed):
+    """Confine an operator-requested rotation to the same enrolled identity."""
+
+    return bool(
+        observed.get("paired")
+        and observed.get("identity_consistent")
+        and isinstance(observed.get("enrollment_id"), str)
+        and observed["enrollment_id"]
+    )
+
+
 def _replace_config(path, config):
     temporary = path.with_suffix(path.suffix + ".tmp")
     with temporary.open("w", encoding="utf-8") as handle:
@@ -155,6 +166,7 @@ def converge(
     adb,
     port,
     replace_quarantined_enrollment=False,
+    replace_enrollment=False,
 ):
     inventory = load_sync_inventory(repository)
     if device_id not in inventory["devices"]:
@@ -169,8 +181,20 @@ def converge(
     policy = inventory["profile_sync"]
     previous_enrollment_id = observed.get("enrollment_id")
     pairing = None
-    replace_enrollment = False
-    if replace_quarantined_enrollment:
+    replace_local_enrollment = False
+    if replace_enrollment:
+        if not _can_replace_enrollment(observed):
+            raise RuntimeError(
+                "Profile Sync enrollment is not eligible for explicit replacement"
+            )
+        replace_local_enrollment = True
+        pairing = _pairing(
+            repository,
+            device_id,
+            policy["channel"],
+            _target_tags(device, adb, port, serial),
+        )
+    elif replace_quarantined_enrollment:
         current_assignment = bootstrap_active(repository, device_id)
         if not _can_replace_quarantined_enrollment(
             observed, current_assignment["active_revision"]
@@ -178,7 +202,7 @@ def converge(
             raise RuntimeError(
                 "Profile Sync quarantine is not eligible for safe replacement"
             )
-        replace_enrollment = True
+        replace_local_enrollment = True
         pairing = _pairing(
             repository,
             device_id,
@@ -204,7 +228,7 @@ def converge(
         "interval_hours": policy["interval_hours"],
         "read_only": policy["read_only"],
         **({"pairing_code": pairing["code"]} if pairing else {}),
-        **({"replace_enrollment": True} if replace_enrollment else {}),
+        **({"replace_enrollment": True} if replace_local_enrollment else {}),
     }
     private = repository / ".kodi-private/profile-sync-production/runtime"
     private.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -346,12 +370,21 @@ def main():
     parser.add_argument("--device", required=True)
     parser.add_argument("--adb", default="/home/mwo/android-sdk/platform-tools/adb")
     parser.add_argument("--adb-server-port", type=int, default=5038)
-    parser.add_argument(
+    replacement = parser.add_mutually_exclusive_group()
+    replacement.add_argument(
         "--replace-quarantined-enrollment",
         action="store_true",
         help=(
             "replace only a quarantined enrollment that has never applied "
             "the current active revision"
+        ),
+    )
+    replacement.add_argument(
+        "--replace-enrollment",
+        action="store_true",
+        help=(
+            "explicitly rotate a same-identity enrollment and revoke the old "
+            "generation only after successful convergence"
         ),
     )
     args = parser.parse_args()
@@ -365,6 +398,7 @@ def main():
                 replace_quarantined_enrollment=(
                     args.replace_quarantined_enrollment
                 ),
+                replace_enrollment=args.replace_enrollment,
             ),
             indent=2,
             sort_keys=True,

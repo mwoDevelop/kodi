@@ -1,6 +1,6 @@
 # Stan wdrożenia Profile Sync
 
-Data: 2026-08-31
+Data: 2026-09-01
 
 To jest chronologiczny zapis wdrożenia, a nie strona statusu na żywo. Poniższe
 stwierdzenia dotyczące wersji opisują bramę osiągniętą w zarejestrowanym dniu. Bieżący
@@ -10,6 +10,78 @@ tools/qnap_images.py status` i kontroli urządzenia udokumentowanych w
 w `docs/README.md`.
 
 ## Zaimplementowano
+
+### Przyrost 2026-09-01: wielokierunkowe Kodi Favourites
+
+- Profile Sync 1.4.0 dodaje osobny, minutowy kanał
+  `favourites-state-lww-v1`; każda jawnie włączona instalacja może publikować cały
+  kanoniczny dokument Favourites i pobierać nowszą wersję bez urządzenia nadrzędnego;
+- wspólne z playback WatchNixtoons2 są enrollment, scope, bearer, podpis urządzenia,
+  monotoniczny cursor, idempotencja, journal, retry i obserwowalność. Favourites mają
+  osobne tabele i walidator, ponieważ stosują whole-document last-accepted-write-wins,
+  a playback działa per `content_key` i odrzuca stale base;
+- klient najpierw utrwala lokalną zmianę, następnie pobiera head. Jedno niezmienne
+  `inflight` może mieć jedno koaleskowane `desired_latest`; później przyjęty kompletny
+  commit wygrywa bez scalania pozycji;
+- apply używa istniejącego adaptera JSON-RPC i osobnego crash-recoverable journala.
+  Po pierwszym poprawnym head zapisuje trwały `favourites_dynamic_fence`, przez co
+  kolejne statyczne rewizje nie mogą ponownie nadpisać dynamicznych Favourites;
+- wspólna allowlista klienta i serwera dopuszcza wyłącznie okna/media `plugin://`
+  Umbrella, WatchNixtoons2 mwoDevelop, YouTube i Rapideo. `script`, `android`, lokalne
+  ścieżki i nieznane dodatki są odrzucane;
+- wyczyszczenie listy albo spadek o ponad połowę wymaga czterech identycznych odczytów
+  w czasie co najmniej 60 sekund;
+- serwer 0.10.0 realizuje podpisany `prepare -> upload brakujących blobów -> commit`,
+  osobny ACK urządzenia, historię oraz zredagowany endpoint integracyjny Control Plane;
+- prywatny klucz podpisujący head jest osobnym plikiem `0600`, montowanym read-only
+  do kontenera QNAP. Nie trafia do Git ani obrazu;
+- migracja jest świadomie ręczna i jednorazowa: operator seeduje aktywny statyczny
+  adapter, a następnie włącza dokładne enrollmenty. Nie ma automatycznego dual-read,
+  dual-write ani niejawnego fallbacku po cutover.
+
+Powtarzalne testy modułowe i HTTP:
+
+```bash
+cd /home/mwo/projects/kodi-profile-sync-server
+../kodi/.venv/bin/python -m pytest -q
+
+cd /home/mwo/projects/kodi/profile-sync-addon
+../.venv/bin/python -m pytest -q
+```
+
+Ręczna inicjalizacja produkcji, wykonywana dopiero po backupie QNAP:
+
+```bash
+cd /home/mwo/projects/kodi
+.venv/bin/python tools/favourites_sync_authority.py generate
+.venv/bin/python tools/qnap_images.py deploy profile-sync --reconcile
+.venv/bin/python tools/qnap_profile_sync.py seed-production-favourites-state
+```
+
+Każdy klient-writer musi zostać sparowany kodem wygenerowanym po tej zmianie (role
+`read,publish`, trust authority), a następnie jawnie włączony:
+
+```bash
+.venv/bin/python tools/qnap_profile_sync.py create-production-pairing \
+  --logical-device-id bluestacks1 --channel home-stable \
+  --target-tag home --target-tag android:x86_64 \
+  --output .kodi-private/pairing/bluestacks1-favourites.json
+.venv/bin/python tools/qnap_profile_sync.py set-production-favourites-state \
+  --enrollment-id 'enr:...' --enabled true
+```
+
+Istniejącego klienta `read` można podczas tego ręcznego cutover wymienić jedną
+komendą. Skrypt dopuszcza wyłącznie tę samą logiczną tożsamość, a starą
+generację unieważnia dopiero po poprawnym sparowaniu i konwergencji nowej:
+
+```bash
+.venv/bin/python tools/kodi_android_profile_sync.py \
+  --device bluestacks1 --replace-enrollment
+```
+
+Rollback jest również jawny: najpierw `--enabled false`, potem ręczne usunięcie
+`favourites_dynamic_fence` z prywatnego stanu klienta i dopiero zastosowanie aktywnej
+rewizji statycznej. Nie wykonuje się downgrade'u schematu bazy.
 
 ### Przyrost 2026-08-31: stan odtwarzania
 

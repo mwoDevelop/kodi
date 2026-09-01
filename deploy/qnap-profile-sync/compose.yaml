@@ -28,6 +28,12 @@ services:
         bind:
           create_host_path: false
       - type: bind
+        source: ${PROFILE_SYNC_FAVOURITES_AUTHORITY:?set favourites authority file}
+        target: /run/profile-sync/favourites-authority.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
         source: ${PROFILE_SYNC_TLS_CERT:?set TLS certificate file}
         target: /run/profile-sync/tls/server.crt
         read_only: true

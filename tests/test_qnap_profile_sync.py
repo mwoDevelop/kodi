@@ -349,12 +349,18 @@ def test_production_files_reject_nonprivate_tls_key(tmp_path, monkeypatch):
     key = tmp_path / "server.key"
     key.write_text("private key")
     key.chmod(0o644)
+    authority = tmp_path / "favourites-authority.json"
+    authority.write_text(
+        '{"schema":1,"key_id":"favourites-authority-1",'
+        '"seed":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}'
+    )
+    authority.chmod(0o600)
     monkeypatch.setattr(
         "ssl.SSLContext.load_cert_chain", lambda *_args, **_kwargs: None
     )
 
     with pytest.raises(QnapError, match="permissions are too broad"):
-        validate_production_files(registry, certificate, key)
+        validate_production_files(registry, certificate, key, authority)
 
 
 def test_raid_summary_reports_degraded_recovery():

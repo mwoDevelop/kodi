@@ -592,7 +592,7 @@ def test_control_plane_catalogs_are_valid_and_watchdog_thresholds_match():
         item for item in schedules["jobs"] if item["kind"] == "github_actions"
     ]
     assert len(github_jobs) == 12
-    assert len(sources["sources"]) == 6
+    assert len(sources["sources"]) == 8
     assert len(severity["rules"]) == 7
     assert {(item["repository"], item["workflow"]) for item in github_jobs} == set(
         SCHEDULED_WORKFLOWS

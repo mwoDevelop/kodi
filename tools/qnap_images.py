@@ -1085,6 +1085,7 @@ def deploy(service_name, image, references, repository=ROOT):
                 private / "key-registry.json",
                 private / "tls/server.crt",
                 private / "tls/server.key",
+                private / "favourites-authority.json",
                 private / "tls/ca.crt",
                 Path(repository)
                 / ".kodi-private/secret-broker/profile-sync",
