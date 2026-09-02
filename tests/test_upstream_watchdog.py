@@ -593,7 +593,17 @@ def test_control_plane_catalogs_are_valid_and_watchdog_thresholds_match():
     ]
     assert len(github_jobs) == 12
     assert len(sources["sources"]) == 8
-    assert len(severity["rules"]) == 7
+    assert len(severity["rules"]) == 11
+    assert {
+        item["reason_code"]
+        for item in severity["rules"]
+        if item["condition_axis"] == "configuration"
+    } == {
+        "FLEET_CAPABILITY_PENDING",
+        "FLEET_ASSIGNMENT_PENDING",
+        "FLEET_ASSIGNMENT_FAILED",
+        "FLEET_CONFIGURATION_DRIFT",
+    }
     assert {(item["repository"], item["workflow"]) for item in github_jobs} == set(
         SCHEDULED_WORKFLOWS
     )

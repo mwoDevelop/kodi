@@ -607,7 +607,7 @@ def deploy(
         raise ControlPlaneError("Control Plane GitHub token is missing or invalid")
     if (
         not isinstance(device_inventory, dict)
-        or device_inventory.get("schema") != 1
+        or device_inventory.get("schema") != 2
         or not isinstance(device_inventory.get("devices"), list)
         or not device_inventory["devices"]
     ):

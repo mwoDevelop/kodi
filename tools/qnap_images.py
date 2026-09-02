@@ -22,6 +22,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 try:
+    from control_plane_device_inventory import DEFAULT_MINIMUM_CLIENT_VERSION
+    from control_plane_device_inventory import DEFAULT_REQUIRED_CAPABILITIES
     from control_plane_device_inventory import build_inventory
     from qnap_control_plane import (
         create_browser_bootstrap,
@@ -40,6 +42,8 @@ try:
     from qnap_provider_relay import deploy as deploy_relay
     from qnap_secret_broker import deploy as deploy_secret_broker
 except ModuleNotFoundError:
+    from tools.control_plane_device_inventory import DEFAULT_MINIMUM_CLIENT_VERSION
+    from tools.control_plane_device_inventory import DEFAULT_REQUIRED_CAPABILITIES
     from tools.control_plane_device_inventory import build_inventory
     from tools.qnap_control_plane import (
         create_browser_bootstrap,
@@ -1117,7 +1121,11 @@ def deploy(service_name, image, references, repository=ROOT):
                 Path(repository) / ".kodi-private/secret-broker/control-plane",
                 Path(repository) / ".kodi-private/control-plane/watchdog",
                 github["token"],
-                build_inventory(private_references),
+                build_inventory(
+                    private_references,
+                    required_capabilities=DEFAULT_REQUIRED_CAPABILITIES,
+                    minimum_client_version=DEFAULT_MINIMUM_CLIENT_VERSION,
+                ),
             )
         elif service_name == "secret-broker":
             result = deploy_secret_broker(

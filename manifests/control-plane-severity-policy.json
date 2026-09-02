@@ -49,6 +49,34 @@
       "severity": "critical",
       "overall_state": "DEGRADED",
       "condition_family": "heartbeat"
+    },
+    {
+      "condition_axis": "configuration",
+      "reason_code": "FLEET_CAPABILITY_PENDING",
+      "severity": "warning",
+      "overall_state": "DEGRADED",
+      "condition_family": "configuration"
+    },
+    {
+      "condition_axis": "configuration",
+      "reason_code": "FLEET_ASSIGNMENT_PENDING",
+      "severity": "warning",
+      "overall_state": "DEGRADED",
+      "condition_family": "configuration"
+    },
+    {
+      "condition_axis": "configuration",
+      "reason_code": "FLEET_ASSIGNMENT_FAILED",
+      "severity": "critical",
+      "overall_state": "DEGRADED",
+      "condition_family": "configuration"
+    },
+    {
+      "condition_axis": "configuration",
+      "reason_code": "FLEET_CONFIGURATION_DRIFT",
+      "severity": "warning",
+      "overall_state": "DEGRADED",
+      "condition_family": "configuration"
     }
   ]
 }

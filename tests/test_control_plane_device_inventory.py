@@ -16,7 +16,7 @@ def test_inventory_is_redacted_and_supports_per_device_policy():
     )
 
     assert payload == {
-        "schema": 1,
+        "schema": 2,
         "devices": [
             {
                 "logical_device_id": "bluestacks1",
@@ -25,6 +25,8 @@ def test_inventory_is_redacted_and_supports_per_device_policy():
                 "warning_after_seconds": 28800,
                 "failure_after_seconds": 259200,
                 "maintenance_until": None,
+                "required_capabilities": ["skin-shortcuts-menu-v1"],
+                "minimum_client_version": "1.5.0",
             },
             {
                 "logical_device_id": "sony-tv",
@@ -33,6 +35,8 @@ def test_inventory_is_redacted_and_supports_per_device_policy():
                 "warning_after_seconds": 3600,
                 "failure_after_seconds": 7200,
                 "maintenance_until": None,
+                "required_capabilities": ["skin-shortcuts-menu-v1"],
+                "minimum_client_version": "1.5.0",
             },
         ],
     }
@@ -52,4 +56,16 @@ def test_inventory_rejects_duplicates_and_invalid_thresholds():
                 "KODI_DEVICE_SONY_TV_WARNING_AFTER_SECONDS": "7200",
                 "KODI_DEVICE_SONY_TV_FAILURE_AFTER_SECONDS": "3600",
             }
+        )
+
+    with pytest.raises(InventoryError, match="required capabilities"):
+        build_inventory(
+            {"KODI_SYNC_DEVICES": "sony-tv"},
+            required_capabilities=["invalid_capability"],
+        )
+
+    with pytest.raises(InventoryError, match="minimum client version"):
+        build_inventory(
+            {"KODI_SYNC_DEVICES": "sony-tv"},
+            minimum_client_version="1.5",
         )

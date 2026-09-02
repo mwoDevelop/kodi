@@ -41,7 +41,17 @@ class DashboardService:
             "schema": 1,
             "generated_at": int(time.time()),
             "overall_state": "DEGRADED",
-            "fleet": {"total": 4, "online": 3, "stale_or_offline": 1, "revoked": 0},
+            "fleet": {
+                "total": 4,
+                "online": 3,
+                "stale_or_offline": 1,
+                "revoked": 0,
+                "capability_ready": 3,
+                "capability_pending": 1,
+                "assignment_applied": 3,
+                "assignment_pending": 1,
+                "devices": [],
+            },
             "services": {
                 "services": [
                     {
