@@ -23,5 +23,18 @@ Powtórny audyt gotowej implementacji wykrył i zamknął przed release dwie luk
   poprzedniego wygenerowanego menu, a rollback czeka na jej ponowną odbudowę.
   Brak jakiegokolwiek weryfikowalnego stanu rollback zatrzymuje mutację.
 
+Końcowy audyt przed promocją wykrył dalsze zasadne luki, które również zostały
+zastosowane:
+
+- canary wymaga teraz statusu menu `GENERATED_VERIFIED`/`HEALTHY`, zgodności
+  źródłowego XML i wygenerowanego include oraz ponownej zgodności po restarcie;
+  `NOT_APPLICABLE` nie może już zostać wypromowane jako pozorny sukces;
+- świeża instalacja bez źródła i include jest odraczana, a nie klasyfikowana jako
+  terminalny błąd;
+- weryfikacja include obejmuje ikonę, `property path` i dokładny zamknięty zestaw
+  `onclick`; dodatkowa akcja wykonawcza jest odrzucana;
+- journal wykonuje także `fsync` katalogu po atomowym `replace`, a `StateStore`
+  serializuje read-modify-write między wejściami usługi.
+
 Nie przyjęto rozszerzania V1 o inne skórki, kopiowania hash/properties/include,
 forka Skin Shortcuts, lokalnego multi-writer ani przeładowania skórki przy no-op.

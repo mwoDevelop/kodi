@@ -246,6 +246,133 @@ def test_trigger_sync_prefers_acknowledged_jsonrpc_dispatch(monkeypatch):
     ]
 
 
+def test_trigger_sync_rejects_not_applicable_required_skin_menu(monkeypatch):
+    revision = "sha256:" + "c" * 64
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release._profile_sync_probe",
+        lambda *_args: {
+            "enrollment_id": "enr:device000",
+            "assigned_revision": revision,
+            "applied_revision": revision,
+            "status": "NO_CHANGE",
+            "skin_menu_status": "NOT_APPLICABLE",
+        },
+    )
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release._wait_for_kodi_ready",
+        lambda *_args: None,
+    )
+
+    class Rpc:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def call(self, *_args):
+            return "OK"
+
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release.AdbJsonRpcClient",
+        lambda *_args: Rpc(),
+    )
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release.time.sleep", lambda *_args: None
+    )
+
+    with pytest.raises(RuntimeError, match="not applicable"):
+        _trigger_sync(
+            {
+                "devices": {
+                    "device-a": {
+                        "platform": "android",
+                        "endpoints": {"adb": "192.0.2.10:5555"},
+                    }
+                }
+            },
+            "device-a",
+            "adb",
+            5038,
+            revision,
+            require_skin_menu=True,
+        )
+
+
+def test_trigger_sync_requires_menu_files_and_restart_evidence(monkeypatch):
+    revision = "sha256:" + "d" * 64
+    probe = {
+        "enrollment_id": "enr:device000",
+        "assigned_revision": revision,
+        "applied_revision": revision,
+        "status": "NO_CHANGE",
+        "skin_menu_status": "HEALTHY",
+    }
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release._profile_sync_probe",
+        lambda *_args: probe,
+    )
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release._wait_for_kodi_ready",
+        lambda *_args: None,
+    )
+
+    class Rpc:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def call(self, *_args):
+            return "OK"
+
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release.AdbJsonRpcClient",
+        lambda *_args: Rpc(),
+    )
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release.time.sleep", lambda *_args: None
+    )
+    menu_evidence = {
+        "source_match": True,
+        "generated_match": True,
+        "source_items": 4,
+        "generated_items": 4,
+    }
+    menu_calls = []
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release.probe_skin_menu_device",
+        lambda *_args: menu_calls.append(True) or menu_evidence,
+    )
+    restarts = []
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release.restart_kodi",
+        lambda *_args: restarts.append(True),
+    )
+
+    result = _trigger_sync(
+        {
+            "devices": {
+                "device-a": {
+                    "platform": "android",
+                    "endpoints": {"adb": "192.0.2.10:5555"},
+                }
+            }
+        },
+        "device-a",
+        "adb",
+        5038,
+        revision,
+        require_skin_menu=True,
+        restart_skin_menu=True,
+    )
+
+    assert result["skin_menu_restart_verified"] is True
+    assert len(menu_calls) == 2
+    assert restarts == [True]
+
+
 def test_bootstrap_active_signs_only_a_missing_current_assignment(
     monkeypatch, tmp_path
 ):

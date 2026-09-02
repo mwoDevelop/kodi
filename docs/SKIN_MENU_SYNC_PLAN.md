@@ -75,7 +75,9 @@ Poza zakresem:
 2. Uogólnić `TransactionalApplier` przez rejestr wersjonowanych handlerów
    operacji z preflight/apply/verify/rollback/post-apply, zachowując recovery
    istniejącego journala schema 1 oraz kontrakt Favourites. Jeden lock blokuje
-   równoległe apply Favourites i menu.
+   równoległe zastosowanie adapterów podpisanej rewizji (w tym historycznego
+   adaptera Favourites) i menu. Dynamiczny strumień Favourites ma własny journal,
+   a wspólny `StateStore` serializuje osobno wszystkie operacje read-modify-write.
 3. W kompozytorze produkcyjnej rewizji wczytać kanoniczny manifest menu z repo,
    nie z urządzenia-publishera, i dołączyć go do podpisanej rewizji.
 4. Rozszerzyć walidację JSON Schema, compose/no-op i raporty rolloutowe o nowy

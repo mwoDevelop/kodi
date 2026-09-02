@@ -21,7 +21,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools.kodi_portable_state import validate_bundle
-from tools.kodi_portable_state_rollout import _cleanup, _profile_sync_probe
+from tools.kodi_portable_state_rollout import (
+    _cleanup,
+    _profile_sync_probe,
+)
+from tools.kodi_portable_state_rollout import (
+    _restart as restart_kodi,
+)
 from tools.kodi_profile import (
     AdbEventClient,
     AdbJsonRpcClient,
@@ -40,6 +46,7 @@ from tools.kodi_skin_menu import (
 from tools.kodi_skin_menu import (
     load_skin_menu,
 )
+from tools.kodi_skin_menu import probe_device as probe_skin_menu_device
 from tools.kodi_sync_inventory import load_sync_inventory
 from tools.profile_portable_favourites import export_portable_favourites
 from tools.profile_revision_compose import compose
@@ -349,7 +356,15 @@ def _assign_candidate(
     )
 
 
-def _trigger_sync(inventory: dict, logical_id: str, adb: str, port: int, revision: str):
+def _trigger_sync(
+    inventory: dict,
+    logical_id: str,
+    adb: str,
+    port: int,
+    revision: str,
+    require_skin_menu=False,
+    restart_skin_menu=False,
+):
     device = inventory["devices"][logical_id]
     if device["platform"] not in {"android", "android-emulator"}:
         raise RuntimeError("Profile Sync canary must use Android")
@@ -381,12 +396,42 @@ def _trigger_sync(inventory: dict, logical_id: str, adb: str, port: int, revisio
                 and probe.get("applied_revision") == revision
                 and probe.get("status") in {"APPLIED", "NO_CHANGE"}
             ):
-                return {
+                result = {
                     "logical_device_id": logical_id,
                     "enrollment_id": probe["enrollment_id"],
                     "status": probe["status"],
                     "revision_id": revision,
                 }
+                if require_skin_menu:
+                    status = probe.get("skin_menu_status")
+                    if status == "NOT_APPLICABLE":
+                        raise RuntimeError(
+                            "Profile Sync canary skin menu is not applicable"
+                        )
+                    if status not in {"GENERATED_VERIFIED", "HEALTHY"}:
+                        continue
+                    skin_menu = probe_skin_menu_device(adb, port, serial)
+                    if not (
+                        skin_menu["source_match"]
+                        and skin_menu["generated_match"]
+                    ):
+                        raise RuntimeError(
+                            "Profile Sync canary skin menu verification failed"
+                        )
+                    result["skin_menu_status"] = status
+                    result["skin_menu"] = skin_menu
+                    if restart_skin_menu:
+                        restart_kodi(adb, port, serial)
+                        persisted = probe_skin_menu_device(adb, port, serial)
+                        if not (
+                            persisted["source_match"]
+                            and persisted["generated_match"]
+                        ):
+                            raise RuntimeError(
+                                "Profile Sync canary skin menu did not survive restart"
+                            )
+                        result["skin_menu_restart_verified"] = True
+                return result
         raise TimeoutError("Profile Sync canary did not apply the candidate")
     finally:
         _cleanup(adb, port, serial)
@@ -566,7 +611,15 @@ def converge(
                 _assign_candidate(
                     session, repository, enrollment, revision_id, state["generation"]
                 )
-                observed = _trigger_sync(inventory, logical_id, adb, port, revision_id)
+                observed = _trigger_sync(
+                    inventory,
+                    logical_id,
+                    adb,
+                    port,
+                    revision_id,
+                    require_skin_menu=skin_menu is not None,
+                    restart_skin_menu=skin_menu is not None,
+                )
                 if observed["enrollment_id"] != enrollment["enrollment_id"]:
                     raise RuntimeError("Profile Sync canary uses a stale enrollment")
                 report_backup, report_evidence = _backup(
@@ -614,7 +667,14 @@ def converge(
                 repository,
             )
             for logical_id in canaries:
-                observed = _trigger_sync(inventory, logical_id, adb, port, revision_id)
+                observed = _trigger_sync(
+                    inventory,
+                    logical_id,
+                    adb,
+                    port,
+                    revision_id,
+                    require_skin_menu=skin_menu is not None,
+                )
                 active_backup, active_evidence = _backup(
                     session, repository, "active-%s" % logical_id
                 )
