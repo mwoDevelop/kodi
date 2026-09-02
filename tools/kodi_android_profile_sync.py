@@ -350,6 +350,7 @@ def converge(
             "status": verified.get("status"),
             "assigned_revision": verified.get("assigned_revision"),
             "applied_revision": verified.get("applied_revision"),
+            "skin_menu_status": verified.get("skin_menu_status"),
         }
     finally:
         local.unlink(missing_ok=True)

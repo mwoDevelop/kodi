@@ -25,9 +25,7 @@ def test_partial_update_carries_forward_unmodified_active_components():
             "umbrella.preferences": {"values": {"cache.providers": 48}},
         }
     )
-    update = revision(
-        {"umbrella.preferences": {"values": {"cache.providers": 6}}}
-    )
+    update = revision({"umbrella.preferences": {"values": {"cache.providers": 6}}})
 
     result = compose(active, update)
 
@@ -38,3 +36,23 @@ def test_partial_update_carries_forward_unmodified_active_components():
     assert result["required_capabilities"] == ["portable_favourites_v1"]
     assert result["minimum_client_version"] == "1.0.0"
     assert result["revision_id"].startswith("sha256:")
+
+
+def test_skin_menu_adds_capability_and_minimum_client():
+    menu = {
+        "adapter": "skin_shortcuts_v1",
+        "apply_mode": "hot_apply",
+        "ownership": "whole_document",
+        "skin_id": "skin.aeon.nox.silvo",
+        "menu_id": "mainmenu",
+        "items": [],
+    }
+    result = compose(
+        revision({}),
+        revision({}),
+        extra_adapters={"kodi.skin_menu": menu},
+    )
+
+    assert result["adapters"]["kodi.skin_menu"] == menu
+    assert result["required_capabilities"] == ["skin-shortcuts-menu-v1"]
+    assert result["minimum_client_version"] == "1.5.0"

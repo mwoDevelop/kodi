@@ -7,8 +7,9 @@ import json
 import os
 import sys
 
-import xbmcaddon
 import xbmc
+import xbmcaddon
+import xbmcgui
 import xbmcvfs
 
 
@@ -44,6 +45,10 @@ def main():
             PortableFavouritesAdapter,
         )
         from resources.lib.mwoprofilesync.state import StateStore
+        from resources.lib.mwoprofilesync.skin_menu import (
+            HANDLER_ID as SKIN_MENU_HANDLER_ID,
+            SkinMenuAdapter,
+        )
         from resources.lib.mwoprofilesync.sync import ReadOnlySync
 
         addon = xbmcaddon.Addon(ADDON_ID)
@@ -96,14 +101,29 @@ def main():
         sync_result = None
         favourites_result = None
         if config["action"] in {"sync", "sync-favourites"}:
+            settings = KodiAddonSettings(
+                xbmcaddon.Addon, xbmc.executeJSONRPC
+            )
             applier = TransactionalApplier(
                 profile,
                 state,
-                KodiAddonSettings(xbmcaddon.Addon),
+                settings,
                 portable=PortableFavouritesAdapter(
                     xbmcvfs.translatePath("special://profile"),
                     KodiFavourites(xbmc.executeJSONRPC),
                 ),
+                handlers={
+                    SKIN_MENU_HANDLER_ID: SkinMenuAdapter(
+                        xbmcvfs.translatePath("special://profile"),
+                        xbmcvfs.translatePath("special://skin"),
+                        settings,
+                        xbmcaddon.Addon,
+                        xbmc.executebuiltin,
+                        xbmcgui.Window(10000),
+                        lambda: xbmc.Player().isPlayingVideo(),
+                        state=state,
+                    )
+                },
             )
             applier.recover()
             sync_result = ReadOnlySync(addon, state, applier=applier)()
@@ -142,6 +162,7 @@ def main():
             "applied_revision": local.get("applied_revision"),
             "pending_report": bool(local.get("pending_report")),
             "sync_status": sync_result.get("status") if sync_result else None,
+            "skin_menu_status": local.get("skin_menu_status"),
             "favourites_sync_status": (
                 favourites_result.get("status") if favourites_result else None
             ),

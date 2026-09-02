@@ -96,7 +96,7 @@ flowchart LR
 | Nadawca | Odbiorca | Kanał | Przenoszone dane | Rola |
 |---|---|---|---|---|
 | Repozytorium Kodi na urządzeniu | GitHub Pages | HTTPS | Indeks, metadane i ZIP-y stable/testing | Instalacja i aktualizacja kodu dodatków |
-| Profile Sync w Kodi | Profile Sync na QNAP | HTTPS z walidacją prywatnego CA, token urządzenia i podpisy | Assignment, rewizja, heartbeat, raport, opt-in playback oraz whole-document Favourites LWW | Rutynowa konfiguracja i synchronizacja stanu bez urządzenia nadrzędnego |
+| Profile Sync w Kodi | Profile Sync na QNAP | HTTPS z walidacją prywatnego CA, token urządzenia i podpisy | Assignment, rewizja, heartbeat, raport, opt-in playback, whole-document Favourites LWW i deklaratywne menu skórki | Rutynowa konfiguracja i synchronizacja stanu bez urządzenia nadrzędnego |
 | Control Plane | Integration API Profile Sync | Prywatne mTLS na `mwodevelop-control:8767` | Zredagowana flota, rollouty, playback oraz cursor/ACK Favourites | Dashboard i obserwowalność |
 | Control Plane | GitHub API | HTTPS read-only | Statusy workflow i harmonogramów | Dashboard i freshness |
 | Upstream Watchdog | GitHub API | HTTPS, uwierzytelniony odczyt | Ostatnie wyniki 12 workflow | Alarm fail-closed |
@@ -143,7 +143,7 @@ digestów zapisanych w `qnap-stable.json`.
 | `control-plane` | LAN `HTTPS/mTLS :19443`; wewnętrzne `/ready` | Agreguje zredagowany stan floty, rolloutów, usług, harmonogramów i audytu. Maszynowy dashboard oraz API są tylko do odczytu. Własna baza SQLite |
 | `KodiCPGateway` + `control-plane-web` | QTS `HTTPS :443/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/` → CGI → `127.0.0.1:19445`; prywatne mTLS BFF do core/authz | Bezusługowy QPKG rejestruje skrót **Kodi admin** i CGI bez `app_proxy.conf`. CGI najpierw weryfikuje cookie sesyjne przez loopback; wygasłą sesję odnawia po walidacji administratorskiego `NAS_SID`, wykonując istniejący login z TOTP serwer-serwer. Prywatne pliki `0600` są poza WWW. Read-only BFF nadal wymusza Host/Origin, CSRF i sesję, a backend nie ma portu w LAN ani dostępu do sekretów floty |
 | `control-plane-authz` | Brak opublikowanego portu; prywatne mTLS | Hasło scrypt, TOTP, recovery codes, rate limit i sesje. Osobna baza SQLite; seed TOTP szyfrowany AES-GCM |
-| `profile-sync` | LAN `HTTPS :18765`; prywatne mTLS `:8767` tylko w sieci Compose | Enrollmenty, podpisane rewizje i assignmenty, heartbeat, playback LWW oraz podpisany whole-document Favourites LWW z CAS artwork. Trwała baza SQLite/blob |
+| `profile-sync` | LAN `HTTPS :18765`; prywatne mTLS `:8767` tylko w sieci Compose | Enrollmenty, podpisane rewizje i assignmenty, heartbeat, playback LWW, podpisany whole-document Favourites LWW z CAS artwork oraz deklaratywne menu skórki. Trwała baza SQLite/blob |
 | `provider-relay` | Prywatny adres LAN `HTTP :18766` | Bezstanowy, opcjonalny fallback wyłącznie dla allowlistowanych zapytań providerów, obecnie przede wszystkim Torrentio |
 | `upstream-watchdog` | Brak opublikowanego portu | Co sześć godzin sprawdza 11 cyklicznych workflow GitHub; healthcheck QTS odczytuje wynik co pięć minut |
 
@@ -301,6 +301,7 @@ sequenceDiagram
   O->>O: Dry-run, walidacja inventory i przypięcie locków
   O->>Pub: Eksport kanonicznych favourites/artwork i wybranych danych prywatnych
   Pub-->>O: Content-addressed bundle bez cache
+  O->>O: Dołącz allowlistowane menu z manifests/kodi-skin-menu.json
   O->>B: Opublikuj podpisaną rewizję candidate
   B-->>C: Assignment przy starcie Kodi lub w cyklu sześciogodzinnym
   C->>C: Weryfikacja podpisu, journal, apply i lokalny rollback
@@ -314,8 +315,13 @@ sequenceDiagram
 ```
 
 Profile Sync synchronizuje wyłącznie podpisaną, allowlistowaną konfigurację
-rutynową: wybrane ustawienia Kodi/Umbrella, kanoniczne favourites i lokalne grafiki
-WatchNixtoons2. Osobny opt-in `playback-state-lww-v1` synchronizuje dla tego dodatku
+rutynową: wybrane ustawienia Kodi/Umbrella, kanoniczne favourites, lokalne grafiki
+WatchNixtoons2 oraz dokładne menu główne Aeon Nox Silvo. Menu jest dokumentem
+`whole_document` z repo, a nie eksportem z urządzenia. Klient dołącza je dopiero po
+potwierdzeniu capability `skin-shortcuts-menu-v1` przez całą zarejestrowaną flotę,
+atomowo zapisuje źródłowy XML i zleca Skin Shortcuts odbudowę generowanego include.
+Brak właściwej skórki albo Skin Shortcuts 2.x oznacza `NOT_APPLICABLE`, a trwające
+odtwarzanie — odroczenie mutacji. Osobny opt-in `playback-state-lww-v1` synchronizuje dla tego dodatku
 małe rekordy watched/resume przez serwerowe rewizje i prostą zasadę remote-wins dla
 starego eventu; nie kopiuje bazy `MyVideos`. Umbrella zachowuje Trakt jako źródło
 prawdy, a YouTube zdalną historię konta. Każde urządzenie ma własny enrollment, token i klucz podpisujący;

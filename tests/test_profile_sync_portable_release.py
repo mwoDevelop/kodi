@@ -10,6 +10,7 @@ from tools.profile_sync_portable_release import (
     _latest_enrollments,
     _portable_export,
     _routine_export,
+    _skin_menu_for_fleet,
     _trigger_sync,
     bootstrap_active,
 )
@@ -89,7 +90,8 @@ def test_database_state_and_latest_enrollment_are_exact(tmp_path):
         CREATE TABLE revisions (revision_id TEXT, manifest TEXT);
         CREATE TABLE enrollments (
           enrollment_id TEXT, logical_device_id TEXT, generation INTEGER,
-          channel TEXT, target_tags TEXT, revoked INTEGER, last_seen_at INTEGER
+          channel TEXT, target_tags TEXT, revoked INTEGER, last_seen_at INTEGER,
+          client_version TEXT, client_capabilities TEXT
         );
         CREATE TABLE assignment_reports (
           enrollment_id TEXT, revision_id TEXT, assignment_kind TEXT,
@@ -111,12 +113,12 @@ def test_database_state_and_latest_enrollment_are_exact(tmp_path):
         (revision, json.dumps(manifest)),
     )
     database.execute(
-        "INSERT INTO enrollments VALUES (?, 'device-a', 1, 'home-stable', ?, 0, 1)",
-        ("enr:old00000", '["home"]'),
+        "INSERT INTO enrollments VALUES (?, 'device-a', 1, 'home-stable', ?, 0, 1, ?, ?)",
+        ("enr:old00000", '["home"]', "1.4.2", "[]"),
     )
     database.execute(
-        "INSERT INTO enrollments VALUES (?, 'device-a', 2, 'home-stable', ?, 0, 2)",
-        ("enr:new00000", '["android:arm64","home"]'),
+        "INSERT INTO enrollments VALUES (?, 'device-a', 2, 'home-stable', ?, 0, 2, ?, ?)",
+        ("enr:new00000", '["android:arm64","home"]', "1.5.0", '["skin-shortcuts-menu-v1"]'),
     )
     database.commit()
     database.close()
@@ -133,6 +135,44 @@ def test_database_state_and_latest_enrollment_are_exact(tmp_path):
 def test_latest_enrollment_fails_closed_for_unenrolled_device():
     with pytest.raises(RuntimeError, match="device-b"):
         _latest_enrollments({"enrollments": []}, {"device-b"})
+
+
+def test_skin_menu_waits_for_every_enrollment_capability():
+    menu, pending = _skin_menu_for_fleet(
+        Path("."),
+        {
+            "ready": {
+                "client_version": "1.5.0",
+                "client_capabilities": '["skin-shortcuts-menu-v1"]',
+            },
+            "old": {
+                "client_version": "1.4.2",
+                "client_capabilities": "[]",
+            },
+        },
+    )
+
+    assert menu is None
+    assert pending == ["old"]
+
+
+def test_skin_menu_loads_only_after_the_whole_fleet_is_ready():
+    menu, pending = _skin_menu_for_fleet(
+        Path("."),
+        {
+            "android": {
+                "client_version": "1.5.0",
+                "client_capabilities": '["skin-shortcuts-menu-v1"]',
+            },
+            "flatpak": {
+                "client_version": "1.6.0",
+                "client_capabilities": '["skin-shortcuts-menu-v1"]',
+            },
+        },
+    )
+
+    assert menu["adapter"] == "skin_shortcuts_v1"
+    assert pending == []
 
 
 def test_trigger_sync_prefers_acknowledged_jsonrpc_dispatch(monkeypatch):

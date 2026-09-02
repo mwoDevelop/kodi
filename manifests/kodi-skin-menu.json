@@ -1,0 +1,38 @@
+{
+  "adapter": "skin_shortcuts_v1",
+  "apply_mode": "hot_apply",
+  "items": [
+    {
+      "action": "ActivateWindow(1133)",
+      "icon": "special://skin/extras/icons/DefaultAddon.png",
+      "id": "programs",
+      "label": "$SKIN[31957|skin.aeon.nox.silvo|None]",
+      "label2": ""
+    },
+    {
+      "action": "ActivateWindow(Settings)",
+      "icon": "special://skin/extras/icons/DefaultAddonService.png",
+      "id": "settings",
+      "label": "13000",
+      "label2": ""
+    },
+    {
+      "action": "ActivateWindow(FavouritesBrowser)",
+      "icon": "special://skin/extras/icons/Favorites.png",
+      "id": "favourites",
+      "label": "Cartoons",
+      "label2": "Custom item"
+    },
+    {
+      "action": "PlayDisc",
+      "icon": "special://skin/extras/icons/Disc.png",
+      "id": "playdisc",
+      "label": "$SKIN[31958|skin.aeon.nox.silvo|None]",
+      "label2": "",
+      "visible": "System.HasMediaDVD"
+    }
+  ],
+  "menu_id": "mainmenu",
+  "ownership": "whole_document",
+  "skin_id": "skin.aeon.nox.silvo"
+}

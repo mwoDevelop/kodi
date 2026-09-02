@@ -64,7 +64,6 @@ from .model import (
 from .planner import rollout_plan
 from .store import RunStore
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -95,9 +94,7 @@ def release_rollout_result(child_report: dict[str, Any], child_code: int) -> Ste
         return StepResult.PASS
     if child_code != EXIT_CODES[RunStatus.PARTIAL]:
         raise RuntimeError("post-release rollout failed")
-    results = {
-        step.get("result") for step in child_report.get("steps", {}).values()
-    }
+    results = {step.get("result") for step in child_report.get("steps", {}).values()}
     if StepResult.DIAGNOSTIC_FAILED.value in results:
         return StepResult.DIAGNOSTIC_FAILED
     if StepResult.DEFERRED.value in results:
@@ -248,11 +245,13 @@ class ProductionExecutor:
             )
         except TransportError as error:
             message = str(error)
-            if message.startswith((
-                "ADB command failed with exit code ",
-                "ADB endpoint is not an authorized device",
-                "SSH read-only command failed with exit code ",
-            )):
+            if message.startswith(
+                (
+                    "ADB command failed with exit code ",
+                    "ADB endpoint is not an authorized device",
+                    "SSH read-only command failed with exit code ",
+                )
+            ):
                 raise DeviceUnavailable("registered device is unavailable") from error
             raise
         return {
@@ -303,9 +302,7 @@ class ProductionExecutor:
             return self._portable(command, device_id)
         return result
 
-    def _provider_configuration_argv(
-        self, device_id: str, serial: str
-    ) -> list[str]:
+    def _provider_configuration_argv(self, device_id: str, serial: str) -> list[str]:
         argv = [
             sys.executable,
             "tools/kodi_mwoscrapers_configure.py",
@@ -325,9 +322,7 @@ class ProductionExecutor:
 
     def _provider_probe(self, serial: str) -> dict[str, Any]:
         """Probe the promoted user path; the full matrix runs in scheduled CI."""
-        return device_provider_probe(
-            self.adb, self.adb_server_port, serial, 75
-        )
+        return device_provider_probe(self.adb, self.adb_server_port, serial, 75)
 
     def _youtube_configuration(self, serial: str) -> dict[str, Any]:
         required = {
@@ -505,19 +500,25 @@ class ProductionExecutor:
         portable = self._portable_with_retry("apply", device_id)
         if portable["status"] != "CONVERGED":
             raise RuntimeError("portable state did not converge")
-        changed = any(
-            item.get("action") != "unchanged"
-            for item in [
-                *stable.get("actions", []),
-                *defaults.get("actions", []),
-            ]
-        ) or portable.get("apply_status") not in {None, "NO_CHANGE"} or bool(
-            rapideo.get("changed")
-            or opensubtitles.get("changed")
-            or opensubtitles_com.get("changed")
-            or youtube.get("changed")
-            or providers.get("changed")
-        ) or managed_settings.get("status") == "UPDATED"
+        changed = (
+            any(
+                item.get("action") != "unchanged"
+                for item in [
+                    *stable.get("actions", []),
+                    *defaults.get("actions", []),
+                ]
+            )
+            or portable.get("apply_status") not in {None, "NO_CHANGE"}
+            or bool(
+                rapideo.get("changed")
+                or opensubtitles.get("changed")
+                or opensubtitles_com.get("changed")
+                or youtube.get("changed")
+                or providers.get("changed")
+            )
+            or managed_settings.get("status") == "UPDATED"
+        )
+        changed = changed or profile_sync.get("sync_status") == "APPLIED"
         attempts = int(getattr(self, "external_attempts", 3))
         retry_seconds = int(getattr(self, "retry_seconds", 5))
         diagnostics = None
@@ -542,9 +543,7 @@ class ProductionExecutor:
                 break
             if attempt < attempts:
                 time.sleep(retry_seconds)
-        diagnostic_failed = not (
-            diagnostics["provider"] and diagnostics["real_debrid"]
-        )
+        diagnostic_failed = not (diagnostics["provider"] and diagnostics["real_debrid"])
         return StepOutcome(
             StepResult.DIAGNOSTIC_FAILED
             if diagnostic_failed
@@ -556,9 +555,7 @@ class ProductionExecutor:
                 "default_addons": defaults.get("result"),
                 "runtime_compatibility": {
                     "stable": stable.get("compatibility", {}).get("status"),
-                    "default_addons": defaults.get("compatibility", {}).get(
-                        "status"
-                    ),
+                    "default_addons": defaults.get("compatibility", {}).get("status"),
                 },
                 "managed_settings": managed_settings.get("status"),
                 "rapideo": (
@@ -569,9 +566,7 @@ class ProductionExecutor:
                 "opensubtitles": (
                     "pass"
                     if opensubtitles.get("ok")
-                    else opensubtitles.get(
-                        "result", opensubtitles.get("status")
-                    )
+                    else opensubtitles.get("result", opensubtitles.get("status"))
                 ),
                 "opensubtitles_com": (
                     "pass"
@@ -584,9 +579,7 @@ class ProductionExecutor:
                     "pass"
                     if youtube.get("ok")
                     and youtube.get("status") != "API_CONFIG_REQUIRED"
-                    else youtube.get(
-                        "status", youtube.get("result", "failed")
-                    )
+                    else youtube.get("status", youtube.get("result", "failed"))
                 ),
                 "providers": (
                     "pass"
@@ -594,6 +587,7 @@ class ProductionExecutor:
                     else providers.get("result", providers.get("status"))
                 ),
                 "profile_sync": profile_sync.get("status", "pass"),
+                "skin_menu_status": profile_sync.get("skin_menu_status"),
                 "umbrella_private": umbrella_private.get("status"),
                 "portable": portable,
                 "diagnostics": diagnostics,
@@ -609,10 +603,7 @@ class ProductionExecutor:
         if device["platform"] == "linux-flatpak":
             run_id = getattr(self, "run_id", None)
             backup = (
-                self.repository
-                / ".kodi-private/kodi-ops/backups"
-                / run_id
-                / device_id
+                self.repository / ".kodi-private/kodi-ops/backups" / run_id / device_id
                 if run_id
                 else None
             )
@@ -646,10 +637,7 @@ class ProductionExecutor:
         run_id = getattr(self, "run_id", None)
         if run_id:
             backup = (
-                self.repository
-                / ".kodi-private/kodi-ops/backups"
-                / run_id
-                / device_id
+                self.repository / ".kodi-private/kodi-ops/backups" / run_id / device_id
             )
             if backup.is_dir() and not backup.is_symlink():
                 verify_snapshot(backup)
@@ -660,9 +648,7 @@ class ProductionExecutor:
     def _restore_execute(self, step, dry_run, verify_only):
         target = self._restore_target(step.target)
         if target["platform"] == "linux-flatpak":
-            return self._flatpak_restore_execute(
-                step, target, dry_run, verify_only
-            )
+            return self._flatpak_restore_execute(step, target, dry_run, verify_only)
         if dry_run:
             return StepOutcome(
                 StepResult.PASS,
@@ -672,9 +658,9 @@ class ProductionExecutor:
                     "installed_version": target["installed_version"],
                     "target_version": target["expected_version"],
                     "snapshot_id": target["snapshot_manifest"]["snapshot_id"],
-                    "runtime_compatibility": target.get(
-                        "compatibility", {}
-                    ).get("status"),
+                    "runtime_compatibility": target.get("compatibility", {}).get(
+                        "status"
+                    ),
                     "action": step.action,
                 },
             )
@@ -686,9 +672,10 @@ class ProductionExecutor:
                 verify_snapshot(backup)
             elif step.action == "uninstall" and target["installed_version"] is not None:
                 raise RuntimeError("Kodi returned after completed uninstall phase")
-            elif step.action in {"install", "profile"} and target[
-                "installed_version"
-            ] != target["expected_version"]:
+            elif (
+                step.action in {"install", "profile"}
+                and target["installed_version"] != target["expected_version"]
+            ):
                 raise RuntimeError("installed Kodi version differs after restore phase")
             return StepOutcome(
                 StepResult.PASS,
@@ -768,9 +755,7 @@ class ProductionExecutor:
             )
             if refreshed["model"] != target["model"]:
                 raise RuntimeError("restore target identity changed")
-            uninstall_and_clean(
-                self.adb, self.adb_server_port, target["serial"]
-            )
+            uninstall_and_clean(self.adb, self.adb_server_port, target["serial"])
             return StepOutcome(StepResult.PASS, {"device": step.target})
         if step.action == "install":
             install_apk(
@@ -812,9 +797,7 @@ class ProductionExecutor:
                     "principal_uid": target["principal_uid"],
                     "flatpak_scope": target["installer"]["scope"],
                     "installed_version": target["installed_version"],
-                    "runtime_paths_qualified": target[
-                        "runtime_paths_qualified"
-                    ],
+                    "runtime_paths_qualified": target["runtime_paths_qualified"],
                     "action": step.action,
                 },
             )
@@ -846,9 +829,7 @@ class ProductionExecutor:
                     "principal_uid": target["principal_uid"],
                     "flatpak_scope": target["installer"]["scope"],
                     "installed_version": target["installed_version"],
-                    "runtime_paths_qualified": target[
-                        "runtime_paths_qualified"
-                    ],
+                    "runtime_paths_qualified": target["runtime_paths_qualified"],
                 },
             )
         if step.action == "backup":
@@ -894,21 +875,15 @@ class ProductionExecutor:
                 self.repository / ".kodi-private/flatpak-profile-sync",
             )
             target["data_exists"] = False
-            return StepOutcome(
-                StepResult.PASS, {"device": step.target, **result}
-            )
+            return StepOutcome(StepResult.PASS, {"device": step.target, **result})
         if step.action == "install":
             result = install_flatpak_binary(target, manifest)
             target["data_exists"] = True
-            return StepOutcome(
-                StepResult.PASS, {"device": step.target, **result}
-            )
+            return StepOutcome(StepResult.PASS, {"device": step.target, **result})
         if step.action == "profile":
             result = restore_flatpak_snapshot(target, snapshot)
             verify_flatpak_remote_snapshot(target, snapshot)
-            return StepOutcome(
-                StepResult.PASS, {"device": step.target, **result}
-            )
+            return StepOutcome(StepResult.PASS, {"device": step.target, **result})
         raise NotImplementedError("unknown Flatpak restore phase")
 
     def _release_snapshot(self, commit):
@@ -927,7 +902,9 @@ class ProductionExecutor:
             return StepOutcome(StepResult.SKIPPED, {"reason": "operator option"})
         if dry_run:
             return StepOutcome(
-                StepResult.PASS if action in {"preflight", "test", "security"} else StepResult.SKIPPED,
+                StepResult.PASS
+                if action in {"preflight", "test", "security"}
+                else StepResult.SKIPPED,
                 {"action": action, "mode": "read-only-plan"},
             )
         if action == "preflight":
@@ -971,7 +948,9 @@ class ProductionExecutor:
                 {"dry_run": "true", "force_snapshot": "false"},
             )
             watched = self.github.watch(run)
-            return StepOutcome(StepResult.PASS, {"workflow": "publish-testing.yml", **watched})
+            return StepOutcome(
+                StepResult.PASS, {"workflow": "publish-testing.yml", **watched}
+            )
         if action == "publish-testing":
             if not verify_only:
                 run = self.github.dispatch(
@@ -981,7 +960,9 @@ class ProductionExecutor:
                 )
                 self.github.watch(run)
             snapshot = self._release_snapshot(base_commit)
-            return StepOutcome(StepResult.PASS, {"snapshot_id": snapshot["snapshot_id"]})
+            return StepOutcome(
+                StepResult.PASS, {"snapshot_id": snapshot["snapshot_id"]}
+            )
         snapshot = self._release_snapshot(base_commit)
         if action == "qnap":
             if verify_only:
@@ -1085,14 +1066,26 @@ class ProductionExecutor:
                     {"pull_request": pr["number"], "url": pr["url"]},
                     RunStatus.WAITING_APPROVAL,
                 )
-            subprocess.run(("git", "fetch", "origin", "main"), cwd=self.repository, check=True)
-            subprocess.run(("git", "merge", "--ff-only", merge_commit), cwd=self.repository, check=True)
+            subprocess.run(
+                ("git", "fetch", "origin", "main"), cwd=self.repository, check=True
+            )
+            subprocess.run(
+                ("git", "merge", "--ff-only", merge_commit),
+                cwd=self.repository,
+                check=True,
+            )
             self.release_merge_commit = merge_commit
             return StepOutcome(
                 StepResult.PASS,
-                {"pull_request": pr["number"], "merge_commit": merge_commit, **verified_pr},
+                {
+                    "pull_request": pr["number"],
+                    "merge_commit": merge_commit,
+                    **verified_pr,
+                },
             )
-        merge_commit = getattr(self, "release_merge_commit", None) or self.github.require_merged_pr(pr)
+        merge_commit = getattr(
+            self, "release_merge_commit", None
+        ) or self.github.require_merged_pr(pr)
         if not merge_commit:
             raise RuntimeError("stable promotion is not merged")
         if action == "deploy":
@@ -1120,13 +1113,16 @@ class ProductionExecutor:
             )
         if action == "rollout":
             child_plan = rollout_plan(self.repository, full_diagnostics=True)
-            child_report, child_code = OperationRunner(
-                self.repository, self
-            ).run(child_plan, acquire_lock=False)
+            child_report, child_code = OperationRunner(self.repository, self).run(
+                child_plan, acquire_lock=False
+            )
             result = release_rollout_result(child_report, child_code)
             return StepOutcome(
                 result,
-                {"child_run_id": child_report["run_id"], "status": child_report["status"]},
+                {
+                    "child_run_id": child_report["run_id"],
+                    "status": child_report["status"],
+                },
             )
         raise NotImplementedError("unknown release action")
 
@@ -1228,9 +1224,7 @@ class ProductionExecutor:
                 timeout=120,
                 adapter="umbrella-private",
             )
-            published = self._portable_with_retry(
-                "publish", self.fleet["publisher"]
-            )
+            published = self._portable_with_retry("publish", self.fleet["publisher"])
             if published["status"] != "CONVERGED":
                 raise RuntimeError("portable-state publisher did not converge")
             command = [
@@ -1259,6 +1253,8 @@ class ProductionExecutor:
                     "active_revision": result.get("active_revision"),
                     "canary_checks": len(result.get("canaries", [])),
                     "backups": result.get("backups", []),
+                    "skin_menu": result.get("skin_menu"),
+                    "skin_menu_pending": result.get("skin_menu_pending", []),
                 },
             )
         if step.adapter in {"android", "flatpak"}:
@@ -1292,23 +1288,18 @@ class ProductionExecutor:
                     "sync_status": result.get("sync_status"),
                     "favourites_status": result.get("favourites_status"),
                     "favourites_cursor": result.get("favourites_cursor"),
-                    "favourites_pending_count": result.get(
-                        "favourites_pending_count"
-                    ),
-                    "favourites_dynamic_fence": result.get(
-                        "favourites_dynamic_fence"
-                    ),
+                    "favourites_pending_count": result.get("favourites_pending_count"),
+                    "favourites_dynamic_fence": result.get("favourites_dynamic_fence"),
                     "playback_status": result.get("playback_status"),
+                    "skin_menu_status": result.get("skin_menu_status"),
                     "playback_cursor": result.get("playback_cursor"),
-                    "playback_pending_events": result.get(
-                        "playback_pending_events"
-                    ),
+                    "playback_pending_events": result.get("playback_pending_events"),
                     "playback_pending_application": result.get(
                         "playback_pending_application"
                     ),
-                    "runtime_compatibility": result.get(
-                        "compatibility", {}
-                    ).get("status"),
+                    "runtime_compatibility": result.get("compatibility", {}).get(
+                        "status"
+                    ),
                     "opensubtitles_com": (
                         result.get("opensubtitles_com", {}).get("login")
                     ),
@@ -1361,7 +1352,9 @@ class OperationRunner:
             raise RuntimeError("stable lock drifted from plan")
         qnap = self.repository / "manifests/locks/qnap-stable.json"
         expected = plan_document.get("qnap_lock_sha256")
-        observed = hashlib.sha256(qnap.read_bytes()).hexdigest() if qnap.is_file() else None
+        observed = (
+            hashlib.sha256(qnap.read_bytes()).hexdigest() if qnap.is_file() else None
+        )
         if observed != expected:
             raise RuntimeError("QNAP stable lock drifted from plan")
 
@@ -1384,14 +1377,10 @@ class OperationRunner:
         if hasattr(self.executor, "plan_repository_commit") or isinstance(
             self.executor, ProductionExecutor
         ):
-            self.executor.plan_repository_commit = plan_document[
-                "repository_commit"
-            ]
+            self.executor.plan_repository_commit = plan_document["repository_commit"]
         if isinstance(self.executor, ProductionExecutor):
             options = plan_document.get("options", {})
-            self.executor.external_attempts = options.get(
-                "external_attempts", 3
-            )
+            self.executor.external_attempts = options.get("external_attempts", 3)
             self.executor.retry_seconds = options.get("retry_seconds", 5)
             self.executor.release_android_tv_canary = options.get(
                 "android_tv_canary", "x88pro20"
@@ -1511,15 +1500,12 @@ class OperationRunner:
                     break
                 if outcome.result == StepResult.ERROR and step.required:
                     break
-                if (
-                    step.target in plan.canaries
-                    and outcome.result
-                    in {StepResult.DEFERRED, StepResult.DIAGNOSTIC_FAILED}
-                ):
+                if step.target in plan.canaries and outcome.result in {
+                    StepResult.DEFERRED,
+                    StepResult.DIAGNOSTIC_FAILED,
+                }:
                     break
-            state["status"] = (
-                terminal_status or overall_status(outcomes)
-            ).value
+            state["status"] = (terminal_status or overall_status(outcomes)).value
             state["updated_at"] = utc_now()
             store.write("state.json", state)
             report = {

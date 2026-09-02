@@ -9,6 +9,7 @@ import sys
 
 import xbmc
 import xbmcaddon
+import xbmcgui
 import xbmcvfs
 
 ADDON_ID = "service.mwodevelop.profilesync"
@@ -41,6 +42,12 @@ def main():
             KodiFavourites,
             PortableFavouritesAdapter,
         )
+        from resources.lib.mwoprofilesync.skin_menu import (
+            HANDLER_ID as SKIN_MENU_HANDLER_ID,
+        )
+        from resources.lib.mwoprofilesync.skin_menu import (
+            SkinMenuAdapter,
+        )
         from resources.lib.mwoprofilesync.state import StateStore
         from resources.lib.mwoprofilesync.sync import ReadOnlySync
 
@@ -57,9 +64,7 @@ def main():
             "enabled": "true",
             "server_url": config["server_url"],
             "ca_certificate": (
-                "special://profile/addon_data/"
-                + ADDON_ID
-                + "/profile-sync-ca.pem"
+                "special://profile/addon_data/" + ADDON_ID + "/profile-sync-ca.pem"
             ),
             "logical_device_id": config["logical_device_id"],
             "channel": config["channel"],
@@ -73,8 +78,7 @@ def main():
         if config.get("replace_enrollment") and local.get("enrollment"):
             current = local["enrollment"]
             if (
-                current.get("logical_device_id")
-                != config["logical_device_id"]
+                current.get("logical_device_id") != config["logical_device_id"]
                 or current.get("channel") != config["channel"]
             ):
                 raise ValueError("Profile Sync replacement identity differs")
@@ -92,14 +96,27 @@ def main():
             or enrollment["channel"] != config["channel"]
         ):
             raise ValueError("Profile Sync enrollment identity differs")
+        settings = KodiAddonSettings(xbmcaddon.Addon, xbmc.executeJSONRPC)
         applier = TransactionalApplier(
             profile,
             state,
-            KodiAddonSettings(xbmcaddon.Addon),
+            settings,
             portable=PortableFavouritesAdapter(
                 xbmcvfs.translatePath("special://profile"),
                 KodiFavourites(xbmc.executeJSONRPC),
             ),
+            handlers={
+                SKIN_MENU_HANDLER_ID: SkinMenuAdapter(
+                    xbmcvfs.translatePath("special://profile"),
+                    xbmcvfs.translatePath("special://skin"),
+                    settings,
+                    xbmcaddon.Addon,
+                    xbmc.executebuiltin,
+                    xbmcgui.Window(10000),
+                    lambda: xbmc.Player().isPlayingVideo(),
+                    state=state,
+                )
+            },
         )
         applier.recover()
         sync_result = ReadOnlySync(addon, state, applier=applier)()
@@ -114,6 +131,7 @@ def main():
             "applied_revision": local.get("applied_revision"),
             "pending_report": bool(local.get("pending_report")),
             "sync_status": sync_result.get("status"),
+            "skin_menu_status": local.get("skin_menu_status"),
         }
     except Exception as error:  # noqa: BLE001 - Kodi runtime boundary
         result = {

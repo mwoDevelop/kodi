@@ -42,7 +42,10 @@ jest chwilowo niedostępna, zachowywany jest ostatni zweryfikowany obraz lokalny
 cookie i sufiksy nagłówków adresów URL nie są używane ani utrwalane.
 
 Rutynowa usługa profili celowo zarządza małą listą dozwolonych ustawień semantycznych,
-kanonicznym dokumentem ulubionych i zestawem grafik adresowanych zawartością. Nie
+kanonicznym dokumentem ulubionych, zestawem grafik adresowanych zawartością oraz
+allowlistowanym menu głównym Aeon Nox Silvo z `manifests/kodi-skin-menu.json`. Menu
+ma własność `whole_document`: lokalna zmiana jest zastępowana przy następnym cyklu z
+ważnym assignmentem, a pliki generowane Skin Shortcuts nie są przesyłane. Nie
 rozpowszechnia poświadczeń, tokenów, dowolnych ustawień dodatków ani pamięci
 podręcznych, które można odbudować. Te prywatne wartości pozostają w ignorowanych
 migawkach hostów i są stosowane tylko w drodze jawnego wdrożenia na każdym urządzeniu.
@@ -90,7 +93,10 @@ SHA-256 i przywoływany zestaw grafik, stosuje go z prywatnym dziennikiem i roll
 restartuje Kodi dopiero po zmianie i weryfikuje wynik z wnętrza Kodi. To samo wdrożenie
 konfiguruje nietajną tożsamość i harmonogram `mwoDevelop Profile Sync` dla każdego
 urządzenia logicznego. Tokeny rejestracji i nasiona podpisu nigdy nie są kopiowane
-między urządzeniami. Powtórzona aplikacja zwraca `NO_CHANGE`.
+między urządzeniami. Powtórzona aplikacja zwraca `NO_CHANGE`. Wersja klienta
+obsługująca menu jest rozprowadzana przed aktywacją adaptera; kompozytor nie dołączy
+menu, dopóki najnowszy aktywny enrollment każdego urządzenia nie zgłosi capability
+`skin-shortcuts-menu-v1` i wersji co najmniej 1.5.0.
 
 Produkcyjny profil tożsamości korzysta z trwałego uwierzytelnionego zaplecza HTTPS oraz
 odrębnego klucza rejestracji, tokenu i podpisu dla każdego urządzenia. Testy na
