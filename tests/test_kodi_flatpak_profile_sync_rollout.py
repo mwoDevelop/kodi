@@ -659,12 +659,17 @@ def test_in_kodi_profile_sync_runs_dynamic_favourites_lifecycle(
 ):
     xbmc = types.ModuleType("xbmc")
     xbmc.executeJSONRPC = lambda _request: "{}"
+    xbmc.executebuiltin = lambda _command: None
     xbmcaddon = types.ModuleType("xbmcaddon")
     xbmcaddon.Addon = lambda _addon_id=None: object()
+    xbmcgui = types.ModuleType("xbmcgui")
+    xbmcgui.Window = lambda _window_id: object()
     xbmcvfs = types.ModuleType("xbmcvfs")
+    xbmcvfs.translatePath = lambda path: path
     for name, module_object in (
         ("xbmc", xbmc),
         ("xbmcaddon", xbmcaddon),
+        ("xbmcgui", xbmcgui),
         ("xbmcvfs", xbmcvfs),
     ):
         monkeypatch.setitem(sys.modules, name, module_object)
@@ -744,6 +749,10 @@ def test_in_kodi_profile_sync_runs_dynamic_favourites_lifecycle(
         ),
         "resources.lib.mwoprofilesync.state": types.SimpleNamespace(
             StateStore=StateStore
+        ),
+        "resources.lib.mwoprofilesync.skin_menu": types.SimpleNamespace(
+            HANDLER_ID="skin_menu_v1",
+            SkinMenuAdapter=lambda *_args, **_kwargs: object(),
         ),
         "resources.lib.mwoprofilesync.sync": types.SimpleNamespace(
             ReadOnlySync=ReadOnlySync

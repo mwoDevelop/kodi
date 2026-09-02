@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import json
-import hashlib
 import glob
+import hashlib
+import json
 import os
 import re
 import runpy
@@ -20,7 +20,6 @@ from xml.etree import ElementTree
 import xbmc
 import xbmcaddon
 import xbmcvfs
-
 
 ADDON_ID = "service.mwodevelop.profilesync"
 REPOSITORY_ID = "repository.mwodevelop"
@@ -175,8 +174,7 @@ def _extract_artifact_candidates(stage, addons, artifacts, directory, output):
         if (
             not archive.is_file()
             or archive.is_symlink()
-            or hashlib.sha256(archive.read_bytes()).hexdigest()
-            != artifact["sha256"]
+            or hashlib.sha256(archive.read_bytes()).hexdigest() != artifact["sha256"]
         ):
             raise ValueError("required Flatpak artifact digest differs")
         root, candidate_version = _extract_candidate(
@@ -205,10 +203,7 @@ def _extract_required_candidates(stage, expected, output):
 def _extract_dependency_candidates(stage, expected, output):
     artifacts = expected.get("dependency_artifacts")
     addons = (
-        {
-            addon_id: metadata.get("version")
-            for addon_id, metadata in artifacts.items()
-        }
+        {addon_id: metadata.get("version") for addon_id, metadata in artifacts.items()}
         if isinstance(artifacts, dict)
         and all(isinstance(metadata, dict) for metadata in artifacts.values())
         else None
@@ -222,17 +217,12 @@ def _extract_official_candidates(stage, expected, output):
     official = expected.get("official_addons")
     artifacts = expected.get("official_artifacts")
     addons = (
-        {
-            addon_id: metadata.get("version")
-            for addon_id, metadata in official.items()
-        }
+        {addon_id: metadata.get("version") for addon_id, metadata in official.items()}
         if isinstance(official, dict)
         and all(isinstance(metadata, dict) for metadata in official.values())
         else None
     )
-    return _extract_artifact_candidates(
-        stage, addons, artifacts, "official", output
-    )
+    return _extract_artifact_candidates(stage, addons, artifacts, "official", output)
 
 
 def _rpc(method, params):
@@ -299,10 +289,13 @@ def _enable(addon_id, timeout=30):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            if _rpc(
-                "Addons.SetAddonEnabled",
-                {"addonid": addon_id, "enabled": True},
-            ) == "OK":
+            if (
+                _rpc(
+                    "Addons.SetAddonEnabled",
+                    {"addonid": addon_id, "enabled": True},
+                )
+                == "OK"
+            ):
                 return
         except RuntimeError:
             pass
@@ -392,15 +385,9 @@ def _forget_native_official(addon_id):
     connection = sqlite3.connect(_addon_database())
     try:
         with connection:
-            connection.execute(
-                "DELETE FROM installed WHERE addonID=?", (addon_id,)
-            )
-            connection.execute(
-                "DELETE FROM update_rules WHERE addonID=?", (addon_id,)
-            )
-            connection.execute(
-                "DELETE FROM package WHERE addonID=?", (addon_id,)
-            )
+            connection.execute("DELETE FROM installed WHERE addonID=?", (addon_id,))
+            connection.execute("DELETE FROM update_rules WHERE addonID=?", (addon_id,))
+            connection.execute("DELETE FROM package WHERE addonID=?", (addon_id,))
     finally:
         connection.close()
 
@@ -520,8 +507,7 @@ def _reconcile_native_official(addons, timeout=180, stage=None):
                     or len(requirement["supported_android_abis"])
                     != len(set(requirement["supported_android_abis"]))
                     or any(
-                        not isinstance(abi, str)
-                        or not SAFE_ADDON_ID.fullmatch(abi)
+                        not isinstance(abi, str) or not SAFE_ADDON_ID.fullmatch(abi)
                         for abi in requirement["supported_android_abis"]
                     )
                 )
@@ -560,9 +546,7 @@ def _reconcile_native_official(addons, timeout=180, stage=None):
                         break
                 if time.monotonic() >= next_install:
                     if request:
-                        _write_atomic(
-                            request, {"addon_id": addon_id, "schema": 1}
-                        )
+                        _write_atomic(request, {"addon_id": addon_id, "schema": 1})
                     xbmc.executebuiltin("InstallAddon(%s)" % addon_id)
                     next_install = time.monotonic() + 10
                 xbmc.sleep(2000)
@@ -574,9 +558,7 @@ def _reconcile_native_official(addons, timeout=180, stage=None):
 
         if _installed_origin(addon_id) != "repository.xbmc.org":
             raise RuntimeError("native official add-on origin differs")
-        for dependency_id, requirement in metadata[
-            "dependency_requirements"
-        ].items():
+        for dependency_id, requirement in metadata["dependency_requirements"].items():
             dependency = _addon_details(dependency_id)
             if (
                 not dependency
@@ -606,13 +588,9 @@ def _configure_youtube(stage):
     if not config.is_file() or config.is_symlink():
         raise ValueError("YouTube Flatpak private configuration is unsafe")
     try:
-        expected_schema = json.loads(config.read_text(encoding="utf-8")).get(
-            "schema"
-        )
+        expected_schema = json.loads(config.read_text(encoding="utf-8")).get("schema")
     except (OSError, TypeError, ValueError) as error:
-        raise ValueError(
-            "YouTube Flatpak private configuration is invalid"
-        ) from error
+        raise ValueError("YouTube Flatpak private configuration is invalid") from error
     if expected_schema not in {1, 2}:
         raise ValueError("YouTube Flatpak private configuration schema is invalid")
     previous_argv = sys.argv
@@ -659,9 +637,7 @@ def _configure_youtube(stage):
                 else "unknown",
             )
         )
-        if isinstance(report, dict) and isinstance(
-            report.get("error_type"), str
-        ):
+        if isinstance(report, dict) and isinstance(report.get("error_type"), str):
             error.code = report["error_type"]
         raise error
     return report
@@ -746,6 +722,8 @@ def _identity(addon_xml, expected_id):
 
 
 def _sync(profile_root, addon_root, profile_version, repository_version):
+    import xbmcgui
+
     profile_data = profile_root / "addon_data" / ADDON_ID
     _set_stage("wait_favourites_api")
     _wait_favourites_api()
@@ -757,11 +735,6 @@ def _sync(profile_root, addon_root, profile_version, repository_version):
     from resources.lib.mwoprofilesync.apply import (
         KodiAddonSettings,
         TransactionalApplier,
-    )
-    from resources.lib.mwoprofilesync.portable import (
-        KodiFavourites,
-        PortableFavouritesAdapter,
-        PortableFavouritesExporter,
     )
     from resources.lib.mwoprofilesync.favourites_state import (
         FavouritesApplier,
@@ -775,20 +748,42 @@ def _sync(profile_root, addon_root, profile_version, repository_version):
         PlaybackSync,
         PlaybackTicker,
     )
+    from resources.lib.mwoprofilesync.portable import (
+        KodiFavourites,
+        PortableFavouritesAdapter,
+        PortableFavouritesExporter,
+    )
+    from resources.lib.mwoprofilesync.skin_menu import (
+        HANDLER_ID as SKIN_MENU_HANDLER_ID,
+    )
+    from resources.lib.mwoprofilesync.skin_menu import (
+        SkinMenuAdapter,
+    )
     from resources.lib.mwoprofilesync.state import StateStore
     from resources.lib.mwoprofilesync.sync import ReadOnlySync
 
     addon = _enabled_addon(ADDON_ID)
     state = StateStore(profile_data)
     kodi_favourites = KodiFavourites(xbmc.executeJSONRPC)
-    portable_favourites = PortableFavouritesAdapter(
-        str(profile_root), kodi_favourites
-    )
+    portable_favourites = PortableFavouritesAdapter(str(profile_root), kodi_favourites)
+    settings = KodiAddonSettings(xbmcaddon.Addon, xbmc.executeJSONRPC)
     applier = TransactionalApplier(
         profile_data,
         state,
-        KodiAddonSettings(xbmcaddon.Addon),
+        settings,
         portable=portable_favourites,
+        handlers={
+            SKIN_MENU_HANDLER_ID: SkinMenuAdapter(
+                str(profile_root),
+                xbmcvfs.translatePath("special://skin"),
+                settings,
+                xbmcaddon.Addon,
+                xbmc.executebuiltin,
+                xbmcgui.Window(10000),
+                lambda: xbmc.Player().isPlayingVideo(),
+                state=state,
+            )
+        },
     )
     applier.recover()
     _set_stage("apply_profile_sync")
@@ -833,17 +828,14 @@ def _sync(profile_root, addon_root, profile_version, repository_version):
         "favourites_status": local.get("favourites_status"),
         "favourites_cursor": local.get("favourites_cursor"),
         "favourites_pending_count": local.get("favourites_pending_count"),
-        "favourites_dynamic_fence": bool(
-            local.get("favourites_dynamic_fence")
-        ),
+        "favourites_dynamic_fence": bool(local.get("favourites_dynamic_fence")),
         "playback_sync_status": playback.get("status"),
         "playback_status": local.get("playback_status"),
         "playback_cursor": local.get("playback_cursor"),
         "playback_pending_events": local.get("playback_pending_events"),
         "playback_pending_mapping": local.get("playback_pending_mapping"),
-        "playback_pending_application": local.get(
-            "playback_pending_application"
-        ),
+        "playback_pending_application": local.get("playback_pending_application"),
+        "skin_menu_status": local.get("skin_menu_status"),
     }
 
 
@@ -872,9 +864,7 @@ def _sync_existing(stage):
         "official_artifacts",
     }:
         raise ValueError("invalid Flatpak sync receipt")
-    profile_version = _identity(
-        addon_root / ADDON_ID / "addon.xml", ADDON_ID
-    )
+    profile_version = _identity(addon_root / ADDON_ID / "addon.xml", ADDON_ID)
     repository_version = _identity(
         addon_root / REPOSITORY_ID / "addon.xml", REPOSITORY_ID
     )
@@ -884,13 +874,9 @@ def _sync_existing(stage):
     ):
         raise ValueError("installed Flatpak add-on version differs")
     _set_stage("reconcile_required_addons")
-    required_addons = _reconcile_required_addons(
-        expected["required_addons"]
-    )
+    required_addons = _reconcile_required_addons(expected["required_addons"])
     _set_stage("reconcile_native_official")
-    official_addons = _reconcile_native_official(
-        expected["official_addons"]
-    )
+    official_addons = _reconcile_native_official(expected["official_addons"])
     _set_stage("configure_youtube")
     youtube = _configure_youtube(stage)
     _set_stage("apply_profile_sync")
@@ -931,9 +917,7 @@ def _transaction(stage):
         "repository-addon": addon_root / REPOSITORY_ID,
         "profile-data": profile_root / "addon_data" / ADDON_ID,
     }
-    expected = json.loads(
-        (stage / "expected.json").read_text(encoding="utf-8")
-    )
+    expected = json.loads((stage / "expected.json").read_text(encoding="utf-8"))
     if set(expected) != {
         "dependency_artifacts",
         "logical_device_id",
@@ -952,8 +936,7 @@ def _transaction(stage):
         not isinstance(expected_required, dict)
         or not expected_required
         or any(
-            not isinstance(addon_id, str)
-            or not SAFE_ADDON_ID.fullmatch(addon_id)
+            not isinstance(addon_id, str) or not SAFE_ADDON_ID.fullmatch(addon_id)
             for addon_id in expected_required
         )
     ):
@@ -962,8 +945,7 @@ def _transaction(stage):
         not isinstance(expected_dependencies, dict)
         or not expected_dependencies
         or any(
-            not isinstance(addon_id, str)
-            or not SAFE_ADDON_ID.fullmatch(addon_id)
+            not isinstance(addon_id, str) or not SAFE_ADDON_ID.fullmatch(addon_id)
             for addon_id in expected_dependencies
         )
     ):
@@ -1026,9 +1008,7 @@ def _transaction(stage):
     platform_dependencies = {
         dependency_id
         for metadata in expected_official.values()
-        for dependency_id, requirement in metadata[
-            "dependency_requirements"
-        ].items()
+        for dependency_id, requirement in metadata["dependency_requirements"].items()
         if requirement.get("type") == "platform"
     }
     if set(_candidate_dependencies(all_candidates)) - platform_dependencies:
@@ -1045,8 +1025,7 @@ def _transaction(stage):
             (details := _addon_details(addon_id)) is not None
             and (
                 str(details.get("version")) != metadata["version"]
-                or official_previous_origins.get(addon_id)
-                != "repository.xbmc.org"
+                or official_previous_origins.get(addon_id) != "repository.xbmc.org"
             )
         )
     }
@@ -1075,13 +1054,9 @@ def _transaction(stage):
         for addon_id in expected_official:
             _set_installed_origin(addon_id, "repository.xbmc.org")
         _set_stage("reconcile_required_addons")
-        _reconcile_required_addons(
-            expected["required_addons"], stage=stage
-        )
+        _reconcile_required_addons(expected["required_addons"], stage=stage)
         _set_stage("verify_required_addons")
-        required_addons = _verify_required_addons(
-            expected["required_addons"]
-        )
+        required_addons = _verify_required_addons(expected["required_addons"])
         _set_stage("reconcile_native_official")
         official_addons = _reconcile_native_official(
             expected["official_addons"], stage=stage

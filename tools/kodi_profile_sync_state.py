@@ -12,7 +12,6 @@ import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
-
 ADDON_ID = "service.mwodevelop.profilesync"
 STATE_SCHEMA = 2
 SUPPORTED_STATE_SCHEMAS = {1, STATE_SCHEMA}
@@ -65,9 +64,7 @@ def _server_summary(value):
     return {
         "server_url_configured": True,
         "server_url_scheme": parsed.scheme,
-        "server_url_sha256": hashlib.sha256(
-            value.encode("utf-8")
-        ).hexdigest(),
+        "server_url_sha256": hashlib.sha256(value.encode("utf-8")).hexdigest(),
     }
 
 
@@ -89,26 +86,20 @@ def _state_document(profile):
 
 
 def probe(addon, profile):
-    settings = {
-        setting_id: addon.getSetting(setting_id) for setting_id in SETTING_IDS
-    }
+    settings = {setting_id: addon.getSetting(setting_id) for setting_id in SETTING_IDS}
     state = _state_document(profile)
     enrollment = state.get("enrollment")
     if enrollment is not None and not isinstance(enrollment, dict):
         raise ValueError("Profile Sync enrollment is invalid")
     logical_id = settings["logical_device_id"].strip()
     channel = settings["channel"].strip()
-    enrollment_logical = (
-        enrollment.get("logical_device_id") if enrollment else None
-    )
+    enrollment_logical = enrollment.get("logical_device_id") if enrollment else None
     enrollment_channel = enrollment.get("channel") if enrollment else None
     return {
         "addon_version": addon.getAddonInfo("version"),
         "enabled": settings["enabled"].strip().casefold() == "true",
         **_server_summary(settings["server_url"]),
-        "ca_certificate_configured": bool(
-            settings["ca_certificate"].strip()
-        ),
+        "ca_certificate_configured": bool(settings["ca_certificate"].strip()),
         "logical_device_id": logical_id,
         "channel": channel,
         "startup_delay_seconds": settings["startup_delay_seconds"],
@@ -127,9 +118,7 @@ def probe(addon, profile):
         and channel == enrollment_channel,
         "has_access_token": bool(state.get("access_token")),
         "has_signing_seed": bool(state.get("signing_seed")),
-        "has_encryption_private_key": bool(
-            state.get("encryption_private_key")
-        ),
+        "has_encryption_private_key": bool(state.get("encryption_private_key")),
         "encryption_key_registered": bool(
             enrollment and enrollment.get("encryption_key_id")
         ),
@@ -140,33 +129,22 @@ def probe(addon, profile):
         "last_check_utc": state.get("last_check_utc"),
         "assigned_revision": state.get("assigned_revision"),
         "applied_revision": state.get("applied_revision"),
+        "skin_menu_status": state.get("skin_menu_status"),
         "playback_status": state.get("playback_status"),
-        "playback_last_success_utc": state.get(
-            "playback_last_success_utc"
-        ),
-        "playback_last_attempt_utc": state.get(
-            "playback_last_attempt_utc"
-        ),
+        "playback_last_success_utc": state.get("playback_last_success_utc"),
+        "playback_last_attempt_utc": state.get("playback_last_attempt_utc"),
         "playback_error_code": state.get("playback_error_code"),
         "playback_cursor": state.get("playback_cursor"),
         "playback_pending_events": state.get("playback_pending_events"),
         "playback_pending_mapping": state.get("playback_pending_mapping"),
-        "playback_pending_application": state.get(
-            "playback_pending_application"
-        ),
+        "playback_pending_application": state.get("playback_pending_application"),
         "favourites_status": state.get("favourites_status"),
-        "favourites_last_success_utc": state.get(
-            "favourites_last_success_utc"
-        ),
-        "favourites_last_attempt_utc": state.get(
-            "favourites_last_attempt_utc"
-        ),
+        "favourites_last_success_utc": state.get("favourites_last_success_utc"),
+        "favourites_last_attempt_utc": state.get("favourites_last_attempt_utc"),
         "favourites_error_code": state.get("favourites_error_code"),
         "favourites_cursor": state.get("favourites_cursor"),
         "favourites_pending_count": state.get("favourites_pending_count"),
-        "favourites_dynamic_fence": bool(
-            state.get("favourites_dynamic_fence")
-        ),
+        "favourites_dynamic_fence": bool(state.get("favourites_dynamic_fence")),
     }
 
 
@@ -264,8 +242,10 @@ def configure_secret_mode(addon, profile, mode):
         raise ValueError("Profile Sync secret mode is invalid")
     state = _state_document(profile)
     enrollment = state.get("enrollment")
-    if not enrollment or not state.get("encryption_private_key") or not enrollment.get(
-        "encryption_key_id"
+    if (
+        not enrollment
+        or not state.get("encryption_private_key")
+        or not enrollment.get("encryption_key_id")
     ):
         raise ValueError("Profile Sync secret capability is not enrolled")
     addon.setSetting("secret_mode", mode)
@@ -280,9 +260,7 @@ def _write_marker(path, document):
 
 def main():
     if len(sys.argv) < 3:
-        raise SystemExit(
-            "usage: kodi_profile_sync_state.py MODE MARKER [CONFIG...]"
-        )
+        raise SystemExit("usage: kodi_profile_sync_state.py MODE MARKER [CONFIG...]")
     marker = sys.argv[2]
     try:
         import xbmcaddon

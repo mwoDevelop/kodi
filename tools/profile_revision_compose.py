@@ -22,10 +22,14 @@ def _unsigned(document):
 
 
 def _adapters(document):
-    return document["adapters"] if document["schema"] == 2 else document["base"]["adapters"]
+    return (
+        document["adapters"]
+        if document["schema"] == 2
+        else document["base"]["adapters"]
+    )
 
 
-def compose(active, update, portable_favourites=None):
+def compose(active, update, portable_favourites=None, extra_adapters=None):
     active = _unsigned(active)
     update = _unsigned(update)
     if active["schema"] != update["schema"]:
@@ -38,6 +42,10 @@ def compose(active, update, portable_favourites=None):
         if not isinstance(portable_favourites, dict):
             raise ValueError("portable favourites adapter is invalid")
         merged["kodi.favourites"] = portable_favourites
+    for adapter_id, adapter in sorted((extra_adapters or {}).items()):
+        if not isinstance(adapter_id, str) or not isinstance(adapter, dict):
+            raise ValueError("extra profile adapter is invalid")
+        merged[adapter_id] = adapter
     if schema == 2:
         result["adapters"] = merged
     else:
@@ -56,6 +64,8 @@ def compose(active, update, portable_favourites=None):
     capabilities.update(update.get("required_capabilities", []))
     if "kodi.favourites" in merged:
         capabilities.add("portable_favourites_v1")
+    if "kodi.skin_menu" in merged:
+        capabilities.add("skin-shortcuts-menu-v1")
     if capabilities:
         result["required_capabilities"] = sorted(capabilities)
     minimums = [
@@ -64,6 +74,7 @@ def compose(active, update, portable_favourites=None):
             active.get("minimum_client_version"),
             update.get("minimum_client_version"),
             "1.0.0" if "kodi.favourites" in merged else None,
+            "1.5.0" if "kodi.skin_menu" in merged else None,
         )
         if value is not None
     ]

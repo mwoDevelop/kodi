@@ -47,6 +47,8 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | Dziennik wdrożenia Profile Sync | [Zapis stanu realizacji](profile-sync-implementation.md) |
 | Synchronizacja stanu odtwarzania | [Plan playback LWW](PLAYBACK_STATE_SYNC_PLAN.md) |
 | Wielokierunkowa synchronizacja ulubionych | [Plan Favourites LWW bez urządzenia nadrzędnego](FAVOURITES_MULTIWRITER_SYNC_PLAN.md) |
+| Deklaratywne menu skórki | [Plan synchronizacji menu Aeon Nox Silvo](SKIN_MENU_SYNC_PLAN.md) |
+| Audyt planu menu skórki | [Niezależny audyt planu synchronizacji menu](SKIN_MENU_SYNC_PLAN_REVIEW.md) |
 | Katalog możliwości runtime Kodi | [Plan automatycznej kwalifikacji wydań](KODI_RUNTIME_CAPABILITY_CATALOG_PLAN.md) |
 | Synchronizacja upstream | [Plan synchronizacji upstream](../UPSTREAM_SYNC_PLAN.md) |
 | Automatyczny release Umbrelli | [Plan automatyzacji Umbrelli](../UMBRELLA_AUTOMATED_RELEASE_PLAN.md) |

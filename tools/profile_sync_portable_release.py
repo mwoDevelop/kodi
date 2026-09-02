@@ -21,13 +21,32 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools.kodi_portable_state import validate_bundle
-from tools.kodi_portable_state_rollout import _cleanup, _profile_sync_probe
+from tools.kodi_portable_state_rollout import (
+    _cleanup,
+    _profile_sync_probe,
+)
+from tools.kodi_portable_state_rollout import (
+    _restart as restart_kodi,
+)
 from tools.kodi_profile import (
     AdbEventClient,
     AdbJsonRpcClient,
     _wait_for_kodi_ready,
 )
 from tools.kodi_routine_profile import export_routine_profile
+from tools.kodi_skin_menu import (
+    ADAPTER_ID as SKIN_MENU_ADAPTER_ID,
+)
+from tools.kodi_skin_menu import (
+    CAPABILITY as SKIN_MENU_CAPABILITY,
+)
+from tools.kodi_skin_menu import (
+    MINIMUM_CLIENT_VERSION as SKIN_MENU_MINIMUM_CLIENT_VERSION,
+)
+from tools.kodi_skin_menu import (
+    load_skin_menu,
+)
+from tools.kodi_skin_menu import probe_device as probe_skin_menu_device
 from tools.kodi_sync_inventory import load_sync_inventory
 from tools.profile_portable_favourites import export_portable_favourites
 from tools.profile_revision_compose import compose
@@ -42,11 +61,8 @@ from tools.qnap_profile_sync import (
     production_admin_request,
 )
 
-
 CHANNEL = "home-stable"
-ADDON_ENTRYPOINT = (
-    "special://home/addons/service.mwodevelop.profilesync/default.py"
-)
+ADDON_ENTRYPOINT = "special://home/addons/service.mwodevelop.profilesync/default.py"
 
 
 def _current_bundle(repository: Path) -> tuple[Path, dict]:
@@ -94,14 +110,15 @@ def _routine_export(repository: Path, settings: Path, schema: int) -> dict:
     """Export the managed Umbrella subset without copying private XML."""
     settings = settings.resolve()
     private = (repository / ".kodi-private").resolve()
-    if private not in settings.parents or not settings.is_file() or settings.is_symlink():
+    if (
+        private not in settings.parents
+        or not settings.is_file()
+        or settings.is_symlink()
+    ):
         raise ValueError("routine settings authority must be a private regular file")
     with tempfile.TemporaryDirectory(prefix="profile-sync-routine-") as value:
         profile = Path(value)
-        target = (
-            profile
-            / "userdata/addon_data/plugin.video.umbrella/settings.xml"
-        )
+        target = profile / "userdata/addon_data/plugin.video.umbrella/settings.xml"
         target.parent.mkdir(parents=True)
         target.write_bytes(settings.read_bytes())
         return export_routine_profile(
@@ -148,7 +165,8 @@ def _database_state(path: Path) -> dict:
             for row in database.execute(
                 """
                 SELECT enrollment_id, logical_device_id, generation, channel,
-                       target_tags, revoked, last_seen_at
+                       target_tags, revoked, last_seen_at, client_version,
+                       client_capabilities
                 FROM enrollments WHERE channel=? ORDER BY logical_device_id, generation
                 """,
                 (CHANNEL,),
@@ -201,8 +219,32 @@ def _latest_enrollments(state: dict, logical_ids: set[str]) -> dict[str, dict]:
             "Profile Sync has no eligible enrollment for: %s" % ", ".join(missing)
         )
     for item in selected.values():
-        item["target_tags"] = json.loads(item["target_tags"])
+        if isinstance(item["target_tags"], str):
+            item["target_tags"] = json.loads(item["target_tags"])
     return selected
+
+
+def _version(value):
+    try:
+        return tuple(int(part) for part in str(value).split("."))
+    except ValueError:
+        return ()
+
+
+def _skin_menu_for_fleet(repository, enrollments):
+    pending = []
+    for logical_id, enrollment in sorted(enrollments.items()):
+        try:
+            capabilities = set(json.loads(enrollment["client_capabilities"] or "[]"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            capabilities = set()
+        if SKIN_MENU_CAPABILITY not in capabilities or _version(
+            enrollment.get("client_version")
+        ) < _version(SKIN_MENU_MINIMUM_CLIENT_VERSION):
+            pending.append(logical_id)
+    if pending:
+        return None, pending
+    return load_skin_menu(repository / "manifests/kodi-skin-menu.json"), []
 
 
 def _admin(
@@ -314,7 +356,15 @@ def _assign_candidate(
     )
 
 
-def _trigger_sync(inventory: dict, logical_id: str, adb: str, port: int, revision: str):
+def _trigger_sync(
+    inventory: dict,
+    logical_id: str,
+    adb: str,
+    port: int,
+    revision: str,
+    require_skin_menu=False,
+    restart_skin_menu=False,
+):
     device = inventory["devices"][logical_id]
     if device["platform"] not in {"android", "android-emulator"}:
         raise RuntimeError("Profile Sync canary must use Android")
@@ -346,12 +396,42 @@ def _trigger_sync(inventory: dict, logical_id: str, adb: str, port: int, revisio
                 and probe.get("applied_revision") == revision
                 and probe.get("status") in {"APPLIED", "NO_CHANGE"}
             ):
-                return {
+                result = {
                     "logical_device_id": logical_id,
                     "enrollment_id": probe["enrollment_id"],
                     "status": probe["status"],
                     "revision_id": revision,
                 }
+                if require_skin_menu:
+                    status = probe.get("skin_menu_status")
+                    if status == "NOT_APPLICABLE":
+                        raise RuntimeError(
+                            "Profile Sync canary skin menu is not applicable"
+                        )
+                    if status not in {"GENERATED_VERIFIED", "HEALTHY"}:
+                        continue
+                    skin_menu = probe_skin_menu_device(adb, port, serial)
+                    if not (
+                        skin_menu["source_match"]
+                        and skin_menu["generated_match"]
+                    ):
+                        raise RuntimeError(
+                            "Profile Sync canary skin menu verification failed"
+                        )
+                    result["skin_menu_status"] = status
+                    result["skin_menu"] = skin_menu
+                    if restart_skin_menu:
+                        restart_kodi(adb, port, serial)
+                        persisted = probe_skin_menu_device(adb, port, serial)
+                        if not (
+                            persisted["source_match"]
+                            and persisted["generated_match"]
+                        ):
+                            raise RuntimeError(
+                                "Profile Sync canary skin menu did not survive restart"
+                            )
+                        result["skin_menu_restart_verified"] = True
+                return result
         raise TimeoutError("Profile Sync canary did not apply the candidate")
     finally:
         _cleanup(adb, port, serial)
@@ -392,8 +472,7 @@ def bootstrap_active(repository: Path, logical_id: str) -> dict:
                 and current["revision_id"] == state["active_revision"]
                 and document.get("schema") == 2
                 and document.get("channel_generation") == state["generation"]
-                and document.get("enrollment_generation")
-                == enrollment["generation"]
+                and document.get("enrollment_generation") == enrollment["generation"]
                 and int(document.get("expires_at", 0)) >= int(time.time())
             ):
                 return {
@@ -457,6 +536,18 @@ def converge(
             backups.append(evidence["backup_id"])
             state = _database_state(backup)
             active_adapters = _revision_adapters(state["manifest"])
+            logical_ids = set(inventory["devices"])
+            enrollments = _latest_enrollments(state, logical_ids)
+            skin_menu, skin_menu_pending = _skin_menu_for_fleet(repository, enrollments)
+            if active_adapters.get(SKIN_MENU_ADAPTER_ID) is not None:
+                expected_menu = load_skin_menu(
+                    repository / "manifests/kodi-skin-menu.json"
+                )
+                if active_adapters[SKIN_MENU_ADAPTER_ID] != expected_menu:
+                    raise RuntimeError(
+                        "active skin menu differs while fleet capability is incomplete"
+                    )
+                skin_menu = expected_menu
             routine = (
                 _routine_export(
                     repository,
@@ -474,6 +565,10 @@ def converge(
             if (
                 active_adapters.get("kodi.favourites") == exported["adapter"]
                 and routine_matches
+                and (
+                    skin_menu is None
+                    or active_adapters.get(SKIN_MENU_ADAPTER_ID) == skin_menu
+                )
             ):
                 return {
                     "schema": 1,
@@ -482,8 +577,20 @@ def converge(
                     "active_revision": state["active_revision"],
                     "backups": backups,
                     "canaries": [],
+                    "skin_menu": (
+                        "DEFERRED_CAPABILITY" if skin_menu is None else "ACTIVE"
+                    ),
+                    "skin_menu_pending": skin_menu_pending,
                 }
-            unsigned = compose(state["manifest"], routine, exported["adapter"])
+            extra_adapters = (
+                {SKIN_MENU_ADAPTER_ID: skin_menu} if skin_menu is not None else None
+            )
+            unsigned = compose(
+                state["manifest"],
+                routine,
+                exported["adapter"],
+                extra_adapters=extra_adapters,
+            )
             revision = sign_with_registry(
                 "revision",
                 unsigned,
@@ -492,11 +599,11 @@ def converge(
                 repository / ".kodi-private/profile-sync-production/key-registry.json",
             )
             if state["candidate_revision"] not in {None, revision["revision_id"]}:
-                raise RuntimeError("Profile Sync channel already has a foreign candidate")
+                raise RuntimeError(
+                    "Profile Sync channel already has a foreign candidate"
+                )
             _put_candidate(session, repository, state, revision, exported)
             revision_id = revision["revision_id"]
-            logical_ids = set(inventory["devices"])
-            enrollments = _latest_enrollments(state, logical_ids)
             canary_results = []
             canary_enrollments = []
             for logical_id in canaries:
@@ -504,7 +611,15 @@ def converge(
                 _assign_candidate(
                     session, repository, enrollment, revision_id, state["generation"]
                 )
-                observed = _trigger_sync(inventory, logical_id, adb, port, revision_id)
+                observed = _trigger_sync(
+                    inventory,
+                    logical_id,
+                    adb,
+                    port,
+                    revision_id,
+                    require_skin_menu=skin_menu is not None,
+                    restart_skin_menu=skin_menu is not None,
+                )
                 if observed["enrollment_id"] != enrollment["enrollment_id"]:
                     raise RuntimeError("Profile Sync canary uses a stale enrollment")
                 report_backup, report_evidence = _backup(
@@ -552,7 +667,14 @@ def converge(
                 repository,
             )
             for logical_id in canaries:
-                observed = _trigger_sync(inventory, logical_id, adb, port, revision_id)
+                observed = _trigger_sync(
+                    inventory,
+                    logical_id,
+                    adb,
+                    port,
+                    revision_id,
+                    require_skin_menu=skin_menu is not None,
+                )
                 active_backup, active_evidence = _backup(
                     session, repository, "active-%s" % logical_id
                 )
@@ -574,6 +696,8 @@ def converge(
                 "generation": next_generation,
                 "backups": backups,
                 "canaries": canary_results,
+                "skin_menu": "ACTIVE" if skin_menu is not None else "UNCHANGED",
+                "skin_menu_pending": skin_menu_pending,
             }
         finally:
             session.close()

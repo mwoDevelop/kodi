@@ -378,7 +378,8 @@ rollout, ponowne enrollment i pełne E2E.
 Publisher jest wybierany przez `KODI_SYNC_PUBLISHER` i rolę `publisher` w
 prywatnym inventory; obecnie jest nim Sony TV. Pełny rollout eksportuje z niego
 content-addressed bundle favourites/artwork, tworzy na QNAP podpisaną rewizję
-`kodi.favourites`, a następnie wymaga kolejno raportów candidate i active z
+`kodi.favourites` oraz — po capability-gate całej floty — deklaratywne
+`kodi.skin_menu`, a następnie wymaga kolejno raportów candidate i active z
 BlueStacks oraz X88. Dopiero po obu raportach promuje rewizję. Profile Sync/QNAP
 jest autorytatywnym kanałem rutynowej konfiguracji. Bezpośredni `apply` bundle
 pozostaje bootstrapem i kompensacją; gdy semantyczny hash favourites, dokładny
@@ -388,6 +389,13 @@ Scoped rollout nie publikuje rewizji, nie odczytuje publishera i nie mutuje QNAP
 Używa wyłącznie przypiętego prywatnego bundle oraz aktywnej rewizji. Po każdym
 przebiegu brama wymaga kompletnych grafik, aktualnych akcji WatchNixtoons2 i
 spójnej, sparowanej tożsamości Profile Sync.
+
+Menu skórki nie jest eksportowane z publishera. Jego źródłem prawdy jest
+`manifests/kodi-skin-menu.json`; pierwsza wersja zastępuje całe menu główne Aeon Nox
+Silvo pozycjami `Programs`, `Settings`, `Cartoons` i warunkowym `PlayDisc`. Adapter
+zapisuje journal przed mutacją, uruchamia builder Skin Shortcuts i sprawdza
+wygenerowany include. Podczas odtwarzania zwraca `DEFERRED_PLAYBACK`, a drugi zgodny
+przebieg nie przeładowuje skórki.
 
 Androidowy adapter nie ufa samej obecności ustawień Profile Sync. Przy poprawnej
 tożsamości wymaga podpisanego przypisania aktywnej rewizji oraz zgodności

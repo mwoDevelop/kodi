@@ -176,8 +176,41 @@
         },
         {
           "$ref": "#/$defs/favouritesAdapter"
+        },
+        {
+          "$ref": "#/$defs/skinMenuAdapter"
         }
       ]
+    },
+    "skinMenuAdapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapter", "apply_mode", "ownership", "skin_id", "menu_id", "items"],
+      "properties": {
+        "adapter": {"const": "skin_shortcuts_v1"},
+        "apply_mode": {"const": "hot_apply"},
+        "ownership": {"const": "whole_document"},
+        "skin_id": {"const": "skin.aeon.nox.silvo"},
+        "menu_id": {"const": "mainmenu"},
+        "items": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "label2", "icon", "action"],
+            "properties": {
+              "id": {"enum": ["programs", "settings", "favourites", "playdisc"]},
+              "label": {"type": "string", "maxLength": 128},
+              "label2": {"type": "string", "maxLength": 128},
+              "icon": {"type": "string", "pattern": "^special://skin/", "maxLength": 256},
+              "action": {"type": "string", "maxLength": 128},
+              "visible": {"const": "System.HasMediaDVD"}
+            }
+          }
+        }
+      }
     },
     "settingsAdapter": {
       "type": "object",
