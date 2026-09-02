@@ -92,6 +92,12 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
         },
         "addons": addons,
     }
+    dependency = {
+        "id": "script.module.urllib3",
+        "version": "2.2.3",
+        "sha256": "3" * 64,
+        "url": "https://mirrors.kodi.tv/addons/omega/urllib3.zip",
+    }
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.load_private_references",
         lambda path: loaded.setdefault("references", path) and {},
@@ -136,6 +142,24 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
                 "version": "1.0.0",
             },
         },
+    )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.load_official_dependencies",
+        lambda _path: [dependency],
+    )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.fetch_artifact",
+        lambda _metadata, _cache: tmp_path / "urllib3.zip",
+    )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.reconcile_official_dependencies",
+        lambda *_args, **_kwargs: [
+            {
+                "addon": "script.module.urllib3",
+                "action": "unchanged",
+                "version": "2.2.3",
+            }
+        ],
     )
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.addon_details",
@@ -216,6 +240,7 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     assert result["channel"] == "testing"
     assert result["advancedsettings"]["status"] == "NO_CHANGE"
     assert result["retired_addons"]["status"] == "NO_CHANGE"
+    assert result["official_dependencies"]["status"] == "NO_CHANGE"
     assert result["managed_settings"]["status"] == "UPDATED"
     assert loaded == {
         "devices": tmp_path / "devices.json",
