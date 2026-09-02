@@ -32,13 +32,13 @@ from tools.kodi_profile import (
     _wait_for_kodi_ready,
     adb_command,
 )
-from tools.kodi_runtime_attestation import attest_android_runtime
 from tools.kodi_reinstall import (
     assign_addon_origins_in_kodi,
     installed_addon_origins_in_kodi,
 )
 from tools.kodi_retired_addons import reconcile_retired_addons
-from tools.kodi_stable_artifacts import prepare
+from tools.kodi_runtime_attestation import attest_android_runtime
+from tools.kodi_stable_artifacts import prepare, prepare_repository
 
 STABLE_ORIGIN = "repository.mwodevelop"
 TESTING_ORIGIN = "repository.mwodevelop.testing"
@@ -237,8 +237,17 @@ def reconcile(
     kodi_preflight = ensure_kodi_ready(adb, port, serial)
     prepared = prepare(ROOT, channel=channel)
     repository_id = prepared["repository_id"]
+    supporting_repositories = {}
+    if channel == "testing" and STABLE_ORIGIN in desired_origins(
+        prepared, channel
+    ).values():
+        stable_repository = prepare_repository(ROOT, channel="stable")
+        supporting_repositories[stable_repository["repository_id"]] = (
+            stable_repository["repository"]
+        )
     available = {
         repository_id: prepared["repository"],
+        **supporting_repositories,
         **prepared["addons"],
     }
     descriptors = [
@@ -292,10 +301,12 @@ def reconcile(
     actions = []
     deployment_order = [
         repository_id,
+        *supporting_repositories,
         *(
             addon_id
             for addon_id in compatibility["order"]
             if addon_id != repository_id
+            and addon_id not in supporting_repositories
         ),
     ]
     for addon_id in deployment_order:

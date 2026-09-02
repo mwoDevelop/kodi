@@ -1,6 +1,6 @@
 # Stan wdrożenia Profile Sync
 
-Data: 2026-09-01
+Data: 2026-09-02
 
 To jest chronologiczny zapis wdrożenia, a nie strona statusu na żywo. Poniższe
 stwierdzenia dotyczące wersji opisują bramę osiągniętą w zarejestrowanym dniu. Bieżący
@@ -13,7 +13,7 @@ w `docs/README.md`.
 
 ### Przyrost 2026-09-01: wielokierunkowe Kodi Favourites
 
-- Profile Sync 1.4.1 dodaje osobny, minutowy kanał
+- Profile Sync 1.4.2 udostępnia osobny, minutowy kanał
   `favourites-state-lww-v1`; każda jawnie włączona instalacja może publikować cały
   kanoniczny dokument Favourites i pobierać nowszą wersję bez urządzenia nadrzędnego;
 - wspólne z playback WatchNixtoons2 są enrollment, scope, bearer, podpis urządzenia,
@@ -40,6 +40,14 @@ w `docs/README.md`.
   dual-write ani niejawnego fallbacku po cutover.
 - poprawka 1.4.1 normalizuje zwracane przez Kodi 21 puste `thumbnail` do braku
   opcjonalnego pola; każda niepusta wartość nadal przechodzi ścisłą walidację.
+- poprawka 1.4.2 zachowuje jako `base_server_revision` trwały cursor lokalnego
+  journala. Klient nie może podpisać oczekującej zmiany headem, który tylko zobaczył
+  w tej samej próbie; serwer rozpoznaje dzięki temu rzeczywisty stale-base jako
+  konflikt i nadal przyjmuje cały późniejszy dokument zgodnie z LWW.
+
+Kwalifikacja BlueStacks/X88, konflikt whole-document oraz powrót do identycznych
+dziewięciu skrótów z kompletem grafik są zapisane w
+`docs/e2e-results/2026-09-02-favourites-multiwriter-sync.md`.
 
 Powtarzalne testy modułowe i HTTP:
 

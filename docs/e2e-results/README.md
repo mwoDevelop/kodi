@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-09
 
+- [Wielokierunkowa synchronizacja Kodi Favourites](2026-09-02-favourites-multiwriter-sync.md)
 - [Automatyczny katalog możliwości runtime Kodi](2026-09-01-kodi-runtime-capability-catalog.md)
 - [Brama kompatybilności dodatków Kodi](2026-09-01-addon-runtime-compatibility.md)
 

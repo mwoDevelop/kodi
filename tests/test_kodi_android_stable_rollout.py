@@ -128,6 +128,16 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
         lambda _root, channel: prepared,
     )
     monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.prepare_repository",
+        lambda _root, channel: {
+            "repository_id": "repository.mwodevelop",
+            "repository": {
+                "path": tmp_path / "stable-repository.zip",
+                "version": "1.0.0",
+            },
+        },
+    )
+    monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.addon_details",
         lambda *_args: None,
     )
@@ -171,17 +181,19 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.desired_origins",
-        lambda _prepared, _channel: {ADDON_IDS[0]: repository_id},
+        lambda _prepared, _channel: {
+            ADDON_IDS[0]: "repository.mwodevelop"
+        },
     )
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.installed_addon_origins_in_kodi",
-        lambda *_args: {ADDON_IDS[0]: "repository.mwodevelop"},
+        lambda *_args: {ADDON_IDS[0]: repository_id},
     )
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.origin_transition",
         lambda _prepared, _channel, _origins, _current: (
-            {ADDON_IDS[0]: "repository.mwodevelop"},
-            {ADDON_IDS[0]: {"from": "1.0.0", "to": "2.0.0"}},
+            {ADDON_IDS[0]: repository_id},
+            {},
         ),
     )
     def reconcile_settings(*_args):
@@ -211,16 +223,15 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     }
     assert [item[0] for item in installed] == [
         repository_id,
+        "repository.mwodevelop",
         *ADDON_IDS,
     ]
     assert assigned == [
         {
             "serial": "device",
-            "addon_origins": {ADDON_IDS[0]: repository_id},
-            "addon_previous_origins": {ADDON_IDS[0]: "repository.mwodevelop"},
-            "addon_version_transitions": {
-                ADDON_IDS[0]: {"from": "1.0.0", "to": "2.0.0"}
-            },
+            "addon_origins": {ADDON_IDS[0]: "repository.mwodevelop"},
+            "addon_previous_origins": {ADDON_IDS[0]: repository_id},
+            "addon_version_transitions": {},
         }
     ]
 

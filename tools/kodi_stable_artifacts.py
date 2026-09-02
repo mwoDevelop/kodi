@@ -12,7 +12,6 @@ import urllib.request
 from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = "https://mwodevelop.github.io/kodi"
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -91,7 +90,7 @@ def _validate_zip(path, addon_id, version):
         raise ValueError("stable ZIP metadata differs from lock")
 
 
-def prepare(repository=ROOT, opener=urllib.request.urlopen, channel="stable"):
+def _channel_context(repository, opener, channel):
     repository = Path(repository).resolve()
     if channel not in CHANNELS:
         raise ValueError("unsupported Kodi repository channel")
@@ -108,6 +107,57 @@ def prepare(repository=ROOT, opener=urllib.request.urlopen, channel="stable"):
     cache.mkdir(parents=True, exist_ok=True, mode=0o700)
     cache.chmod(0o700)
     public = artifact_manifest(opener=opener)
+    return repository, channel_config, lock, lock_sha, cache, public
+
+
+def _prepare_repository(cache, public, channel_config, opener):
+    repository_id = channel_config["repository_id"]
+    repository_version = "1.0.0"
+    relative = "%s-%s.zip" % (repository_id, repository_version)
+    expected = public.get(relative)
+    if not expected:
+        raise ValueError("public artifact manifest lacks channel repository ZIP")
+    destination = cache / (repository_id + ".zip")
+    if not destination.is_file() or digest(destination) != expected:
+        _download(PUBLIC + "/" + relative, destination, opener=opener)
+    if digest(destination) != expected:
+        raise ValueError("channel repository ZIP digest differs")
+    _validate_zip(destination, repository_id, repository_version)
+    return {
+        "path": destination,
+        "sha256": expected,
+        "version": repository_version,
+    }
+
+
+def prepare_repository(repository=ROOT, opener=urllib.request.urlopen, channel="stable"):
+    (
+        _repository,
+        channel_config,
+        _lock,
+        lock_sha,
+        cache,
+        public,
+    ) = _channel_context(repository, opener, channel)
+    return {
+        "channel": channel,
+        "repository_id": channel_config["repository_id"],
+        "lock_sha256": lock_sha,
+        "repository": _prepare_repository(
+            cache, public, channel_config, opener
+        ),
+    }
+
+
+def prepare(repository=ROOT, opener=urllib.request.urlopen, channel="stable"):
+    (
+        _repository,
+        channel_config,
+        lock,
+        lock_sha,
+        cache,
+        public,
+    ) = _channel_context(repository, opener, channel)
     artifacts = {}
     for addon_id, pin in lock["components"].items():
         version = pin["version"]
@@ -132,25 +182,12 @@ def prepare(repository=ROOT, opener=urllib.request.urlopen, channel="stable"):
             "version": version,
         }
     repository_id = channel_config["repository_id"]
-    repository_version = "1.0.0"
-    relative = "%s-%s.zip" % (repository_id, repository_version)
-    expected = public.get(relative)
-    if not expected:
-        raise ValueError("public artifact manifest lacks channel repository ZIP")
-    destination = cache / (repository_id + ".zip")
-    if not destination.is_file() or digest(destination) != expected:
-        _download(PUBLIC + "/" + relative, destination, opener=opener)
-    if digest(destination) != expected:
-        raise ValueError("channel repository ZIP digest differs")
-    _validate_zip(destination, repository_id, repository_version)
     return {
         "channel": channel,
         "repository_id": repository_id,
         "lock_sha256": lock_sha,
-        "repository": {
-            "path": destination,
-            "sha256": expected,
-            "version": repository_version,
-        },
+        "repository": _prepare_repository(
+            cache, public, channel_config, opener
+        ),
         "addons": artifacts,
     }

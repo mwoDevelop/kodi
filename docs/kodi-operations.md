@@ -107,6 +107,13 @@ Przykłady:
   tests/test_kodi_addon_candidate_rollout.py
 ```
 
+Rollout kanału `testing` stosuje hybrydową politykę pochodzenia: dodatki różniące
+się od stable należą do `repository.mwodevelop.testing`, a identyczne artefakty do
+`repository.mwodevelop`. Jeżeli na urządzeniu nie ma jeszcze repozytorium stable,
+adapter pobiera i weryfikuje tylko jego dokładny ZIP, instaluje go jako repozytorium
+wspierające i dopiero potem przypisuje originy. Nie pobiera przy tym całego zestawu
+dodatków stable. Powtórzenie musi zakończyć się `NO_CHANGE`.
+
 Nowe stabilne wydanie Kodi nie wymaga zmiany kodu. Codzienny workflow proponuje
 append-only wpis danych, a operator przed merge atestuje rzeczywiste dystrybucje:
 

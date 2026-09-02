@@ -1,8 +1,8 @@
 # Plan wielokierunkowej synchronizacji Kodi Favourites przez QNAP
 
-Data: 2026-09-01
+Data: 2026-09-02
 
-Status: `IMPLEMENTED_PENDING_LIVE_QUALIFICATION`
+Status: `IMPLEMENTED_CANARY_QUALIFIED_PENDING_RELEASE`
 
 Niezależny audyt: `FAVOURITES_MULTIWRITER_SYNC_PLAN_REVIEW.md`.
 
@@ -338,7 +338,7 @@ pełnego audytu aktora.
 
 - `kodi_ops.py rollout` ma kwalifikować dynamiczny head i zbieżność, bez eksportu z
   Sony TV;
-- usunąć wymóg `KODI_SYNC_PUBLISHER` dopiero po zakończeniu migracji;
+- usunąć wymóg `KODI_SYNC_PUBLISHER` po ręcznym przełączeniu dostępnych klientów;
 - zachować narzędzie jednorazowego seed/bootstrapu z lokalnego bundle;
 - zaktualizować dokumenty architektury, Profile Sync, operacji, backupu, panelu i E2E.
 
@@ -380,16 +380,15 @@ Po udanych E2E i pełnym rolloutcie:
 - usunąć rolę publishera i `KODI_SYNC_PUBLISHER` z aktywnego kontraktu;
 - usunąć eksport z Sony TV z normalnej ścieżki full rollout;
 - pozostawić jawne, administracyjne narzędzie bootstrap/import;
-- usunąć dual-read dopiero po potwierdzeniu, że wszystkie wspierane klienty mają nową
-  capability; każdy aktywny enrollment musi zostać ręcznie przełączony albo jawnie
-  `revoked`/`retired`; samo `DEFERRED` nie wystarcza;
-- oznaczyć stary model w lifecycle jako wycofany i usunąć go w osobnym, testowanym
-  kroku, a nie razem z pierwszym wdrożeniem.
+- ręcznie przełączyć dostępne aktywne enrollmenty, a nieużywane jawnie oznaczyć jako
+  `revoked`/`retired`; urządzenie offline może pozostać `DEFERRED` do czasu powrotu;
+- pozostawić statyczny adapter wyłącznie jako jawny mechanizm rollbacku i usunąć go
+  później zwykłą, ręczną zmianą po kwalifikacji floty.
 
 Nie budować automatycznego migratora dla tej jednorazowej operacji. Obsługiwany jest
-mały, jawny skrypt operatora `seed` oraz `cutover-enrollment`, oba z dry-run, dokładnym
-targetem, backupem i raportem. To ogranicza implementację i usuwa niebezpieczny
-automatyczny dual-read.
+mały, jawny skrypt operatora `seed` oraz ręczne przełączenie konkretnego enrollmentu.
+Obie operacje mają dry-run, dokładny target, backup i raport. Nie ma dual-read,
+dual-write ani osobnej maszyny stanów migracji.
 
 ## 11. Testy
 
