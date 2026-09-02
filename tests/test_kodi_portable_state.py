@@ -1,6 +1,5 @@
 import json
 import zipfile
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -220,7 +219,7 @@ def test_current_bundle_pointer_is_content_addressed_and_path_safe(tmp_path):
 
 
 @pytest.mark.parametrize("running", [True, False])
-def test_portable_operation_wakes_device_and_starts_kodi_only_when_not_running(
+def test_portable_operation_wakes_device_and_activates_kodi_when_needed(
     monkeypatch, running
 ):
     commands = []
@@ -238,9 +237,12 @@ def test_portable_operation_wakes_device_and_starts_kodi_only_when_not_running(
     monkeypatch.setattr(
         "tools.kodi_portable_state_rollout.adb_command", adb_command
     )
+
+    def wait(*_args, **kwargs):
+        ready.append(kwargs.get("timeout"))
+
     monkeypatch.setattr(
-        "tools.kodi_portable_state_rollout._wait_for_kodi_ready",
-        lambda *_args: ready.append(True),
+        "tools.kodi_portable_state_rollout._wait_for_kodi_ready", wait
     )
 
     _ensure_kodi_started("adb", 5038, "device")
@@ -256,4 +258,35 @@ def test_portable_operation_wakes_device_and_starts_kodi_only_when_not_running(
             "shell",
             "monkey -p org.xbmc.kodi -c android.intent.category.LAUNCHER 1 >/dev/null",
         )
-    assert ready == [True]
+    assert ready == ([5] if running else [None])
+
+
+def test_portable_operation_reactivates_stale_background_kodi(monkeypatch):
+    commands = []
+    ready = []
+
+    def adb_command(_adb, _port, _serial, *argv, **_kwargs):
+        commands.append(argv)
+        if argv == ("shell", "pidof org.xbmc.kodi"):
+            return SimpleNamespace(returncode=0, stdout="1234\n")
+        return SimpleNamespace(returncode=0, stdout="")
+
+    def wait(*_args, **kwargs):
+        ready.append(kwargs.get("timeout"))
+        if kwargs.get("timeout") == 5:
+            raise TimeoutError("background event server is suspended")
+
+    monkeypatch.setattr(
+        "tools.kodi_portable_state_rollout.adb_command", adb_command
+    )
+    monkeypatch.setattr(
+        "tools.kodi_portable_state_rollout._wait_for_kodi_ready", wait
+    )
+
+    _ensure_kodi_started("adb", 5038, "device")
+
+    assert commands[-1] == (
+        "shell",
+        "monkey -p org.xbmc.kodi -c android.intent.category.LAUNCHER 1 >/dev/null",
+    )
+    assert ready == [5, None]

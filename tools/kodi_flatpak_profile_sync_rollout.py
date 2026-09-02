@@ -273,6 +273,8 @@ class QnapPairingClient:
         channel,
         key_id,
         public_key,
+        encryption_key_id=None,
+        encryption_public_key=None,
     ):
         return production_pair_request(
             self.session,
@@ -281,6 +283,8 @@ class QnapPairingClient:
             channel,
             key_id,
             public_key,
+            encryption_key_id,
+            encryption_public_key,
         )
 
 
@@ -1703,6 +1707,29 @@ def rollout(args):
                 "repository_version": repository_version,
                 "applied_revision": result["applied_revision"],
                 "sync_status": result["sync_status"],
+                "favourites_sync_status": result.get(
+                    "favourites_sync_status"
+                ),
+                "favourites_status": result.get("favourites_status"),
+                "favourites_cursor": result.get("favourites_cursor"),
+                "favourites_pending_count": result.get(
+                    "favourites_pending_count"
+                ),
+                "favourites_dynamic_fence": result.get(
+                    "favourites_dynamic_fence"
+                ),
+                "playback_sync_status": result.get("playback_sync_status"),
+                "playback_status": result.get("playback_status"),
+                "playback_cursor": result.get("playback_cursor"),
+                "playback_pending_events": result.get(
+                    "playback_pending_events"
+                ),
+                "playback_pending_mapping": result.get(
+                    "playback_pending_mapping"
+                ),
+                "playback_pending_application": result.get(
+                    "playback_pending_application"
+                ),
                 "rollout_mode": mode,
                 "favourites": favourite_count,
                 "required_addons": result["required_addons"],

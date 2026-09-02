@@ -761,23 +761,61 @@ def _sync(profile_root, addon_root, profile_version, repository_version):
     from resources.lib.mwoprofilesync.portable import (
         KodiFavourites,
         PortableFavouritesAdapter,
+        PortableFavouritesExporter,
+    )
+    from resources.lib.mwoprofilesync.favourites_state import (
+        FavouritesApplier,
+        FavouritesJournal,
+        FavouritesSync,
+        FavouritesTicker,
+    )
+    from resources.lib.mwoprofilesync.playback import (
+        KodiPlaybackAdapter,
+        PlaybackJournal,
+        PlaybackSync,
+        PlaybackTicker,
     )
     from resources.lib.mwoprofilesync.state import StateStore
     from resources.lib.mwoprofilesync.sync import ReadOnlySync
 
     addon = _enabled_addon(ADDON_ID)
     state = StateStore(profile_data)
+    kodi_favourites = KodiFavourites(xbmc.executeJSONRPC)
+    portable_favourites = PortableFavouritesAdapter(
+        str(profile_root), kodi_favourites
+    )
     applier = TransactionalApplier(
         profile_data,
         state,
         KodiAddonSettings(xbmcaddon.Addon),
-        portable=PortableFavouritesAdapter(
-            str(profile_root), KodiFavourites(xbmc.executeJSONRPC)
-        ),
+        portable=portable_favourites,
     )
     applier.recover()
     _set_stage("apply_profile_sync")
     sync = ReadOnlySync(addon, state, applier=applier)()
+    _set_stage("sync_favourites_state")
+    favourites_applier = FavouritesApplier(profile_data, portable_favourites)
+    favourites_applier.recover()
+    favourites = FavouritesTicker(
+        FavouritesSync(
+            addon,
+            state,
+            FavouritesJournal(profile_data),
+            PortableFavouritesExporter(str(profile_root), kodi_favourites),
+            favourites_applier,
+        ),
+        state,
+    ).tick()
+    _set_stage("sync_playback_state")
+    playback = PlaybackTicker(
+        PlaybackSync(
+            addon,
+            state,
+            PlaybackJournal(profile_data),
+            KodiPlaybackAdapter(xbmc.executeJSONRPC),
+        ),
+        state,
+    ).tick()
     addon.setSetting("enabled", "true")
     local = state.read()
     enrollment = local.get("enrollment") or {}
@@ -791,6 +829,21 @@ def _sync(profile_root, addon_root, profile_version, repository_version):
         "assigned_revision": local.get("assigned_revision"),
         "applied_revision": local.get("applied_revision"),
         "pending_report": bool(local.get("pending_report")),
+        "favourites_sync_status": favourites.get("status"),
+        "favourites_status": local.get("favourites_status"),
+        "favourites_cursor": local.get("favourites_cursor"),
+        "favourites_pending_count": local.get("favourites_pending_count"),
+        "favourites_dynamic_fence": bool(
+            local.get("favourites_dynamic_fence")
+        ),
+        "playback_sync_status": playback.get("status"),
+        "playback_status": local.get("playback_status"),
+        "playback_cursor": local.get("playback_cursor"),
+        "playback_pending_events": local.get("playback_pending_events"),
+        "playback_pending_mapping": local.get("playback_pending_mapping"),
+        "playback_pending_application": local.get(
+            "playback_pending_application"
+        ),
     }
 
 
