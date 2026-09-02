@@ -40,6 +40,7 @@ TESTING_ORIGIN = "repository.mwodevelop.testing"
 # indexes, while the Big Buck Bunny fixture is independently exercised by the
 # device E2E matrix and remains resolvable on both release canaries.
 UMBRELLA_PLAYBACK_CASE = "big_buck_bunny"
+UMBRELLA_DIRECTORY_UNAVAILABLE_EXIT = 75
 
 
 def _run(argv, env=None):
@@ -218,7 +219,18 @@ def _run_functional_check(
                     "%s failed after %d controlled attempts"
                     % (name, MAX_CHECK_ATTEMPTS)
                 ) from None
-            _recover_kodi(adb, server_port, endpoint, port)
+            if (
+                name == "umbrella-search"
+                and error.returncode == UMBRELLA_DIRECTORY_UNAVAILABLE_EXIT
+            ):
+                # The first cold query can initialize Umbrella after reporting
+                # its directory unavailable. Restarting Kodi here recreates
+                # that same cold state, so retry in a new probe process against
+                # the warmed Kodi instance. Every other failure keeps the
+                # stronger full-process recovery below.
+                time.sleep(KODI_SERVICE_WARMUP_SECONDS)
+            else:
+                _recover_kodi(adb, server_port, endpoint, port)
 
 
 def _addon_state(adb, server_port, endpoint, expected, stable):

@@ -52,6 +52,26 @@ Kodi pokazywało już okno Videos, ale `Files.GetDirectory` zwracało jeszcze
 limicie czasu; inne błędy JSON-RPC nadal kończą próbę natychmiast. Dwa kolejne testy
 live po świeżym starcie Kodi zwróciły po jednym właściwym wyniku i okno Videos.
 
+Wolniejszy przebieg zdalny wykazał następnie, że odpytywanie tego samego katalogu,
+gdy GUI nadal posiada jego wywołanie pluginu, może podtrzymywać `-32602`. Sonda
+rozdziela teraz dwie odpowiedzialności: najpierw, przed nawigacją GUI, sprawdza
+wynik wyszukiwania niezależnym żądaniem, a następnie osobno przechodzi
+rzeczywistą ścieżkę klawiatury i powrotu do Videos. Inne błędy pluginu i JSON-RPC
+nadal kończą próbę natychmiast.
+
+Pełny lokalny certyfikator odtworzył również zimny start: pierwsza sonda mogła
+zainicjalizować Umbrellę, lecz poprzednia polityka restartowała Kodi przed drugą
+próbą i ponownie tworzyła zimny stan. Sonda zwraca teraz osobny kod wyjścia tylko
+dla tego warunku. Certyfikator po nim pozostawia dogrzaną instancję i uruchamia
+nowy proces sondy; wszystkie inne kody błędów nadal powodują pełny restart Kodi.
+
+Na X88 certyfikator znalazł następnie rzeczywistą usterkę instalacji zależności:
+`script.module.urllib3` deklarował wersję 2.2.3, ale brakowało katalogu `http2`,
+przez co import `requests` zatrzymywał Umbrellę. Androidowy rollout weryfikuje
+teraz zawartość wszystkich przypiętych czystych zależności Pythona z oficjalnego
+repozytorium Kodi względem SHA-256 ZIP-u i naprawia pakiet, gdy sama wersja w
+bazie Kodi jest poprawna, lecz pliki są niepełne albo zmienione.
+
 ## Powtarzalne testy
 
 ```bash

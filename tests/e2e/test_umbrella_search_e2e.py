@@ -191,6 +191,49 @@ def test_run_search_retries_transient_directory_initialization(monkeypatch):
 			return {"files": [{"label": "Sintel (2010)"}]}
 
 	rpc = FlakyRpc()
+	home_activations = []
+	monkeypatch.setattr(
+		umbrella_search_e2e,
+		"wait_for_window",
+		lambda *_args, **_kwargs: {"id": umbrella_search_e2e.VIDEOS_WINDOW},
+	)
+	monkeypatch.setattr(
+		umbrella_search_e2e,
+		"activate_home",
+		lambda *_args, **_kwargs: home_activations.append("home")
+		or {"id": 10000},
+	)
+	monkeypatch.setattr(
+		umbrella_search_e2e,
+		"open_search_keyboard",
+		lambda *_args, **_kwargs: {"id": 10103},
+	)
+	monkeypatch.setattr(
+		umbrella_search_e2e, "submit_keyboard", lambda *_args, **_kwargs: None
+	)
+	monkeypatch.setattr(
+		umbrella_search_e2e,
+		"current_window",
+		lambda *_args, **_kwargs: {"id": umbrella_search_e2e.VIDEOS_WINDOW},
+	)
+	monkeypatch.setattr(umbrella_search_e2e.time, "sleep", lambda _delay: None)
+
+	result = umbrella_search_e2e.run_search(rpc, "Sintel", timeout=1)
+
+	assert result["matches"] == ["Sintel (2010)"]
+	assert result["directory_probe"] == "standalone-before-gui"
+	assert rpc.directory_calls == 2
+	assert home_activations == ["home"]
+
+
+def test_run_search_does_not_hide_other_directory_errors(monkeypatch):
+	class BrokenRpc:
+		def call(self, method, params=None):
+			assert method == "Files.GetDirectory"
+			raise umbrella_search_e2e.JsonRpcError(
+				method, {"code": -32000, "message": "plugin failed"}
+			)
+
 	monkeypatch.setattr(
 		umbrella_search_e2e,
 		"wait_for_window",
@@ -216,7 +259,9 @@ def test_run_search_retries_transient_directory_initialization(monkeypatch):
 	)
 	monkeypatch.setattr(umbrella_search_e2e.time, "sleep", lambda _delay: None)
 
-	result = umbrella_search_e2e.run_search(rpc, "Sintel", timeout=1)
-
-	assert result["matches"] == ["Sintel (2010)"]
-	assert rpc.directory_calls == 2
+	try:
+		umbrella_search_e2e.run_search(BrokenRpc(), "Sintel", timeout=1)
+	except umbrella_search_e2e.JsonRpcError as error:
+		assert error.code == -32000
+	else:
+		raise AssertionError("non-transient JSON-RPC error was hidden")

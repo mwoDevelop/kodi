@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+import traceback
 from pathlib import Path
 from typing import Callable
 from urllib.parse import quote_plus
@@ -24,6 +25,11 @@ OK_DIALOG_WINDOW = 12002
 PVR_INFO_TITLE = "No PVR add-on enabled"
 KEYBOARD_WINDOWS = {10103, 10138}
 VIDEOS_WINDOW = 10025
+DIRECTORY_UNAVAILABLE_EXIT = 75
+
+
+class DirectoryTemporarilyUnavailable(RuntimeError):
+	"""Signal the one cold-start condition that is safe to retry in-place."""
 
 
 def current_window(rpc: JsonRpc) -> dict:
@@ -216,6 +222,33 @@ def run_search(
 			timeout,
 			transitions,
 		)
+	# Validate the plugin result before GUI navigation owns a plugin directory.
+	# Probing after activating or submitting the search window can race Kodi's
+	# asynchronous GUI call and return -32602 even though the same standalone
+	# request succeeds.
+	matches = []
+	directory_error = None
+	started = time.monotonic()
+	while time.monotonic() - started < timeout:
+		try:
+			matches = matching_search_results(rpc, term, media_type)
+		except JsonRpcError as error:
+			# A cold add-on can briefly reject its first directory request. Retry
+			# only this exact response; all other RPC errors remain fail-fast.
+			if error.method != "Files.GetDirectory" or error.code != -32602:
+				raise
+			directory_error = error
+			time.sleep(0.5)
+			continue
+		if matches:
+			break
+		time.sleep(0.5)
+	if not matches:
+		if directory_error is not None:
+			raise DirectoryTemporarilyUnavailable(
+				"Umbrella search directory remained unavailable"
+			) from directory_error
+		raise RuntimeError("Umbrella returned no matching result for %r" % term)
 	activate_home(rpc, timeout, transitions, modal_back)
 	time.sleep(2)
 	keyboard = open_search_keyboard(rpc, timeout, transitions, media_type)
@@ -228,30 +261,6 @@ def run_search(
 		timeout,
 		transitions,
 	)
-	matches = []
-	directory_error = None
-	started = time.monotonic()
-	while time.monotonic() - started < timeout:
-		try:
-			matches = matching_search_results(rpc, term, media_type)
-		except JsonRpcError as error:
-			# Kodi can expose the Videos window before an asynchronous plugin
-			# directory becomes queryable.  Retry only this exact transient
-			# GetDirectory response; all other RPC errors remain fail-fast.
-			if error.method != "Files.GetDirectory" or error.code != -32602:
-				raise
-			directory_error = error
-			time.sleep(0.5)
-			continue
-		if matches:
-			break
-		time.sleep(0.5)
-	if not matches:
-		if directory_error is not None:
-			raise RuntimeError(
-				"Umbrella search directory remained unavailable"
-			) from directory_error
-		raise RuntimeError("Umbrella returned no matching result for %r" % term)
 	after = current_window(rpc)
 	if after.get("id") == SOURCE_PROGRESS_WINDOW:
 		raise RuntimeError("source_progress window reappeared during search")
@@ -260,6 +269,7 @@ def run_search(
 		"media_type": media_type,
 		"keyboard_window": keyboard,
 		"matches": matches[:10],
+		"directory_probe": "standalone-before-gui",
 		"window_transitions": transitions,
 		"final_window": after,
 	}
@@ -315,4 +325,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-	raise SystemExit(main())
+	try:
+		raise SystemExit(main())
+	except DirectoryTemporarilyUnavailable:
+		traceback.print_exc()
+		raise SystemExit(DIRECTORY_UNAVAILABLE_EXIT) from None

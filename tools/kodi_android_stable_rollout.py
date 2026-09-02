@@ -21,7 +21,12 @@ from tools.kodi_addon_runtime_compatibility import (
     load_policy,
 )
 from tools.kodi_advancedsettings_policy import reconcile_android_advancedsettings
-from tools.kodi_default_addons import addon_details
+from tools.kodi_default_addons import (
+    addon_details,
+    fetch_artifact,
+    load_official_dependencies,
+    reconcile_official_dependencies,
+)
 from tools.kodi_devices import load_registry, resolve_device, resolve_private_endpoint
 from tools.kodi_inventory import load_private_references
 from tools.kodi_managed_addon_settings import (
@@ -245,6 +250,17 @@ def reconcile(
         supporting_repositories[stable_repository["repository_id"]] = (
             stable_repository["repository"]
         )
+    official_dependencies = load_official_dependencies(
+        ROOT / "manifests/kodi-official-dependencies.json"
+    )
+    dependency_cache = ROOT / ".kodi-private/cache/default-addons"
+    dependency_artifacts = {
+        dependency["id"]: {
+            "path": fetch_artifact(dependency, dependency_cache),
+            "version": dependency["version"],
+        }
+        for dependency in official_dependencies
+    }
     available = {
         repository_id: prepared["repository"],
         **supporting_repositories,
@@ -256,11 +272,11 @@ def reconcile(
             expected_id=addon_id,
             expected_version=artifact["version"],
         )
-        for addon_id, artifact in available.items()
+        for addon_id, artifact in {**dependency_artifacts, **available}.items()
     ]
     planned_versions = {
         addon_id: artifact["version"]
-        for addon_id, artifact in available.items()
+        for addon_id, artifact in {**dependency_artifacts, **available}.items()
     }
     runtime = android_runtime_facts(
         adb, port, serial, platform=device["platform"]
@@ -298,6 +314,16 @@ def reconcile(
         time.sleep(2)
         ensure_kodi_ready(adb, port, serial)
     retired_addons = reconcile_retired_addons(adb, port, serial)
+    dependency_actions = reconcile_official_dependencies(
+        adb,
+        port,
+        serial,
+        official_dependencies,
+        dependency_cache,
+        240,
+        planned_versions=planned_versions,
+        runtime_platform=device["platform"],
+    )
     actions = []
     deployment_order = [
         repository_id,
@@ -307,6 +333,7 @@ def reconcile(
             for addon_id in compatibility["order"]
             if addon_id != repository_id
             and addon_id not in supporting_repositories
+            and addon_id in available
         ),
     ]
     for addon_id in deployment_order:
@@ -390,6 +417,14 @@ def reconcile(
         "kodi_preflight": kodi_preflight,
         "advancedsettings": advancedsettings,
         "retired_addons": retired_addons,
+        "official_dependencies": {
+            "status": (
+                "UPDATED"
+                if any(item["action"] != "unchanged" for item in dependency_actions)
+                else "NO_CHANGE"
+            ),
+            "actions": dependency_actions,
+        },
         "actions": actions,
         "origins": origin_result,
         "managed_settings": managed_settings,

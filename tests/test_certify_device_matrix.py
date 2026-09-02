@@ -313,6 +313,44 @@ def test_functional_check_fails_after_two_attempts(monkeypatch, tmp_path):
         )
 
 
+def test_umbrella_cold_directory_retry_keeps_warmed_kodi(monkeypatch, tmp_path):
+    report = tmp_path / "result.json"
+    attempts = []
+    recoveries = []
+    sleeps = []
+
+    def fake_run(argv, env=None):
+        attempts.append((argv, env))
+        if len(attempts) == 1:
+            raise subprocess.CalledProcessError(75, argv)
+        report.write_text('{"result":"passed"}\n', encoding="utf-8")
+
+    monkeypatch.setattr("tools.certify_device_matrix._run", fake_run)
+    monkeypatch.setattr(
+        "tools.certify_device_matrix._recover_kodi",
+        lambda *args: recoveries.append(args),
+    )
+    monkeypatch.setattr(
+        "tools.certify_device_matrix.time.sleep",
+        lambda seconds: sleeps.append(seconds),
+    )
+
+    _run_functional_check(
+        "umbrella-search",
+        ["python", "check.py"],
+        report,
+        {},
+        "adb",
+        5038,
+        "device",
+        12345,
+    )
+
+    assert len(attempts) == 2
+    assert recoveries == []
+    assert sleeps == [20]
+
+
 def test_diagnostic_redacts_urls_and_credentials():
     redacted = _redacted_diagnostic(
         "open plugin://addon/path then https://example.invalid/?token=secret"
