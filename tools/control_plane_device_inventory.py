@@ -10,7 +10,11 @@ from pathlib import Path
 
 DEVICE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,95}$")
 CHANNEL = re.compile(r"^[a-z0-9][a-z0-9-]{1,95}$")
+CAPABILITY = re.compile(r"^[a-z0-9][a-z0-9-]{1,95}$")
+VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 MODES = frozenset({"always_on", "on_demand", "maintenance", "retired"})
+DEFAULT_REQUIRED_CAPABILITIES = ("skin-shortcuts-menu-v1",)
+DEFAULT_MINIMUM_CLIENT_VERSION = "1.5.0"
 
 
 class InventoryError(ValueError):
@@ -33,12 +37,27 @@ def _positive_int(references, name, default, minimum):
     return parsed
 
 
-def build_inventory(references):
-    """Return a strictly redacted schema-1 inventory.
+def build_inventory(
+    references,
+    required_capabilities=DEFAULT_REQUIRED_CAPABILITIES,
+    minimum_client_version=DEFAULT_MINIMUM_CLIENT_VERSION,
+):
+    """Return a strictly redacted schema-2 inventory.
 
     Only allowlisted policy keys are copied. Transport addresses, credentials,
     enrollment identifiers and every other value in ``references`` are ignored.
     """
+
+    required_capabilities = sorted(set(required_capabilities))
+    if (
+        len(required_capabilities) > 32
+        or any(not CAPABILITY.fullmatch(str(item)) for item in required_capabilities)
+    ):
+        raise InventoryError("required capabilities are invalid")
+    if not isinstance(minimum_client_version, str) or not VERSION.fullmatch(
+        minimum_client_version
+    ):
+        raise InventoryError("minimum client version is invalid")
 
     raw_ids = references.get("KODI_SYNC_DEVICES", "")
     devices = [item.strip() for item in raw_ids.split(",") if item.strip()]
@@ -101,9 +120,11 @@ def build_inventory(references):
                 "warning_after_seconds": warning,
                 "failure_after_seconds": failure,
                 "maintenance_until": maintenance or None,
+                "required_capabilities": required_capabilities,
+                "minimum_client_version": minimum_client_version,
             }
         )
-    return {"schema": 1, "devices": rows}
+    return {"schema": 2, "devices": rows}
 
 
 def _read_env(path):

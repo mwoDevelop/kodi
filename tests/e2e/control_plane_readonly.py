@@ -315,7 +315,7 @@ def main():
         device_inventory.write_text(
             json.dumps(
                 {
-                    "schema": 1,
+                    "schema": 2,
                     "devices": [
                         {
                             "logical_device_id": "e2e-device",
@@ -324,6 +324,8 @@ def main():
                             "warning_after_seconds": 28800,
                             "failure_after_seconds": 259200,
                             "maintenance_until": None,
+                            "required_capabilities": ["skin-shortcuts-menu-v1"],
+                            "minimum_client_version": "1.5.0",
                         }
                     ],
                 }
@@ -453,7 +455,8 @@ def main():
             status, fleet = wait_for(endpoint + "/v1/fleet", context, control)
             if status != 200 or fleet["profile_sync"]["status"] != "ok":
                 raise RuntimeError("Profile Sync fleet did not cross mTLS")
-            if fleet["profile_sync"]["data"]["database_schema"] != 7:
+            profile_schema = fleet["profile_sync"]["data"]["database_schema"]
+            if not isinstance(profile_schema, int) or profile_schema < 7:
                 raise RuntimeError("unexpected Profile Sync database schema")
             no_client = ssl.create_default_context(cafile=operator_tls / "ca.crt")
             try:
@@ -479,24 +482,45 @@ def main():
                 raise RuntimeError("published convergence bundle is unavailable")
             _status, services = request(endpoint + "/v1/services", context)
             _status, dashboard = request(endpoint + "/api/v1/dashboard", context)
-            if dashboard["schema"] != 1 or len(dashboard["schedules"]["jobs"]) != 13:
+            expected_jobs = len(
+                json.loads(
+                    (ROOT / "manifests/control-plane-schedules.json").read_text(
+                        encoding="utf-8"
+                    )
+                )["jobs"]
+            )
+            if (
+                dashboard["schema"] != 1
+                or len(dashboard["schedules"]["jobs"]) != expected_jobs
+            ):
                 raise RuntimeError("dashboard schedule catalog is unavailable")
-            if dashboard["fleet"]["devices"] != [
-                {
-                    "logical_device_id": "e2e-device",
-                    "monitoring_mode": "on_demand",
-                    "expected_channel": "home-stable",
-                    "state": "UNENROLLED",
-                    "severity": "none",
-                    "reason_codes": ["DEVICE_UNENROLLED"],
-                    "enrollment_generation": None,
-                    "client_version": None,
-                    "platform": None,
-                    "last_seen_at": None,
-                    "age_seconds": None,
-                }
-            ]:
+            devices = dashboard["fleet"]["devices"]
+            if len(devices) != 1:
                 raise RuntimeError("redacted device inventory is unavailable")
+            observed_device = devices[0]
+            expected_device = {
+                "logical_device_id": "e2e-device",
+                "monitoring_mode": "on_demand",
+                "expected_channel": "home-stable",
+                "state": "UNENROLLED",
+                "severity": "none",
+                "heartbeat_condition": "NEVER_SEEN",
+                "enrollment_condition": "UNENROLLED",
+                "configuration_condition": "OK",
+                "capability_condition": "NOT_EXPECTED",
+                "assignment_condition": "NOT_EXPECTED",
+                "required_capabilities": ["skin-shortcuts-menu-v1"],
+                "minimum_client_version": "1.5.0",
+            }
+            if any(
+                observed_device.get(key) != value
+                for key, value in expected_device.items()
+            ):
+                raise RuntimeError("redacted device inventory is unavailable")
+            if set(observed_device).intersection(
+                {"address", "token", "server_url", "credentials"}
+            ):
+                raise RuntimeError("device inventory leaked a private field")
             with urllib.request.urlopen(
                 endpoint + "/", context=context, timeout=2
             ) as response:
@@ -509,7 +533,7 @@ def main():
                         "schema": 1,
                         "status": "PASS",
                         "fleet_devices": len(fleet["profile_sync"]["data"]["devices"]),
-                        "profile_sync_database_schema": 7,
+                        "profile_sync_database_schema": profile_schema,
                         "mtls_without_client": "REJECTED",
                         "mutation": "REJECTED",
                         "bundle_lifecycle": "PREPARING_READY_PUBLISHED",

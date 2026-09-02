@@ -48,7 +48,12 @@ Watchdoga są deduplikowane.
 
 Dashboard otrzymuje też zredagowany spis urządzeń wygenerowany podczas wdrożenia.
 Tryb `always_on` lub `on_demand`, kanał i indywidualne progi pozwalają poprawnie
-klasyfikować heartbeat bez ujawniania adresów, poświadczeń ani generacji enrollmentu.
+klasyfikować heartbeat bez ujawniania adresów ani poświadczeń. Inventory schema 2
+dodaje wymagane capabilities i minimalną wersję klienta. Panel porównuje je z
+heartbeat oraz z raportem aktywnego assignmentu dla bieżącej generacji
+enrollmentu i pokazuje osobno `Capabilities`, `Assignment` oraz zbiorczy stan
+konfiguracji. Opóźnienie rolloutowe nie jest dzięki temu błędnie przedstawiane
+jako awaria sieciowa.
 
 Profile Sync udostępnia mu osobny kontrakt mTLS
 `/v1/integration/{fleet,rollouts}` w prywatnej sieci Compose. Consumer API nadal

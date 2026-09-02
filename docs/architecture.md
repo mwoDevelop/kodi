@@ -140,7 +140,7 @@ digestów zapisanych w `qnap-stable.json`.
 
 | Usługa | Interfejs | Stan i dane |
 |---|---|---|
-| `control-plane` | LAN `HTTPS/mTLS :19443`; wewnętrzne `/ready` | Agreguje zredagowany stan floty, rolloutów, usług, harmonogramów i audytu. Maszynowy dashboard oraz API są tylko do odczytu. Własna baza SQLite |
+| `control-plane` | LAN `HTTPS/mTLS :19443`; wewnętrzne `/ready` | Agreguje zredagowany stan floty, rolloutów, usług, harmonogramów i audytu. Porównuje deklarowane wymagania klienta z heartbeat i raportem aktywnego assignmentu, oddzielając drift konfiguracji od łączności. Maszynowy dashboard oraz API są tylko do odczytu. Własna baza SQLite |
 | `KodiCPGateway` + `control-plane-web` | QTS `HTTPS :443/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/` → CGI → `127.0.0.1:19445`; prywatne mTLS BFF do core/authz | Bezusługowy QPKG rejestruje skrót **Kodi admin** i CGI bez `app_proxy.conf`. CGI najpierw weryfikuje cookie sesyjne przez loopback; wygasłą sesję odnawia po walidacji administratorskiego `NAS_SID`, wykonując istniejący login z TOTP serwer-serwer. Prywatne pliki `0600` są poza WWW. Read-only BFF nadal wymusza Host/Origin, CSRF i sesję, a backend nie ma portu w LAN ani dostępu do sekretów floty |
 | `control-plane-authz` | Brak opublikowanego portu; prywatne mTLS | Hasło scrypt, TOTP, recovery codes, rate limit i sesje. Osobna baza SQLite; seed TOTP szyfrowany AES-GCM |
 | `profile-sync` | LAN `HTTPS :18765`; prywatne mTLS `:8767` tylko w sieci Compose | Enrollmenty, podpisane rewizje i assignmenty, heartbeat, playback LWW, podpisany whole-document Favourites LWW z CAS artwork oraz deklaratywne menu skórki. Trwała baza SQLite/blob |
@@ -156,6 +156,10 @@ GitHub Actions obserwuje harmonogramy workflow, Watchdog publikuje własny stan
 kolektora, a Profile Sync przekazuje z urządzenia ostatnią próbę, sukces i termin
 retry. Control Plane zachowuje źródłowe pola na potrzeby alertów, lecz w panelu
 pokazuje dla wszystkich źródeł te same osie: obserwator, wynik, świeżość i termin.
+Wiersz `kodi-profile-sync-device` uwzględnia również gotowość klienta do
+zastosowania bieżącego desired state: wymagane capabilities, minimalną wersję i
+raport assignmentu. Szczegóły pozostają widoczne per urządzenie, a jeden
+zagregowany reason code ogranicza duplikowanie alertów.
 
 ### 2.3 Zaufany host operatora
 

@@ -21,8 +21,10 @@ Wdrożenie kopiuje z repo kanoniczne manifesty
 `control-plane-schedules.json` i `control-plane-status-sources.json`, a następnie
 montuje je read-only. Z prywatnego rejestru urządzeń generuje także zredagowany
 `device-inventory.json`, zawierający wyłącznie logiczny identyfikator, kanał, tryb
-monitorowania i progi świeżości. Adresy, tokeny i credentiale nie trafiają do
-Control Plane. Dotychczasowy dashboard mTLS pozostaje pod
+monitorowania, progi świeżości, wymagane capabilities i minimalną wersję klienta.
+Control Plane zestawia go z heartbeat oraz raportem aktywnego assignmentu, dzięki
+czemu odróżnia brak łączności od starego klienta i niezaaplikowanej rewizji.
+Adresy, tokeny i credentiale nie trafiają do Control Plane. Dotychczasowy dashboard mTLS pozostaje pod
 `https://<QNAP>:19443/`. Dla zwykłej przeglądarki działa dodatkowo kanoniczne
 `https://<QNAP>/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/`: nie
 wymaga certyfikatu klienta. QPKG `KodiCPGateway` rejestruje skrót **Kodi admin**
