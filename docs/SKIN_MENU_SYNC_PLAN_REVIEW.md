@@ -15,5 +15,13 @@ Zastosowane uwagi:
 - zamknięty kontrakt czterech pozycji, semantyczna kontrola źródła, include i GUI;
 - użycie istniejącego stanu rolloutowego `DEFERRED`.
 
+Powtórny audyt gotowej implementacji wykrył i zamknął przed release dwie luki:
+
+- wszystkie wejścia `service`, `--sync-once` i rollout są serializowane jednym
+  blokującym lockiem plikowym zwalnianym przez system także po awarii procesu;
+- gdy przed zmianą nie istniał źródłowy XML, journal zachowuje semantykę
+  poprzedniego wygenerowanego menu, a rollback czeka na jej ponowną odbudowę.
+  Brak jakiegokolwiek weryfikowalnego stanu rollback zatrzymuje mutację.
+
 Nie przyjęto rozszerzania V1 o inne skórki, kopiowania hash/properties/include,
 forka Skin Shortcuts, lokalnego multi-writer ani przeładowania skórki przy no-op.
