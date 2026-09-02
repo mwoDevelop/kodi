@@ -234,15 +234,24 @@ def _ensure_kodi_started(adb, port, serial):
         check=False,
         text=True,
     )
-    if running.returncode != 0 or not (running.stdout or "").strip():
-        adb_command(
-            adb,
-            port,
-            serial,
-            "shell",
-            "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
-            % KODI_PACKAGE,
-        )
+    if running.returncode == 0 and (running.stdout or "").strip():
+        try:
+            # Android TV may retain Kodi's process while suspending its event
+            # server in the background. Avoid disturbing an already-ready
+            # foreground instance, but do not mistake a stale PID for a usable
+            # Kodi runtime.
+            _wait_for_kodi_ready(adb, port, serial, timeout=5)
+            return
+        except TimeoutError:
+            pass
+    adb_command(
+        adb,
+        port,
+        serial,
+        "shell",
+        "monkey -p %s -c android.intent.category.LAUNCHER 1 >/dev/null"
+        % KODI_PACKAGE,
+    )
     _wait_for_kodi_ready(adb, port, serial)
 
 

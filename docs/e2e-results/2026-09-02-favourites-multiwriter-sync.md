@@ -72,6 +72,30 @@ teraz zawartość wszystkich przypiętych czystych zależności Pythona z oficja
 repozytorium Kodi względem SHA-256 ZIP-u i naprawia pakiet, gdy sama wersja w
 bazie Kodi jest poprawna, lecz pliki są niepełne albo zmienione.
 
+## Wydanie stable i rozszerzony rollout
+
+- końcowy release zakończył się `COMPLETE`; promocja snapshotu została zatwierdzona,
+  a publiczny lock i 57 opublikowanych plików repozytorium zweryfikowano po deployu;
+- rollout canary BlueStacks/X88 zakończył się `COMPLETE`; wszystkie sondy dodatków,
+  Umbrella/Real-Debrid, providerów, Rapideo, YouTube i runtime przeszły, a pełny
+  zestaw lokalny miał wynik 731 testów;
+- Bedroom TV początkowo zachowywał proces Kodi w tle przy wyłączonym EventServerze.
+  Adapter odróżnia teraz gotowy proces od uśpionego PID-u, aktywuje aplikację i
+  ponawia kontrolę gotowości. Test wymuszający powrót do launchera potwierdził tę
+  ścieżkę;
+- Bedroom TV został przeparowany, oba strumienie stanu włączono, a rollout zakończył
+  się `COMPLETE` z dziewięcioma Favourites i pełnym zestawem 732 testów;
+- `nuc-mwo` i `nuc-alek` przeszły ręczny cutover do generacji 2. Test live ujawnił i
+  naprawił brak przekazywania opcjonalnego klucza szyfrowania w hostowym transporcie
+  parowania Flatpak. Po ponownym przebiegu oba profile raportowały Favourites i
+  playback `HEALTHY`, cursor 6/13, pending events 0 i aktywny fence;
+- końcowy wspólny no-op BlueStacks, X88 i Bedroom TV potwierdził Favourites
+  `HEALTHY`, cursor 6, pending 0 oraz identyczny semantyczny SHA-256. Sony TV nie było
+  celem tego rolloutu na wyraźne polecenie operatora;
+- po wszystkich poprawkach hostowego rolloutu pełny zestaw regresyjny zakończył się
+  wynikiem 734 testów, a kontrola statyczna zmienionych plików i `git diff --check`
+  przeszły bez uwag.
+
 ## Powtarzalne testy
 
 ```bash

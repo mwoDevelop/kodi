@@ -514,3 +514,43 @@ def test_production_pairing_exchange_uses_private_container_loopback(
     assert "exec -T profile-sync" in session.command
     assert "127.0.0.1:8765" in session.command
     assert "12345678" not in session.command
+
+
+def test_production_pairing_forwards_optional_encryption_key(monkeypatch):
+    captured = {}
+
+    def request(_session, path, document, base_url):
+        captured.update(
+            {"path": path, "document": document, "base_url": base_url}
+        )
+        return {"status": "ok"}
+
+    monkeypatch.setattr(
+        "tools.qnap_profile_sync._production_loopback_post", request
+    )
+
+    result = production_pair_request(
+        object(),
+        "12345678",
+        "nuc-alek",
+        "home-stable",
+        "device-0123456789abcdef",
+        "A" * 43,
+        "encryption-0123456789abcdef",
+        "B" * 43,
+    )
+
+    assert result == {"status": "ok"}
+    assert captured == {
+        "path": "/v1/pair",
+        "base_url": "https://127.0.0.1:8765",
+        "document": {
+            "code": "12345678",
+            "logical_device_id": "nuc-alek",
+            "channel": "home-stable",
+            "key_id": "device-0123456789abcdef",
+            "public_key": "A" * 43,
+            "encryption_key_id": "encryption-0123456789abcdef",
+            "encryption_public_key": "B" * 43,
+        },
+    }

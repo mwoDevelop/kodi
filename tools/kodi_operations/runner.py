@@ -1290,6 +1290,22 @@ class ProductionExecutor:
                     "platform": "linux-flatpak",
                     "rollout_mode": status,
                     "sync_status": result.get("sync_status"),
+                    "favourites_status": result.get("favourites_status"),
+                    "favourites_cursor": result.get("favourites_cursor"),
+                    "favourites_pending_count": result.get(
+                        "favourites_pending_count"
+                    ),
+                    "favourites_dynamic_fence": result.get(
+                        "favourites_dynamic_fence"
+                    ),
+                    "playback_status": result.get("playback_status"),
+                    "playback_cursor": result.get("playback_cursor"),
+                    "playback_pending_events": result.get(
+                        "playback_pending_events"
+                    ),
+                    "playback_pending_application": result.get(
+                        "playback_pending_application"
+                    ),
                     "runtime_compatibility": result.get(
                         "compatibility", {}
                     ).get("status"),

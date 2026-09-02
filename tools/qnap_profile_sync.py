@@ -1081,6 +1081,8 @@ def production_pair_request(
     channel,
     key_id,
     public_key,
+    encryption_key_id=None,
+    encryption_public_key=None,
 ):
     """Exchange one pairing code without exposing the production listener."""
     if not isinstance(code, str) or not re.fullmatch(r"[0-9]{8}", code):
@@ -1094,16 +1096,32 @@ def production_pair_request(
         r"[A-Za-z0-9_-]{43}", public_key
     ):
         raise QnapError("invalid production pairing public key")
+    if (encryption_key_id is None) != (encryption_public_key is None):
+        raise QnapError("incomplete production pairing encryption key")
+    if encryption_key_id is not None and (
+        not SAFE_ID.fullmatch(encryption_key_id)
+        or not isinstance(encryption_public_key, str)
+        or not re.fullmatch(r"[A-Za-z0-9_-]{43}", encryption_public_key)
+    ):
+        raise QnapError("invalid production pairing encryption key")
+    document = {
+        "code": code,
+        "logical_device_id": logical_device_id,
+        "channel": channel,
+        "key_id": key_id,
+        "public_key": public_key,
+    }
+    if encryption_key_id is not None:
+        document.update(
+            {
+                "encryption_key_id": encryption_key_id,
+                "encryption_public_key": encryption_public_key,
+            }
+        )
     return _production_loopback_post(
         session,
         "/v1/pair",
-        {
-            "code": code,
-            "logical_device_id": logical_device_id,
-            "channel": channel,
-            "key_id": key_id,
-            "public_key": public_key,
-        },
+        document,
         base_url="https://127.0.0.1:8765",
     )
 

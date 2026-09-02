@@ -654,6 +654,136 @@ def test_in_kodi_new_addon_is_enabled_before_settings_are_opened(
     assert result == {"addon_id": "service.test"}
 
 
+def test_in_kodi_profile_sync_runs_dynamic_favourites_lifecycle(
+    tmp_path, monkeypatch
+):
+    xbmc = types.ModuleType("xbmc")
+    xbmc.executeJSONRPC = lambda _request: "{}"
+    xbmcaddon = types.ModuleType("xbmcaddon")
+    xbmcaddon.Addon = lambda _addon_id=None: object()
+    xbmcvfs = types.ModuleType("xbmcvfs")
+    for name, module_object in (
+        ("xbmc", xbmc),
+        ("xbmcaddon", xbmcaddon),
+        ("xbmcvfs", xbmcvfs),
+    ):
+        monkeypatch.setitem(sys.modules, name, module_object)
+    source = "tools/kodi_flatpak_profile_sync_device.py"
+    spec = importlib.util.spec_from_file_location(
+        "flatpak_device_favourites", source
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    calls = []
+
+    class Addon:
+        def setSetting(self, key, value):
+            calls.append(("setting", key, value))
+
+    class StateStore:
+        def __init__(self, profile):
+            calls.append(("state", profile))
+
+        def read(self):
+            return {
+                "enrollment": {"logical_device_id": "nuc-test"},
+                "status": "NO_CHANGE",
+                "assigned_revision": "sha256:" + "a" * 64,
+                "applied_revision": "sha256:" + "a" * 64,
+                "favourites_status": "HEALTHY",
+                "favourites_cursor": 6,
+                "favourites_pending_count": 0,
+                "favourites_dynamic_fence": True,
+            }
+
+    class Recoverable:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def recover(self):
+            calls.append("recover")
+
+    class ReadOnlySync:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __call__(self):
+            calls.append("profile-sync")
+            return {"status": "NO_CHANGE"}
+
+    class FavouritesSync:
+        def __init__(self, *_args, **_kwargs):
+            calls.append("favourites-created")
+
+        def __call__(self):
+            calls.append("favourites-sync")
+            return {"status": "HEALTHY"}
+
+    class FavouritesTicker:
+        def __init__(self, sync, _state):
+            self.sync = sync
+
+        def tick(self):
+            return self.sync()
+
+    modules = {
+        "resources": types.ModuleType("resources"),
+        "resources.lib": types.ModuleType("resources.lib"),
+        "resources.lib.mwoprofilesync": types.ModuleType(
+            "resources.lib.mwoprofilesync"
+        ),
+        "resources.lib.mwoprofilesync.apply": types.SimpleNamespace(
+            KodiAddonSettings=lambda *_args: object(),
+            TransactionalApplier=Recoverable,
+        ),
+        "resources.lib.mwoprofilesync.portable": types.SimpleNamespace(
+            KodiFavourites=lambda *_args: object(),
+            PortableFavouritesAdapter=lambda *_args: object(),
+            PortableFavouritesExporter=lambda *_args: object(),
+        ),
+        "resources.lib.mwoprofilesync.state": types.SimpleNamespace(
+            StateStore=StateStore
+        ),
+        "resources.lib.mwoprofilesync.sync": types.SimpleNamespace(
+            ReadOnlySync=ReadOnlySync
+        ),
+        "resources.lib.mwoprofilesync.favourites_state": types.SimpleNamespace(
+            FavouritesApplier=Recoverable,
+            FavouritesJournal=lambda *_args: object(),
+            FavouritesSync=FavouritesSync,
+            FavouritesTicker=FavouritesTicker,
+        ),
+        "resources.lib.mwoprofilesync.playback": types.SimpleNamespace(
+            KodiPlaybackAdapter=lambda *_args: object(),
+            PlaybackJournal=lambda *_args: object(),
+            PlaybackSync=FavouritesSync,
+            PlaybackTicker=FavouritesTicker,
+        ),
+    }
+    for name, fake in modules.items():
+        monkeypatch.setitem(sys.modules, name, fake)
+    monkeypatch.setattr(module, "_wait_favourites_api", lambda: None)
+    monkeypatch.setattr(module, "_enable", lambda _addon_id: None)
+    monkeypatch.setattr(module, "_enabled_addon", lambda _addon_id: Addon())
+
+    result = module._sync(
+        tmp_path / "profile", tmp_path / "addons", "1.4.2", "1.0.0"
+    )
+
+    assert result["sync_status"] == "NO_CHANGE"
+    assert result["favourites_sync_status"] == "HEALTHY"
+    assert result["favourites_status"] == "HEALTHY"
+    assert result["favourites_cursor"] == 6
+    assert result["favourites_pending_count"] == 0
+    assert result["favourites_dynamic_fence"] is True
+    assert result["playback_sync_status"] == "HEALTHY"
+    assert result["playback_status"] is None
+    assert calls.count("recover") == 2
+    assert "favourites-sync" in calls
+    assert ("setting", "enabled", "true") in calls
+
+
 def test_in_kodi_reconciles_required_addons_before_profile_apply(
     monkeypatch,
 ):

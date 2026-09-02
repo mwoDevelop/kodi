@@ -2,9 +2,31 @@
 
 Data: 2026-09-02
 
-Status: `IMPLEMENTED_CANARY_QUALIFIED_PENDING_RELEASE`
+Status: `RELEASED_STABLE_ROLLED_OUT_APPROVED_SCOPE`
 
 Niezależny audyt: `FAVOURITES_MULTIWRITER_SYNC_PLAN_REVIEW.md`.
+
+## Stan realizacji 2026-09-02
+
+- backend Profile Sync 0.10.0, Kodi Control Plane 0.11.0 i dodatek Profile Sync
+  1.4.2 zostały wydane oraz promowane do kanału stable;
+- BlueStacks i X88 przeszły test konfliktu whole-document LWW, powrót do wspólnego
+  head oraz pełną certyfikację Umbrella, providerów i odtwarzania;
+- rollout objął również Bedroom TV oraz oba profile NUC/Flatpak. Wszystkie pięć
+  urządzeń w zatwierdzonym zakresie osiągnęło revision/cursor 6, `HEALTHY`, pending 0,
+  aktywny dynamic fence i dziewięć Favourites bez brakujących grafik;
+- Bedroom TV oraz oba profile NUC zostały ręcznie przełączone na enrollmenty ufające
+  authority Favourites. Stare generacje unieważniono dopiero po poprawnej
+  konwergencji nowych;
+- Sony TV zostało świadomie pominięte w tym rolloutcie zgodnie z decyzją operatora;
+- normalna minutowa synchronizacja `kodi.favourites` nie używa urządzenia nadrzędnego.
+  `KODI_SYNC_PUBLISHER` pozostaje tymczasowo wyłącznie w starszym administracyjnym
+  przepływie statycznego bundle/DR i nie jest źródłem dynamicznych Favourites;
+- adapter Android rozpoznaje teraz proces Kodi uśpiony w tle jako niegotowy i
+  przywraca aplikację na pierwszy plan przed operacją, bez zbędnego restartu procesu;
+- adapter Flatpak jawnie wykonuje i raportuje zarówno cykl Favourites, jak i playback,
+  a parowanie obsługuje również klucz szyfrowania sekretów wymagany przez klienta
+  1.4.2.
 
 ## 1. Decyzja
 
