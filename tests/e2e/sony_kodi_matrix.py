@@ -19,7 +19,6 @@ import time
 from pathlib import Path
 from urllib.parse import quote_plus, urlencode
 
-
 KODI_ROOT = "/sdcard/Android/data/org.xbmc.kodi/files/.kodi"
 KODI_ACTIVITY = "org.xbmc.kodi/.Splash"
 ADDONS = {
@@ -263,6 +262,16 @@ def missing_player_timed_out(
     )
 
 
+class JsonRpcError(RuntimeError):
+    """Preserve structured Kodi errors for narrowly scoped retry policies."""
+
+    def __init__(self, method: str, payload: dict):
+        self.method = method
+        self.payload = payload
+        self.code = payload.get("code") if isinstance(payload, dict) else None
+        super().__init__("%s: %r" % (method, payload))
+
+
 class JsonRpc:
     def __init__(self, host: str, port: int = 9090, timeout: float = 15.0):
         self.host = host
@@ -294,7 +303,7 @@ class JsonRpc:
                 except json.JSONDecodeError:
                     continue
         if "error" in response:
-            raise RuntimeError("%s: %r" % (method, response["error"]))
+            raise JsonRpcError(method, response["error"])
         return response.get("result")
 
 

@@ -10,8 +10,13 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import quote_plus
 
-from sony_kodi_matrix import JsonRpc, addon_version, kodi_version, shell
-
+from sony_kodi_matrix import (
+	JsonRpc,
+	JsonRpcError,
+	addon_version,
+	kodi_version,
+	shell,
+)
 
 SOURCE_PROGRESS_WINDOW = 10160
 SHUTDOWN_MENU_WINDOW = 10111
@@ -224,13 +229,28 @@ def run_search(
 		transitions,
 	)
 	matches = []
+	directory_error = None
 	started = time.monotonic()
 	while time.monotonic() - started < timeout:
-		matches = matching_search_results(rpc, term, media_type)
+		try:
+			matches = matching_search_results(rpc, term, media_type)
+		except JsonRpcError as error:
+			# Kodi can expose the Videos window before an asynchronous plugin
+			# directory becomes queryable.  Retry only this exact transient
+			# GetDirectory response; all other RPC errors remain fail-fast.
+			if error.method != "Files.GetDirectory" or error.code != -32602:
+				raise
+			directory_error = error
+			time.sleep(0.5)
+			continue
 		if matches:
 			break
 		time.sleep(0.5)
 	if not matches:
+		if directory_error is not None:
+			raise RuntimeError(
+				"Umbrella search directory remained unavailable"
+			) from directory_error
 		raise RuntimeError("Umbrella returned no matching result for %r" % term)
 	after = current_window(rpc)
 	if after.get("id") == SOURCE_PROGRESS_WINDOW:

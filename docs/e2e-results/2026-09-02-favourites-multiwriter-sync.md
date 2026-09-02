@@ -46,6 +46,12 @@ Rzeczywisty rollout X88 po poprawce zakończył się `AUDIT_PASS`,
 `ATTESTATION_PASS`, poprawą originów oraz idempotentnym ponowieniem. Profile Sync
 1.4.2 został następnie zainstalowany transakcyjnie na obu canary.
 
+Pierwsza certyfikacja release wykryła też krótkie okno inicjalizacji katalogu Umbrelli:
+Kodi pokazywało już okno Videos, ale `Files.GetDirectory` zwracało jeszcze
+`-32602 Invalid params`. Sonda ponawia teraz wyłącznie ten dokładny błąd w istniejącym
+limicie czasu; inne błędy JSON-RPC nadal kończą próbę natychmiast. Dwa kolejne testy
+live po świeżym starcie Kodi zwróciły po jednym właściwym wyniku i okno Videos.
+
 ## Powtarzalne testy
 
 ```bash
