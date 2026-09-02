@@ -2,7 +2,7 @@
 
 Data: 2026-09-02
 
-Status: `RELEASED_STABLE_ROLLED_OUT_APPROVED_SCOPE`
+Status: `RELEASED_STABLE_FULL_FLEET`
 
 Niezależny audyt: `FAVOURITES_MULTIWRITER_SYNC_PLAN_REVIEW.md`.
 
@@ -12,13 +12,15 @@ Niezależny audyt: `FAVOURITES_MULTIWRITER_SYNC_PLAN_REVIEW.md`.
   1.4.2 zostały wydane oraz promowane do kanału stable;
 - BlueStacks i X88 przeszły test konfliktu whole-document LWW, powrót do wspólnego
   head oraz pełną certyfikację Umbrella, providerów i odtwarzania;
-- rollout objął również Bedroom TV oraz oba profile NUC/Flatpak. Wszystkie pięć
-  urządzeń w zatwierdzonym zakresie osiągnęło revision/cursor 6, `HEALTHY`, pending 0,
+- rollout objął również Bedroom TV, Sony TV oraz oba profile NUC/Flatpak. Wszystkie
+  sześć zapisanych urządzeń osiągnęło revision/cursor 6, `HEALTHY`, pending 0,
   aktywny dynamic fence i dziewięć Favourites bez brakujących grafik;
 - Bedroom TV oraz oba profile NUC zostały ręcznie przełączone na enrollmenty ufające
   authority Favourites. Stare generacje unieważniono dopiero po poprawnej
   konwergencji nowych;
-- Sony TV zostało świadomie pominięte w tym rolloutcie zgodnie z decyzją operatora;
+- Sony TV dołączono w osobnym, późniejszym rolloutcie na decyzję operatora. Po
+  bezpiecznej rotacji enrollmentu również playback osiągnął `HEALTHY`, cursor 13 i
+  brak oczekujących zdarzeń;
 - normalna minutowa synchronizacja `kodi.favourites` nie używa urządzenia nadrzędnego.
   `KODI_SYNC_PUBLISHER` pozostaje tymczasowo wyłącznie w starszym administracyjnym
   przepływie statycznego bundle/DR i nie jest źródłem dynamicznych Favourites;

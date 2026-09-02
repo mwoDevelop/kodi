@@ -90,8 +90,11 @@ bazie Kodi jest poprawna, lecz pliki są niepełne albo zmienione.
   parowania Flatpak. Po ponownym przebiegu oba profile raportowały Favourites i
   playback `HEALTHY`, cursor 6/13, pending events 0 i aktywny fence;
 - końcowy wspólny no-op BlueStacks, X88 i Bedroom TV potwierdził Favourites
-  `HEALTHY`, cursor 6, pending 0 oraz identyczny semantyczny SHA-256. Sony TV nie było
-  celem tego rolloutu na wyraźne polecenie operatora;
+  `HEALTHY`, cursor 6, pending 0 oraz identyczny semantyczny SHA-256;
+- w późniejszym, jawnie zleconym rolloutcie Sony TV przeszło pełne wdrożenie oraz 734
+  testy regresyjne. Enrollment generacji 1 został zastąpiony generacją 2 i unieważniony
+  dopiero po konwergencji; końcowy audyt potwierdził Favourites `HEALTHY`/cursor 6,
+  playback `HEALTHY`/cursor 13, pending 0, dziewięć pozycji i komplet grafik;
 - po wszystkich poprawkach hostowego rolloutu pełny zestaw regresyjny zakończył się
   wynikiem 734 testów, a kontrola statyczna zmienionych plików i `git diff --check`
   przeszły bez uwag.
