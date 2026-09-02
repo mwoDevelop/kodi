@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-09
 
+- [Control Plane 0.12 — gotowość klienta i aktywnego assignmentu](2026-09-02-control-plane-device-readiness.md)
 - [Deklaratywna synchronizacja menu Aeon Nox Silvo](2026-09-02-skin-menu-sync.md)
 - [Wielokierunkowa synchronizacja Kodi Favourites](2026-09-02-favourites-multiwriter-sync.md)
 - [Automatyczny katalog możliwości runtime Kodi](2026-09-01-kodi-runtime-capability-catalog.md)
