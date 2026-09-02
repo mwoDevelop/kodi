@@ -1,6 +1,6 @@
 # Plan deklaratywnej synchronizacji menu skórki Kodi
 
-Status: `IMPLEMENTED_PENDING_RELEASE_E2E`
+Status: `RELEASED_PENDING_FLEET_CAPABILITY_E2E`
 
 ## 1. Problem i wynik docelowy
 
@@ -144,3 +144,25 @@ Poza zakresem:
 - istniejące Favourites, grafiki oraz playback nie zmieniają semantyki;
 - drugi przebieg jest bezpiecznym `NO_CHANGE`;
 - repozytoria są czyste, zsynchronizowane z origin i przechodzą CI.
+
+## 8. Stan realizacji z 2 września 2026 r.
+
+Kod klienta, kompozycja rewizji, walidacja, bramy capability i testy zostały
+zaimplementowane oraz poddane niezależnemu review. Profile Sync 1.5.0 został
+opublikowany w kanałach testing i stable jako dokładny, przeskanowany artefakt.
+Certyfikacja BlueStacks/X88 oraz pełny zestaw 742 testów zakończyły się sukcesem.
+
+Pierwszy i drugi rollout stable zakończyły pełną konwergencję BlueStacks, X88 i
+Sony TV, a QNAP raportował wszystkie siedem obserwowanych usług jako zdrowe.
+Bedroom TV i host obu profili NUC były w czasie rolloutu nieosiągalne. Zgodnie z
+bramą opisaną w punkcie 3 adapter menu nie został jeszcze dołączony do aktywnej
+rewizji: oczekuje na capability `skin-shortcuts-menu-v1` z najnowszych
+enrollmentów `bedroom-tv`, `nuc-mwo` i `nuc-alek`.
+
+Nie jest to częściowa mutacja menu. Do czasu spełnienia bramy aktywna rewizja nie
+zawiera adaptera, więc X88 zachowuje sześć dotychczasowych pozycji, BlueStacks
+cztery historyczne pozycje, a Sony cztery pozycje kanoniczne. Po uruchomieniu
+trzech brakujących klientów należy wykonać dwa pełne przebiegi `kodi_ops.py
+rollout`: pierwszy aktualizuje klienta i heartbeat, drugi publikuje, sprawdza na
+canary i promuje menu. Szczegółowy zapis znajduje się w [raporcie
+E2E](e2e-results/2026-09-02-skin-menu-sync.md).
