@@ -234,7 +234,7 @@ def main(argv=None):
         websocket.call("Runtime.enable")
         deadline = time.monotonic() + 10
         value = None
-        expression = "JSON.stringify({ready:document.readyState,overall:document.querySelector('#overall').textContent,total:document.querySelector('#fleet-total').textContent,services:document.querySelector('#services').textContent,schedules:document.querySelector('#schedules').textContent,error:document.querySelector('#error').textContent})"
+        expression = "JSON.stringify({ready:document.readyState,overall:document.querySelector('#overall').textContent,total:document.querySelector('#fleet-total').textContent,capabilities:document.querySelector('#fleet-capabilities').textContent,assignments:document.querySelector('#fleet-assignments').textContent,services:document.querySelector('#services').textContent,schedules:document.querySelector('#schedules').textContent,error:document.querySelector('#error').textContent})"
         while time.monotonic() < deadline:
             result = websocket.call(
                 "Runtime.evaluate", {"expression": expression, "returnByValue": True}
@@ -244,7 +244,13 @@ def main(argv=None):
             if value and value["overall"] == "DEGRADED":
                 break
             time.sleep(0.2)
-        if not value or value["total"] != "4" or value["error"]:
+        if (
+            not value
+            or value["total"] != "4"
+            or value["capabilities"] != "3/4"
+            or value["assignments"] != "3/4"
+            or value["error"]
+        ):
             raise RuntimeError(f"dashboard did not render: {value}")
         if "profile-sync-fleet" not in value["services"]:
             raise RuntimeError("status sources were not rendered")
