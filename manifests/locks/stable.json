@@ -1,7 +1,7 @@
 {
-  "attestation_id": "17f1fbc19a7cc297341d548bfff983b5e90383706198cf3a29780fd0485018ff",
+  "attestation_id": "185841bf9cb6ba745f9e2a6b6ffb71d5dd9365c267ec6b083593dbee9ee79206",
   "attestation_kind": "device",
-  "attestation_sha256": "ec81ca562e58ee92646e002ee58dbb25727d73f0c55e4b0f44c5fe48d8e758cc",
+  "attestation_sha256": "43c547284659b1557afa2f27902d146befcf292e9329978e7b77aeb541e36e74",
   "channel": "stable",
   "components": {
     "plugin.video.umbrella": {
@@ -26,9 +26,9 @@
       "zip_sha256": "f2610ec43aa41e1ff39fdd39c7e495c385fff16529957e834325e432ff678695"
     },
     "service.mwodevelop.profilesync": {
-      "commit": "3074a4c90f51f9cbb9cd18a422619d02bd92d365",
-      "version": "1.4.2",
-      "zip_sha256": "60a8077ca874e56363287b7002b7daa7339f14e741dfb2061997e9bc4e7c2f22"
+      "commit": "3f77fe5b52d2ed91babf5250763682a99bd8fe5f",
+      "version": "1.5.0",
+      "zip_sha256": "33ee831da191483e769bd73020c782fc11cca60ce1645de19d8073d6c016c2b0"
     },
     "service.subtitles.opensubtitles-com": {
       "commit": "27b00fc2ba9c1637f6cd4c858a1c702bee786280",
@@ -38,7 +38,7 @@
   },
   "promotion_kind": "normal",
   "schema": 2,
-  "source_artifact_manifest_sha256": "6b84e57c62503e51f1f8c49f294490d8a87d91dfd7019d9ff51ce13c9f1efdca",
-  "source_index_sha256": "871c7d7a8fae233894290599a6d54e8e96e5814496b71e233b94483473a11f47",
-  "source_snapshot_id": "190428d52cd70d52da8b65b0ccefcdaa21024b0a9d769e3877935a8f785b7486"
+  "source_artifact_manifest_sha256": "2f4914058289b032219e012e022ce08b17bb4630609979dc7e5c77100ab0c0f2",
+  "source_index_sha256": "880d130509312751cd36c4df688b918698010b69b7432a473d37e482735a571c",
+  "source_snapshot_id": "5d90f9f818596c1e9bcc39c11e0242dee0fd98ca7a3e329a1a70b356e079fbff"
 }
