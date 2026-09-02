@@ -174,3 +174,49 @@ def test_submit_keyboard_waits_for_done_before_selecting():
 		"GUI.GetProperties",
 		"Input.Select",
 	]
+
+
+def test_run_search_retries_transient_directory_initialization(monkeypatch):
+	class FlakyRpc:
+		def __init__(self):
+			self.directory_calls = 0
+
+		def call(self, method, params=None):
+			assert method == "Files.GetDirectory"
+			self.directory_calls += 1
+			if self.directory_calls == 1:
+				raise umbrella_search_e2e.JsonRpcError(
+					method, {"code": -32602, "message": "Invalid params."}
+				)
+			return {"files": [{"label": "Sintel (2010)"}]}
+
+	rpc = FlakyRpc()
+	monkeypatch.setattr(
+		umbrella_search_e2e,
+		"wait_for_window",
+		lambda *_args, **_kwargs: {"id": umbrella_search_e2e.VIDEOS_WINDOW},
+	)
+	monkeypatch.setattr(
+		umbrella_search_e2e,
+		"activate_home",
+		lambda *_args, **_kwargs: {"id": 10000},
+	)
+	monkeypatch.setattr(
+		umbrella_search_e2e,
+		"open_search_keyboard",
+		lambda *_args, **_kwargs: {"id": 10103},
+	)
+	monkeypatch.setattr(
+		umbrella_search_e2e, "submit_keyboard", lambda *_args, **_kwargs: None
+	)
+	monkeypatch.setattr(
+		umbrella_search_e2e,
+		"current_window",
+		lambda *_args, **_kwargs: {"id": umbrella_search_e2e.VIDEOS_WINDOW},
+	)
+	monkeypatch.setattr(umbrella_search_e2e.time, "sleep", lambda _delay: None)
+
+	result = umbrella_search_e2e.run_search(rpc, "Sintel", timeout=1)
+
+	assert result["matches"] == ["Sintel (2010)"]
+	assert rpc.directory_calls == 2
