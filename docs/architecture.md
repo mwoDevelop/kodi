@@ -145,11 +145,14 @@ digestów zapisanych w `qnap-stable.json`.
 | `control-plane-authz` | Brak opublikowanego portu; prywatne mTLS | Hasło scrypt, TOTP, recovery codes, rate limit i sesje. Osobna baza SQLite; seed TOTP szyfrowany AES-GCM |
 | `profile-sync` | LAN `HTTPS :18765`; prywatne mTLS `:8767` tylko w sieci Compose | Enrollmenty, podpisane rewizje i assignmenty, heartbeat, playback LWW, podpisany whole-document Favourites LWW z CAS artwork oraz deklaratywne menu skórki. Trwała baza SQLite/blob |
 | `provider-relay` | Prywatny adres LAN `HTTP :18766` | Bezstanowy, opcjonalny fallback wyłącznie dla allowlistowanych zapytań providerów, obecnie przede wszystkim Torrentio |
-| `upstream-watchdog` | Brak opublikowanego portu | Co sześć godzin sprawdza 12 cyklicznych workflow GitHub; healthcheck QTS odczytuje wynik co pięć minut |
+| `secret-broker` | Brak opublikowanego portu; prywatne mTLS | Przechowuje zaszyfrowane sekrety urządzeń i wydaje je tylko uwierzytelnionym klientom zgodnie z polityką. Osobna baza SQLite i klucz główny poza obrazem |
+| `upstream-watchdog` | Brak opublikowanego portu | Co 15 minut sprawdza 12 cyklicznych workflow GitHub; po przekroczeniu progu może wykonać wyłącznie allowlistowany `workflow_dispatch`, a healthcheck QTS odczytuje wynik co pięć minut |
 
 `control-plane` komunikuje się z `profile-sync` przez prywatną zewnętrzną sieć
 Compose `mwodevelop-control` i osobne mTLS. Nie montuje bazy Profile Sync. Watchdog
-nie przekazuje danych do urządzeń i nie może naprawiać ani uruchamiać workflow.
+nie przekazuje danych do urządzeń i nie może zmieniać kodu, PR ani release; jego
+jedyna remediacja to jawnie dozwolone ponowienie konkretnego workflow przez
+`workflow_dispatch`.
 
 Procesy cykliczne są prezentowane we wspólnym modelu `ProcessObservation`. Adapter
 GitHub Actions obserwuje harmonogramy workflow, Watchdog publikuje własny stan
