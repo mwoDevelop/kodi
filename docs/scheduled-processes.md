@@ -46,6 +46,14 @@ nie promuje `testing` do `stable`. Automatyka nigdy nie zmienia poświadczeń
 Real-Debrid ani konfiguracji użytkownika Kodi. Szczegółowy kontrakt wyjątku opisuje
 [automatyczny release Umbrelli](umbrella-automated-release.md).
 
+Workflow budujące repozytorium pobierają również prywatne komponenty przypięte w
+lockach. Używają w tym celu repozytoryjnego sekretu `KODI_COMPONENTS_TOKEN` z
+minimalnym dostępem tylko do odczytu zawartości zarządzanych repozytoriów. Token jest
+podawany do `actions/checkout` oraz przez tymczasowy `GIT_ASKPASS`; nie jest
+utrwalany w adresach origin ani artefaktach. Po zmianie widoczności lub listy
+komponentów należy sprawdzić obecność sekretu oraz ręcznie uruchomić `test.yml`,
+`publish-testing.yml`, `publish-pages.yml` i `reconcile-upstreams.yml`.
+
 ## Monitorowanie na QNAP
 
 `qnap-upstream-watchdog` działa w Container Station i odpytuje GitHub co 15 minut.

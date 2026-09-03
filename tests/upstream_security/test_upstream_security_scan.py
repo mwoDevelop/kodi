@@ -561,6 +561,18 @@ def test_publication_workflows_check_out_submodules_before_full_e2e():
             "actions/setup-python@", 1
         )[0]
         assert "submodules: true" in checkout, path
+        assert "token: ${{ secrets.KODI_COMPONENTS_TOKEN }}" in checkout, path
+
+
+def test_private_component_checkout_uses_non_persistent_askpass():
+    checkout = Path("tools/checkout_locked_components.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'os.environ.get("KODI_COMPONENTS_TOKEN"' in checkout
+    assert '"GIT_ASKPASS": str(askpass)' in checkout
+    assert '"GIT_TERMINAL_PROMPT": "0"' in checkout
+    assert "x-access-token" in checkout
+    assert "https://x-access-token:" not in checkout
 
 
 def test_hermetic_qualification_checks_out_exact_snapshot_component():
