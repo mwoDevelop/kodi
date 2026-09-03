@@ -145,7 +145,7 @@ digestów zapisanych w `qnap-stable.json`.
 | `control-plane-authz` | Brak opublikowanego portu; prywatne mTLS | Hasło scrypt, TOTP, recovery codes, rate limit i sesje. Osobna baza SQLite; seed TOTP szyfrowany AES-GCM |
 | `profile-sync` | LAN `HTTPS :18765`; prywatne mTLS `:8767` tylko w sieci Compose | Enrollmenty, podpisane rewizje i assignmenty, heartbeat, playback LWW, podpisany whole-document Favourites LWW z CAS artwork oraz deklaratywne menu skórki. Trwała baza SQLite/blob |
 | `provider-relay` | Prywatny adres LAN `HTTP :18766` | Bezstanowy, opcjonalny fallback wyłącznie dla allowlistowanych zapytań providerów, obecnie przede wszystkim Torrentio |
-| `upstream-watchdog` | Brak opublikowanego portu | Co sześć godzin sprawdza 11 cyklicznych workflow GitHub; healthcheck QTS odczytuje wynik co pięć minut |
+| `upstream-watchdog` | Brak opublikowanego portu | Co sześć godzin sprawdza 12 cyklicznych workflow GitHub; healthcheck QTS odczytuje wynik co pięć minut |
 
 `control-plane` komunikuje się z `profile-sync` przez prywatną zewnętrzną sieć
 Compose `mwodevelop-control` i osobne mTLS. Nie montuje bazy Profile Sync. Watchdog

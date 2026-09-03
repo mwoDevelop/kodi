@@ -161,6 +161,8 @@ gh run list --repo mwoDevelop/kodi \
 gh run list --repo mwoDevelop/kodi \
   --workflow approve-umbrella-update.yml --event schedule --limit 1
 gh run list --repo mwoDevelop/kodi \
+  --workflow approve-umbrella-promotion.yml --event schedule --limit 1
+gh run list --repo mwoDevelop/kodi \
   --workflow publish-pages.yml --event schedule --limit 1
 gh run list --repo mwoDevelop/kodi \
   --workflow check-youtube-upstream.yml --event schedule --limit 1
