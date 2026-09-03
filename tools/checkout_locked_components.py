@@ -2,11 +2,42 @@
 """Fetch only commits referenced by Kodi channel locks."""
 
 import argparse
+import contextlib
 import json
+import os
 import subprocess
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
+
+
+@contextlib.contextmanager
+def git_environment():
+    """Provide non-persistent credentials for private component repositories."""
+    token = os.environ.get("KODI_COMPONENTS_TOKEN", "").strip()
+    if not token:
+        yield None
+        return
+    with tempfile.TemporaryDirectory(prefix="kodi-git-askpass-") as directory:
+        askpass = Path(directory) / "askpass.sh"
+        askpass.write_text(
+            "#!/bin/sh\n"
+            "case \"$1\" in\n"
+            "  *Username*) printf '%s\\n' x-access-token ;;\n"
+            "  *) printf '%s\\n' \"$KODI_COMPONENTS_TOKEN\" ;;\n"
+            "esac\n",
+            encoding="utf-8",
+        )
+        askpass.chmod(0o700)
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "GIT_ASKPASS": str(askpass),
+                "GIT_TERMINAL_PROMPT": "0",
+            }
+        )
+        yield environment
 
 
 def load_json(path):
@@ -25,40 +56,47 @@ def checkout_locked_components(output):
 
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
-    for addon_id, component in components.items():
-        checkout = component["source"].split("/", 1)[0]
-        if checkout not in commits:
-            continue
-        target = output / checkout
-        if not (target / ".git").is_dir():
-            target.mkdir(parents=True, exist_ok=True)
-            subprocess.run(["git", "-C", str(target), "init", "-q"], check=True)
-            subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(target),
-                    "remote",
-                    "add",
-                    "origin",
-                    "https://github.com/%s.git" % component["repository"],
-                ],
-                check=True,
-            )
-        for commit in sorted(commits[checkout]):
-            subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(target),
-                    "fetch",
-                    "--depth",
-                    "1",
-                    "origin",
-                    "%s:refs/locked/%s" % (commit, commit),
-                ],
-                check=True,
-            )
+    with git_environment() as environment:
+        for addon_id, component in components.items():
+            checkout = component["source"].split("/", 1)[0]
+            if checkout not in commits:
+                continue
+            target = output / checkout
+            if not (target / ".git").is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                subprocess.run(
+                    ["git", "-C", str(target), "init", "-q"],
+                    check=True,
+                    env=environment,
+                )
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(target),
+                        "remote",
+                        "add",
+                        "origin",
+                        "https://github.com/%s.git" % component["repository"],
+                    ],
+                    check=True,
+                    env=environment,
+                )
+            for commit in sorted(commits[checkout]):
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(target),
+                        "fetch",
+                        "--depth",
+                        "1",
+                        "origin",
+                        "%s:refs/locked/%s" % (commit, commit),
+                    ],
+                    check=True,
+                    env=environment,
+                )
     return commits
 
 
