@@ -198,10 +198,10 @@
       "id": "qnap-upstream-watchdog",
       "kind": "internal_interval",
       "owner": "operations",
-      "interval_seconds": 21600,
-      "grace_seconds": 900,
+      "interval_seconds": 900,
+      "grace_seconds": 300,
       "timeout_seconds": 120,
-      "stale_after_seconds": 28800,
+      "stale_after_seconds": 3600,
       "retry_policy": "next_interval",
       "dependencies": ["github-api"],
       "observer": "watchdog_status"
