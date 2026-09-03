@@ -13,7 +13,8 @@ w `manifests/locks` oraz publiczny status
    `plugin.video.umbrella`. Kandydat nie może zmienić żadnego innego pinu.
 3. `approve-umbrella-update.yml` co 15 minut sprawdza autora, branch, dokładny
    head SHA, jedyny dozwolony plik, zmianę wersji do przodu i zielony check
-   `e2e`. W trybie obserwacyjnym tylko zapisuje decyzję jako artefakt.
+   `e2e`. Zapisuje decyzję jako artefakt i, gdy repozytoryjny przełącznik jest
+   włączony, ustawia natywne auto-merge przypięte do zweryfikowanego SHA.
 4. Po scaleniu `publish-testing.yml` buduje, testuje i skanuje dokładne bajty,
    a następnie publikuje niezmienny snapshot testing. Odświeżenie samego statusu
    nie tworzy snapshotu.
@@ -24,29 +25,32 @@ w `manifests/locks` oraz publiczny status
 6. Atestacja oraz niezmieniony, ponownie zweryfikowany lock QNAP są dołączane do
    release snapshotu. `promote-stable.yml` otwiera PR stable, nie przebudowując
    ZIP-ów ani obrazów QNAP. `approve-umbrella-promotion.yml` ponownie sprawdza
-   snapshot i atestację przed approval normalnej promocji.
+   snapshot i atestację przed włączeniem auto-merge normalnej promocji.
 7. `publish-pages.yml` jest jedynym writerem GitHub Pages. Składa stable,
    testing i status w jeden przeskanowany artefakt, po czym publikuje go atomowo.
 8. Kodi ze stable origin i `general.addonupdates=0` pobiera nową wersję natywnym
    mechanizmem repozytoriów. Urządzenia nie są obowiązkową bramą pre-release;
    test urządzenia po wydaniu jest dodatkowym smoke testem.
 
-## Konfiguracja GitHub App
+## Konfiguracja automatyzacji
 
-Auto-approver nie ma bypassu rulesetów i nie jest niezależnym ludzkim review.
-Jest automatyczną kontrolą polityki dla jednego, ściśle określonego typu PR.
+Automatyczna brama nie zastępuje niezależnego ludzkiego review. Jest kontrolą
+polityki dla jednego, ściśle określonego typu PR: najpierw weryfikuje tożsamość,
+dozwolone pliki, dokładny head SHA i wymagane checki, a dopiero potem ustawia
+natywne auto-merge. Nie używa bypassu rulesetów.
 
-W chronionym Environment `umbrella-auto-release` ustaw:
+Etap mutujący używa krótkotrwałego `GITHUB_TOKEN` bieżącego workflow z
+uprawnieniami ograniczonymi do `actions`, `contents` i `pull-requests: write`.
+Nie ma długowiecznego sekretu ani chronionego Environment. Ponieważ GitHub nie
+uruchamia nowych workflow po scaleniu wykonanym własnym `GITHUB_TOKEN`, brama po
+potwierdzeniu stanu `MERGED` jawnie wywołuje następny etap: `publish-testing`,
+`deploy-stable` albo test głównej gałęzi forka.
 
-- variable `UMBRELLA_RELEASE_APP_CLIENT_ID`;
-- secret `UMBRELLA_RELEASE_APP_PRIVATE_KEY`.
-
-GitHub App potrzebuje wyłącznie `Pull requests: write` i `Contents: write` oraz
-instalacji ograniczonej do repozytoriów `mwoDevelop/kodi` i
-`mwoDevelop/umbrellaplug.github.io`. Chronione Environment z tym samym kontraktem
-sekretów trzeba skonfigurować osobno w obu repozytoriach. Oba repozytoria muszą
-zezwalać na native auto-merge, ale App nie może omijać wymaganych checków ani
-approval rulesetu.
+Oba repozytoria muszą zezwalać na native auto-merge. Rulesety nadal wymagają
+checków, lecz nie wymagają approval, ponieważ zweryfikowana brama nie wykonuje
+już sztucznego self-approval. Ustawienie Actions dla PR-ów pierwszych autorów
+akceptuje tylko konta istniejące wcześniej; nowo utworzone konta zewnętrzne nadal
+wymagają ręcznego zatwierdzenia uruchomienia workflow.
 
 Domyślnie część mutująca jest wyłączona. Po udanym teście obserwacyjnym, teście
 negatywnym allowlisty i potwierdzonym no-op ustaw repozytoryjną variable:
@@ -58,12 +62,10 @@ UMBRELLA_AUTO_MERGE_ENABLED=true
 Usunięcie albo ustawienie innej wartości natychmiast przywraca tryb
 obserwacyjny; weryfikacja nadal działa i publikuje dowód decyzji.
 
-Na dzień 20.08.2026 oba weryfikatory przeszły próbę obserwacyjną i końcowy
-no-op, lecz część mutująca pozostaje celowo wyłączona: chronione Environment nie
-ma jeszcze poświadczeń dedykowanej App, a `UMBRELLA_AUTO_MERGE_ENABLED` nie jest
-ustawione na `true`. W tym stanie wykrycie, budowa, skanowanie, atestacja,
-publikacja i przygotowanie PR są automatyczne, natomiast dokładnie zweryfikowany
-PR nadal wymaga approval i scalenia przez inną tożsamość.
+Od 3.09.2026 część mutująca jest włączona w obu repozytoriach. Wyłączenie
+`UMBRELLA_AUTO_MERGE_ENABLED` nadal pozostawia pełną weryfikację i artefakt
+decyzji, ale nie ustawia auto-merge. Brak albo pusty token kończy etap mutujący
+błędem zamiast cichego raportowania sukcesu.
 
 ## Ręczne uruchomienia i diagnostyka
 
