@@ -72,31 +72,27 @@ jobs:
     if: >-
       needs.verify.outputs.eligible == 'true' &&
       vars.UMBRELLA_AUTO_MERGE_ENABLED == 'true'
-    environment: umbrella-auto-release
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      actions: write
+      contents: write
+      pull-requests: write
     steps:
-      - name: Mint a narrowly scoped, short-lived GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          client-id: ${{ vars.UMBRELLA_RELEASE_APP_CLIENT_ID }}
-          private-key: ${{ secrets.UMBRELLA_RELEASE_APP_PRIVATE_KEY }}
-          owner: mwoDevelop
-          repositories: kodi
-          permission-contents: write
-          permission-pull-requests: write
-      - name: Recheck head identity, approve, and enable native auto-merge
+      - name: Recheck head identity and enable native auto-merge
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           NUMBER: ${{ needs.verify.outputs.number }}
           VERIFIED_HEAD: ${{ needs.verify.outputs.head_sha }}
         run: |
           set -euo pipefail
           current="$(gh pr view "$NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)"
           test "$current" = "$VERIFIED_HEAD"
-          gh pr review "$NUMBER" --repo "$GITHUB_REPOSITORY" --approve \
-            --body "Automatyczna aprobata: wyłącznie lock Umbrelli, zmiana do przodu i pełny zielony E2E."
           gh pr merge "$NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge \
             --match-head-commit "$VERIFIED_HEAD"
+          for attempt in $(seq 1 12); do
+            state="$(gh pr view "$NUMBER" --repo "$GITHUB_REPOSITORY" --json state --jq .state)"
+            [ "$state" = "MERGED" ] && break
+            sleep 5
+          done
+          test "$state" = "MERGED"
+          gh workflow run publish-testing.yml --repo "$GITHUB_REPOSITORY" --ref main

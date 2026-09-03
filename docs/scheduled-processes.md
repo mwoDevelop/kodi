@@ -15,8 +15,8 @@ workflow obsługuje również `workflow_dispatch`, umożliwiający kontrolowane 
 | UTC | Repozytorium | Workflow | Cel | Granica zapisu |
 | --- | --- | --- | --- | --- |
 | 03:10 codziennie | `mwoDevelop/kodi` | `publish-pages.yml` | Odświeża jeden atomowy payload stable, testing i publicznego statusu Umbrelli. | To jedyny writer GitHub Pages; dokładne komponenty pochodzą z locków i cały payload przechodzi wspólną bramę malware. |
-| co 15 minut | `mwoDevelop/kodi` | `approve-umbrella-update.yml` | Sprawdza ścisłą allowlistę PR aktualizującego wyłącznie lock Umbrelli. | Domyślnie obserwacyjny. Mutacja wymaga `UMBRELLA_AUTO_MERGE_ENABLED=true` i osobnej App bez bypassu rulesetów. |
-| co 30 minut | `mwoDevelop/kodi` | `approve-umbrella-promotion.yml` | Sprawdza PR stable związany z dokładnym snapshotem, hermetyczną atestacją i niezmienionym lockiem QNAP. | Forward rollback nigdy nie kwalifikuje się do automatycznego approval; normalna promocja używa tej samej chronionej App i native auto-merge. |
+| co 15 minut | `mwoDevelop/kodi` | `approve-umbrella-update.yml` | Sprawdza ścisłą allowlistę PR aktualizującego wyłącznie lock Umbrelli. | Przy `UMBRELLA_AUTO_MERGE_ENABLED=true` krótkotrwały `GITHUB_TOKEN` ustawia native auto-merge przypięte do zweryfikowanego SHA; ruleset nadal wymaga `e2e`, ale nie approval. Po merge jawnie uruchamia `publish-testing`. |
+| co 30 minut | `mwoDevelop/kodi` | `approve-umbrella-promotion.yml` | Sprawdza PR stable związany z dokładnym snapshotem, hermetyczną atestacją i niezmienionym lockiem QNAP. | Forward rollback nigdy nie kwalifikuje się do auto-merge; normalna promocja nie omija wymaganych checków, a po merge jawnie uruchamia `deploy-stable`. |
 | 04:11 codziennie | `mwoDevelop/kodi` | `check-kodi-runtime-upstream.yml` | Odkrywa najnowsze stabilne wydanie `xbmc/xbmc` i porównuje jego systemowe ABI z append-only katalogiem runtime. | `NO_CHANGE` nie zapisuje niczego. Nowe wydanie tworzy PR zmieniający wyłącznie katalog; dokładny head przechodzi pełne CI, a merge wymaga osobnej atestacji binariów APK/Flatpak. Prerelease i tag drift są odrzucane. |
 | 04:20 codziennie | `mwoDevelop/kodi` | `reconcile-upstreams.yml` | Wykrywa stan wszystkich zarządzanych komponentów i przygotowuje dokładnego kandydata na lock kanału testing. | Ogólny kandydat trafia na `automation/testing-lock` i wymaga review. |
 | 04:35 codziennie | `mwoDevelop/kodi` | `reconcile-upstreams.yml` w trybie komponentowym | Przygotowuje lock zmieniający wyłącznie `plugin.video.umbrella`. | PR `automation/testing-lock-plugin-video-umbrella` może otrzymać automatyczne approval dopiero po pełnej weryfikacji allowlisty i CI. |
@@ -25,7 +25,7 @@ workflow obsługuje również `workflow_dispatch`, umożliwiający kontrolowane 
 | 04:35 codziennie | `mwoDevelop/ch.repo` | `mwodevelop-watchnixtoons2-update.yml` | Wykrywa upstream WatchNixtoons2, materializuje i skanuje izolowanego kandydata, a następnie go testuje. | Zweryfikowana zmiana może zaktualizować `automation/watchnixtoons2-upstream` i otworzyć PR wymagający review. Nie publikuje repozytorium Kodi. |
 | 04:41 codziennie | `mwoDevelop/script.module.mwoscrapers` | `discover-provider-upstreams.yml` | Obserwuje najnowsze źródła providerów i utrzymuje stan review dotyczący wyłącznie pochodzenia. | Zmieniona obserwacja może zaktualizować `automation/provider-provenance` i otworzyć PR wymagający review. Nie importuje ani nie wykonuje kodu providera. |
 | 04:50 codziennie | `mwoDevelop/umbrellaplug.github.io` | `propose-upstream-update.yml` | Odtwarza stos poprawek downstream Umbrella na dokładnym commitcie upstream, skanuje kandydata i go testuje. | Zweryfikowana zmiana może zaktualizować `automation/umbrella-upstream` i otworzyć PR wymagający review. Chronione ścieżki muszą pozostać niezmienione. |
-| co 15 minut | `mwoDevelop/umbrellaplug.github.io` | `approve-upstream-update.yml` | Sprawdza dokładny PR odtwarzający fork Umbrelli, jego Candidate-ID, stos patchy i zielone checki. | Domyślnie obserwacyjny. Mutacja wymaga chronionego Environment, dedykowanej App i `UMBRELLA_AUTO_MERGE_ENABLED=true` również w repozytorium forka. |
+| co 15 minut | `mwoDevelop/umbrellaplug.github.io` | `approve-upstream-update.yml` | Sprawdza dokładny PR odtwarzający fork Umbrelli, jego Candidate-ID, stos patchy i zielone checki. | Przy `UMBRELLA_AUTO_MERGE_ENABLED=true` krótkotrwały `GITHUB_TOKEN` ustawia native auto-merge dla dokładnego SHA; wymagane `malware-scan` i `test` pozostają obowiązkowe, a po merge test `main` jest wywoływany jawnie. |
 | 05:03 codziennie | `mwoDevelop/script.module.mwoscrapers` | `probe-provider-health.yml` | Sprawdza publiczne kontrakty wszystkich kwalifikowanych providerów na co najmniej dwóch kontrolowanych filmach i dwóch odcinkach. | Tylko do odczytu. Wynik schema 2 rozróżnia błędy transportu, kontraktu, deadline i pusty wynik po filtracji; quorum chroni przed uznaniem pojedynczego braku tytułu za awarię providera. Artefakt nie zapisuje nazw źródeł, magnetów, hashy ani URL-i treści. |
 
 Audyt providerów i ich discovery są celowo rozdzielone:
@@ -84,11 +84,12 @@ po 60 sekundach zamiast czekać na kolejny pełny cykl 15-minutowy.
 Watchdog ma uwierzytelniony dostęp do GitHub API, aby nie
 dzielić anonimowego limitu `60/h` dla adresu wyjściowego QNAP. Token jest wstrzykiwany
 z prywatnych referencji podczas wdrożenia i nie trafia do repozytorium ani raportu
-statusu. Jedyną operacją zapisu jest `actions:write` potrzebne do wywołania
+statusu. Jedyną operacją zapisu watchdoga jest `actions:write` potrzebne do wywołania
 `workflow_dispatch` dla dokładnej listy wersjonowanego manifestu; watchdog nie może
 zmienić gałęzi, PR, release ani artefaktu upstream. Workflow nadal wykonuje własne
-kontrole uprawnień, dokładnego SHA i bramek środowiska, a automatyczne merge Umbrelli
-pozostaje wyłączone bez `UMBRELLA_AUTO_MERGE_ENABLED=true`. Pomyślne odkrycie nie maskuje
+kontrole uprawnień i dokładnego SHA. Osobne workflowy polityki Umbrelli mogą
+ustawić native auto-merge tylko z `UMBRELLA_AUTO_MERGE_ENABLED=true` i po przejściu
+wszystkich checków. Pomyślne odkrycie nie maskuje
 błędu audytu zaakceptowanych artefaktów; oba workflow mwoScrapers są
 monitorowane niezależnie.
 

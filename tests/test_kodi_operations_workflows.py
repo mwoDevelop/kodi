@@ -161,7 +161,7 @@ def test_pages_publication_waits_for_umbrella_certification():
     assert "- publish testing" not in triggers
 
 
-def test_auto_approval_is_observe_only_until_explicitly_enabled():
+def test_policy_automerge_is_explicitly_gated_without_human_approval():
     workflows = [
         text(".github/workflows/approve-umbrella-update.yml"),
         text(".github/workflows/approve-umbrella-promotion.yml"),
@@ -171,8 +171,13 @@ def test_auto_approval_is_observe_only_until_explicitly_enabled():
     assert "tools/umbrella_promotion_approval.py" in workflows[1]
     for workflow in workflows:
         assert "UMBRELLA_AUTO_MERGE_ENABLED == 'true'" in workflow
+        assert "GH_TOKEN: ${{ github.token }}" in workflow
+        assert "actions: write" in workflow
         assert "--match-head-commit" in workflow
-        assert "environment: umbrella-auto-release" in workflow
+        assert "environment: umbrella-auto-release" not in workflow
+        assert "gh pr review" not in workflow
+    assert "gh workflow run publish-testing.yml" in workflows[0]
+    assert "gh workflow run deploy-stable.yml" in workflows[1]
 
 
 def test_umbrella_qualification_failure_is_candidate_bound_and_persistent():
