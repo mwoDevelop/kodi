@@ -1,7 +1,7 @@
 {
-  "attestation_id": "185841bf9cb6ba745f9e2a6b6ffb71d5dd9365c267ec6b083593dbee9ee79206",
+  "attestation_id": "0415571ee138a2fe607e76bb82a1e3bdaa155e9d0633f52f7e6026d1deb1252b",
   "attestation_kind": "device",
-  "attestation_sha256": "43c547284659b1557afa2f27902d146befcf292e9329978e7b77aeb541e36e74",
+  "attestation_sha256": "488b4ae2140a9bfea2afdc4aff511efc64e5ad2f573e016daaba63a1f02a4222",
   "channel": "stable",
   "components": {
     "plugin.video.umbrella": {
@@ -40,5 +40,5 @@
   "schema": 2,
   "source_artifact_manifest_sha256": "2f4914058289b032219e012e022ce08b17bb4630609979dc7e5c77100ab0c0f2",
   "source_index_sha256": "880d130509312751cd36c4df688b918698010b69b7432a473d37e482735a571c",
-  "source_snapshot_id": "5d90f9f818596c1e9bcc39c11e0242dee0fd98ca7a3e329a1a70b356e079fbff"
+  "source_snapshot_id": "2e84a117c526505a6f0e76186bb6b2b556f03c74affa40fcb5ca8b572260a1fd"
 }
