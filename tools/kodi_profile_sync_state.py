@@ -148,6 +148,57 @@ def probe(addon, profile):
     }
 
 
+def probe_skin_menu(kodi_profile, skin_root):
+    """Return a redacted semantic menu check from inside the Kodi process.
+
+    Android app-private profile files may legitimately be mode 0600.  Reading
+    them from the host through ``adb shell`` therefore is not a portable
+    verification mechanism; this helper runs with Kodi's own identity.
+    """
+
+    source = Path(kodi_profile) / (
+        "addon_data/script.skinshortcuts/mainmenu.DATA.xml"
+    )
+    generated = Path(skin_root) / "16x9/script-skinshortcuts-includes.xml"
+    if not source.is_file() or not generated.is_file():
+        return {
+            "skin_menu_probe_status": "MISSING",
+            "skin_menu_source_match": False,
+            "skin_menu_generated_match": False,
+            "skin_menu_source_items": 0,
+            "skin_menu_generated_items": 0,
+        }
+    try:
+        from resources.lib.mwoprofilesync.skin_menu import (
+            EXPECTED_ITEMS,
+            expected_generated,
+            generated_items,
+            parse_source,
+        )
+
+        source_items = parse_source(source.read_bytes())
+        generated_menu_items = generated_items(generated.read_bytes())
+        source_match = source_items == EXPECTED_ITEMS
+        generated_match = generated_menu_items == expected_generated(EXPECTED_ITEMS)
+        return {
+            "skin_menu_probe_status": (
+                "MATCH" if source_match and generated_match else "MISMATCH"
+            ),
+            "skin_menu_source_match": source_match,
+            "skin_menu_generated_match": generated_match,
+            "skin_menu_source_items": len(source_items),
+            "skin_menu_generated_items": len(generated_menu_items),
+        }
+    except (ImportError, OSError, TypeError, ValueError):
+        return {
+            "skin_menu_probe_status": "INVALID",
+            "skin_menu_source_match": False,
+            "skin_menu_generated_match": False,
+            "skin_menu_source_items": 0,
+            "skin_menu_generated_items": 0,
+        }
+
+
 def configure(
     addon,
     profile,
@@ -270,6 +321,17 @@ def main():
         profile = xbmcvfs.translatePath(addon.getAddonInfo("profile"))
         if sys.argv[1] == "probe" and len(sys.argv) == 3:
             result = probe(addon, profile)
+            addon_root = xbmcvfs.translatePath(
+                "special://home/addons/" + ADDON_ID
+            )
+            if addon_root not in sys.path:
+                sys.path.insert(0, addon_root)
+            result.update(
+                probe_skin_menu(
+                    xbmcvfs.translatePath("special://profile"),
+                    xbmcvfs.translatePath("special://skin"),
+                )
+            )
         elif sys.argv[1] == "configure" and len(sys.argv) in {7, 8}:
             result = configure(
                 addon,

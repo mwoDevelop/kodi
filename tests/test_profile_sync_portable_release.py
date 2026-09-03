@@ -307,6 +307,11 @@ def test_trigger_sync_requires_menu_files_and_restart_evidence(monkeypatch):
         "applied_revision": revision,
         "status": "NO_CHANGE",
         "skin_menu_status": "HEALTHY",
+        "skin_menu_probe_status": "MATCH",
+        "skin_menu_source_match": True,
+        "skin_menu_generated_match": True,
+        "skin_menu_source_items": 4,
+        "skin_menu_generated_items": 4,
     }
     monkeypatch.setattr(
         "tools.profile_sync_portable_release._profile_sync_probe",

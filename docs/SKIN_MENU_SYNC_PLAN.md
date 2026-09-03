@@ -1,6 +1,6 @@
 # Plan deklaratywnej synchronizacji menu skórki Kodi
 
-Status: `RELEASED_PENDING_FLEET_CAPABILITY_E2E`
+Status: `RELEASED_AND_FLEET_CONVERGED`
 
 ## 1. Problem i wynik docelowy
 
@@ -166,3 +166,29 @@ trzech brakujących klientów należy wykonać dwa pełne przebiegi `kodi_ops.py
 rollout`: pierwszy aktualizuje klienta i heartbeat, drugi publikuje, sprawdza na
 canary i promuje menu. Szczegółowy zapis znajduje się w [raporcie
 E2E](e2e-results/2026-09-02-skin-menu-sync.md).
+
+## 9. Domknięcie rolloutu z 3 września 2026 r.
+
+Wszystkie sześć aktywnych enrollmentów raportuje Profile Sync 1.5.0 oraz
+capability `skin-shortcuts-menu-v1`. Brama floty została spełniona, dlatego
+adapter `kodi.skin_menu` włączono do aktywnej rewizji generacji 7
+`sha256:63a8026e6454713ebbd18e9cdd9660e194ad99e0f90e224819922a963a72e6dc`.
+
+BlueStacks i X88 przeszły zastosowanie, weryfikację po restarcie oraz kolejny
+przebieg `NO_CHANGE`. Pełny rollout objął także Sony TV, Bedroom TV i oba
+profile Flatpak. `nuc-alek` nie miał wcześniej poprawnego dokumentu
+źródłowego, dlatego wykonano jednorazowy, kontrolowany bootstrap kanonicznego
+`mainmenu.DATA.xml`; nie dodawano rozbudowanej migracji do klienta. Po normalnym
+uruchomieniu Kodi oba pliki menu na `nuc-alek` są zgodne, a drugi przebieg
+zwraca `NO_CHANGE` i `skin_menu_status=HEALTHY`.
+
+Przy kwalifikacji usunięto dwie usterki narzędzi hosta. Sonda Androida działa
+teraz wewnątrz procesu Kodi, więc nie próbuje czytać przez `adb shell` plików
+prywatnych o trybie `0600`. Transport Flatpak wysyła sekwencję EventServer
+`HELLO`/`ACTION`/`BYE` z jednego gniazda UDP, zgodnie z identyfikacją klienta
+przez Kodi. Raport rolloutu jawnie zawiera również `skin_menu_status`.
+Cleanup używa ponadto aplikacyjnego `flatpak kill tv.kodi.Kodi` jako
+ograniczonego fallbacku, gdy proces Kodi odłączy się od grupy launchera.
+
+Odtwarzalny przebieg i dowody są opisane w [raporcie konwergencji
+floty](e2e-results/2026-09-03-skin-menu-fleet-convergence.md).
