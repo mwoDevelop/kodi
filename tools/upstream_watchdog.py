@@ -401,14 +401,14 @@ def main():
     )
     parser.add_argument("--manifest", default="manifests/upstream-watchdog.json")
     parser.add_argument("--status")
-    parser.add_argument("--interval-seconds", type=int, default=21600)
+    parser.add_argument("--interval-seconds", type=int, default=900)
     parser.add_argument("--remediation-recheck-seconds", type=int, default=60)
     parser.add_argument("--listen")
     parser.add_argument("--port", type=int, default=9445)
     parser.add_argument("--tls-cert")
     parser.add_argument("--tls-key")
     parser.add_argument("--client-ca")
-    parser.add_argument("--max-status-age-seconds", type=int, default=28800)
+    parser.add_argument("--max-status-age-seconds", type=int, default=3600)
     parser.add_argument("--max-clock-skew-seconds", type=int, default=300)
     parser.add_argument(
         "--remediate",

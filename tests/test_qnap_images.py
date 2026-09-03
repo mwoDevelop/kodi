@@ -57,6 +57,8 @@ def watchdog_policy(image=IMAGE):
                         "health",
                         "--status",
                         "/run/watchdog/status.json",
+                        "--max-status-age-seconds",
+                        "3600",
                     ]
                 },
                 "volumes": [

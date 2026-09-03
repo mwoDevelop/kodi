@@ -62,6 +62,8 @@ services:
         - health
         - --status
         - /run/watchdog/status.json
+        - --max-status-age-seconds
+        - "3600"
       interval: 5m
       timeout: 5s
       retries: 2
