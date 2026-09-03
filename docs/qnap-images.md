@@ -59,6 +59,11 @@ konfigurację wybranej usługi (na przykład po rotacji tokena Watchdoga), użyj
 python tools/qnap_images.py deploy upstream-watchdog --reconcile
 ```
 
+`--reconcile` ponownie stosuje także konfigurację montowaną z hosta. Dla
+Control Plane oznacza to kontrolowane odtworzenie jego kontenerów, ponieważ samo
+skopiowanie zmienionego katalogu harmonogramów nie przeładowuje katalogu
+zapamiętanego przez działający proces.
+
 Bez jawnego `--reconcile` zgodny digest pozostaje bezpiecznym `NO_CHANGE`.
 
 To interfejs niskopoziomowy do diagnostyki i kontrolowanych prac serwisowych.

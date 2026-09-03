@@ -41,6 +41,11 @@ class ControlPlaneError(RuntimeError):
     pass
 
 
+def compose_reconcile_command(compose):
+    """Recreate the stack so changed bind-mounted configuration is loaded."""
+    return compose + " up -d --pull always --force-recreate"
+
+
 def _verify_certificate(ca, certificate, purpose):
     result = subprocess.run(
         (
@@ -734,7 +739,7 @@ def deploy(
         "bind_create_host_path_false": sorted(explicit_bind_targets(compose_source))
     }
     policy = validate_policy(rendered)
-    session.execute(compose + " up -d --pull always", timeout=360)
+    session.execute(compose_reconcile_command(compose), timeout=360)
     gateway = install_gateway(
         session,
         repository,

@@ -9,12 +9,19 @@ from tools.qnap_compose_policy import explicit_bind_targets
 from tools.qnap_control_plane import (
     BROWSER_PATH,
     ControlPlaneError,
+    compose_reconcile_command,
     create_browser_bootstrap,
     environment,
     validate_policy,
     verify_api,
     verify_browser,
 )
+
+
+def test_control_plane_reconcile_reloads_bind_mounted_configuration():
+    assert compose_reconcile_command("docker compose") == (
+        "docker compose up -d --pull always --force-recreate"
+    )
 
 
 def render(repository_root, tmp_path):
