@@ -995,6 +995,11 @@ def _cleanup_command(operation):
         "case \"$pid\" in (*[!0-9]*|'') exit 1;; esac; "
         "kill -TERM -- \"-$pid\" 2>/dev/null || kill \"$pid\" 2>/dev/null || true; "
         "sleep 2; kill -KILL -- \"-$pid\" 2>/dev/null || true; }}; "
+        # The Flatpak launcher may exit after handing Kodi to its sandbox, so
+        # the application process is not guaranteed to remain in the launcher's
+        # process group. The rollout precondition requires Kodi to be stopped;
+        # use Flatpak's app-scoped kill as the bounded cleanup fallback.
+        "flatpak kill tv.kodi.Kodi 2>/dev/null || true; "
         "test ! -f {xpid} || {{ pid=$(cat {xpid}); "
         "case \"$pid\" in (*[!0-9]*|'') exit 1;; esac; "
         "kill \"$pid\" 2>/dev/null || true; }}; "
@@ -1061,9 +1066,24 @@ def _stage_event_packets(sftp, stage, command):
 def _send_staged_event_builtin(transport, packet_paths):
     if len(packet_paths) != 3:
         raise ValueError("Kodi EventServer command requires three packets")
-    command = "set -eu; command -v nc >/dev/null; " + "; ".join(
-        "nc -u -w 1 127.0.0.1 9777 < %s" % shlex.quote(path)
-        for path in packet_paths
+    # EventServer identifies a client by its UDP peer as well as the protocol
+    # UID.  Starting one ``nc`` process per packet can therefore split HELLO,
+    # ACTION and BYE across three peers and silently discard the action.  Keep
+    # one socket while preserving the protocol's datagram boundaries.
+    sender = (
+        "import socket,sys,time\n"
+        "sock=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)\n"
+        "for path in sys.argv[1:]:\n"
+        "    with open(path,'rb') as source:\n"
+        "        payload=source.read(2048)\n"
+        "    if not payload.startswith(b'XBMC') or len(payload)>1024:\n"
+        "        raise SystemExit(2)\n"
+        "    sock.sendto(payload,('127.0.0.1',9777))\n"
+        "    time.sleep(0.05)\n"
+    )
+    command = "set -eu; command -v python3 >/dev/null; python3 -c %s %s" % (
+        shlex.quote(sender),
+        " ".join(shlex.quote(path) for path in packet_paths),
     )
     _remote_command(transport, command, timeout=10)
 
@@ -1730,6 +1750,7 @@ def rollout(args):
                 "playback_pending_application": result.get(
                     "playback_pending_application"
                 ),
+                "skin_menu_status": result.get("skin_menu_status"),
                 "rollout_mode": mode,
                 "favourites": favourite_count,
                 "required_addons": result["required_addons"],

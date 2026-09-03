@@ -7,6 +7,7 @@ from tools.kodi_profile_sync_state import (
     configure_identity,
     configure_secret_mode,
     probe,
+    probe_skin_menu,
 )
 
 
@@ -253,3 +254,15 @@ def test_secret_mode_rejects_unpaired_or_unknown_mode(tmp_path):
         configure_secret_mode(Addon(), tmp_path, "canary")
     with pytest.raises(ValueError, match="invalid"):
         configure_secret_mode(Addon(), tmp_path, "unsupported")
+
+
+def test_skin_menu_probe_reports_missing_without_host_filesystem_fallback(tmp_path):
+    result = probe_skin_menu(tmp_path / "profile", tmp_path / "skin")
+
+    assert result == {
+        "skin_menu_probe_status": "MISSING",
+        "skin_menu_source_match": False,
+        "skin_menu_generated_match": False,
+        "skin_menu_source_items": 0,
+        "skin_menu_generated_items": 0,
+    }

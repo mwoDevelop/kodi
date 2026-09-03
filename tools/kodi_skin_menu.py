@@ -8,8 +8,6 @@ import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from tools.kodi_profile import KODI_ROOT, adb_output
-
 ADAPTER_ID = "kodi.skin_menu"
 CAPABILITY = "skin-shortcuts-menu-v1"
 MINIMUM_CLIENT_VERSION = "1.5.0"
@@ -165,31 +163,18 @@ def _expected_generated(items):
 
 
 def probe_device(adb, port, serial):
-    source = adb_output(
-        adb,
-        port,
-        serial,
-        "exec-out",
-        "cat",
-        KODI_ROOT + "/userdata/addon_data/script.skinshortcuts/mainmenu.DATA.xml",
-        text=False,
-    )
-    generated = adb_output(
-        adb,
-        port,
-        serial,
-        "exec-out",
-        "cat",
-        KODI_ROOT
-        + "/addons/skin.aeon.nox.silvo/16x9/script-skinshortcuts-includes.xml",
-        text=False,
-    )
-    expected = expected_document()["items"]
-    source_items = _source_items(source)
-    generated_items = _generated_items(generated)
+    # Import lazily to keep the manifest/parser module independent from the
+    # Android orchestration module.  The probe is deliberately executed inside
+    # Kodi: app-private files written atomically can be unreadable to adb shell.
+    from tools.kodi_portable_state_rollout import _profile_sync_probe
+
+    observed = _profile_sync_probe(adb, port, serial)
+    status = observed.get("skin_menu_probe_status")
+    if status not in {"MATCH", "MISMATCH"}:
+        raise RuntimeError("in-Kodi skin menu probe is unavailable: %s" % status)
     return {
-        "source_match": source_items == expected,
-        "generated_match": generated_items == _expected_generated(expected),
-        "source_items": len(source_items),
-        "generated_items": len(generated_items),
+        "source_match": observed.get("skin_menu_source_match") is True,
+        "generated_match": observed.get("skin_menu_generated_match") is True,
+        "source_items": observed.get("skin_menu_source_items"),
+        "generated_items": observed.get("skin_menu_generated_items"),
     }

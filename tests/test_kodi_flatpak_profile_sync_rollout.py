@@ -418,6 +418,7 @@ def test_cleanup_command_is_valid_shell_and_scopes_all_paths_to_operation():
     assert command.count(operation) == 8
     assert "kill -TERM" in command
     assert "kill -KILL" in command
+    assert command.count("flatpak kill tv.kodi.Kodi") == 1
     assert "/tmp/mwo-kodi-" in command
     assert "/tmp/mwo-xvfb-" in command
 
@@ -487,8 +488,12 @@ def test_staged_event_packets_are_sent_only_to_nuc_loopback(monkeypatch):
 
     assert observed["transport"] is transport
     assert observed["timeout"] == 10
-    assert observed["command"].count("127.0.0.1 9777") == 3
-    assert observed["command"].count("nc -u -w 1") == 3
+    assert "socket.SOCK_DGRAM" in observed["command"]
+    assert "127.0.0.1" in observed["command"]
+    assert "9777" in observed["command"]
+    assert observed["command"].count(".event-") == 3
+    assert "command -v python3" in observed["command"]
+    assert "nc -u" not in observed["command"]
     assert "192.168." not in observed["command"]
 
 
