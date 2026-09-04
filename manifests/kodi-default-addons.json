@@ -1,79 +1,75 @@
 {
-  "schema": 1,
-  "policy": "official-external",
   "addons": [
     {
       "id": "repository.rapideo_pl",
-      "version": "1.0.4",
       "kind": "repository",
-      "url": "https://www.rapideo.pl/kodi/repo/repository.rapideo_pl.zip",
+      "license": "not-declared",
       "sha256": "fa6e9b020d910e96eed89f1b41f3b6afd1252401976f6dc4a4bed43709b03e77",
       "source": "https://www.rapideo.pl/kodi/repo/",
-      "license": "not-declared"
+      "url": "https://www.rapideo.pl/kodi/repo/repository.rapideo_pl.zip",
+      "version": "1.0.4"
     },
     {
       "id": "script.module.xbmcswift2",
-      "version": "19.0.7",
       "kind": "module",
-      "url": "https://mirrors.kodi.tv/addons/omega/script.module.xbmcswift2/script.module.xbmcswift2-19.0.7.zip",
+      "license": "GPL-3.0-only",
+      "origin": "repository.xbmc.org",
       "sha256": "1f4c8c79e36ea61c88b4d55bc8ee1f7a9618950de7f3a09b5bd675009703fb8f",
       "source": "https://github.com/XBMC-Addons/script.module.xbmcswift2",
-      "license": "GPL-3.0-only",
-      "origin": "repository.xbmc.org"
+      "url": "https://mirrors.kodi.tv/addons/omega/script.module.xbmcswift2/script.module.xbmcswift2-19.0.7.zip",
+      "version": "19.0.7"
     },
     {
       "id": "service.subtitles.opensubtitles",
-      "version": "5.1.5",
       "kind": "subtitle",
-      "url": "https://mirrors.kodi.tv/addons/omega/service.subtitles.opensubtitles/service.subtitles.opensubtitles-5.1.5.zip",
+      "license": "GPL-2.0-only",
+      "origin": "repository.xbmc.org",
       "sha256": "5d03f76827089c3878537f1d983465c4dd7676cae04fbdb3c5f3f1b4ab50b1e4",
       "source": "https://github.com/juokelis/service.subtitles.opensubtitles",
-      "license": "GPL-2.0-only",
-      "origin": "repository.xbmc.org"
+      "url": "https://mirrors.kodi.tv/addons/omega/service.subtitles.opensubtitles/service.subtitles.opensubtitles-5.1.5.zip",
+      "version": "5.1.5"
     },
     {
-      "id": "plugin.video.rapideo_pl",
-      "version": "1.5.0",
-      "kind": "plugin",
-      "url": "https://www.rapideo.pl/kodi/zip/plugin.video.rapideo_pl/plugin.video.rapideo_pl-1.5.0.zip",
-      "sha256": "129e4fb59065d8b8d46a272dcbb3d78cb3a43ae6b7a6231d2446499f26739d8e",
-      "source": "https://www.rapideo.pl",
-      "license": "GPL-2.0-only",
-      "origin": "repository.rapideo_pl",
       "dependencies": [
         "script.module.requests",
         "script.module.six",
         "script.module.xbmcswift2"
-      ]
+      ],
+      "id": "plugin.video.rapideo_pl",
+      "kind": "plugin",
+      "license": "GPL-2.0-only",
+      "origin": "repository.rapideo_pl",
+      "sha256": "129e4fb59065d8b8d46a272dcbb3d78cb3a43ae6b7a6231d2446499f26739d8e",
+      "source": "https://www.rapideo.pl",
+      "url": "https://www.rapideo.pl/kodi/zip/plugin.video.rapideo_pl/plugin.video.rapideo_pl-1.5.0.zip",
+      "version": "1.5.0"
     },
     {
-      "id": "plugin.video.youtube",
-      "version": "7.4.4",
-      "kind": "plugin",
-      "url": "https://mirrors.kodi.tv/addons/omega/plugin.video.youtube/plugin.video.youtube-7.4.4.zip",
-      "sha256": "d744e5ba2d2b50924a9fa5624f4d209c2be95b97ef1ad1682cafbed160fb428f",
-      "source": "https://github.com/anxdpanic/plugin.video.youtube/tree/v7.4.4",
-      "license": "GPL-2.0-only",
-      "origin": "repository.xbmc.org",
-      "install_mode": "kodi-native-official",
       "dependencies": [
         "script.module.requests",
         "inputstream.adaptive"
       ],
       "dependency_requirements": {
+        "inputstream.adaptive": {
+          "minimum_version": "19.0.0",
+          "type": "platform"
+        },
         "script.module.requests": {
           "minimum_version": "2.27.1",
           "type": "python"
-        },
-        "inputstream.adaptive": {
-          "minimum_version": "19.0.0",
-          "type": "platform",
-          "supported_android_abis": [
-            "arm64-v8a",
-            "armeabi-v7a"
-          ]
         }
-      }
+      },
+      "id": "plugin.video.youtube",
+      "install_mode": "kodi-native-official",
+      "kind": "plugin",
+      "license": "GPL-2.0-only",
+      "origin": "repository.xbmc.org",
+      "sha256": "d744e5ba2d2b50924a9fa5624f4d209c2be95b97ef1ad1682cafbed160fb428f",
+      "source": "https://github.com/anxdpanic/plugin.video.youtube/tree/v7.4.4",
+      "url": "https://mirrors.kodi.tv/addons/omega/plugin.video.youtube/plugin.video.youtube-7.4.4.zip",
+      "version": "7.4.4"
     }
-  ]
+  ],
+  "policy": "official-external",
+  "schema": 1
 }
