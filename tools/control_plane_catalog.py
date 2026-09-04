@@ -167,7 +167,7 @@ def load_severity_policy(path):
 
 def watchdog_entries(path):
     payload = _document(path)
-    if payload.get("schema") != 2 or not isinstance(payload.get("workflows"), list):
+    if payload.get("schema") != 3 or not isinstance(payload.get("workflows"), list):
         raise ValueError("unsupported watchdog catalog")
     return {
         (item["repository"], item["workflow"]): item["max_age_seconds"]

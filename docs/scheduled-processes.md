@@ -75,8 +75,12 @@ Station może dzięki temu odróżnić awarię sondy od alarmu domenowego.
 Obserwacja rozdziela dwa fakty. Najnowszy przebieg `schedule` dowodzi, że natywny
 cron GitHub nadal jest uruchamiany. Jeżeli jego wynik przekroczy jawny próg z
 `manifests/upstream-watchdog.json`, watchdog może wykonać wyłącznie allowlistowany
-`workflow_dispatch` na `main`. Udany, nowszy przebieg naprawczy jest prezentowany
-w panelu jako `REMEDIATED`; kolejne opuszczone okna ponownie otworzą alert. Pole
+`workflow_dispatch` na jawnie przypiętej w tym samym wpisie gałęzi. Schemat 3
+manifestu wymaga pola `ref`: dla większości repozytoriów jest to `main`, natomiast
+`mwoDevelop/ch.repo` używa swojej gałęzi domyślnej `master`. Dzięki temu fallback
+nie zakłada wspólnej nazwy gałęzi i nie może niejawnie przełączyć celu. Udany,
+nowszy przebieg naprawczy jest prezentowany w panelu jako `REMEDIATED`; kolejne
+opuszczone okna ponownie otworzą alert. Pole
 `run_event=workflow_dispatch` zachowuje pochodzenie i nie pozwala pomylić fallbacku
 z natywnym harmonogramem. Po wysłaniu dispatchu watchdog wykonuje dodatkowy odczyt
 po 60 sekundach zamiast czekać na kolejny pełny cykl 15-minutowy.

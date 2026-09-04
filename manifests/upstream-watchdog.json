@@ -1,9 +1,10 @@
 {
-  "schema": 2,
+  "schema": 3,
   "workflows": [
     {
       "repository": "mwoDevelop/kodi",
       "workflow": "reconcile-upstreams.yml",
+      "ref": "main",
       "max_age_seconds": 129600,
       "remediation_after_seconds": 90000,
       "remediation_cooldown_seconds": 900
@@ -11,6 +12,7 @@
     {
       "repository": "mwoDevelop/kodi",
       "workflow": "approve-umbrella-update.yml",
+      "ref": "main",
       "max_age_seconds": 4500,
       "remediation_after_seconds": 3600,
       "remediation_cooldown_seconds": 900
@@ -18,6 +20,7 @@
     {
       "repository": "mwoDevelop/kodi",
       "workflow": "approve-umbrella-promotion.yml",
+      "ref": "main",
       "max_age_seconds": 8100,
       "remediation_after_seconds": 7200,
       "remediation_cooldown_seconds": 900
@@ -25,6 +28,7 @@
     {
       "repository": "mwoDevelop/kodi",
       "workflow": "publish-pages.yml",
+      "ref": "main",
       "max_age_seconds": 129600,
       "remediation_after_seconds": 90000,
       "remediation_cooldown_seconds": 900
@@ -32,6 +36,7 @@
     {
       "repository": "mwoDevelop/kodi",
       "workflow": "check-youtube-upstream.yml",
+      "ref": "main",
       "max_age_seconds": 129600,
       "remediation_after_seconds": 90000,
       "remediation_cooldown_seconds": 900
@@ -39,6 +44,7 @@
     {
       "repository": "mwoDevelop/kodi",
       "workflow": "check-kodi-runtime-upstream.yml",
+      "ref": "main",
       "max_age_seconds": 129600,
       "remediation_after_seconds": 90000,
       "remediation_cooldown_seconds": 900
@@ -46,6 +52,7 @@
     {
       "repository": "mwoDevelop/script.module.mwoscrapers",
       "workflow": "check-provider-upstreams.yml",
+      "ref": "main",
       "max_age_seconds": 129600,
       "remediation_after_seconds": 90000,
       "remediation_cooldown_seconds": 900
@@ -53,6 +60,7 @@
     {
       "repository": "mwoDevelop/script.module.mwoscrapers",
       "workflow": "discover-provider-upstreams.yml",
+      "ref": "main",
       "max_age_seconds": 129600,
       "remediation_after_seconds": 90000,
       "remediation_cooldown_seconds": 900
@@ -60,6 +68,7 @@
     {
       "repository": "mwoDevelop/script.module.mwoscrapers",
       "workflow": "probe-provider-health.yml",
+      "ref": "main",
       "max_age_seconds": 129600,
       "remediation_after_seconds": 90000,
       "remediation_cooldown_seconds": 900
@@ -67,6 +76,7 @@
     {
       "repository": "mwoDevelop/umbrellaplug.github.io",
       "workflow": "propose-upstream-update.yml",
+      "ref": "main",
       "max_age_seconds": 129600,
       "remediation_after_seconds": 90000,
       "remediation_cooldown_seconds": 900
@@ -74,6 +84,7 @@
     {
       "repository": "mwoDevelop/umbrellaplug.github.io",
       "workflow": "approve-upstream-update.yml",
+      "ref": "main",
       "max_age_seconds": 4500,
       "remediation_after_seconds": 3600,
       "remediation_cooldown_seconds": 900
@@ -81,6 +92,7 @@
     {
       "repository": "mwoDevelop/ch.repo",
       "workflow": "mwodevelop-watchnixtoons2-update.yml",
+      "ref": "master",
       "max_age_seconds": 129600,
       "remediation_after_seconds": 90000,
       "remediation_cooldown_seconds": 900

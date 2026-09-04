@@ -97,11 +97,12 @@ SCHEDULED_WORKFLOWS = {
 
 def _manifest():
     return {
-        "schema": 2,
+        "schema": 3,
         "workflows": [
             {
                 "repository": "owner/repo",
                 "workflow": "sync.yml",
+                "ref": "main",
                 "max_age_seconds": 129600,
                 "remediation_after_seconds": 90000,
                 "remediation_cooldown_seconds": 900,
@@ -580,6 +581,12 @@ def test_versioned_manifest_is_valid():
     assert {
         (item["repository"], item["workflow"]) for item in loaded["workflows"]
     } == set(SCHEDULED_WORKFLOWS)
+    assert {
+        (item["repository"], item["ref"]) for item in loaded["workflows"]
+    } == {
+        (repository, "master" if repository == "mwoDevelop/ch.repo" else "main")
+        for repository, _workflow in SCHEDULED_WORKFLOWS
+    }
 
 
 def test_control_plane_catalogs_are_valid_and_watchdog_thresholds_match():
