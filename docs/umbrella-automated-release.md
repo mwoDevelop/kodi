@@ -47,6 +47,11 @@ uruchamia nowych workflow po scaleniu wykonanym własnym `GITHUB_TOKEN`, brama p
 potwierdzeniu stanu `MERGED` jawnie wywołuje następny etap: `publish-testing`,
 `deploy-stable` albo test głównej gałęzi forka.
 
+Hermetyczna kwalifikacja materializuje dokładnie przypięte prywatne komponenty
+przed wejściem do Bubblewrap, używając `KODI_COMPONENTS_TOKEN`. Token nie jest
+przekazywany do środowiska `env -i`; testowany kod widzi wyłącznie lokalne,
+tylko-do-odczytu drzewa komponentów i nie ma dostępu do sieci.
+
 Oba repozytoria muszą zezwalać na native auto-merge. Rulesety nadal wymagają
 checków, lecz nie wymagają approval, ponieważ zweryfikowana brama nie wykonuje
 już sztucznego self-approval. Ustawienie Actions dla PR-ów pierwszych autorów
