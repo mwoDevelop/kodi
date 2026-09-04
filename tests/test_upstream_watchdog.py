@@ -664,6 +664,16 @@ def test_youtube_upstream_scans_zip_and_expanded_tree_before_review_pr():
     assert "github.event_name != 'pull_request'" in workflow
 
 
+def test_youtube_upstream_retires_obsolete_candidate_pr_after_noop():
+    workflow = Path(".github/workflows/check-youtube-upstream.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "retire-obsolete-candidate:" in workflow
+    assert "needs.qualify.outputs.action == 'noop'" in workflow
+    assert "gh pr close" in workflow
+    assert "--delete-branch" in workflow
+
+
 def test_kodi_runtime_upstream_is_append_only_review_with_exact_ci_head():
     workflow = Path(
         ".github/workflows/check-kodi-runtime-upstream.yml"

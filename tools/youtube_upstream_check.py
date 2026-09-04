@@ -138,6 +138,17 @@ def _requirements(addon_xml):
     return dependencies, requirements
 
 
+def _preserve_dependency_policy(current, requirements):
+    """Carry local runtime qualification that upstream addon.xml cannot express."""
+    current_requirements = current.get("dependency_requirements", {})
+    for addon_id, requirement in requirements.items():
+        previous = current_requirements.get(addon_id, {})
+        supported_abis = previous.get("supported_android_abis")
+        if supported_abis is not None and requirement["type"] == "platform":
+            requirement["supported_android_abis"] = list(supported_abis)
+    return requirements
+
+
 def _extract_candidate(archive_path, destination):
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=False)
@@ -199,6 +210,7 @@ def materialize(manifest_path, output_dir, opener=urllib.request.urlopen):
     with ZipFile(archive_path) as archive:
         addon_xml = archive.read(ADDON_ID + "/addon.xml")
     dependencies, requirements = _requirements(addon_xml)
+    requirements = _preserve_dependency_policy(current, requirements)
     candidate_entry["dependencies"] = dependencies
     candidate_entry["dependency_requirements"] = requirements
 
