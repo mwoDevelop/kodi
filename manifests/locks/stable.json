@@ -1,13 +1,13 @@
 {
-  "attestation_id": "8fbfee8c8513f31b692102b17cd1dd8d5fe2bbe4d9feb83dc0725a6f03b56262",
-  "attestation_kind": "device",
-  "attestation_sha256": "8ac670b0b44b2785a66ebb366f94a9eb19dd1dfb683c73a881474470822759f8",
+  "attestation_id": "62acab696a632ec3415c76f6d42c626641e52e9fcc2e501402c6a13f8f6ee705",
+  "attestation_kind": "hermetic_ci",
+  "attestation_sha256": "f8981b4fa69d489225a43590d4f2e045fd9edbadd70394e81c8c641139da2b0c",
   "channel": "stable",
   "components": {
     "plugin.video.umbrella": {
-      "commit": "72f4da1a109cb522b9390de068b4545fb1e39303",
-      "version": "6.7.85.1",
-      "zip_sha256": "3eda5c1cbb8f04386ea9f8ddf869dad75a4842c7a6ee1d0b51e5dc3b56ebbcc9"
+      "commit": "6fedd792a6c29d1c89f29340c2d61ef07478ac30",
+      "version": "6.7.86.1",
+      "zip_sha256": "6dcc765dccf04ba06c3db7784d25a0f25769c3303b0997bfecb3672b2e1cf887"
     },
     "plugin.video.watchnixtoons2.mwodevelop": {
       "commit": "f2878c2f03cf4281b0e388191036005407281239",
@@ -38,7 +38,7 @@
   },
   "promotion_kind": "normal",
   "schema": 2,
-  "source_artifact_manifest_sha256": "2f4914058289b032219e012e022ce08b17bb4630609979dc7e5c77100ab0c0f2",
-  "source_index_sha256": "880d130509312751cd36c4df688b918698010b69b7432a473d37e482735a571c",
-  "source_snapshot_id": "13576c2e13aa92951ae249b5ef65055cd871e839bc57cbb7fd6f0ad79dbc733d"
+  "source_artifact_manifest_sha256": "5bcfbc1a78294024ffb8dcc7095cfb6ea08c3be3129e1b158a59c7942ae1a840",
+  "source_index_sha256": "c01c07b699366a99c61848497591d7ffbe2452983530b159644faa93344860e5",
+  "source_snapshot_id": "6ef8ccda4e377de01420eddd1d793e90bcf6deb168ae6b6fea476e37fc5df2b2"
 }
