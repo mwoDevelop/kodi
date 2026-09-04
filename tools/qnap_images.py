@@ -906,17 +906,16 @@ def validate_watchdog_policy(document):
 
 def watchdog_workflow_keys(repository):
     manifest_path = Path(repository) / "manifests/upstream-watchdog.json"
-    document = json.loads(manifest_path.read_text(encoding="utf-8"))
-    workflows = document.get("workflows")
-    if document.get("schema") != 2 or not isinstance(workflows, list):
-        raise ImageError("watchdog manifest contract is invalid")
+    try:
+        from tools.upstream_watchdog import load_manifest
+
+        workflows = load_manifest(manifest_path)["workflows"]
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        raise ImageError("watchdog manifest contract is invalid") from error
     keys = {
         (item.get("repository"), item.get("workflow"))
         for item in workflows
-        if isinstance(item, dict)
     }
-    if len(keys) != len(workflows) or any(not all(key) for key in keys):
-        raise ImageError("watchdog manifest contains invalid or duplicate workflows")
     return keys
 
 
