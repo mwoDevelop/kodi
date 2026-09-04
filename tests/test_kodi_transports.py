@@ -318,3 +318,22 @@ def test_package_imports_share_transport_class_identity():
     assert kodi_inventory.transport_for_device.__module__ == (
         "tools.kodi_transports"
     )
+
+
+def test_inventory_cli_uses_operational_adb_default(monkeypatch, capsys):
+    captured = {}
+
+    def fake_inventory_device(*_args, **kwargs):
+        captured.update(kwargs)
+        return {"logical_device_id": "android-tv"}
+
+    monkeypatch.setattr(kodi_inventory, "inventory_device", fake_inventory_device)
+    monkeypatch.setattr(kodi_inventory, "DEFAULT_ADB", "/tmp/operational-adb")
+    monkeypatch.setattr(
+        "sys.argv",
+        ["kodi_inventory.py", "android-tv"],
+    )
+
+    assert kodi_inventory.main() == 0
+    assert captured["adb"] == "/tmp/operational-adb"
+    assert '"logical_device_id": "android-tv"' in capsys.readouterr().out
