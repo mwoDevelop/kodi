@@ -67,6 +67,10 @@ def _manifest(tmp_path, version="7.4.4", payload=None):
                     "inputstream.adaptive": {
                         "minimum_version": "19.0.0",
                         "type": "platform",
+                        "supported_android_abis": [
+                            "arm64-v8a",
+                            "armeabi-v7a",
+                        ],
                     },
                 },
             }
@@ -130,6 +134,12 @@ def test_changed_candidate_is_atomic_and_updates_dependency_policy(tmp_path):
         ]["minimum_version"]
         == "2.32.0"
     )
+    assert candidate["candidate_manifest"]["addons"][0][
+        "dependency_requirements"
+    ]["inputstream.adaptive"]["supported_android_abis"] == [
+        "arm64-v8a",
+        "armeabi-v7a",
+    ]
 
     upstream.apply_candidate(candidate_dir / "candidate.json", manifest)
     applied = json.loads(manifest.read_text())

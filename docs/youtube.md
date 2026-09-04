@@ -190,6 +190,12 @@ merge ani promocji; wymagane pozostają testy BlueStacks, X88 i regresja starej
 funkcjonalności. QNAP watchdog monitoruje ten workflow niezależnie od ogólnego
 `reconcile-upstreams.yml`.
 
+Discovery zachowuje lokalne ograniczenia ABI zależności platformowych, których
+oficjalny `addon.xml` nie potrafi opisać. Identyczna wersja, ZIP i wymagania
+upstream kończą się dzięki temu jako `noop`, a workflow zamyka pozostały po
+starszym kandydacie PR i usuwa jego gałąź. Polityka runtime nie może być
+przypadkowo usunięta przez samą normalizację metadanych upstream.
+
 Oficjalny dodatek zawiera własne publiczne identyfikatory klientów/API, które Gitleaks
 poprawnie wskazuje jako potencjalne sekrety. Po ręcznym przeglądzie przypiętej wersji
 zaakceptowano wyłącznie cztery pary ścieżka+reguła w
