@@ -155,10 +155,14 @@ def test_only_one_workflow_owns_pages_deployment():
 def test_pages_publication_waits_for_umbrella_certification():
     workflow = text(".github/workflows/publish-pages.yml")
     triggers = workflow.split("permissions:", 1)[0]
+    deploy = text(".github/workflows/deploy-stable.yml")
 
     assert "- certify Umbrella hermetically" in triggers
-    assert "- deploy stable" in triggers
+    assert "- deploy stable" not in triggers
     assert "- publish testing" not in triggers
+    assert "publish-pages:" in deploy
+    assert "needs: materialize" in deploy
+    assert "gh workflow run publish-pages.yml" in deploy
 
 
 def test_policy_automerge_is_explicitly_gated_without_human_approval():
