@@ -13,8 +13,9 @@ w `manifests/locks` oraz publiczny status
    `plugin.video.umbrella`. Kandydat nie może zmienić żadnego innego pinu.
 3. `approve-umbrella-update.yml` co 15 minut sprawdza autora, branch, dokładny
    head SHA, jedyny dozwolony plik, zmianę wersji do przodu i zielony check
-   `e2e`. Zapisuje decyzję jako artefakt i, gdy repozytoryjny przełącznik jest
-   włączony, ustawia natywne auto-merge przypięte do zweryfikowanego SHA.
+   `e2e`. Zapisuje decyzję jako artefakt, autoryzuje oczekujący natywny przebieg
+   PR dla dokładnie tego SHA i czeka na jego wynik. Dopiero potem, gdy
+   repozytoryjny przełącznik jest włączony, ustawia natywne auto-merge.
 4. Po scaleniu `publish-testing.yml` buduje, testuje i skanuje dokładne bajty,
    a następnie publikuje niezmienny snapshot testing. Odświeżenie samego statusu
    nie tworzy snapshotu.
@@ -51,6 +52,12 @@ checków, lecz nie wymagają approval, ponieważ zweryfikowana brama nie wykonuj
 już sztucznego self-approval. Ustawienie Actions dla PR-ów pierwszych autorów
 akceptuje tylko konta istniejące wcześniej; nowo utworzone konta zewnętrzne nadal
 wymagają ręcznego zatwierdzenia uruchomienia workflow.
+
+PR utworzony przez `github-actions[bot]` może otrzymać od GitHub stan
+`action_required`, mimo że gałąź znajduje się w tym samym repozytorium. Brama
+autoryzuje wyłącznie przebieg `test.yml` związany z uprzednio zweryfikowanym
+head SHA i czeka na jego sukces. Powtórny reconcile nie przepisuje identycznego
+kandydata na nowy commit, dzięki czemu nie unieważnia testu ani decyzji w toku.
 
 Domyślnie część mutująca jest wyłączona. Po udanym teście obserwacyjnym, teście
 negatywnym allowlisty i potwierdzonym no-op ustaw repozytoryjną variable:

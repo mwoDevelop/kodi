@@ -94,18 +94,48 @@ jobs:
       needs.verify.outputs.eligible == 'true' &&
       vars.UMBRELLA_AUTO_MERGE_ENABLED == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     permissions:
       actions: write
       contents: write
       pull-requests: write
     steps:
-      - name: Recheck head identity and enable native auto-merge
+      - name: Authorize required PR E2E and enable native auto-merge
         env:
           GH_TOKEN: ${{ github.token }}
           NUMBER: ${{ needs.verify.outputs.number }}
           VERIFIED_HEAD: ${{ needs.verify.outputs.head_sha }}
         run: |
           set -euo pipefail
+          current="$(gh pr view "$NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)"
+          test "$current" = "$VERIFIED_HEAD"
+          branch="$(gh pr view "$NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefName --jq .headRefName)"
+          run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow test.yml \
+            --branch "$branch" --event pull_request --limit 20 \
+            --json databaseId,headSha \
+            --jq ".[] | select(.headSha == \"$VERIFIED_HEAD\") | .databaseId" | head -1)"
+          test -n "$run_id"
+          read -r run_status run_conclusion < <(
+            gh run view "$run_id" --repo "$GITHUB_REPOSITORY" \
+              --json status,conclusion --jq '[.status,.conclusion] | @tsv'
+          )
+          if [ "$run_conclusion" = "action_required" ]; then
+            gh api --method POST \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/approve" > /dev/null
+          elif [ "$run_status" = "completed" ] && [ "$run_conclusion" != "success" ]; then
+            echo "Required PR E2E already ended with $run_conclusion"
+            exit 1
+          fi
+          for attempt in $(seq 1 90); do
+            read -r run_status run_conclusion < <(
+              gh run view "$run_id" --repo "$GITHUB_REPOSITORY" \
+                --json status,conclusion --jq '[.status,.conclusion] | @tsv'
+            )
+            [ "$run_status" = "completed" ] && break
+            sleep 5
+          done
+          test "$run_status" = "completed"
+          test "$run_conclusion" = "success"
           current="$(gh pr view "$NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)"
           test "$current" = "$VERIFIED_HEAD"
           gh pr merge "$NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge \
