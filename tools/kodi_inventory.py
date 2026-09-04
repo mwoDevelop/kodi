@@ -28,6 +28,7 @@ else:
 
 
 ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+DEFAULT_ADB = str(Path.home() / "android-sdk/platform-tools/adb")
 
 
 def load_private_references(path):
@@ -112,7 +113,7 @@ def main():
         default=".kodi-private/devices.json",
     )
     parser.add_argument("--references", default=".env")
-    parser.add_argument("--adb", default="adb")
+    parser.add_argument("--adb", default=DEFAULT_ADB)
     parser.add_argument("--adb-server-port", type=int, default=5038)
     args = parser.parse_args()
     result = inventory_device(
