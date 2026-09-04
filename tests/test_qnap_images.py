@@ -106,10 +106,24 @@ def test_watchdog_workflow_keys_follow_manifest(tmp_path):
     manifest.write_text(
         json.dumps(
             {
-                "schema": 2,
+                "schema": 3,
                 "workflows": [
-                    {"repository": "owner/repo", "workflow": "first.yml", "max_age_seconds": 3600},
-                    {"repository": "owner/repo", "workflow": "second.yml", "max_age_seconds": 3600},
+                    {
+                        "repository": "owner/repo",
+                        "workflow": "first.yml",
+                        "ref": "main",
+                        "max_age_seconds": 3600,
+                        "remediation_after_seconds": 1800,
+                        "remediation_cooldown_seconds": 900,
+                    },
+                    {
+                        "repository": "owner/repo",
+                        "workflow": "second.yml",
+                        "ref": "master",
+                        "max_age_seconds": 3600,
+                        "remediation_after_seconds": 1800,
+                        "remediation_cooldown_seconds": 900,
+                    },
                 ],
             }
         ),
@@ -120,6 +134,18 @@ def test_watchdog_workflow_keys_follow_manifest(tmp_path):
         ("owner/repo", "first.yml"),
         ("owner/repo", "second.yml"),
     }
+
+
+def test_watchdog_workflow_keys_rejects_stale_manifest_schema(tmp_path):
+    manifest = tmp_path / "manifests/upstream-watchdog.json"
+    manifest.parent.mkdir()
+    manifest.write_text(
+        json.dumps({"schema": 2, "workflows": []}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(qnap_images.ImageError, match="manifest contract"):
+        qnap_images.watchdog_workflow_keys(tmp_path)
 
 
 @pytest.mark.parametrize(
