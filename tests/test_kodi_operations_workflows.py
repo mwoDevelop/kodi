@@ -201,3 +201,16 @@ def test_umbrella_qualification_failure_is_candidate_bound_and_persistent():
     assert "candidate_id=$CANDIDATE_ID" in certify
     assert marker in pages
     assert "failure_code=qualification_failed" in pages
+
+
+def test_hermetic_qualification_fetches_private_components_without_leaking_token():
+    workflow = text(".github/workflows/certify-umbrella-hermetic.yml")
+    execute = workflow.split(
+        "- name: Execute candidate tests without network, secrets, or host writes",
+        1,
+    )[1].split("- name: Create a short-lived", 1)[0]
+
+    assert "KODI_COMPONENTS_TOKEN: ${{ secrets.KODI_COMPONENTS_TOKEN }}" in execute
+    assert "python tools/checkout_locked_components.py" in execute
+    assert "sudo -n env -i /usr/bin/bwrap" in execute
+    assert "--setenv KODI_COMPONENTS_TOKEN" not in execute

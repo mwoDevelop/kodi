@@ -150,6 +150,10 @@ jobs:
           sudo apt-get install --yes --no-install-recommends bubblewrap
           python -m pip install --require-hashes -r requirements-ci.txt
       - name: Execute candidate tests without network, secrets, or host writes
+        env:
+          # Used only while materializing locked private components outside
+          # Bubblewrap. The sandbox is started with env -i and never receives it.
+          KODI_COMPONENTS_TOKEN: ${{ secrets.KODI_COMPONENTS_TOKEN }}
         run: |
           set -euo pipefail
           # Keep the bind source below a world-traversable parent. GitHub's
