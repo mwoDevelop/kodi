@@ -29,6 +29,8 @@ w `manifests/locks` oraz publiczny status
    snapshot i atestację przed włączeniem auto-merge normalnej promocji.
 7. `publish-pages.yml` jest jedynym writerem GitHub Pages. Składa stable,
    testing i status w jeden przeskanowany artefakt, po czym publikuje go atomowo.
+   Udany `deploy-stable.yml` wywołuje go jawnie; nie polega to na zagnieżdżonym
+   `workflow_run`, który GitHub może pominąć po osiągnięciu limitu łańcucha.
 8. Kodi ze stable origin i `general.addonupdates=0` pobiera nową wersję natywnym
    mechanizmem repozytoriów. Urządzenia nie są obowiązkową bramą pre-release;
    test urządzenia po wydaniu jest dodatkowym smoke testem.

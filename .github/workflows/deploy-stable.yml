@@ -211,3 +211,15 @@ jobs:
           if public_testing != composed_testing:
               raise SystemExit("composer did not preserve current testing")
           PY
+
+  publish-pages:
+    needs: materialize
+    if: needs.materialize.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Request the single atomic Pages writer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run publish-pages.yml --repo "$GITHUB_REPOSITORY" --ref main
