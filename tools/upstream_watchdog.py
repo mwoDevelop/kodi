@@ -200,7 +200,7 @@ def evaluate(
                             remediator(
                                 config["repository"],
                                 config["workflow"],
-                                ref="main",
+                                ref=config["ref"],
                                 token=token,
                             )
                             remediation_state = "DISPATCHED"
@@ -293,7 +293,7 @@ def validate_status(
 def load_manifest(path):
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if (
-        payload.get("schema") != 2
+        payload.get("schema") != 3
         or not isinstance(payload.get("workflows"), list)
         or not payload["workflows"]
     ):
@@ -303,6 +303,7 @@ def load_manifest(path):
         if set(item) != {
             "repository",
             "workflow",
+            "ref",
             "max_age_seconds",
             "remediation_after_seconds",
             "remediation_cooldown_seconds",
@@ -312,6 +313,11 @@ def load_manifest(path):
         if (
             identity in seen
             or not all(isinstance(value, str) and value for value in identity)
+            or not isinstance(item["ref"], str)
+            or not item["ref"]
+            or len(item["ref"]) > 255
+            or item["ref"].startswith("-")
+            or any(char.isspace() or ord(char) < 32 for char in item["ref"])
             or not isinstance(item["max_age_seconds"], int)
             or not 900 <= item["max_age_seconds"] <= 604800
             or not isinstance(item["remediation_after_seconds"], int)
