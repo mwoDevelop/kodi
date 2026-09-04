@@ -176,8 +176,19 @@ def test_policy_automerge_is_explicitly_gated_without_human_approval():
         assert "--match-head-commit" in workflow
         assert "environment: umbrella-auto-release" not in workflow
         assert "gh pr review" not in workflow
+        assert 'actions/runs/$run_id/approve' in workflow
+        assert '--event pull_request' in workflow
+        assert 'test "$run_conclusion" = "success"' in workflow
     assert "gh workflow run publish-testing.yml" in workflows[0]
     assert "gh workflow run deploy-stable.yml" in workflows[1]
+
+
+def test_reconcile_reuses_an_identical_open_candidate_head():
+    workflow = text(".github/workflows/reconcile-upstreams.yml")
+
+    assert 'git diff --quiet "$remote_sha" HEAD -- manifests/locks/testing.json' in workflow
+    assert 'git reset --hard "$remote_sha"' in workflow
+    assert 'remote_base="$(git merge-base "$remote_sha" "$BASE_COMMIT")"' in workflow
 
 
 def test_umbrella_qualification_failure_is_candidate_bound_and_persistent():

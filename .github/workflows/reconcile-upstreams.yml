@@ -188,8 +188,15 @@ jobs:
           git fetch origin "$BRANCH:refs/remotes/origin/$BRANCH" || true
           remote_sha="$(git show-ref --hash "refs/remotes/origin/$BRANCH" 2>/dev/null || true)"
           if [ -n "$remote_sha" ]; then
-            git push origin "HEAD:refs/heads/$BRANCH" \
-              "--force-with-lease=refs/heads/$BRANCH:$remote_sha"
+            remote_base="$(git merge-base "$remote_sha" "$BASE_COMMIT")"
+            if [ "$remote_base" = "$BASE_COMMIT" ] && \
+               git diff --quiet "$remote_sha" HEAD -- manifests/locks/testing.json; then
+              echo "Reusing identical candidate already published at $remote_sha"
+              git reset --hard "$remote_sha"
+            else
+              git push origin "HEAD:refs/heads/$BRANCH" \
+                "--force-with-lease=refs/heads/$BRANCH:$remote_sha"
+            fi
           else
             git push origin "HEAD:refs/heads/$BRANCH"
           fi
