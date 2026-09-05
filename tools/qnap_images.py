@@ -907,7 +907,13 @@ def validate_watchdog_policy(document):
 def watchdog_workflow_keys(repository):
     manifest_path = Path(repository) / "manifests/upstream-watchdog.json"
     try:
-        from tools.upstream_watchdog import load_manifest
+        try:
+            # ``qnap_images.py`` is both imported as ``tools.qnap_images`` by
+            # tests and executed directly by operators.  In the latter case
+            # Python puts ``tools/`` (not the repository root) on sys.path.
+            from upstream_watchdog import load_manifest
+        except ModuleNotFoundError:
+            from tools.upstream_watchdog import load_manifest
 
         workflows = load_manifest(manifest_path)["workflows"]
     except (OSError, ValueError, json.JSONDecodeError) as error:

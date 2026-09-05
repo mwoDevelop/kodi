@@ -1,7 +1,9 @@
 import json
 import os
+from pathlib import Path
 import stat
 import subprocess
+import sys
 
 import pytest
 
@@ -146,6 +148,28 @@ def test_watchdog_workflow_keys_rejects_stale_manifest_schema(tmp_path):
 
     with pytest.raises(qnap_images.ImageError, match="manifest contract"):
         qnap_images.watchdog_workflow_keys(tmp_path)
+
+
+def test_watchdog_workflow_keys_supports_direct_cli_import(tmp_path):
+    repository = Path(__file__).resolve().parents[1]
+    command = (
+        "import qnap_images; "
+        "keys=qnap_images.watchdog_workflow_keys(" + repr(str(repository)) + "); "
+        "assert len(keys) == 12"
+    )
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(repository / "tools")
+
+    result = subprocess.run(
+        [sys.executable, "-c", command],
+        cwd=tmp_path,
+        env=environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.parametrize(
