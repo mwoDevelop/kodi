@@ -168,9 +168,14 @@ def evaluate(
                     "in_progress",
                     "waiting",
                 }
+                # A scheduled run that is still active is normal scheduler
+                # progress.  A manual run, however, is remediation of an
+                # already delayed or failed schedule and must not turn the
+                # observer green before it has actually succeeded.
+                active_scheduled = active and run.get("event") == "schedule"
                 healthy = (
                     age.total_seconds() <= config["max_age_seconds"]
-                    and (active or conclusion == "success")
+                    and (active_scheduled or conclusion == "success")
                 )
                 result = {
                     **config,

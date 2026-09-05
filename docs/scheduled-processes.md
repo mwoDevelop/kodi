@@ -82,8 +82,10 @@ nie zakłada wspólnej nazwy gałęzi i nie może niejawnie przełączyć celu. 
 nowszy przebieg naprawczy jest prezentowany w panelu jako `REMEDIATED`; kolejne
 opuszczone okna ponownie otworzą alert. Pole
 `run_event=workflow_dispatch` zachowuje pochodzenie i nie pozwala pomylić fallbacku
-z natywnym harmonogramem. Po wysłaniu dispatchu watchdog wykonuje dodatkowy odczyt
-po 60 sekundach zamiast czekać na kolejny pełny cykl 15-minutowy.
+z natywnym harmonogramem. Sam stan `queued`, `waiting` albo `in_progress` ręcznej
+remediacji nie zmienia procesu na zdrowy: alarm znika dopiero po jej sukcesie.
+Po wysłaniu dispatchu watchdog wykonuje dodatkowy odczyt po 60 sekundach zamiast
+czekać na kolejny pełny cykl 15-minutowy.
 
 Watchdog ma uwierzytelniony dostęp do GitHub API, aby nie
 dzielić anonimowego limitu `60/h` dla adresu wyjściowego QNAP. Token jest wstrzykiwany
