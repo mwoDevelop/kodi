@@ -26,6 +26,9 @@ def render(mode, filename):
 def test_production_policy():
     document = render("production", "env.example")
 
+    healthcheck = document["services"]["provider-relay"]["healthcheck"]
+    assert healthcheck["timeout"] == "10s"
+    assert "timeout=5" in " ".join(healthcheck["test"])
     assert validate_policy(
         document, "production", allow_placeholder=True
     ) == {
