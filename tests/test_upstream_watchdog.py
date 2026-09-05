@@ -409,6 +409,37 @@ def test_watchdog_accepts_newer_manual_success_without_hiding_scheduler():
     assert item["latest_scheduled_run"]["id"] == 1
 
 
+def test_watchdog_does_not_greenwash_active_manual_remediation():
+    now = dt.datetime(2026, 8, 22, 8, tzinfo=dt.timezone.utc)
+
+    def fetch(_repository, _workflow, token=None):
+        return [
+            {
+                "id": 2,
+                "event": "workflow_dispatch",
+                "status": "in_progress",
+                "conclusion": None,
+                "updated_at": "2026-08-22T07:59:00Z",
+            },
+            {
+                "id": 1,
+                "event": "schedule",
+                "status": "completed",
+                "conclusion": "failure",
+                "updated_at": "2026-08-22T07:30:00Z",
+            },
+        ]
+
+    report = evaluate(_manifest(), fetcher=fetch, now=now)
+
+    assert report["healthy"] is False
+    item = report["workflows"][0]
+    assert item["monitored_state"] == "FAILED"
+    assert item["run_id"] == 2
+    assert item["run_event"] == "workflow_dispatch"
+    assert item["latest_scheduled_run"]["id"] == 1
+
+
 def test_watchdog_accepts_recent_remediation_after_stale_scheduler_run():
     now = dt.datetime(2026, 8, 22, 8, tzinfo=dt.timezone.utc)
 
