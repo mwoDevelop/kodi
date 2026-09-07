@@ -12,7 +12,7 @@ def _policy(tmp_path):
     path.write_text(
         json.dumps(
             {
-                "schema": 1,
+                "schema": 2,
                 "addons": {
                     "plugin.video.example": {
                         "version_range": {
@@ -51,6 +51,89 @@ def test_repository_policy_manages_watchnixtoons2_auto_highest():
     ) == {
         "plugin.video.watchnixtoons2.mwodevelop": {"playbackMethod": "1"}
     }
+
+
+def test_repository_policy_has_explicit_umbrella_filters_for_the_fleet():
+    policy = managed.load_policy(
+        Path("manifests/kodi-managed-addon-settings.json")
+    )
+    overrides = policy["addons"]["plugin.video.umbrella"][
+        "device_overrides"
+    ]
+
+    assert set(overrides) == {
+        "bedroom-tv",
+        "bluestacks1",
+        "nuc-alek",
+        "nuc-mwo",
+        "sony-tv",
+        "x88pro20",
+    }
+    assert all(
+        set(values)
+        == {
+            "remove.3D.sources",
+            "remove.av1",
+            "remove.dolby.vision",
+            "remove.hdr",
+            "remove.hevc",
+        }
+        for values in overrides.values()
+    )
+    assert {
+        device: (
+            values["remove.hevc"],
+            values["remove.av1"],
+            values["remove.hdr"],
+            values["remove.dolby.vision"],
+            values["remove.3D.sources"],
+        )
+        for device, values in overrides.items()
+    } == {
+        "bedroom-tv": ("false", "false", "true", "true", "true"),
+        "bluestacks1": ("false", "false", "true", "true", "true"),
+        "nuc-alek": ("false", "false", "true", "true", "true"),
+        "nuc-mwo": ("false", "false", "true", "true", "true"),
+        "sony-tv": ("false", "true", "false", "false", "true"),
+        "x88pro20": ("false", "true", "false", "true", "true"),
+    }
+    selected = managed.applicable_settings(
+        policy,
+        {"plugin.video.umbrella": "6.7.86.1"},
+        "sony-tv",
+    )["plugin.video.umbrella"]
+    assert selected["remove.av1"] == "true"
+    assert selected["remove.dolby.vision"] == "false"
+
+
+def test_device_override_replaces_a_common_value(tmp_path):
+    path = _policy(tmp_path)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["addons"]["plugin.video.example"]["device_overrides"] = {
+        "device-one": {"playbackMethod": "0"}
+    }
+    path.write_text(json.dumps(document), encoding="utf-8")
+    policy = managed.load_policy(path)
+
+    assert managed.applicable_settings(
+        policy, {"plugin.video.example": "2.2.0"}, "device-one"
+    ) == {"plugin.video.example": {"playbackMethod": "0"}}
+
+
+def test_device_specific_policy_fails_closed_for_an_unknown_device(tmp_path):
+    path = _policy(tmp_path)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["addons"]["plugin.video.example"]["device_overrides"] = {
+        "device-one": {"playbackMethod": "0"}
+    }
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="no device override"):
+        managed.applicable_settings(
+            managed.load_policy(path),
+            {"plugin.video.example": "2.2.0"},
+            "unregistered-device",
+        )
 
 
 def test_repository_policy_disables_broken_youtube_744_mpd_path():

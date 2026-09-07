@@ -23,7 +23,7 @@ from tools.kodi_addon_settings_rollout import (
 )
 from tools.kodi_profile import AdbJsonRpcClient, adb_command
 
-SCHEMA = 1
+SCHEMA = 2
 SAFE_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 VERSION = re.compile(r"^[0-9]+(?:\.[0-9]+)*$")
 KODI_ADDON_DATA = (
@@ -47,10 +47,13 @@ def load_policy(path: Path) -> dict:
     for addon_id, policy in addons.items():
         if not isinstance(addon_id, str) or not SAFE_ID.fullmatch(addon_id):
             raise ValueError("managed add-on settings policy has an invalid add-on ID")
-        if not isinstance(policy, dict) or set(policy) != {
-            "version_range",
-            "settings",
-        }:
+        if (
+            not isinstance(policy, dict)
+            or not {"version_range", "settings"}.issubset(policy)
+            or not set(policy).issubset(
+                {"version_range", "settings", "device_overrides"}
+            )
+        ):
             raise ValueError("managed add-on settings policy has an invalid entry")
         version_range = policy["version_range"]
         if not isinstance(version_range, dict) or set(version_range) != {
@@ -74,10 +77,45 @@ def load_policy(path: Path) -> dict:
             )
         ):
             raise ValueError("managed add-on settings policy has invalid settings")
+        overrides = policy.get("device_overrides", {})
+        if not isinstance(overrides, dict):
+            raise ValueError("managed add-on settings policy has invalid overrides")
+        for logical_device_id, values in overrides.items():
+            if (
+                not isinstance(logical_device_id, str)
+                or not SAFE_ID.fullmatch(logical_device_id)
+                or not isinstance(values, dict)
+                or not values
+                or any(
+                    not isinstance(setting_id, str)
+                    or not SAFE_ID.fullmatch(setting_id)
+                    or not isinstance(value, str)
+                    for setting_id, value in values.items()
+                )
+            ):
+                raise ValueError(
+                    "managed add-on settings policy has an invalid device override"
+                )
     return document
 
 
-def applicable_settings(policy: dict, addon_versions: dict[str, str]) -> dict:
+def applicable_settings(
+    policy: dict,
+    addon_versions: dict[str, str],
+    logical_device_id: str | None = None,
+) -> dict:
+    if logical_device_id is not None:
+        missing = sorted(
+            addon_id
+            for addon_id, entry in policy["addons"].items()
+            if entry.get("device_overrides")
+            and logical_device_id not in entry["device_overrides"]
+        )
+        if missing:
+            raise ValueError(
+                "managed add-on settings have no device override for: "
+                f"{', '.join(missing)}"
+            )
     selected = {}
     for addon_id, entry in sorted(policy["addons"].items()):
         installed = addon_versions.get(addon_id)
@@ -90,7 +128,14 @@ def applicable_settings(policy: dict, addon_versions: dict[str, str]) -> dict:
             <= current
             < _version(version_range["max_exclusive"])
         ):
-            selected[addon_id] = dict(sorted(entry["settings"].items()))
+            values = dict(entry["settings"])
+            if logical_device_id is not None:
+                values.update(
+                    entry.get("device_overrides", {}).get(
+                        logical_device_id, {}
+                    )
+                )
+            selected[addon_id] = dict(sorted(values.items()))
     return selected
 
 
@@ -136,8 +181,11 @@ def reconcile_android_managed_settings(
     addon_versions,
     policy_path,
     device_script,
+    logical_device_id=None,
 ):
-    desired = applicable_settings(load_policy(policy_path), addon_versions)
+    desired = applicable_settings(
+        load_policy(policy_path), addon_versions, logical_device_id
+    )
     pending = {}
     managed_count = 0
     for addon_id, settings in desired.items():
@@ -161,7 +209,10 @@ def reconcile_android_managed_settings(
         rollout_settings(adb, port, serial, sources, Path(device_script))
     for addon_id, settings in desired.items():
         current = read_android_settings(adb, port, serial, addon_id)
-        if any(current.get(setting_id) != value for setting_id, value in settings.items()):
+        if any(
+            current.get(setting_id) != value
+            for setting_id, value in settings.items()
+        ):
             raise RuntimeError("managed add-on settings verification failed")
     return {
         "status": "UPDATED",
@@ -192,7 +243,7 @@ def installed_android_addon_versions(adb, port, serial, addon_ids):
 
 
 def reconcile_installed_android_managed_settings(
-    adb, port, serial, policy_path, device_script
+    adb, port, serial, policy_path, device_script, logical_device_id=None
 ):
     policy = load_policy(policy_path)
     versions = installed_android_addon_versions(
@@ -205,12 +256,18 @@ def reconcile_installed_android_managed_settings(
         versions,
         policy_path,
         device_script,
+        logical_device_id,
     )
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--serial", required=True)
+    parser.add_argument(
+        "--device",
+        required=True,
+        help="logical device id selecting its versioned setting overrides",
+    )
     parser.add_argument(
         "--adb", default="/home/mwo/android-sdk/platform-tools/adb"
     )
@@ -230,6 +287,7 @@ def main():
         args.serial,
         Path(args.policy),
         Path(args.device_script),
+        args.device,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
 

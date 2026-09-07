@@ -399,6 +399,7 @@ def reconcile(
         serial,
         policy_path,
         ROOT / "tools/kodi_profile_restore_device.py",
+        device_id,
     )
     return {
         "schema": 1,

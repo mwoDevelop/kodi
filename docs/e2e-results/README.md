@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-09
 
+- [Filtry możliwości Umbrella per urządzenie](2026-09-07-umbrella-device-filters.md)
 - [Konwergencja menu Skin Shortcuts na całej flocie](2026-09-03-skin-menu-fleet-convergence.md)
 - [Control Plane 0.12 — gotowość klienta i aktywnego assignmentu](2026-09-02-control-plane-device-readiness.md)
 - [Deklaratywna synchronizacja menu Aeon Nox Silvo](2026-09-02-skin-menu-sync.md)
