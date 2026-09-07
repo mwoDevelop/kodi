@@ -200,6 +200,9 @@ nie może pozostawić włączonej flagi z pustą nazwą modułu. Filtr
 `realdebrid.filter.filename` pozostaje wyłączony: jego lista obejmuje typowe
 oznaczenia wydań (m.in. WEB-DL, WEBRip i BDRip) i potrafi usunąć wszystkie
 poprawne wyniki. Deduplikacja oraz negatywna pamięć błędów RD nadal działają.
+Wspólny profil ustawia również `remove.hevc=false`, aby urządzenia nie odrzucały
+poprawnych źródeł HEVC przed próbą odtworzenia. `remove.av1` pozostaje ustawieniem
+lokalnym, ponieważ wsparcie dekodera AV1 zależy od konkretnego urządzenia.
 
 Wśród dodatków domyślnych Kodi instaluje również oficjalny
 `plugin.video.youtube` z `repository.xbmc.org`. Adapter pobiera API i trzy refresh

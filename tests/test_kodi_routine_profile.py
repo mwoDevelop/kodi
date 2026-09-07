@@ -47,6 +47,7 @@ def profile(tmp_path):
             "sources.useonlyone": "true",
             "rd_cloud.enabled": "false",
             "cache.providers": "6",
+            "remove.hevc": "false",
             "scrapers.timeout": "30",
             "realdebridtoken": "must-not-export",
             "unknown.preference": "must-not-export",
@@ -115,6 +116,7 @@ def test_export_is_semantic_typed_and_excludes_secrets(tmp_path):
         "provider.external.enabled": True,
         "rd_cloud.enabled": False,
         "realdebrid.filter.filename": True,
+        "remove.hevc": False,
         "scrapers.timeout": 30,
         "sources.useonlyone": True,
     }
