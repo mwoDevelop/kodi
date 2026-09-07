@@ -103,6 +103,10 @@
               "type": "boolean",
               "class": "portable"
             },
+            "remove.hevc": {
+              "type": "boolean",
+              "class": "portable"
+            },
             "scrapers.timeout": {
               "type": "integer",
               "class": "portable"
