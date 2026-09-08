@@ -66,6 +66,11 @@ zapamiętanego przez działający proces.
 
 Bez jawnego `--reconcile` zgodny digest pozostaje bezpiecznym `NO_CHANGE`.
 
+Aktualizacja Control Plane nie obniża wersji osobno zarządzanej bramy QTS.
+Jeżeli zainstalowana wersja `KodiCPGateway` jest nowsza od pakietu w checkout,
+skrypt sprawdza jej działanie przed zmianą kontenerów i zachowuje ją jako
+`PRESERVED_NEWER`; niepoprawna wersja lub niedziałająca brama blokuje tę operację.
+
 To interfejs niskopoziomowy do diagnostyki i kontrolowanych prac serwisowych.
 Rutynowy rollout wykonuj przez `tools/kodi_ops.py rollout`; wtedy deploy jest
 dozwolony wyłącznie z zatwierdzonego stable locka, pod zdalną blokadą i z

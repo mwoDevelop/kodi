@@ -563,6 +563,22 @@ def verify_browser(host_ip, _ca=None, attempts=30):
     ) from last_error
 
 
+def preserve_newer_gateway(session, host_ip, packaged_version):
+    """Never downgrade a separately managed, verified QTS gateway with an image update."""
+    installed = session.execute(
+        "/sbin/getcfg KodiCPGateway Version -f /etc/config/qpkg.conf", allowed=(0, 1)
+    ).strip()
+    if not installed:
+        return None
+    if not all(re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", value)
+               for value in (installed, packaged_version)):
+        raise ControlPlaneError("cannot safely compare installed gateway version")
+    if tuple(map(int, installed.split("."))) <= tuple(map(int, packaged_version.split("."))):
+        return None
+    browser = verify_browser(host_ip, attempts=1)
+    return {"status": "PRESERVED_NEWER", "version": installed, "browser": browser}
+
+
 def create_browser_bootstrap(session, reset=False):
     """Create a short-lived browser bootstrap code inside the private authz DB."""
     report = preflight(session)
@@ -600,14 +616,19 @@ def deploy(
     device_inventory=None,
 ):
     try:
+        from qnap_control_plane_gateway import VERSION as gateway_version
         from qnap_control_plane_gateway import install as install_gateway
     except ModuleNotFoundError:
+        from tools.qnap_control_plane_gateway import VERSION as gateway_version
         from tools.qnap_control_plane_gateway import install as install_gateway
 
     report = preflight(session)
     if report["raid"] != {"array": "UU", "recovery_percent": None}:
         raise ControlPlaneError("Control Plane deployment requires healthy RAID [UU]")
     files = validate_private_files(private, secret_broker_private, watchdog_private)
+    # Probe before modifying the stack; a newer gateway belongs to a separate
+    # lifecycle and must not be replaced by this checkout's older package.
+    preserved_gateway = preserve_newer_gateway(session, host_ip, gateway_version)
     if not github_token or any(char in github_token for char in "\r\n"):
         raise ControlPlaneError("Control Plane GitHub token is missing or invalid")
     if (
@@ -740,10 +761,8 @@ def deploy(
     }
     policy = validate_policy(rendered)
     session.execute(compose_reconcile_command(compose), timeout=360)
-    gateway = install_gateway(
-        session,
-        repository,
-        repository / ".kodi-private/control-plane-operator.json",
+    gateway = preserved_gateway or install_gateway(
+        session, repository, repository / ".kodi-private/control-plane-operator.json"
     )
     api = verify_api(
         host_ip,

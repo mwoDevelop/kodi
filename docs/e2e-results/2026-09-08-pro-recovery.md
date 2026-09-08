@@ -43,6 +43,12 @@
 
 ## Odbiór wdrożenia
 
+Preflight wykazał działające QPKG 0.3.4 poza tym zakresem; stable kod zawiera
+pakiet 0.3.2. Dodano i przetestowano ochronę przed downgrade podczas aktualizacji
+kontenerów. Istniejąca nowsza brama jest weryfikowana i zachowywana, a jej
+niepowiązane zmiany lokalne pozostają nietknięte. Poprawiono brak linku do tego
+raportu wykryty w pierwszym pełnym CI promocji.
+
 Wymagany odczyt wersji/health i zachowanych przypisań po deployu, drugi deploy
 `NO_CHANGE`, E2E API/mTLS, odświeżenie DOM i publiczne repo. Stan końcowy zostanie
 dopisany po rzeczywistym wdrożeniu; powyższe nie jest jeszcze dowodem deployu.
