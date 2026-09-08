@@ -128,8 +128,15 @@ def evaluate(
     now=None,
     token=None,
     remediator=None,
+    remediation_attempts=None,
 ):
     now = now or dt.datetime.now(dt.timezone.utc)
+    # Separate retry throttling from selection of a successful recovery. Failed
+    # dispatch runs must not make health green, but must consume the cooldown.
+    # The caller retains this small ledger across polls (including API errors)
+    # because GitHub may not expose a newly accepted dispatch immediately.
+    if remediation_attempts is None:
+        remediation_attempts = {}
     results = []
     for config in manifest["workflows"]:
         try:
@@ -200,7 +207,22 @@ def evaluate(
                     ) or (
                         conclusion != "success" and age_seconds >= cooldown
                     )
+                    key = (config["repository"], config["workflow"], config["ref"])
+                    latest_attempt = remediation_attempts.get(key)
+                    for attempt in runs:
+                        if attempt.get("event") != "workflow_dispatch":
+                            continue
+                        observed = _timestamp(attempt["updated_at"])
+                        if latest_attempt is None or observed > latest_attempt:
+                            latest_attempt = observed
+                    if latest_attempt is not None:
+                        result["last_remediation_attempt_at"] = latest_attempt.isoformat()
+                        due = due and (now - latest_attempt).total_seconds() >= cooldown
                     if due:
+                        # Also throttle an ambiguous HTTP failure: the POST may
+                        # have reached GitHub even if its response was lost.
+                        remediation_attempts[key] = now
+                        result["last_remediation_attempt_at"] = now.isoformat()
                         try:
                             remediator(
                                 config["repository"],
@@ -458,11 +480,13 @@ def main():
         )
     elif any(observer_values):
         parser.error("observer TLS files require --listen")
+    remediation_attempts = {}
     while True:
         report = evaluate(
             manifest,
             token=token,
             remediator=dispatch_workflow if args.remediate else None,
+            remediation_attempts=remediation_attempts,
         )
         state.set(report)
         if args.status:

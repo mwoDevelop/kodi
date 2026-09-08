@@ -56,6 +56,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | Usunięcie zgodności legacy | [Plan usunięcia kodu legacy](../LEGACY_REMOVAL_PLAN.md) |
 | Orchestrator operacji | [Plan release, rollout i restore](../KODI_OPS_PLAN.md) |
 | Zdrowie usług i procesów cyklicznych | [Plan naprawy providerów, watchdoga, heartbeatów i harmonogramów](../OPERATIONS_HEALTH_REMEDIATION_PLAN.md) |
+| Audyt operacyjny 8.09.2026 | [Limity Actions, cooldown remediacji i aktywne przypisania](OPERATIONS_HEALTH_REMEDIATION_PLAN_2026-09-08.md) |
 | Cykl życia formatów | [Schematy bieżące i legacy](schema-lifecycle.md) |
 | Wstępny rekonesans repozytorium | [Rekord etapu 0](ETAP0.md) |
 | Początkowa linia bazowa upstream | [Wartość bazowa upstream z 25.07.2026 r.](upstream-sync-baseline-2026-07-25.md) |
