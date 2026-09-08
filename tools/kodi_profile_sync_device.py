@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import sys
+import traceback
 
 import xbmc
 import xbmcaddon
@@ -134,11 +135,17 @@ def main():
             "skin_menu_status": local.get("skin_menu_status"),
         }
     except Exception as error:  # noqa: BLE001 - Kodi runtime boundary
+        frame = traceback.extract_tb(error.__traceback__)[-1]
         result = {
             "ok": False,
             "error_type": type(error).__name__,
             "error_code": getattr(error, "code", None),
             "http_status": getattr(error, "status", None),
+            # No exception text, local variables or full device paths: those
+            # can contain credentials. The code location is enough to diagnose.
+            "error_location": "%s:%s:%s" % (
+                os.path.basename(frame.filename), frame.lineno, frame.name
+            ),
         }
     _write_atomic(
         marker,

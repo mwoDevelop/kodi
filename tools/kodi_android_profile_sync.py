@@ -287,11 +287,12 @@ def converge(
             result = _run_until_marker(adb, port, serial, command)
         if not result or not result.get("ok"):
             raise RuntimeError(
-                "Profile Sync Android convergence failed: %s/%s/%s"
+                "Profile Sync Android convergence failed: %s/%s/%s at %s"
                 % (
                     (result or {}).get("error_type", "missing-marker"),
                     (result or {}).get("error_code", "none"),
                     (result or {}).get("http_status", "none"),
+                    (result or {}).get("error_location", "unknown"),
                 )
             )
         assignment = bootstrap_active(repository, device_id)
@@ -320,11 +321,12 @@ def converge(
             result = _run_until_marker(adb, port, serial, command)
             if not result or not result.get("ok"):
                 raise RuntimeError(
-                    "Profile Sync active assignment failed: %s/%s/%s"
+                    "Profile Sync active assignment failed: %s/%s/%s at %s"
                     % (
                         (result or {}).get("error_type", "missing-marker"),
                         (result or {}).get("error_code", "none"),
                         (result or {}).get("http_status", "none"),
+                        (result or {}).get("error_location", "unknown"),
                     )
                 )
             verified = _profile_sync_probe(adb, port, serial)
