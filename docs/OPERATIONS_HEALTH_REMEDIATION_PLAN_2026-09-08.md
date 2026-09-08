@@ -258,6 +258,77 @@ GitHub według obecnych zasad, nie koszty energii i utrzymania hosta.
 GHCR storage i transfer są obecnie darmowe; odrzucony push w tym zadaniu
 dotyczył zakresu tokenu, nie dowiedzionego przekroczenia budżetu Packages.
 
+## E. Realizacja zaakceptowanego wariantu $0 — kolejność i bramy
+
+Status początkowy: retencja i rozróżnienie publikacji no-op są scalone w PR #356;
+oba profile NUC przeszły kontrolowany rollout synchronizacji (bez reinstalacji).
+Backend PR #20 nadal nie ma wykonanego CI. Zastane zmiany bramy QTS nie należą
+do tego etapu i pozostają poza zakresem commitów.
+
+1. **Ochrona przed powtarzaniem błędów budżetu.** Rozpoznawać wyłącznie
+   potwierdzone adnotacje GitHub o blokadzie Actions/budżetu/magazynu, a nie
+   sam status failure. Odczyt ograniczony do API danego repo, bez zapisywania
+   treści adnotacji. Udostępnić kod `BILLING_BLOCKED` i stan obserwacji klasyfikacji.
+   Dla takich awarii dopuścić najwyżej jeden automatyczny dispatch na workflow
+   w ciągu 24 h; normalne awarie zachowują istniejący cooldown.
+2. **Trwały dziennik prób.** Zapisywać identyfikator workflow/ref, czas próby
+   i potwierdzoną blokadę w prywatnym wolumenie watchdoga. Zapis atomowy i fsync
+   musi zakończyć się przed POST. Restart nie zeruje ochrony. Uszkodzony lub
+   niezapisywalny dziennik blokuje remediację, ale nie odczyt zdrowia. Nowszy
+   sukces jest dowodem odblokowania. Niedostępne API adnotacji nie może
+   wymazać wcześniej potwierdzonej blokady. Nie zmieniać failed na healthy.
+3. **Test i wdrożenie samego watchdoga.** Regresje: restart, utrata odpowiedzi
+   POST, błąd zapisu, uszkodzony JSON, błąd/ograniczenie uprawnień API,
+   nowy sukces, próba przed/po 24 h, zwykła awaria. Kontener testowy z trwałym
+   wolumenem; potem pełne testy repo, skan, niezmienny obraz, zatwierdzenie
+   standardową ścieżką qnap_images i odczyt statusu QNAP/API/GUI. Nie restartować
+   innych usług. Zachować poprzedni digest do rollbacku; nie usuwać dziennika.
+4. **Kadencja i duplikacja CI.** Przygotować razem tygodniowy audit/discovery
+   mwoScrapers, odpowiadające im oczekiwania w obu katalogach monitoringu,
+   regresje i dokumentację. Codzienny health pozostaje. Koordynować wdrożenie
+   między repozytoriami: oczekiwania monitoringu aktywować dopiero po scaleniu
+   rzeczywistego crona. Wyliczyć konserwatywną prognozę minut; uwzględnić retry
+   i pozostałe prywatne projekty bez zmieniania ich konfiguracji. Usuwać
+   podwójne testy tylko przy zachowaniu wymaganych checków PR/merge i skanów.
+5. **Prywatne CI i publikacja backendu.** Najpierw audyt dostępnej infrastruktury
+   runnerów. Runner urządzeniowy `mwo-kodi-release-runner` nie jest automatycznie
+   kwalifikowany do tego zadania. Brak bezpiecznej izolowanej maszyny, uprawnień
+   publikacji lub skanu jest jawną blokadą, nie uzasadnieniem obejścia bram.
+   Po uzyskaniu prawdziwych wyników CI/scanu wrócić do części B: backup,
+   wdrożenie backendu 0.10.1, readback i powtórny deploy `NO_CHANGE`.
+6. **Monitoring zużycia.** Najpierw publikować potwierdzoną przyczynę blokady
+   z adnotacji; liczniki billing wdrażać dopiero z działającym uprawnionym
+   źródłem. Brak źródła = `NOT_OBSERVED`, nie licznik 0. Nie odczytywać
+   prywatnych danych rozliczeniowych przez publiczne Actions ani nie dodawać
+   częstego workflow do monitorowania samego limitu.
+7. **Domknięcie.** Ponowić ograniczony test dostępności Bedroom TV i wykonać
+   istniejący rollout tylko dla prawidłowo zidentyfikowanego dostępnego urządzenia.
+   Zweryfikować panel względem niezależnego API, publiczne repo i regresje.
+   Udokumentować osobno wykonane, wdrożone i zablokowane etapy; commit/push
+   wyłącznie własnych zmian po kontroli sekretów. Bez zmiany wersji repo Kodi
+   ani ponownej instalacji niezmienionych dodatków.
+
+Przed implementacją tej sekcji osobny reviewer ocenia trwałość cooldownu,
+bezpieczeństwo runnera, kolejność wdrożeń dwóch repozytoriów i kryteria sukcesu.
+
+### Review E — przyjęte uściślenia
+
+- Rollback do obrazu bez trwałego cooldownu musi uruchamiać wyłącznie obserwację
+  (bez `--remediate`), również po automatycznym błędzie deployu. Zachować dziennik.
+- Klasyfikacja uwzględnia najnowszą zakończoną próbę, także nieudaną ręczną,
+  którą wybór skutecznej remediacji pomija. Sukces innej gałęzi lub wcześniejszy
+  od potwierdzonego błędu nie zwalnia blokady.
+- Tygodniowy cron wymaga rozszerzenia walidatora progów i tolerancji większej
+  niż 7 dni. Zmiana samego crona i manifestu byłaby niewystarczająca.
+- Dziennik: prywatny RW bind poza tmpfs, provisioning UID 10001 i zmiana
+  walidatora qnap_images, pojedynczy writer, fsync pliku i katalogu, jawne
+  pierwsze utworzenie. Brak/uszkodzenie wcześniej utworzonego pliku blokuje POST.
+- Brak adnotacji/uprawnień oznacza nieznaną przyczynę i zachowawcze 24 h,
+  bez przesuwania terminu przy każdym pollu. Dla zwykłych błędów dodać również
+  twardy limit trzech automatycznych prób w ruchomych 24 h na workflow;
+  samo minimum 15 minut nie chroni miesięcznej puli. Licznik nie jest kasowany
+  przez restart ani udany dispatch, a nowszy sukces usuwa klasyfikację billing.
+
 ## Stan końcowy etapu domknięcia
 
 - A: narzędzie zaimplementowano i przetestowano, usunięto tylko dwa zweryfikowane

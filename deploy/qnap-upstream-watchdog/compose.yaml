@@ -22,6 +22,8 @@ services:
       - --remediation-recheck-seconds
       - "60"
       - --remediate
+      - --remediation-ledger
+      - /var/lib/watchdog/attempts.json
     restart: unless-stopped
     init: true
     read_only: true
@@ -34,6 +36,11 @@ services:
       - /run/watchdog:size=1m,mode=0700,uid=10001,gid=10001
       - /tmp:size=4m,mode=1777
     volumes:
+      - type: bind
+        source: ${UPSTREAM_WATCHDOG_STATE_DIR:?set persistent private state directory}
+        target: /var/lib/watchdog
+        bind:
+          create_host_path: false
       - type: bind
         source: ${UPSTREAM_WATCHDOG_TLS_CERT:?set server certificate}
         target: /run/watchdog/tls/server.crt

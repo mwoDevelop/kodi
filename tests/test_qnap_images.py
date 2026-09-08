@@ -38,6 +38,8 @@ def watchdog_policy(image=IMAGE):
                     "--remediation-recheck-seconds",
                     "60",
                     "--remediate",
+                    "--remediation-ledger",
+                    "/var/lib/watchdog/attempts.json",
                 ],
                 "init": True,
                 "read_only": True,
@@ -64,6 +66,11 @@ def watchdog_policy(image=IMAGE):
                     ]
                 },
                 "volumes": [
+                    {
+                        "type": "bind",
+                        "source": str(qnap_images.WATCHDOG_ROOT / "state"),
+                        "target": "/var/lib/watchdog",
+                    },
                     {
                         "type": "bind",
                         "source": str(qnap_images.WATCHDOG_ROOT / "config/server.crt"),
@@ -204,6 +211,7 @@ def test_watchdog_environment_contains_secret_without_logging_it():
         + str(qnap_images.WATCHDOG_ROOT / "config/server.key"),
         "UPSTREAM_WATCHDOG_CLIENT_CA="
         + str(qnap_images.WATCHDOG_ROOT / "config/clients-ca.crt"),
+        "UPSTREAM_WATCHDOG_STATE_DIR=" + str(qnap_images.WATCHDOG_ROOT / "state"),
     ]
 
 

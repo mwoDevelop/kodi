@@ -7,6 +7,7 @@ on:
       - "deploy/qnap-upstream-watchdog/**"
       - "manifests/upstream-watchdog.json"
       - "tools/upstream_watchdog.py"
+      - "tools/watchdog_remediation.py"
       - ".github/workflows/build-upstream-watchdog.yml"
   workflow_dispatch:
 
@@ -61,6 +62,7 @@ jobs:
           paths = [
               "deploy/qnap-upstream-watchdog/Dockerfile",
               "tools/upstream_watchdog.py",
+              "tools/watchdog_remediation.py",
               "manifests/upstream-watchdog.json",
           ]
           tree = subprocess.check_output(

@@ -92,3 +92,25 @@ Trzy audyty prywatnego mwoScrapers pozostają FAILED, watchdog propaguje ten
 rzeczywisty błąd. Nowa strategia oszczędzania jest opisana jako propozycja w
 [planie napraw](../OPERATIONS_HEALTH_REMEDIATION_PLAN_2026-09-08.md#d-dodatkowe-zadanie-utrzymanie-kosztu-github-na-poziomie-0),
 nie jako zrealizowana migracja runnerów czy zmiana harmonogramów.
+
+## Kontynuacja: trwała ochrona budżetu watchdoga
+
+Plan E poddano osobnemu review. Uwzględniono rollback bez remediacji, limit
+trzech automatycznych prób na ruchome 24 h, trwały single-writer ledger,
+klasyfikację niezależną od wyboru skutecznego przebiegu i wymóg tego samego ref.
+Review implementacji doprowadził do regresji dla błędnych dat, brakującej
+gałęzi, utraconego pliku oraz ponowienia odczytu początkowo pustych adnotacji.
+
+- Pełna regresja pierwszej wersji: **807 passed**; końcowe dodatkowe regresje
+  ponawiane przed publikacją. Ostrzeżenie duplicate ZIP należy do negatywnego
+  fixture retencji, nie do przetwarzanego artefaktu produkcyjnego.
+- Kontenerowy E2E: **PASS**. Pierwszy proces rezerwuje jedną próbę; odtworzony
+  proces z tym samym wolumenem wykonuje zero POST i zwraca `NOT_DUE`. Test
+  używa symulowanego zegara i `--network none`, więc nie zużywa Actions.
+- Rzeczywiste adnotacje API sprawdzone nowym klasyfikatorem: przebiegi
+  `34217227330`, `34217232548`, `34217237528` trzech workflow mwoScrapers
+  dają **BILLING_BLOCKED**, bez zapisywania tokenu lub treści adnotacji.
+- Bedroom TV: port `192.168.1.20:5555` nadal `No route to host`; brak rolloutu
+  nie jest raportowany jako PASS.
+- Ten zapis dokumentuje kwalifikację przed wdrożeniem. Digest produkcyjny,
+  wynik CI i odczyt po wdrożeniu wymagają osobnego potwierdzenia poniżej.

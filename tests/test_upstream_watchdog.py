@@ -405,6 +405,7 @@ def test_watchdog_rejects_failure_and_stale_success():
         {
             "repository": "owner/other",
             "workflow": "sync.yml",
+            "ref": "main",
             "max_age_seconds": 129600,
         }
     )

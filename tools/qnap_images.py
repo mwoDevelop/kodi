@@ -175,6 +175,7 @@ def services(profile_sync_repository=None, control_plane_repository=None):
             input_paths=(
                 "deploy/qnap-upstream-watchdog/Dockerfile",
                 "tools/upstream_watchdog.py",
+                "tools/watchdog_remediation.py",
                 "manifests/upstream-watchdog.json",
             ),
         ),
@@ -756,12 +757,14 @@ def _watchdog_environment(image, token):
         "UPSTREAM_WATCHDOG_TLS_CERT=%s\n"
         "UPSTREAM_WATCHDOG_TLS_KEY=%s\n"
         "UPSTREAM_WATCHDOG_CLIENT_CA=%s\n"
+        "UPSTREAM_WATCHDOG_STATE_DIR=%s\n"
         % (
             image,
             token,
             WATCHDOG_ROOT / "config/server.crt",
             WATCHDOG_ROOT / "config/server.key",
             WATCHDOG_ROOT / "config/clients-ca.crt",
+            WATCHDOG_ROOT / "state",
         )
     )
 
@@ -845,6 +848,7 @@ def validate_watchdog_policy(document):
     ):
         raise ImageError("watchdog observer mount set differs")
     expected_targets = {
+        "/var/lib/watchdog",
         "/run/watchdog/tls/server.crt",
         "/run/watchdog/tls/server.key",
         "/run/watchdog/tls/clients-ca.crt",
@@ -854,6 +858,11 @@ def validate_watchdog_policy(document):
         raise ImageError("watchdog observer mount set differs")
     for item in by_target.values():
         source = str(item.get("source", ""))
+        if item.get("target") == "/var/lib/watchdog":
+            if (item.get("type") != "bind" or item.get("read_only", False) is not False
+                    or source != str(WATCHDOG_ROOT / "state")):
+                raise ImageError("watchdog persistent state mount differs")
+            continue
         if (
             item.get("type") != "bind"
             or item.get("read_only") is not True
@@ -884,6 +893,7 @@ def validate_watchdog_policy(document):
         "--interval-seconds 900",
         "--remediation-recheck-seconds 60",
         "--remediate",
+        "--remediation-ledger /var/lib/watchdog/attempts.json",
     ):
         if required not in command:
             raise ImageError("watchdog observer command policy differs")
@@ -925,6 +935,44 @@ def watchdog_workflow_keys(repository):
     return keys
 
 
+def watchdog_observation_only(compose_text):
+    """Rollback of the generated Compose never re-enables an old retry loop."""
+    result = re.sub(r"(?m)^\s*-\s*['\"]?--remediate['\"]?\s*$", "", compose_text)
+    if "--remediate" in result:
+        raise ImageError("unsupported rollback command; refusing automatic remediation")
+    return result
+
+
+def prepare_watchdog_ledger(session, docker, image, prior_compose):
+    directory = WATCHDOG_ROOT / "state"
+    marker = WATCHDOG_ROOT / "state-initialized-v1"
+    ledger = directory / "attempts.json"
+    observed = session.execute(
+        "if test -f " + shlex.quote(str(ledger)) + "; then printf existing; "
+        "elif test -e " + shlex.quote(str(marker)) + "; then printf missing; "
+        "else printf initial; fi"
+    ).strip()
+    if observed == "existing":
+        return
+    if observed != "initial" or "--remediation-ledger" in prior_compose:
+        raise ImageError("persistent watchdog ledger was lost; refusing automatic reset")
+    session.execute("mkdir -p " + shlex.quote(str(directory)))
+    session.execute("chmod 700 " + shlex.quote(str(directory)))
+    session.execute("chown 10001:10001 " + shlex.quote(str(directory)))
+    # Pull/initialize before replacing the service. No token or production mounts
+    # enter this short-lived provisioning process; it has no network.
+    session.execute(docker + " pull " + shlex.quote(image), timeout=300)
+    session.execute(
+        docker + " run --rm --network none --read-only --cap-drop ALL "
+        "--security-opt no-new-privileges --user 10001:10001 --mount "
+        + shlex.quote("type=bind,source=" + str(directory) + ",target=/var/lib/watchdog")
+        + " " + shlex.quote(image)
+        + " init-ledger --remediation-ledger /var/lib/watchdog/attempts.json",
+        timeout=60,
+    )
+    session.upload_text(str(marker), "schema=1\n", 0o600)
+
+
 def deploy_watchdog(session, repository, image, references, private):
     report = preflight(session)
     if report["raid"] != {"array": "UU", "recovery_percent": None}:
@@ -952,6 +1000,7 @@ def deploy_watchdog(session, repository, image, references, private):
         + shlex.quote(str(WATCHDOG_ROOT / "config"))
     )
     try:
+        prepare_watchdog_ledger(session, docker, image, prior_compose)
         session.upload_text(
             str(WATCHDOG_ROOT / "compose.yaml"), compose_text, 0o600
         )
@@ -1020,6 +1069,7 @@ def deploy_watchdog(session, repository, image, references, private):
                     and observed_workflows == expected_workflows
                     and len(candidate.get("workflows", []))
                     == len(expected_workflows)
+                    and candidate.get("remediation_ready") is True
                 ):
                     status = candidate
                     break
@@ -1031,7 +1081,7 @@ def deploy_watchdog(session, repository, image, references, private):
     except Exception:
         if prior_compose and prior_environment:
             session.upload_text(
-                str(WATCHDOG_ROOT / "compose.yaml"), prior_compose + "\n", 0o600
+                str(WATCHDOG_ROOT / "compose.yaml"), watchdog_observation_only(prior_compose) + "\n", 0o600
             )
             session.upload_text(
                 str(WATCHDOG_ROOT / "watchdog.env"),
@@ -1220,6 +1270,14 @@ def status(references, repository=ROOT):
                         watchdog.update(
                             {
                                 "checked_at": document.get("checked_at"),
+                                "remediation_ready": document.get("remediation_ready"),
+                                "billing_blocked": [
+                                    {"repository": item.get("repository"),
+                                     "workflow": item.get("workflow"),
+                                     "remediation_state": item.get("remediation_state")}
+                                    for item in workflows
+                                    if item.get("failure_category") == "BILLING_BLOCKED"
+                                ],
                                 # Compatibility alias for schema 2 N/N+1.
                                 "runtime_healthy": document.get("healthy"),
                                 "observer_ready": (
