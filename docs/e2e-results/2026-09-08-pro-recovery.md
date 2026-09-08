@@ -57,6 +57,68 @@ kontenerów. Istniejąca nowsza brama jest weryfikowana i zachowywana, a jej
 niepowiązane zmiany lokalne pozostają nietknięte. Poprawiono brak linku do tego
 raportu wykryty w pierwszym pełnym CI promocji.
 
-Wymagany odczyt wersji/health i zachowanych przypisań po deployu, drugi deploy
-`NO_CHANGE`, E2E API/mTLS, odświeżenie DOM i publiczne repo. Stan końcowy zostanie
-dopisany po rzeczywistym wdrożeniu; powyższe nie jest jeszcze dowodem deployu.
+### Wynik — 8 września, 12:27 UTC
+
+- PR **kodi #359** scalony do `main` (`49354ffc0dc579805fe52aae1254cf8c406d2ee3`),
+  CI **34225428790**, **34225434411** i ponowny test `main` **34225824182** SUCCESS.
+- Skrypt `tools/qnap_images.py deploy profile-sync control-plane` wdrożył oba
+  obrazy. Odczyt metadanych pakietów w działających kontenerach: Profile Sync
+  **0.10.1**, Control Plane **0.12.3**. Identyfikator stable:
+  `227c2ad3142831233ddc6898e7d9baba25bfd26d6fe67ef529401e13367fa80b`.
+- Ponowne identyczne wywołanie: **NO_CHANGE** dla obu serwisów.
+- Wszystkie siedem kontenerów QNAP: `running` i `healthy`. Watchdog ma gotowy
+  kolektor (`READY`), ale monitorowany wynik `FAILED` dla jednego zadania —
+  to osobne informacje, nie sprzeczność z kontrolą zdrowia procesu.
+- QPKG nadal **0.3.4**, SHA skryptu uruchomieniowego przed/po identyczne:
+  `343cab2424e2cfc77e7e1972ce09c642f01d7a51af2b3fac1422135cf82b6ed0`.
+  Nie zmieniano skrótu ani sesji logowania w przeglądarce.
+- Pełne lokalne testy projektu: **822 PASS**. Backend: **54 PASS**. Panel:
+  **92 PASS**. E2E `control_plane_readonly.py`: PASS (API mTLS, odrzucenie
+  braku certyfikatu i niedozwolonych mutacji, cykl publikacji konfiguracji).
+  `control_plane_dashboard_cdp.py`: PASS na izolowanej makiecie.
+- Dodatkowo produkcyjne API: `POST /api/v1/refresh` HTTP 200; odczyt dashboardu
+  pokazuje osiem źródeł `OK`, 11 z 12 procesów GitHub `OK`. Audyt zdrowia
+  providerów po odrzuceniu gałęzi testowej wrócił z fałszywego `OK` do
+  **FAILED**, zgodnie z produkcją. Efektywny run to **34210497296**, nie run
+  kandydata **34223536138**. Nieudana ręczna próba na `main` **34221782367**
+  nie jest uznawana przez obecną politykę za udaną remediację crona.
+- Produkcyjny panel przez CDP 9222: kliknięcie „Odśwież stan”,
+  `aria-busy=true` → `false`, brak błędu, wiersz provider health **FAILED**.
+  Wcześniej otwarta karta wymagała odświeżenia danych; sama aktualizacja obrazu
+  nie zmienia już wyrenderowanej tabeli w przeglądarce.
+- Przypisania konfiguracji zachowane: pięć urządzeń `APPLIED` + `FRESH`,
+  Bedroom TV `PENDING` + `STALE`. Ponowny test ADB Bedroom TV: timeout.
+  Sony, X88 i NUC są osiągalne. Nie wdrażano dodatków na urządzenia.
+
+### Otwarte kroki — bez fałszywego potwierdzenia sukcesu
+
+1. **Review mwoScrapers #31 i #32**: oba mają zielone testy, lecz wymagają
+   zatwierdzenia przez uprawnionego reviewera albo jawnej decyzji właściciela
+   o zmianie samego wymogu approvals. Nie użyto obejścia administracyjnego.
+2. Po scaleniu #32 uruchomić health probe na `main`, potwierdzić rzeczywisty
+   wynik i odświeżyć watchdog/panel. Obecne `FAILED` watchdoga nie oznacza
+   awarii procesu kontenera. Historyczny bezpiecznik `BILLING_BLOCKED` dla tego
+   zadania nie jest dowodem nadal blokowanego konta Pro; czeka na pozytywną
+   próbę na właściwej gałęzi. Nie usunięto ręcznie rejestru prób.
+3. Po scaleniu #31 dokończyć **kodi #360 (draft)**: zmiana katalogów kadencji,
+   budowa i promocja obrazu watchdoga oraz reconcile konfiguracji panelu.
+   Codzienne zadania nie zostały przedwcześnie oznaczone jako cotygodniowe.
+4. Bedroom TV: po odzyskaniu łączności potwierdzić zastosowanie przypisania
+   i heartbeat. Nie uznawać `STALE` za pewny dowód wyłączonego urządzenia.
+
+### Powtórzenie kontroli
+
+W katalogu głównym projektu, z prywatną konfiguracją i certyfikatami operatora:
+
+```bash
+.venv/bin/python tools/qnap_images.py --references .env status
+.venv/bin/python tools/qnap_images.py --references .env deploy profile-sync control-plane
+.venv/bin/python tests/e2e/control_plane_readonly.py
+.venv/bin/python tests/e2e/control_plane_dashboard_cdp.py
+.venv/bin/python tools/smoke_public.py
+```
+
+Pierwsze dwa polecenia dotyczą QNAP. Test `readonly` uruchamia izolowane
+serwisy lokalne; test CDP używa własnej strony testowej, nie zmienia danych
+produkcyjnych. Produkcyjny panel należy dodatkowo odświeżyć i porównać z
+przebiegami GitHub na gałęziach monitorowanych przez katalog.
