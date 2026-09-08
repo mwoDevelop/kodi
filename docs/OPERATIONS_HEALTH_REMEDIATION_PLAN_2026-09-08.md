@@ -193,6 +193,9 @@ Szczegółowe dowody: [raport testów operacyjnych](e2e-results/2026-09-08-opera
 1. Zachować $0/Stop usage dla wszystkich produktów. Ustalić wewnętrzny cel
    maksymalnie **1400 minut/miesiąc na całe konto** i 600 minut rezerwy;
    to cel planistyczny, nie zmiana limitu GitHub. Wszystkie projekty dzielą pulę.
+   Cel dotyczy zużycia wliczonej puli prywatnych jobów, nie sumy czasów publicznego
+   CI. Przed zmianami zebrać koszt/częstotliwość per workflow, a po zmianach
+   potwierdzić prognozę pełnego miesiąca z retry, macierzą i rezerwą.
 2. Rozszerzyć obecny poprawiony cooldown o rozpoznawanie blokady billing/quota:
    przy takim potwierdzonym błędzie brak kolejnych prób co 15 minut; najwyżej
    jedna kontrolowana próba na dobę lub po ręcznym potwierdzeniu odblokowania.
@@ -204,14 +207,24 @@ Szczegółowe dowody: [raport testów operacyjnych](e2e-results/2026-09-08-opera
    i okresowo co tydzień. Każdy nowy import/release nadal obowiązkowo skanować
    świeżym skanerem zgodnie z istniejącą polityką. Nie zastępować bramy bezpieczeństwa
    samym trafieniem w cache i nie obniżać pokrycia testów.
+   W tym samym PR zmienić oczekiwaną kadencję w obu manifestach monitoringu
+   i dokumentacji. Test: między poprawnymi tygodniowymi przebiegami brak
+   fałszywego DELAYED i dodatkowych dispatchów. Zachować ważność raportu
+   24 h i świeżość sygnatur 48 h; zmiana reguł/skanera/polityki wymaga rewalidacji.
+   Tygodniowy audyt historyczny nie jest aktualnym pozwoleniem na release.
 4. Usunąć podwójne wykonania identycznych testów na push + PR + container;
    jeden wynik dla dokładnego SHA, z poprawnymi wymaganymi checkami. Buildy
    tylko przy zmianach wejść obrazu lub jawnym release, limity czasu i
    `concurrency` dla zastąpionych kandydatów. Nie przerywać rozpoczętego writer.
+   Reuse tylko przy równoważnych wejściach, środowisku i macierzy. Testować
+   required check dla PR/merge SHA, pominiętego builda i anulowanego kandydata;
+   nie uznawać skipped ani pustego checka za przejście właściwych testów.
 5. Artefakty transportowe usuwać wyłącznie po zatwierdzonej archiwizacji,
    a małe raporty/dowody zachowywać. Limit roboczy prywatnego magazynu: 300 MiB,
    pozostawiając rezerwę w puli 500 MiB. Cache utrzymywać poniżej 8 GiB/repo,
    bez usuwania aktywnie używanych kluczy ani cudzych projektów bez uzgodnienia.
+   Cel 300 MiB nie gwarantuje limitu naliczonych GB-godzin; uwzględnić pozostałe
+   współdzielone płatne Packages. Budżet konta nadal jest nadrzędnym zabezpieczeniem.
 6. Do Kodi Admin zaprojektować osobną obserwację: pozostałe minuty, naliczony
    magazyn, bieżące artefakty i cache, czas resetu oraz `BILLING_BLOCKED`.
    Progi 70/85/95%; brak dostępu do billing ma oznaczać `NOT_OBSERVED`, a nie zero.
@@ -233,6 +246,11 @@ Szczegółowe dowody: [raport testów operacyjnych](e2e-results/2026-09-08-opera
 - Obecnych 2000 zużytych minut nie odzyska cleanup. Domknięcie backendu przed
   resetem wymaga uzgodnionej ścieżki własnego runnera/publikacji albo osobnej
   decyzji budżetowej; nie oznaczać tego jako naprawione po usunięciu ZIP-ów.
+
+Sekcję D również poddano niezależnemu review. Powyższe kryteria mierzalności,
+spójnej kadencji monitoringu, ważności skanów i wymaganych checków wynikają
+z zastosowanych uwag. Wariant własnego runnera eliminuje opłatę za minuty
+GitHub według obecnych zasad, nie koszty energii i utrzymania hosta.
 
 Źródła zasad (sprawdzone 8 września):
 [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions),
