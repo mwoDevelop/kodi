@@ -10,6 +10,8 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-09
 
+- [Odblokowanie automatyzacji po GitHub Pro](2026-09-08-pro-recovery.md)
+
 - [Audyt usług, naprawa watchdoga, bramy WWW i X88](2026-09-08-operational-health.md)
 - [Filtry możliwości Umbrella per urządzenie](2026-09-07-umbrella-device-filters.md)
 - [Konwergencja menu Skin Shortcuts na całej flocie](2026-09-03-skin-menu-fleet-convergence.md)

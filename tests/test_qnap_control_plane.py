@@ -12,6 +12,7 @@ from tools.qnap_control_plane import (
     compose_reconcile_command,
     create_browser_bootstrap,
     environment,
+    preserve_newer_gateway,
     validate_policy,
     verify_api,
     verify_browser,
@@ -22,6 +23,49 @@ def test_control_plane_reconcile_reloads_bind_mounted_configuration():
     assert compose_reconcile_command("docker compose") == (
         "docker compose up -d --pull always --force-recreate"
     )
+
+
+@pytest.mark.parametrize("installed,preserve", [("", False), ("0.3.1", False),
+                                               ("0.3.2", False), ("0.3.4", True),
+                                               ("0.10.0", True)])
+def test_image_update_preserves_only_verified_newer_gateway(monkeypatch, installed, preserve):
+    from tools import qnap_control_plane as cp
+
+    class Session:
+        def execute(self, command, **kwargs):
+            assert command == "/sbin/getcfg KodiCPGateway Version -f /etc/config/qpkg.conf"
+            return installed
+
+    probes = []
+    def verify(host, attempts):
+        probes.append((host, attempts))
+        return {"status": "ready"}
+    monkeypatch.setattr(cp, "verify_browser", verify)
+    result = preserve_newer_gateway(Session(), "192.0.2.39", "0.3.2")
+    assert bool(result) is preserve
+    assert len(probes) == int(preserve)
+    if preserve:
+        assert result["version"] == installed
+        assert result["status"] == "PRESERVED_NEWER"
+
+
+def test_unknown_or_broken_newer_gateway_blocks_before_deployment(monkeypatch):
+    from tools import qnap_control_plane as cp
+
+    class Session:
+        version = "unexpected"
+        def execute(self, *args, **kwargs):
+            return self.version
+
+    session = Session()
+    with pytest.raises(ControlPlaneError, match="compare"):
+        preserve_newer_gateway(session, "192.0.2.39", "0.3.2")
+    session.version = "0.3.4"
+    def unavailable(*args, **kwargs):
+        raise ControlPlaneError("browser unavailable")
+    monkeypatch.setattr(cp, "verify_browser", unavailable)
+    with pytest.raises(ControlPlaneError, match="browser unavailable"):
+        preserve_newer_gateway(session, "192.0.2.39", "0.3.2")
 
 
 def render(repository_root, tmp_path):
