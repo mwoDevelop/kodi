@@ -198,5 +198,10 @@ plików i zachowanie istniejących testów. Szczegóły: [review](CONTROLLED_PR_
 Nie uznawać przygotowanego kodu, przyjętego dispatchu ani zielonego testu innej
 gałęzi za wdrożenie. [Odbiór częściowy z 8 września](e2e-results/2026-09-08-controlled-pr-automation.md)
 zawiera wyniki testów, wdrożoną konfigurację GitHub i gotowy obraz watchdoga.
-Bootstrap #31/#33, pozytywny merge #32 oraz jego pakiet/rollout nadal wymagają
-dokończenia; flaga automatycznej akceptacji pozostaje wyłączona.
+Bootstrap #31–#34 zakończono po osobnej zgodzie właściciela; wdrożono też
+tygodniowy monitoring i potwierdzono health nowego `main`. Kandydat 0.2.2
+przeszedł kwalifikację wyszukiwania na BlueStacks/X88. Publikacja stable i
+rollout pozostałych urządzeń są osobnym kolejnym etapem. Flaga automatycznej
+akceptacji pozostaje wyłączona, Copilot działa w trybie `observe`.
+Operatorskie merge nie dowodzą jeszcze pozytywnej ścieżki bota bez bypassu.
+Aktualne dowody: [bootstrap i cutover](e2e-results/2026-09-08-pr-bootstrap-cutover.md).

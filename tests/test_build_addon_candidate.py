@@ -1,4 +1,5 @@
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 import pytest
 
@@ -13,7 +14,8 @@ def test_local_candidate_is_deterministic_and_identified(tmp_path):
     two = build("script.module.mwoscrapers", second)
 
     assert one["addon_id"] == "script.module.mwoscrapers"
-    assert one["version"] == "0.2.1"
+    source_metadata = Path(__file__).resolve().parents[1] / "mwoscrapers/addon.xml"
+    assert one["version"] == ET.parse(source_metadata).getroot().attrib["version"]
     assert one["zip_sha256"] == two["zip_sha256"]
     assert one["files"] == two["files"]
 

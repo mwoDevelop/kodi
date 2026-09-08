@@ -340,7 +340,7 @@ osobno — nie obiecywać bezobsługowych poprawek, jeśli GitHub wymaga ręczne
 - [x] P0: preflight konta i aktualizacja stanu bootstrapu (8.09.2026).
 - [x] P1: instrukcje, adapter, prywatny rejestr i testy lokalne.
 - [x] P2: operatorski pilot natywnego review i idempotentne live E2E.
-- [ ] P2: uruchomienie zaufanego obserwatora na main po bootstrapie.
+- [x] P2: workflow na chronionym main; tryb observe i negatywny test zakresu.
 - [ ] P3: wymagana brama, kwalifikacja natywnych approvals, test bez bypassu.
 - [ ] P4: agent naprawczy z ograniczonym zakresem i liczbą tur.
 - [ ] P5: monitoring, przykłady operatorskie i dokumentacja.
@@ -407,7 +407,10 @@ jeśli nie przeprowadzono merge i powiązanych testów na chronionej gałęzi.
 [Instrukcja operatorska](copilot-pr-operations.md) i
 [dowody E2E z 8.09.2026](e2e-results/2026-09-08-copilot-advisory.md).
 
-Implementacja: mwoScrapers PR #34, zależny od #33. Natywne review PR #32
+Implementacja: mwoScrapers PR #34, po scaleniu #33 wdrożony na `main`.
+Jednorazowy bootstrap #31–#34 został osobno zaakceptowany przez użytkownika
+i zakończony 8.09. [Odbiór cutover](e2e-results/2026-09-08-pr-bootstrap-cutover.md).
+Natywne review PR #32
 zakończyło się COMMENTED, powtórzenia dały zero kolejnych POST. Zasadna uwaga
 Copilota o wersji runtime została poprawiona w #32 wraz z regresją. Ponieważ
 rozszerza to zestaw plików, nowa rewizja wymaga ponownej kwalifikacji; nie
@@ -420,6 +423,9 @@ od zegara hosta. NOT_SENT nie zużywa limitu; niepewny POST nadal go zużywa.
 Brak review/pending nie wystarcza do automatycznego anulowania niepewnej próby.
 
 Nie wdrożono P3, nowego checka App, automatu napraw ani panelu PR na QNAP.
-Nie zmieniono stable dodatków, obrazów serwisów ani konfiguracji urządzeń.
-Warunek kontynuacji produkcyjnego wdrożenia: niezależna ścieżka review/bootstrapu
-PR #31/#33/#34, następnie kwalifikacja rozszerzonej poprawki #32.
+W ramach powiązanego planu wdrożono tygodniowy watchdog i katalog panelu,
+a kandydat mwoScrapers 0.2.2 przeszedł po 42 próby na BlueStacks i X88.
+Nie promowano jeszcze jego ZIP-a do publicznego stable. `MWOSCRAPERS_COPILOT_MODE`
+ma wartość `observe`; bot nie wystawia approvals. Run **34255409339** na main
+poprawnie zatrzymał zmianę workflow jako `MANUAL_REQUIRED`, bez mutacji.
+To nie jest jeszcze test automatycznego approval/merge dopuszczonego PR bez bypassu.

@@ -274,6 +274,41 @@ def test_android_lifecycle_uses_adb_without_ssh_concerns():
     assert all(call[0] == "adb" for call in calls)
 
 
+@pytest.mark.parametrize("pids", ["", "5820", "5820 5900"])
+def test_android_process_probe_accepts_only_pid_data(pids):
+    calls = []
+
+    def runner(argv, **_kwargs):
+        calls.append(argv)
+        return result(stdout=pids, returncode=0 if pids else 1)
+
+    transport = AdbTransport("private-tv:5555", runner=runner)
+    assert transport.process_id("org.xbmc.kodi") == pids
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("fallback", ["", "5820", "invalid", "0"])
+def test_android_process_probe_banner_uses_toybox_or_fails_closed(fallback):
+    calls = []
+
+    def runner(argv, **_kwargs):
+        calls.append(tuple(argv[5:]))
+        if len(calls) == 1:
+            return result(stdout="Total number of currently running services:0\n")
+        return result(stdout=fallback, returncode=0 if fallback else 1)
+
+    transport = AdbTransport("private-tv:5555", runner=runner)
+    if fallback in {"invalid", "0"}:
+        with pytest.raises(TransportError, match="invalid PID data"):
+            transport.process_id("org.xbmc.kodi")
+    else:
+        assert transport.process_id("org.xbmc.kodi") == fallback
+    assert calls == [
+        ("shell", "pidof", "org.xbmc.kodi"),
+        ("shell", "toybox", "pidof", "org.xbmc.kodi"),
+    ]
+
+
 def test_transport_factory_resolves_private_references(tmp_path):
     identity, known_hosts = private_ssh_files(tmp_path)
     device = linux_device()

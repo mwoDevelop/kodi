@@ -212,9 +212,9 @@ credentiali: lifecycle secret setu wymaga jawnej operacji administracyjnej.
 ## Procesy ręczne i sterowane zdarzeniami
 
 Copilot ma na razie [operatorski pilot review](copilot-pr-operations.md), nie
-nowy cron ani produkcyjny automat merge. Kod obserwatora w PR #34 mwoScrapers
-oczekuje na bootstrap na `main`; nie należy wpisywać go jako działającego zadania
-cyklicznego. Review działa w GitHub, prywatny rejestr prób na hoście operatora.
+nowy cron ani produkcyjny automat merge. Kod z PR #34 działa już na `main`
+w trybie `observe`, uruchamiany po zdarzeniu CI lub ręcznie. Nie należy wpisywać
+go jako zadania cyklicznego. Review działa w GitHub, prywatny rejestr prób na hoście operatora.
 Nie zmienia statusu health providerów ani usług QNAP.
 
 Buildy, CI, testy antymalware, publikacja testing, kwalifikacja hermetyczna i promocja

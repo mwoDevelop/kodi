@@ -170,7 +170,9 @@ Na hoście działa również [operatorski pilot Copilot review](copilot-pr-opera
 kontroler pobiera kwalifikację PR z GitHub, zapisuje prywatną rezerwację SQLite
 i może zlecić natywne review wykonywane w GitHub. Wynik wraca przez API.
 Pilot nie komunikuje się z QNAP/Kodi i nie scala PR. Produkcyjna faza approvals
-oraz jej monitoring są planowane, nie wdrożone.
+oraz jej monitoring są planowane, nie wdrożone. Zaufany workflow na `main`
+mwoScrapers ma już włączony tryb `observe`: odczytuje dowody tylko dla
+kwalifikujących się PR, bez approvals i bez automatycznych żądań nowego review.
 
 Repozytorium robocze działa w WSL pod `/home/mwo/projects/kodi`. Host pozostaje
 aktualnym miejscem wykonywania administracji:
