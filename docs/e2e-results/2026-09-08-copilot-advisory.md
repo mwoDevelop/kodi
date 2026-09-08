@@ -62,3 +62,10 @@ kandydata. Nie wyłączono testów ani nie uznano wcześniejszego uruchomienia z
   upload-artifact zakończył się `FinalizeArtifact 403 Forbidden`. Zapis raportu
   jest obowiązkową częścią dowodu, więc nie pominięto błędu i nie oznaczono tego
   przebiegu jako PASS. Uruchomiono po jednym ponowieniu nieudanych jobów.
+- Drugie podejście obu runów — SUCCESS: zapis raportów, malware-scan, test
+  oraz build zakończyły się poprawnie bez zmiany kodu ani pomijania bramy.
+  To potwierdza przejściowy błąd transportu/usługi artefaktów, nie wykrycie malware.
+  Opcjonalny verify-release jest pomijany, ponieważ nie publikowano wydania obrazu.
+- Kod pilota i korekta wersji są wypchnięte; SHA origin odpowiadają lokalnym.
+  Główna dokumentacja została opublikowana w gałęzi PR #360. Zastane zmiany
+  QTS Gateway zachowano poza commitami.
