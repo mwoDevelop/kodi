@@ -1,5 +1,48 @@
 # Naprawa statusów operacyjnych — 8 września 2026
 
+## F. Odblokowanie po aktywacji GitHub Pro — plan bieżącej kontynuacji
+
+Użytkownik aktywował Pro samodzielnie. Odczyt Billing potwierdza Pro $4/mies.;
+nie zmieniamy żadnych budżetów nadwyżek ani innych subskrypcji. Stan początkowy
+panelu: 8 źródeł działa, 3 historyczne błędy mwoScrapers, opóźniony cron
+promocji Umbrelli i 1 oczekujące przypisanie Bedroom TV (pozostałe 5 zastosowane).
+
+1. Wykonać po jednym kontrolowanym ponowieniu trzech audytów mwoScrapers
+   oraz zablokowanych CI PR backendu #20 i mwoScrapers #31. Odróżnić przyjęcie
+   zadania od sukcesu testu, uploadu dowodu i publikacji obrazu. Przy dalszej
+   blokadzie magazynu nie ponawiać w pętli ani nie wyłączać skanów/artefaktów.
+2. Zweryfikować faktyczne opóźnienie promocji Umbrelli i istniejące aktywne
+   próby. Jeżeli żadna nie działa, wykonać jedno ponowienie, bez resetowania
+   trwałych limitów automatycznych retry watchdoga.
+3. Po zielonym CI scalić PR backendu #20 (zachowanie aktywnych przypisań),
+   opublikować przeskanowany obraz 0.10.1 i wdrożyć tylko Profile Sync przez
+   `qnap_images.py`, z backupem bazy i zachowaniem starego digestu. Sprawdzić
+   wersję, health, przypisania i idempotentne drugie wdrożenie.
+4. Po zielonym CI scalić PR mwoScrapers #31 i w tej samej operacji wdrożeniowej
+   skoordynować oba katalogi monitoringu z tygodniowymi audytami. Dzienny test
+   providerów pozostaje. Dodać regresje limitu wieku tygodniowych obserwacji;
+   nie releasować dodatku na urządzenia wyłącznie z powodu zmiany cronów.
+   Audyt implementacji wykazał dodatkową zależność: Control Plane 0.12.1
+   odrzuca dzień tygodnia w parserze cron. Najpierw wdrożyć kompatybilny
+   parser 0.12.2 z regresją niedziela=0, UTC, granic tygodnia i pominiętego
+   poniedziałku; dopiero następnie nowe katalogi i rzeczywiste crony.
+5. Ponownie sprawdzić Bedroom TV bez nadpisywania tożsamości. Jeżeli jest
+   niedostępny, jawnie zachować DEFERRED; nie usuwać prawdziwego ostrzeżenia.
+6. Uruchomić regresje i E2E API/mTLS oraz CDP panelu, publiczne repo, health
+   QNAP. Po odświeżeniu porównać job ID/statusy z GitHub. Aktualizować stable
+   locki tylko dla przetestowanych digestów; zapisać dowody oraz odstępstwa.
+
+Kryterium sukcesu: nowe audyty z rzeczywistym SUCCESS (łącznie z uploadem),
+brak historycznego BILLING_BLOCKED po odczycie nowych wyników, zgodna kadencja
+GitHub/watchdoga/panelu, backend zachowuje aktywne przypisania, a panel nie
+ukrywa niedostępnego klienta. Zastane zmiany bramy QTS pozostają poza zakresem.
+
+Nowy test po odblokowaniu potwierdził osobny problem PirateBay: filmy testowe
+zwracają pusty sentinel API (odcinki działają), a diagnostyka nazywa go
+FILTERED_EMPTY. Sprawdzić zapytanie zawierające rok wobec samego tytułu i
+zachować ścisłą walidację tytułu/roku/IMDb. Nie zmieniać próbek ani progów tylko
+w celu zazielenienia monitoringu; poprawka adaptera wymaga osobnej kwalifikacji.
+
 ## Zweryfikowany stan początkowy
 
 - QNAP: siedem kontenerów `running/healthy`, osiem źródeł Control Plane `OK`.
