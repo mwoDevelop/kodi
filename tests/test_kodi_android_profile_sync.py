@@ -1,6 +1,32 @@
 from tools import kodi_android_profile_sync as profile_sync
 
 
+def test_device_error_location_does_not_expose_exception_text(monkeypatch, tmp_path):
+    import importlib.util
+    import json
+    import sys
+    import types
+    from pathlib import Path
+
+    for name in ("xbmc", "xbmcaddon", "xbmcgui", "xbmcvfs"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    spec = importlib.util.spec_from_file_location(
+        "profile_device_probe", Path("tools/kodi_profile_sync_device.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    captured = []
+    monkeypatch.setattr(module, "_write_atomic", lambda _p, payload: captured.append(payload))
+    private_path = str(tmp_path / "sensitive-config-filename")
+    monkeypatch.setattr(sys, "argv", ["probe", private_path, "marker"])
+    module.main()
+    report = json.loads(captured[0])
+    assert report["error_type"] == "FileNotFoundError"
+    assert report["error_location"].startswith("kodi_profile_sync_device.py:")
+    assert "sensitive-config-filename" not in captured[0].decode()
+    assert str(tmp_path) not in captured[0].decode()
+
+
 def test_android_target_tags_use_live_primary_abi(monkeypatch):
     class Result:
         stdout = "arm64-v8a,armeabi-v7a\n"
