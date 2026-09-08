@@ -8,7 +8,7 @@ import json
 import re
 from pathlib import Path
 
-CRON = re.compile(r"^[0-9*/,\-]+ [0-9*/,\-]+ \* \* \*$")
+CRON = re.compile(r"^[0-9*/,\-]+ [0-9*/,\-]+ \* \* (?:\*|[0-6](?:,[0-6])*)$")
 IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9-]{1,95}$")
 REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 WORKFLOW = re.compile(r"^[A-Za-z0-9_.-]+\.ya?ml$")

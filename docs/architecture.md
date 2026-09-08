@@ -166,6 +166,12 @@ zagregowany reason code ogranicza duplikowanie alertów.
 
 ### 2.3 Zaufany host operatora
 
+Na hoście działa również [operatorski pilot Copilot review](copilot-pr-operations.md):
+kontroler pobiera kwalifikację PR z GitHub, zapisuje prywatną rezerwację SQLite
+i może zlecić natywne review wykonywane w GitHub. Wynik wraca przez API.
+Pilot nie komunikuje się z QNAP/Kodi i nie scala PR. Produkcyjna faza approvals
+oraz jej monitoring są planowane, nie wdrożone.
+
 Repozytorium robocze działa w WSL pod `/home/mwo/projects/kodi`. Host pozostaje
 aktualnym miejscem wykonywania administracji:
 

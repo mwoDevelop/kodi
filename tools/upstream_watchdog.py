@@ -380,7 +380,8 @@ def load_manifest(path):
             or item["ref"].startswith("-")
             or any(char.isspace() or ord(char) < 32 for char in item["ref"])
             or not isinstance(item["max_age_seconds"], int)
-            or not 900 <= item["max_age_seconds"] <= 604800
+            # Weekly observations need a bounded grace period beyond seven days.
+            or not 900 <= item["max_age_seconds"] <= 8 * 86400
             or not isinstance(item["remediation_after_seconds"], int)
             or not 900 <= item["remediation_after_seconds"] <= item["max_age_seconds"]
             or not isinstance(item["remediation_cooldown_seconds"], int)

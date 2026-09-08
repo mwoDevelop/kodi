@@ -55,16 +55,16 @@ SCHEDULED_WORKFLOWS = {
         "check-provider-upstreams.yml",
     ): (
         Path("mwoscrapers/.github/workflows/check-provider-upstreams.yml"),
-        "23 4 * * *",
-        "04:23 codziennie",
+        "23 4 * * 1",
+        "04:23 w poniedziałki",
     ),
     (
         "mwoDevelop/script.module.mwoscrapers",
         "discover-provider-upstreams.yml",
     ): (
         Path("mwoscrapers/.github/workflows/discover-provider-upstreams.yml"),
-        "41 4 * * *",
-        "04:41 codziennie",
+        "41 4 * * 1",
+        "04:41 w poniedziałki",
     ),
     (
         "mwoDevelop/script.module.mwoscrapers",
@@ -662,6 +662,42 @@ def test_versioned_manifest_is_valid():
         (repository, "master" if repository == "mwoDevelop/ch.repo" else "main")
         for repository, _workflow in SCHEDULED_WORKFLOWS
     }
+
+
+def test_weekly_watchdog_waits_for_week_and_grace_without_daily_dispatch():
+    config = next(item for item in load_manifest("manifests/upstream-watchdog.json")["workflows"]
+                  if item["workflow"] == "check-provider-upstreams.yml")
+    manifest = {"schema": 3, "workflows": [config]}
+    monday = dt.datetime(2026, 9, 7, 4, 25, tzinfo=dt.timezone.utc)
+    run = {"id": 1, "event": "schedule", "head_branch": "main",
+           "status": "completed", "conclusion": "success", "updated_at": monday.isoformat()}
+    attempts = []
+    for age in (86400, 6 * 86400, 604800, 608399):
+        report = evaluate(manifest, fetcher=lambda *a, **kw: [run],
+                          now=monday + dt.timedelta(seconds=age),
+                          remediator=lambda *a, **kw: attempts.append(kw))
+        assert report["healthy"]
+        assert attempts == []
+    report = evaluate(manifest, fetcher=lambda *a, **kw: [run],
+                      now=monday + dt.timedelta(seconds=608400),
+                      remediator=lambda *a, **kw: attempts.append(kw))
+    assert len(attempts) == 1
+    assert report["workflows"][0]["remediation_state"] == "DISPATCHED"
+
+
+def test_watchdog_weekly_grace_remains_bounded(tmp_path):
+    import pytest
+
+    manifest = _manifest()
+    path = tmp_path / "manifest.json"
+    for age, valid in ((610200, True), (8 * 86400, True), (8 * 86400 + 1, False)):
+        manifest["workflows"][0]["max_age_seconds"] = age
+        path.write_text(json.dumps(manifest))
+        if valid:
+            assert load_manifest(path) == manifest
+        else:
+            with pytest.raises(ValueError):
+                load_manifest(path)
 
 
 def test_control_plane_catalogs_are_valid_and_watchdog_thresholds_match():
