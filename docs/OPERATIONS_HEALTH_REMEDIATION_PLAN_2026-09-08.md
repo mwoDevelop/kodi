@@ -75,3 +75,198 @@
   Wymaga to osobnej polityki retencji z weryfikacją kopii w immutable releases.
 
 Szczegółowe dowody: [raport testów operacyjnych](e2e-results/2026-09-08-operational-health.md).
+
+## Etap domknięcia — plan po niezależnym review
+
+### A. Retencja i blokada Actions
+
+1. Ponownie sprawdzić najnowsze adnotacje GitHub. Oddzielić limit magazynu
+   artefaktów, blokadę budżetową uruchamiania oraz brak `write:packages`.
+   Nie zmieniać płatnych limitów ani widoczności repozytoriów.
+2. Dodać narzędzie z domyślnym trybem bez zmian do porządkowania wyłącznie
+   tymczasowych artefaktów `testing-snapshot` w `mwoDevelop/kodi`.
+   Pozostawić co najmniej 30 dni historii oraz wszystkie aktywne/nieudane
+   przebiegi. Zweryfikować konsumentów (również certyfikację przez run ID).
+   Usunięcie dopuszczać tylko po potwierdzeniu kopii obu plików w release
+   `testing-snapshot-<id>`: identycznych bajtów snapshotu i raportu bezpieczeństwa.
+   Nie usuwać release, tagów, certyfikatów ani jedynego dowodu skanu.
+   Pierwsza partia wymaga również prawidłowej historycznej attestacji dla
+   konkretnego snapshotu. Nie odświeża to jej ważności do nowej promocji.
+3. Przed wykonaniem zapisać plan z dokładnymi ID, sumami i rozmiarem odzysku;
+   wykonanie wymaga skrótu zatwierdzanego planu i ponownej walidacji warunków.
+   Zacząć od małej partii. Dokumentować usunięcie i dostępność zachowanych kopii.
+   Przed usunięciem zapisać i sprawdzić dodatkowy trwały backup poza Actions
+   (ZIP i mapowanie run/attempt → snapshot/release/asset ID/SHA).
+   GitHub Releases mają `immutable=false`; nie zakładać niezmienności i nie
+   włączać jej automatycznie — certyfikacja dopisuje pliki do release.
+   **Pozostawić TTL 90 dni.** Sam TTL 7 dni usunąłby także jedyne kopie przy
+   awarii writer. Cleanup blokować przy aktywnych konsumentach, a dla
+   historycznego rerun rozróżnić prawdziwy no-op od utraty artefaktu po
+   udanym writer; drugi przypadek ma jawnie wymagać workflow_dispatch z ID.
+4. Nie ponawiać ręcznie odrzuconych jobów w pętli. Po usunięciu blokady wykonać
+   po jednej próbie trzech audytów i potwierdzić prawdziwy wynik w panelu.
+   Przeliczenie magazynu może wymagać 6–12 godzin; nie czekać bezczynnie i nie
+   obiecywać, że naprawi także budżet minut lub płatny limit.
+
+### B. Backend Profile Sync 0.10.1
+
+1. Ponownie wykonać regresje PR #20 oraz E2E publikacji kolejnego kandydata:
+   aktywne przypisania muszą pozostać, zastąpione kandydackie zostać wycofane.
+2. Zweryfikować istniejące, prywatnie przechowywane możliwości publikacji.
+   Bez działającego CI/GHCR nie omijać skanów ani wymaganego review; nie
+   przenosić prywatnego kodu do publicznego workflow jako obejścia budżetu.
+3. Po przejściu bram zbudować i wdrożyć niezmienny obraz istniejącym
+   `tools/qnap_images.py`; wcześniej backup bazy i zapis starego digestu.
+   Zaktualizować stable lock dopiero dla obrazu z prawidłowym dowodem skanu.
+   Odczytać health, wersję oraz przypisania; drugi deploy powinien być `NO_CHANGE`.
+   W razie regresji przywrócić poprzedni obraz; backup bazy przywracać tylko
+   jeżeli jest to konieczne i bez nadpisania nowszego stanu klientów.
+
+### C. Pozostałe urządzenia i regresje
+
+1. Sprawdzić rzeczywisty model/endpoint Bedroom TV oraz sesje obu kont NUC.
+   Nie mylić dostępnego hosta z działającym Kodi. Zachować per-device identity.
+2. Użyć istniejących skryptów stabilnego rolloutu/synchronizacji. Na NUC
+   preferować start istniejącej instalacji w prawidłowej sesji użytkownika
+   i sprawdzenie automatycznego zastosowania przypisania; nie robić reinstalacji
+   ani nowego enrollment, jeżeli działająca tożsamość tego nie wymaga.
+   Jeżeli nie ma sesji graficznej, wolno użyć istniejącego kontrolowanego
+   testu Xvfb/Flatpak, z wyłącznym zajęciem instancji i przywróceniem początkowego
+   stanu stopped po teście. Świeży heartbeat po takim teście nie oznacza
+   pozostawienia Kodi stale uruchomionego.
+3. Potwierdzić na każdym dostępnym kliencie zastosowaną rewizję, heartbeat,
+   wygenerowane menu, wspólny cursor ulubionych i historii oraz miniatury.
+   Nie promować kandydata Sony i nie nadpisywać dynamicznego stanu statycznym
+   backupem. Niedostępne lub pozbawione sesji urządzenie raportować `DEFERRED`.
+4. Uruchomić testy regresyjne narzędzi, backendu i E2E mTLS; ponownie odświeżyć
+   panel przez API i CDP, porównać z rzeczywistymi zadaniami GitHub i urządzeniami.
+   Sprawdzić publiczne repo dodatków. Nie zmieniać wersji repo Kodi z powodu
+   zmian administracyjnych i nie wdrażać niezmienionych dodatków.
+
+### Review, dokumentacja i zakończenie
+
+- Przed implementacją osobny agent oceni zakres, bezpieczeństwo usuwania,
+  zależności certyfikacji, kryteria sukcesu i realność odblokowania publikacji.
+- Zasadne uwagi i odstępstwa zapisać tutaj; instrukcje retencji i wywołań
+  narzędzia dodać do dokumentacji procesów cyklicznych, a dowody do raportu E2E.
+- Zachować zastane, niezwiązane modyfikacje bramy QTS. Przed ewentualnym
+  commitem skontrolować zakres i brak sekretów; status końcowy ma oddzielać
+  kod przetestowany, kod wdrożony i działania zależne od zewnętrznej blokady.
+
+### Uwagi niezależnego review zastosowane
+
+- Retencja 7 dni była sprzeczna z ochroną jedynego dowodu po awarii writer;
+  pozostaje 90 dni, a cleanup ma osobne warunki i próg ponad 30 dni.
+- Konsument `certify-umbrella-hermetic` używa źródłowego run ID, nie wyłącznie
+  release. Nie wolno utożsamić zniknięcia pliku z prawidłowym no-op.
+- Release jest obecnie mutowalny; dodatkowy backup i ponowne porównanie
+  przed DELETE są obowiązkowe. Usuniętego ID Actions nie da się odtworzyć;
+  odtwarzalne są bajty, a powtórzenie certyfikacji używa snapshot ID.
+- Backend pozostaje na zatwierdzonym obrazie aż do przejścia rzeczywistych
+  bram publikacji. Poprawna kwalifikacja lokalna nie zastępuje tego dowodu.
+
+## D. Dodatkowe zadanie: utrzymanie kosztu GitHub na poziomie $0
+
+### Pomiar potwierdzony 8 września przez zalogowaną przeglądarkę
+
+- Plan konta: **GitHub Free**. Zakładka Actions w Billing Overview pokazuje
+  **2000/2000 minut** i **0,5/0,5 GB** wliczonego magazynu, reset za 23 dni.
+  Gross usage $40,92 jest w całości skompensowane discounts $40,92; billable $0.
+  Nie jest to rachunek do zapłaty. Budżet $0 z `Stop usage` chroni przed
+  przekroczeniem; nie należy go usuwać ani przełączać na unlimited.
+- Audyt API 28 repozytoriów (21 prywatnych): prywatne artefakty bieżące to
+  około 97 MiB, ale naliczony magazyn w okresie rozliczeniowym jest inną miarą.
+  Największe kopie bieżące leżą w publicznych repo; nie wolno utożsamiać ich
+  sumy z płatnym wykorzystaniem. Publiczne standardowe joby mają rabat.
+- Jeden prywatny projekt spoza Kodi ma około 10,07 GiB cache. To oddzielny
+  limit per repo, wymagający audytu właściciela; w tym zadaniu nic tam nie kasowano.
+- mwoScrapers: API wykazało ponad 2600 przebiegów od 1 września. W próbce
+  1000 ostatnich: 997 `workflow_dispatch`, 3 `schedule`, wszystkie failure.
+  Nie jest to liczba zużytych minut: odrzucone przed startem próby nie wykonały
+  testów. Dokumentowana wcześniej pętla retry jest istotnym ryzykiem kosztowym.
+- REST billing jest niedostępne dla obecnego CLI (brak scope `user`); liczby
+  limitów odczytano z GUI. Endpoint run timing zwracał zera, więc nie używamy go
+  do pozornego wyliczenia rzeczywistego rachunku.
+
+### Rekomendacja — najpierw oszczędny wariant hosted, bez zmiany budżetów
+
+1. Zachować $0/Stop usage dla wszystkich produktów. Ustalić wewnętrzny cel
+   maksymalnie **1400 minut/miesiąc na całe konto** i 600 minut rezerwy;
+   to cel planistyczny, nie zmiana limitu GitHub. Wszystkie projekty dzielą pulę.
+   Cel dotyczy zużycia wliczonej puli prywatnych jobów, nie sumy czasów publicznego
+   CI. Przed zmianami zebrać koszt/częstotliwość per workflow, a po zmianach
+   potwierdzić prognozę pełnego miesiąca z retry, macierzą i rezerwą.
+2. Rozszerzyć obecny poprawiony cooldown o rozpoznawanie blokady billing/quota:
+   przy takim potwierdzonym błędzie brak kolejnych prób co 15 minut; najwyżej
+   jedna kontrolowana próba na dobę lub po ręcznym potwierdzeniu odblokowania.
+   Zwykłe awarie sieci zachowują ograniczone ponowienia, a alarm nie znika.
+   Projektować klasyfikację na podstawie adnotacji, nie długości joba ani
+   samego słowa failure. Zapis ma przetrwać restart obserwatora.
+3. Zostawić codzienny tani test działania providerów. Odkrywanie nowych wersji
+   przenieść na cotygodniowe; pełny audyt malware uruchamiać dla nowego digestu
+   i okresowo co tydzień. Każdy nowy import/release nadal obowiązkowo skanować
+   świeżym skanerem zgodnie z istniejącą polityką. Nie zastępować bramy bezpieczeństwa
+   samym trafieniem w cache i nie obniżać pokrycia testów.
+   W tym samym PR zmienić oczekiwaną kadencję w obu manifestach monitoringu
+   i dokumentacji. Test: między poprawnymi tygodniowymi przebiegami brak
+   fałszywego DELAYED i dodatkowych dispatchów. Zachować ważność raportu
+   24 h i świeżość sygnatur 48 h; zmiana reguł/skanera/polityki wymaga rewalidacji.
+   Tygodniowy audyt historyczny nie jest aktualnym pozwoleniem na release.
+4. Usunąć podwójne wykonania identycznych testów na push + PR + container;
+   jeden wynik dla dokładnego SHA, z poprawnymi wymaganymi checkami. Buildy
+   tylko przy zmianach wejść obrazu lub jawnym release, limity czasu i
+   `concurrency` dla zastąpionych kandydatów. Nie przerywać rozpoczętego writer.
+   Reuse tylko przy równoważnych wejściach, środowisku i macierzy. Testować
+   required check dla PR/merge SHA, pominiętego builda i anulowanego kandydata;
+   nie uznawać skipped ani pustego checka za przejście właściwych testów.
+5. Artefakty transportowe usuwać wyłącznie po zatwierdzonej archiwizacji,
+   a małe raporty/dowody zachowywać. Limit roboczy prywatnego magazynu: 300 MiB,
+   pozostawiając rezerwę w puli 500 MiB. Cache utrzymywać poniżej 8 GiB/repo,
+   bez usuwania aktywnie używanych kluczy ani cudzych projektów bez uzgodnienia.
+   Cel 300 MiB nie gwarantuje limitu naliczonych GB-godzin; uwzględnić pozostałe
+   współdzielone płatne Packages. Budżet konta nadal jest nadrzędnym zabezpieczeniem.
+6. Do Kodi Admin zaprojektować osobną obserwację: pozostałe minuty, naliczony
+   magazyn, bieżące artefakty i cache, czas resetu oraz `BILLING_BLOCKED`.
+   Progi 70/85/95%; brak dostępu do billing ma oznaczać `NOT_OBSERVED`, a nie zero.
+   Nie dodawać kolejnego częstego workflow GitHub tylko do odczytu zużycia.
+
+### Jeżeli limit nadal nie wystarczy
+
+- Dedykowany, efemeryczny self-hosted runner dla prywatnych buildów/testów
+  jest wariantem bez opłaty GitHub za minuty według aktualnych zasad. To nie
+  znosi limitu upload-artifact. Raporty i zatwierdzenia trzeba nadal trwale
+  archiwizować i weryfikować, a prawa GHCR nadać minimalnie publisherowi.
+- Preferować odizolowaną maszynę/VM, nie runner z dostępem do produkcyjnego
+  socketu Dockera QNAP, katalogów sekretów czy LAN urządzeń. Runner skanujący
+  nieufny upstream nie może otrzymać sekretów wdrożeniowych. QNAP może trzymać
+  kontroler/kolejkę i archiwum; kontener sam w sobie nie stanowi tej izolacji.
+- Instalacja runnera, zmiana harmonogramów i nowy monitoring są **propozycją
+  kolejnego etapu**, nie wykonanym wdrożeniem w tej sesji. Nie publikować
+  prywatnego kodu jako obejścia limitu. Nie zwiększać budżetu bez osobnej decyzji.
+- Obecnych 2000 zużytych minut nie odzyska cleanup. Domknięcie backendu przed
+  resetem wymaga uzgodnionej ścieżki własnego runnera/publikacji albo osobnej
+  decyzji budżetowej; nie oznaczać tego jako naprawione po usunięciu ZIP-ów.
+
+Sekcję D również poddano niezależnemu review. Powyższe kryteria mierzalności,
+spójnej kadencji monitoringu, ważności skanów i wymaganych checków wynikają
+z zastosowanych uwag. Wariant własnego runnera eliminuje opłatę za minuty
+GitHub według obecnych zasad, nie koszty energii i utrzymania hosta.
+
+Źródła zasad (sprawdzone 8 września):
+[GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions),
+[GitHub Packages billing](https://docs.github.com/en/billing/concepts/product-billing/github-packages).
+GHCR storage i transfer są obecnie darmowe; odrzucony push w tym zadaniu
+dotyczył zakresu tokenu, nie dowiedzionego przekroczenia budżetu Packages.
+
+## Stan końcowy etapu domknięcia
+
+- A: narzędzie zaimplementowano i przetestowano, usunięto tylko dwa zweryfikowane
+  duplikaty (113 MiB), zachowano trwały backup i release. Poprawka braku snapshotu
+  rozróżnia rzeczywisty no-op od utraconego transportu. Minuty pozostają wyczerpane.
+- B: 54 testy backendu i ponowne E2E mTLS PASS; publikacja/deploy nadal BLOCKED
+  przez wyczerpaną pulę Actions. Nie omijano bram wydania.
+- C: NUC-mwo i NUC-alek PASS synchronizacji istniejących tożsamości, menu,
+  ulubionych i historii. Powrót do stopped po kontrolowanym teście. Panel
+  potwierdza 5/6 zastosowanych klientów; Bedroom nadal DEFERRED.
+- D: audyt budżetu wykonany, plan optymalizacji zapisany. Harmonogramy,
+  monitoring billing i izolowany runner pozostają propozycją dalszego etapu.
