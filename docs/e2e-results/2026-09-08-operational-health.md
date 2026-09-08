@@ -44,3 +44,51 @@ Nowa diagnostyka skryptu enrollmentu zapisuje wyłącznie nazwę pliku, linię
 i funkcję wyjątku; nie zapisuje komunikatu wyjątku, pełnych ścieżek, zmiennych
 lokalnych ani sekretów. Umożliwiło to wskazanie blokującej walidacji
 `portable.py:_plugin_url` bez ujawniania konfiguracji użytkownika.
+
+## Etap domknięcia po niezależnym review planu
+
+Powyższa tabela opisuje wcześniejszy etap tego samego dnia. W kolejnym przebiegu:
+
+| Obszar | Wynik | Dowód |
+| --- | --- | --- |
+| Regresja | PASS | 787 testów w 133,52 s; następnie 23 testy retencji (w tym dodatkowy readback) i 6 testów dokumentacji |
+| Backend PR #20 | PASS lokalnie / BLOCKED publikacji | ponownie 54 testy i E2E mTLS; produkcyjny obraz nie został zmieniony |
+| NUC mwo i alek | PASS synchronizacji | istniejący `kodi_flatpak_stable_rollout.py`, `rollout_mode=sync`, `NO_CHANGE`, active `63a8026e…`, 7 favourites/cursor 12, playback cursor 26, menu HEALTHY |
+| Konfiguracja NUC | PASS | Profile Sync 1.5.0, Umbrella 6.7.86.1, WatchNixtoons2 0.30.3, mwoScrapers 0.2.1; YouTube ACCOUNT_READY, OpenSubtitles.com login pass/search 25; managed settings NO_CHANGE |
+| Zakończenie testów NUC | PASS | oba procesy Kodi ponownie stopped, ścieżki Flatpak qualified; bez reinstalacji ani wymiany enrollmentu |
+| Bedroom TV | DEFERRED | ponownie brak dostępu ADB; nie nadpisano konfiguracji |
+| Repo publiczne | PASS | `smoke_public.py`: 57 zweryfikowanych plików |
+| Panel QNAP | PASS | 8/8 źródeł OK, 5/6 świeżych i zastosowanych klientów; tylko Bedroom oczekuje przypisania. CDP login=false, refresh true→false |
+| Approval promocji Umbrelli | PASS po ponowieniu | opóźniony cron; pojedynczy dispatch zakończył się sukcesem i po refresh API zmieniło DELAYED na OK/SUCCESS |
+| Porządkowanie Actions | PASS dla małej partii | dwa exact ID usunięte po backupie; DELETE + 404 + ponowne hashe release i kopii lokalnych |
+
+### Dowody retencji
+
+- Usunięte ID: `8898388629`, `8856032923`; łącznie **118301137 bajtów**
+  (około 113 MiB). Release/tagi i ich pliki nie zostały usunięte.
+- Snapshoty: `847ba98e1664368ec2f1cb5fdb0fc27c622c87e093618f0cadfba80a9ae5a1c5`
+  i `75e31558b47d0d73501c0fe23f086e09b7bb5c955bb5b3e025b647871fcf2903`.
+- Trwałe kopie oraz `evidence.json`/`deleted.json` znajdują się pod
+  `.kodi-private/actions-artifact-backups/<ID>/`. Da się odzyskać bajty, nie
+  oryginalne ID Actions. Plan drugiej partii zatwierdzono skrótem
+  `171490ff7ee3bd17775b5ff152905784659f43832418f0543d7af5d17d86323c`.
+- Dodatkowy przegląd 38 nieudanych późniejszych certyfikacji: logi dostępne,
+  brak odniesienia do obu snapshotów. Kontrola aktywnych konsumentów ponowiona
+  bezpośrednio przed DELETE. Nie deklarujemy pełnego indeksu zależności po head SHA.
+- Trzy inne kandydatury zachowano z powodu nieudanych zależnych procesów.
+- Realne E2E `check-missing`: źródło `30923793057` po usunięciu artefaktu daje
+  błąd z instrukcją workflow_dispatch; aktualny no-op `34209810797` jest poprawnie
+  rozpoznawany jako `confirmed publication no-op`. Początkowy HTTP 415 downloadu
+  usunięto przez właściwy Accept dla endpointu Actions; release używa octet-stream.
+- TTL pozostał 90 dni. Cleanup nie stał się nowym zadaniem cyklicznym.
+
+### Budżet — potwierdzona blokada zewnętrzna
+
+Zalogowana przeglądarka Billing Overview potwierdziła GitHub Free,
+2000/2000 minut i 0,5/0,5 GB. Kwota billable wynosi $0, reset za 23 dni.
+Nie zmieniono żadnego budżetu. Usunięcie duplikatów nie cofa zużytych minut
+ani naliczonego historycznie GB-hour; nie odblokowano w ten sposób backendu.
+Trzy audyty prywatnego mwoScrapers pozostają FAILED, watchdog propaguje ten
+rzeczywisty błąd. Nowa strategia oszczędzania jest opisana jako propozycja w
+[planie napraw](../OPERATIONS_HEALTH_REMEDIATION_PLAN_2026-09-08.md#d-dodatkowe-zadanie-utrzymanie-kosztu-github-na-poziomie-0),
+nie jako zrealizowana migracja runnerów czy zmiana harmonogramów.

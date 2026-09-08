@@ -45,6 +45,7 @@ jobs:
               --jq '[.artifacts[] | select(.name == "testing-snapshot" and (.expired | not))] | length')"
             test "$count" -le 1
             if [ "$count" -eq 0 ]; then
+              python tools/github_snapshot_retention.py check-missing --run-id "$SOURCE_RUN_ID"
               echo "available=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi

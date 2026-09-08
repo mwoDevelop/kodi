@@ -56,6 +56,42 @@ komponentów należy sprawdzić obecność sekretu oraz ręcznie uruchomić `tes
 
 ## Monitorowanie na QNAP
 
+### Retencja kopii transportowych Actions
+
+`testing-snapshot` pozostaje z TTL 90 dni. Nie zastępować go krótkim TTL bez
+sprawdzenia konsumentów: nieudany writer może pozostawić jedyny snapshot właśnie
+w Actions. Archiwalne duplikaty można kwalifikować istniejącym narzędziem:
+
+```bash
+.venv/bin/python tools/github_snapshot_retention.py inventory
+.venv/bin/python tools/github_snapshot_retention.py plan \
+  --artifact-id 123456789 --output .kodi-private/retention-plan.json
+.venv/bin/python tools/github_snapshot_retention.py apply \
+  --plan .kodi-private/retention-plan.json --approve-sha256 SKROT_Z_PLANU
+```
+
+ID w przykładzie jest zastępcze. `inventory` wskazuje jedynie kandydatów wiekowych,
+nie zgodę na usunięcie. `plan` nie zmienia GitHub; pobiera dane do prywatnego
+backupu. Oba pliki muszą być bajtowo identyczne z release; potrzebna jest
+historyczna attestacja i udane, starsze niż 30 dni źródło/certyfikacja.
+Plan jest ważny 24 godziny, obejmuje najwyżej 20 dokładnych ID i wymaga skrótu
+zatwierdzenia. Przed `apply` operator sprawdza również historię certyfikacji
+snapshotów: filtr `head_sha` nie obejmuje wszystkich ręcznych prób na nowszym
+main. Trwająca certyfikacja blokuje wykonanie. To procedura operatorska, nie
+nowy cron ani automatyczna polityka usuwania.
+
+Backup `transport.zip`, obu plików i mapowania run/attempt → snapshot/release/
+asset/hash pozostaje w `.kodi-private/actions-artifact-backups/<ID>/`. Backup jest
+utrwalany przed DELETE; apply sprawdza 404 artefaktu i ponownie porównuje release
+z zachowanymi plikami. GitHub Release ma obecnie `immutable=false`; konwencja
+„bez nadpisywania” nie zastępuje backupu. Nie usuwać go przed uzgodnieniem retencji.
+Usuniętego ID Actions nie można odtworzyć; ponowna certyfikacja korzysta z
+`workflow_dispatch` i dokładnego snapshot ID. Gdy zniknie artefakt po udanym
+writer, workflow zgłasza błąd; tylko jawnie pominięte kroki udanej publikacji
+mogą dać `available=false`.
+
+### Obserwacja i remediacja
+
 `qnap-upstream-watchdog` działa w Container Station i odpytuje GitHub co 15 minut.
 Monitorowana lista workflow jest wersjonowana w `manifests/upstream-watchdog.json`.
 Workflow jest niezdrowy, gdy brakuje ostatniego uruchomienia, zakończyło się ono
