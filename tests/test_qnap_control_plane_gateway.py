@@ -6,7 +6,6 @@ import os
 import struct
 import subprocess
 import threading
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -185,15 +184,16 @@ def test_gateway_proxies_only_the_public_cgi_route(repository_root):
     ("control_plane_cookie", "validates_existing_session"),
     (("", False), ("; mwo_cp_session=stale_session_token_value_123456", True)),
 )
+@pytest.mark.parametrize("totp_timestamp", [59, 60])
 def test_qts_admin_session_performs_server_side_totp_login(
-    repository_root, tmp_path, control_plane_cookie, validates_existing_session
+    repository_root, tmp_path, control_plane_cookie, validates_existing_session, totp_timestamp
 ):
     received = {}
     secret_bytes = b"12345678901234567890"
     secret = base64.b32encode(secret_bytes).decode("ascii").rstrip("=")
 
     def current_code():
-        counter = int(time.time()) // 30
+        counter = totp_timestamp // 30
         digest = hmac.new(secret_bytes, struct.pack(">Q", counter), hashlib.sha1).digest()
         offset = digest[-1] & 0x0F
         value = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
@@ -270,6 +270,10 @@ def test_qts_admin_session_performs_server_side_totp_login(
         'qts_auth="https://127.0.0.1/cgi-bin/authLogin.cgi"',
         f'qts_auth="http://127.0.0.1:{server.server_port}/cgi-bin/authLogin.cgi"',
     )
+    # Freeze only the copied CGI fixture, never the production clock. Test both
+    # sides of a TOTP boundary without depending on subprocess/network timing.
+    assert source.count('$(date +%s)') == 1
+    source = source.replace('$(date +%s)', str(totp_timestamp))
     script = www / "gateway.cgi"
     script.write_text(source, encoding="utf-8")
     script.chmod(0o755)

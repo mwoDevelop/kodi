@@ -17,7 +17,7 @@ kompilacji.
 | Profile prywatne | [Prywatne migawki profilu Kodi](kodi-private-profile.md) | Tworzenie kopii zapasowych, przywracanie, tożsamość urządzenia, stan przenośny i granice bezpieczeństwa |
 | YouTube | [Oficjalny dodatek YouTube](youtube.md) | Instalacja, osobiste API, device flow OAuth, statusy i diagnostyka |
 | Automatyzacja cykliczna | [Procesy cykliczne](scheduled-processes.md) | Workflow cron GitHub, watchdog QNAP, częstotliwość Profile Sync i weryfikacja na żywo |
-| Copilot review — pilot operatorski | [Obsługa pilota PR](copilot-pr-operations.md) | Bezpieczny request, reconcile, odtwarzalne E2E i granice niewdrożonego jeszcze automatu |
+| Copilot review — pilot operatorski | [Obsługa pilota PR](copilot-pr-operations.md) | Request, reconcile, pasywna kolejka PR w panelu, E2E i granice niewdrożonego jeszcze automatu |
 | Automatyczny release Umbrelli | [Release i status Umbrelli](umbrella-automated-release.md) | Izolowany lock, testy hermetyczne, approval App, promocja stable i komunikaty Kodi |
 | Kontenery QNAP | [Cykl życia obrazu QNAP](qnap-images.md) | Twórz, publikuj, wdrażaj i sprawdzaj obrazy Container Station |
 | QNAP Control Plane | [Architektura i ADR-y Control Plane](control-plane/README.md) | Read-only stan floty, mTLS, audyt oraz kolejne fazy autonomicznej konwergencji |

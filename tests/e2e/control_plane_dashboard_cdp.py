@@ -86,6 +86,18 @@ class DashboardService:
                 ]
             },
             "alerts": {"alerts": [{"fingerprint": "fixture:degraded"}]},
+            "pull_requests": {
+                "stale_after_seconds": 1800,
+                "status": "error" if self.refreshes else "ok",
+                "last_success_at": int(time.time()),
+                "error_code": "HTTP_4XX" if self.refreshes else None,
+                "data": {"pull_requests": [{
+                    "repository": "owner/repo", "number": 29,
+                    "head_sha": "a" * 40, "state": "REVIEWED_ADVISORY",
+                    "copilot_review_state": "COMMENTED",
+                    "qualification": "NOT_OBSERVED",
+                }]},
+            },
         }
 
     def schedules(self):
@@ -204,10 +216,12 @@ class WebSocket:
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--cdp", default="http://127.0.0.1:9222")
+    parser.add_argument("--control-plane-source", type=Path, default=CONTROL_PLANE)
+    parser.add_argument("--expect-pr-observer", action="store_true")
     args = parser.parse_args(argv)
     import sys
 
-    sys.path.insert(0, str(CONTROL_PLANE / "src"))
+    sys.path.insert(0, str(args.control_plane_source / "src"))
     from kodi_control_plane.http import Handler
 
     class BrowserHandler(Handler):
@@ -256,6 +270,14 @@ def main(argv=None):
             raise RuntimeError("status sources were not rendered")
         if "github-kodi-publish-pages" not in value["schedules"]:
             raise RuntimeError("scheduled jobs were not rendered")
+        if args.expect_pr_observer:
+            result = websocket.call("Runtime.evaluate", {
+                "expression": "JSON.stringify({rows:document.querySelector('#pull-requests').textContent,status:document.querySelector('#pull-requests-status').textContent})",
+                "returnByValue": True,
+            })
+            prs = json.loads(result["result"]["value"])
+            if "REVIEWED_ADVISORY" not in prs["rows"] or "NOT_OBSERVED" not in prs["rows"] or "Odczyt poprawny" not in prs["status"]:
+                raise RuntimeError("advisory PR observation did not render")
         for expected in ("github_actions", "READY", "SUCCESS", "FRESH"):
             if expected not in value["schedules"]:
                 raise RuntimeError(
@@ -284,6 +306,14 @@ def main(argv=None):
         refresh_state = json.loads(result["result"]["value"])
         if refresh_state != {"busy": "false", "error": ""}:
             raise RuntimeError(f"manual refresh did not complete: {refresh_state}")
+        if args.expect_pr_observer:
+            result = websocket.call("Runtime.evaluate", {
+                "expression": "JSON.stringify({rows:document.querySelector('#pull-requests').textContent,status:document.querySelector('#pull-requests-status').textContent})",
+                "returnByValue": True,
+            })
+            prs = json.loads(result["result"]["value"])
+            if "HTTP_4XX" not in prs["status"] or "REVIEWED_ADVISORY" not in prs["rows"] or "Odczyt poprawny" in prs["status"]:
+                raise RuntimeError("failed PR collection was hidden as healthy/empty")
         print(
             json.dumps(
                 {

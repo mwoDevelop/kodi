@@ -80,6 +80,16 @@
       "trust_level": "external_observation",
       "fallback": "last_success",
       "reason_codes": ["GITHUB_TRANSPORT_ERROR", "GITHUB_RATE_LIMITED", "STALE", "UNAVAILABLE"]
+    },
+    {
+      "id": "github-pull-requests",
+      "owner": "github",
+      "adapter": "github_pull_requests_read_only",
+      "auth": "github_pat_read_only",
+      "stale_after_seconds": 1800,
+      "trust_level": "external_observation",
+      "fallback": "last_success",
+      "reason_codes": ["HTTP_4XX", "RATE_LIMITED", "PR_PAGINATION_LIMIT", "PR_OBSERVATION_LIMIT", "PR_CHANGED_DURING_OBSERVATION", "STALE", "UNAVAILABLE"]
     }
   ]
 }
