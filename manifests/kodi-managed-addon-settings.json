@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "addons": {
     "plugin.video.umbrella": {
       "version_range": {
@@ -10,6 +10,50 @@
         "indicators.alt": "1",
         "scrobble.source": "1",
         "markwatched.percent": "85"
+      },
+      "device_overrides": {
+        "bedroom-tv": {
+          "remove.3D.sources": "true",
+          "remove.av1": "false",
+          "remove.dolby.vision": "true",
+          "remove.hdr": "true",
+          "remove.hevc": "false"
+        },
+        "bluestacks1": {
+          "remove.3D.sources": "true",
+          "remove.av1": "false",
+          "remove.dolby.vision": "true",
+          "remove.hdr": "true",
+          "remove.hevc": "false"
+        },
+        "nuc-alek": {
+          "remove.3D.sources": "true",
+          "remove.av1": "false",
+          "remove.dolby.vision": "true",
+          "remove.hdr": "true",
+          "remove.hevc": "false"
+        },
+        "nuc-mwo": {
+          "remove.3D.sources": "true",
+          "remove.av1": "false",
+          "remove.dolby.vision": "true",
+          "remove.hdr": "true",
+          "remove.hevc": "false"
+        },
+        "sony-tv": {
+          "remove.3D.sources": "true",
+          "remove.av1": "true",
+          "remove.dolby.vision": "false",
+          "remove.hdr": "false",
+          "remove.hevc": "false"
+        },
+        "x88pro20": {
+          "remove.3D.sources": "true",
+          "remove.av1": "true",
+          "remove.dolby.vision": "true",
+          "remove.hdr": "false",
+          "remove.hevc": "false"
+        }
       }
     },
     "plugin.video.youtube": {

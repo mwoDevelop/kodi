@@ -13,6 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools.kodi_flatpak_managed_addon_settings import (
+    reconcile as reconcile_settings,
+)
 from tools.kodi_flatpak_profile_sync_rollout import rollout
 from tools.kodi_stable_artifacts import prepare
 
@@ -39,7 +42,11 @@ def stable_rollout(device):
         timeout=300,
         result=None,
     )
-    return rollout(args)
+    result = rollout(args)
+    result["managed_settings"] = reconcile_settings(
+        ROOT, device, apply=True
+    )
+    return result
 
 
 def main():

@@ -293,6 +293,49 @@ def test_watchdog_rechecks_soon_only_after_dispatch():
     assert next_sleep_seconds(steady, 900, 60) == 900
 
 
+def test_failed_or_cancelled_remediation_consumes_cooldown_without_greenwash():
+    now = dt.datetime(2026, 9, 8, 9, tzinfo=dt.timezone.utc)
+    scheduled = {"id": 1, "event": "schedule", "status": "completed",
+                 "conclusion": "failure", "updated_at": "2026-09-07T09:00:00Z"}
+    for conclusion in ("failure", "cancelled", "timed_out", "action_required"):
+        calls = []
+        manual = {"id": 2, "event": "workflow_dispatch", "status": "completed",
+                  "conclusion": conclusion, "updated_at": "2026-09-08T08:59:00Z"}
+        fetch = lambda *_a, **_kw: [manual, scheduled]
+        report = evaluate(_manifest(), fetcher=fetch, now=now,
+                          remediator=lambda *a, **kw: calls.append(1))
+        assert not calls
+        assert report["monitored_state"] == "FAILED"
+        assert report["workflows"][0]["remediation_state"] == "NOT_DUE"
+        evaluate(_manifest(), fetcher=fetch, now=now + dt.timedelta(minutes=14),
+                 remediator=lambda *a, **kw: calls.append(1))
+        assert calls == [1]
+
+
+def test_remediation_ledger_throttles_invisible_dispatch_and_ambiguous_post():
+    now = dt.datetime(2026, 9, 8, 9, tzinfo=dt.timezone.utc)
+    runs = [{"id": 1, "event": "schedule", "status": "completed",
+             "conclusion": "failure", "updated_at": "2026-09-07T09:00:00Z"}]
+    for fail in (False, True):
+        ledger, calls = {}, []
+
+        def remediate(*args, **kwargs):
+            calls.append(1)
+            if fail:
+                raise OSError("response lost")
+
+        for seconds in (0, 60, 899):
+            report = evaluate(_manifest(), fetcher=lambda *a, **kw: runs,
+                              now=now + dt.timedelta(seconds=seconds),
+                              remediator=remediate, remediation_attempts=ledger)
+            assert report["monitored_state"] == "FAILED"
+        assert calls == [1]
+        evaluate(_manifest(), fetcher=lambda *a, **kw: runs,
+                 now=now + dt.timedelta(seconds=900), remediator=remediate,
+                 remediation_attempts=ledger)
+        assert calls == [1, 1]
+
+
 def test_watchdog_does_not_dispatch_fresh_or_active_workflow():
     now = dt.datetime(2026, 8, 27, 12, tzinfo=dt.timezone.utc)
     calls = []

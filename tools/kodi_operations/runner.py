@@ -401,6 +401,8 @@ class ProductionExecutor:
             [
                 sys.executable,
                 "tools/kodi_managed_addon_settings.py",
+                "--device",
+                device_id,
                 "--serial",
                 serial,
                 "--adb",
@@ -1279,8 +1281,15 @@ class ProductionExecutor:
                 timeout=1200,
             )
             status = result.get("rollout_mode")
+            managed_settings = result.get("managed_settings", {}).get(
+                "status"
+            )
             return StepOutcome(
-                StepResult.NO_CHANGE if status == "NO_CHANGE" else StepResult.PASS,
+                (
+                    StepResult.NO_CHANGE
+                    if status == "NO_CHANGE" and managed_settings == "NO_CHANGE"
+                    else StepResult.PASS
+                ),
                 {
                     "device": step.target,
                     "platform": "linux-flatpak",
@@ -1297,6 +1306,7 @@ class ProductionExecutor:
                     "playback_pending_application": result.get(
                         "playback_pending_application"
                     ),
+                    "managed_settings": managed_settings,
                     "runtime_compatibility": result.get("compatibility", {}).get(
                         "status"
                     ),

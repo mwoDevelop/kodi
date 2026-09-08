@@ -283,7 +283,7 @@ def verify(session):
         + "; test ! -L /etc/init.d/"
         + NAME
         + ".sh && test -L \"$link\" && test \"$(readlink \"$link\")\" = "
-        + "\"$install_path/www\" && test -x \"$link/gateway.cgi\" && "
+        + "\"$install_path/www\" && test -x \"$link/gateway.cgi\" || exit 1; "
         + "install_path=$(/sbin/getcfg "
         + NAME
         + " Install_Path -d missing -f /etc/config/qpkg.conf); "

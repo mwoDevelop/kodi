@@ -87,6 +87,14 @@ remediacji nie zmienia procesu na zdrowy: alarm znika dopiero po jej sukcesie.
 Po wysłaniu dispatchu watchdog wykonuje dodatkowy odczyt po 60 sekundach zamiast
 czekać na kolejny pełny cykl 15-minutowy.
 
+Ten szybki odczyt nie jest zgodą na kolejne wywołanie: cooldown uwzględnia również
+nieudane i anulowane `workflow_dispatch`. Osobna pamięć prób procesu chroni przed
+ponowieniem POST, zanim GitHub pokaże nowy przebieg, oraz po utracie odpowiedzi
+HTTP. Po restarcie źródłem odstępu pozostaje historia GitHub. Błąd limitu miejsca
+na artefakty lub budżetu Actions jest rzeczywistym błędem workflow, nawet gdy
+same testy providerów zakończyły się sukcesem. Nie naprawia się go wyłączaniem
+obowiązkowej publikacji raportu bezpieczeństwa ani ukrywaniem alertu.
+
 Watchdog ma uwierzytelniony dostęp do GitHub API, aby nie
 dzielić anonimowego limitu `60/h` dla adresu wyjściowego QNAP. Token jest wstrzykiwany
 z prywatnych referencji podczas wdrożenia i nie trafia do repozytorium ani raportu

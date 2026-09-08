@@ -172,17 +172,51 @@ pliki ustawień. Ogólne sondy providera i Real-Debrid są obecnie częścią ad
 Android, a nie adaptera Flatpak.
 
 Wąski zestaw ustawień dodatków, które mają być jednakowe na istniejących i
-nowych profilach, definiuje publiczna polityka
+nowych profilach, definiuje publiczna polityka schematu 2
 `manifests/kodi-managed-addon-settings.json`. Adapter Androida stosuje ją
 transakcyjnie dopiero po instalacji dokładnie przypiętej wersji dodatku,
 zmienia wyłącznie wymienione klucze przez API Kodi i zachowuje wszystkie
-pozostałe ustawienia użytkownika. Zakres wersji zapobiega przeniesieniu starej
-wartości do niezgodnego przyszłego API dodatku. Obecna polityka ustawia
+pozostałe ustawienia użytkownika. Adapter Flatpak wykonuje ten sam merge po
+zatrzymaniu Kodi i zapisuje plik atomowo przez SFTP. Zakres wersji zapobiega
+przeniesieniu starej wartości do niezgodnego przyszłego API dodatku. Obecna
+polityka ustawia
 `playbackMethod=1` (Auto Play Highest Quality) dla WatchNixtoons2 od wersji
 0.29.2 oraz wyłącza wadliwą ścieżkę MPEG-DASH w YouTube 7.4.4; kolejny przebieg musi
 zwrócić `managed_settings.status=NO_CHANGE`. Obejście YouTube jest przypięte do
 dokładnej wersji i ogranicza zwykłe filmy do 720p; szczegóły i test znajdują się w
 [runbooku YouTube](youtube.md#obejście-zatrzymywania-odtwarzania-w-744).
+
+Ta sama polityka zawiera jawne `device_overrides` dla filtrów źródeł Umbrella.
+Wartość `true` oznacza odrzucenie danego rodzaju źródła:
+
+| Urządzenie | HEVC | AV1 | HDR | Dolby Vision | 3D |
+|---|---:|---:|---:|---:|---:|
+| BlueStacks1 | nie filtruj | nie filtruj | filtruj | filtruj | filtruj |
+| Sony TV | nie filtruj | filtruj | nie filtruj | nie filtruj | filtruj |
+| X88 Pro 20 | nie filtruj | filtruj | nie filtruj | filtruj | filtruj |
+| Bedroom TV | nie filtruj | nie filtruj | filtruj | filtruj | filtruj |
+| NUC (`mwo`, `alek`) | nie filtruj | nie filtruj | filtruj | filtruj | filtruj |
+
+Dobór wynika z faktycznie ogłoszonych dekoderów: BlueStacks ma programowe HEVC
+i AV1, Sony sprzętowe HEVC i Dolby Vision bez AV1, X88 sprzętowe HEVC przy
+jawnie wyłączonym dekoderze AV1, a Google TV Streamer sprzętowe HEVC, AV1 i
+Dolby Vision. Aktywne wyjście Bedroom nie zgłasza jednak żadnego typu HDR,
+dlatego HDR i Dolby Vision są tam filtrowane. Intel Iris Xe w NUC obsługuje
+HEVC/AV1, ale aktywny tor HDR/Dolby Vision nie został potwierdzony przez EDID,
+dlatego te dwa formaty również pozostają filtrowane. 3D jest filtrowane
+wszędzie, bo żaden tor wyświetlania nie zgłosił takiej obsługi.
+
+Bez pełnego rolloutu można uzgodnić tylko ten zakres i natychmiast zweryfikować
+idempotencję:
+
+```bash
+.venv/bin/python tools/kodi_managed_addon_settings.py \
+  --device sony-tv --serial 192.168.1.12:5555
+.venv/bin/python tools/kodi_flatpak_managed_addon_settings.py apply \
+  --device nuc-mwo
+.venv/bin/python tools/kodi_flatpak_managed_addon_settings.py audit \
+  --device nuc-mwo
+```
 
 Preflight Androida usuwa z `advancedsettings.xml` wyłącznie stare sekcje
 `videodatabase` i `musicdatabase`. Biblioteka oraz wyszukiwanie nie zależą dzięki
@@ -200,9 +234,10 @@ nie może pozostawić włączonej flagi z pustą nazwą modułu. Filtr
 `realdebrid.filter.filename` pozostaje wyłączony: jego lista obejmuje typowe
 oznaczenia wydań (m.in. WEB-DL, WEBRip i BDRip) i potrafi usunąć wszystkie
 poprawne wyniki. Deduplikacja oraz negatywna pamięć błędów RD nadal działają.
-Wspólny profil ustawia również `remove.hevc=false`, aby urządzenia nie odrzucały
-poprawnych źródeł HEVC przed próbą odtworzenia. `remove.av1` pozostaje ustawieniem
-lokalnym, ponieważ wsparcie dekodera AV1 zależy od konkretnego urządzenia.
+Wspólny profil ustawia również `remove.hevc=false`, ponieważ wszystkie
+zarejestrowane urządzenia obsługują HEVC. Pozostałe filtry kodeka i toru
+wyświetlania są własnością opisanych wyżej warstw per urządzenie, a nie wspólnej
+rewizji Profile Sync.
 
 Wśród dodatków domyślnych Kodi instaluje również oficjalny
 `plugin.video.youtube` z `repository.xbmc.org`. Adapter pobiera API i trzy refresh

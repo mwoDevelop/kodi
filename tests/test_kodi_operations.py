@@ -798,6 +798,37 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
     assert outcome.summary["managed_settings"] == "NO_CHANGE"
 
 
+def test_flatpak_rollout_reports_managed_setting_changes(monkeypatch):
+    executor = object.__new__(ProductionExecutor)
+    monkeypatch.setattr(
+        executor,
+        "_inventory",
+        lambda _device: {"device": "nuc-mwo"},
+    )
+    monkeypatch.setattr(
+        executor,
+        "_run_json",
+        lambda *_args, **_kwargs: {
+            "rollout_mode": "NO_CHANGE",
+            "managed_settings": {"status": "UPDATED"},
+        },
+    )
+
+    outcome = executor.execute(
+        PlanStep(
+            "device:nuc-mwo",
+            "flatpak",
+            "converge",
+            target="nuc-mwo",
+            mutation=True,
+        ),
+        dry_run=False,
+    )
+
+    assert outcome.result == StepResult.PASS
+    assert outcome.summary["managed_settings"] == "UPDATED"
+
+
 def test_android_rollout_retries_sanitized_provider_network_error(monkeypatch):
     executor = object.__new__(ProductionExecutor)
     executor.adb = "adb"
