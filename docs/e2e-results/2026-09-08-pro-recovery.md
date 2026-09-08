@@ -23,7 +23,7 @@
   PASS, live PirateBay movie-a 31, movie-b 0, episode-a 9, episode-b 27.
 - PR mwoScrapers **#31**: CI zielone, ale obowiązuje ruleset wymagający jednego
   review (`REVIEW_REQUIRED`). Nie usunięto ani nie ominięto reguły. Cotygodniowe
-  crony i nowy provider pozostają niewdrożone do czasu rozstrzygnięcia blokady.
+  crony i poprawka providera pozostają niewdrożone do czasu rozstrzygnięcia blokady.
 - Backend Profile Sync **#20** scalony, 54 testy PASS. Obraz 0.10.1 z runu
   **34222380562** (test, malware, build multiarch, verify-release SUCCESS):
   `sha256:2f45b391f6386c042418caa91ccb81c53cf8ecae709192e09feeb0ef1fae2ad8`.
@@ -31,7 +31,15 @@
   tygodniowych cronów (niedziela=0, UTC, brak fałszywych dziennych opóźnień).
   Obraz z runu **34222727817**, wszystkie bramy SUCCESS:
   `sha256:a3ca46e9336aa4d7713d7c3611bb9988677b876e3c4e87f2a9a180a34d056329`.
-- Oba raporty bezpieczeństwa mają wynik `clean`; hash raportu i wejść obrazu
+- Test kandydata PirateBay **34223536138 SUCCESS** ujawnił błąd panelu:
+  sukces na gałęzi PR był mylnie uznawany za naprawę zadania produkcyjnego.
+  Control Plane **#27** (0.12.3) filtruje ręczne przebiegi po gałęzi ostatniego
+  crona, ponownie sprawdza odpowiedź i odrzuca niezgodny stan z cache.
+  92 testy PASS; odtworzenie z prawdziwym API GitHub potwierdza odrzucenie
+  sukcesu kandydata przy nadal nieudanym zadaniu na `main`.
+  Docelowy obraz z runu **34224571699** zastępuje przygotowany 0.12.2:
+  `sha256:d3874682ba53ee1cdfe015fb3b614f1ba10aff19a4b2d28489182c343ba51748`.
+- Raporty bezpieczeństwa mają wynik `clean`; hash raportu i wejść obrazu
   sprawdzono z approval dla dokładnych commitów i digestów. Pozostałe trzy
   obrazy nie są zmieniane. Katalogi cronów w tym wdrożeniu nadal są codzienne.
 - Backup backendu: `before-pro-recovery-20260908`, 7 blobów, SHA bazy
