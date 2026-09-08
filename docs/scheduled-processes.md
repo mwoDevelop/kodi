@@ -217,6 +217,14 @@ w trybie `observe`, uruchamiany po zdarzeniu CI lub ręcznie. Nie należy wpisyw
 go jako zadania cyklicznego. Review działa w GitHub, prywatny rejestr prób na hoście operatora.
 Nie zmienia statusu health providerów ani usług QNAP.
 
+Control Plane 0.12.4 dodaje źródło `github-pull-requests` i pasywną kartę PR
+mwoScrapers. Odczyty GET wykonuje w istniejącym cyklu obserwacji GitHub (900 s)
+i przy ręcznym odświeżeniu panelu. Nie dodaje to workflow z cronem: nadal 12
+harmonogramów GitHub i 2 procesy wewnętrzne, a liczba źródeł statusu wzrasta do 9.
+Niepowodzenie kolekcji jest błędem obserwatora; brak review albo otwarty PR nie
+oznaczają awarii produkcyjnego providera. Rejestr prób/kosztów lokalnego pilota
+pozostaje nieobserwowany przez QNAP.
+
 Buildy, CI, testy antymalware, publikacja testing, kwalifikacja hermetyczna i promocja
 stable są przede wszystkim sterowane zdarzeniami. Cykl Umbrelli może przejść te etapy
 automatycznie, ale każdy etap zachowuje kontrolę dokładnego SHA, snapshotu i atestacji.

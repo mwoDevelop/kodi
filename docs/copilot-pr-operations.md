@@ -1,5 +1,34 @@
 # Operatorski pilot Copilot PR
 
+## Rozszerzenie obserwacji P5a (0.12.4 Control Plane)
+
+Katalog źródeł włącza `github-pull-requests` dla pilota mwoScrapers. Kolekcja
+działa przy ręcznym odświeżeniu i razem z istniejącą obserwacją harmonogramów
+(900 s), bez nowego workflow cron i bez żądań AI. Liczba procesów pozostaje 14;
+źródeł danych jest 9. Nowa karta nie zastępuje kontrolera `controlled_pr.py`.
+
+`APPROVAL_OBSERVED` nie znaczy `ELIGIBLE`: monitor potwierdza wyłącznie stan
+natywnego review dla head SHA. Nie weryfikuje zaliczenia przez ruleset, App
+qualification ani lokalnego rejestru kosztów/prób. Pola te pozostają jawnie
+`NOT_OBSERVED` / brak liczby. `REVIEWED_ADVISORY` oznacza komentarz, a
+`STALE_EVIDENCE` review wcześniejszej rewizji lub wycofane. `NOT_OBSERVED` nie
+wyklucza trwającej pracy Copilota. Nie ma przycisku zatwierdzenia ani merge.
+
+Odbiór przeglądarkowy implementacji (bez produkcyjnych mutacji):
+
+```bash
+.venv/bin/python tests/e2e/control_plane_dashboard_cdp.py \
+  --control-plane-source /home/mwo/projects/kodi-control-plane \
+  --expect-pr-observer
+```
+
+Test sprawdza kartę, manual refresh i błąd API: poprzednie dane pozostają
+widoczne, ale panel nie nazywa ich świeżym sukcesem. Odbiór produkcyjny wymaga
+osobno odczytu `/v1/dashboard` i GUI po deployu dokładnego obrazu oraz katalogu.
+Usunięcie wpisu źródła zatrzymuje kolekcję; nie zmienia reguł GitHub.
+
+## Stan pilota
+
 Stan z 8.09.2026: lokalny pilot review oraz kontroler na chronionym `main`.
 [PR #34](https://github.com/mwoDevelop/script.module.mwoscrapers/pull/34)
 jest scalony; `MWOSCRAPERS_COPILOT_MODE=observe`. Nie włączono automatycznych

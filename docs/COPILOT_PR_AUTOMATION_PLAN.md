@@ -429,3 +429,34 @@ Nie promowano jeszcze jego ZIP-a do publicznego stable. `MWOSCRAPERS_COPILOT_MOD
 ma wartość `observe`; bot nie wystawia approvals. Run **34255409339** na main
 poprawnie zatrzymał zmianę workflow jako `MANUAL_REQUIRED`, bez mutacji.
 To nie jest jeszcze test automatycznego approval/merge dopuszczonego PR bez bypassu.
+
+## 13. Kontynuacja 9.09.2026 — stable i bezpieczna obserwacja PR
+
+Kolejność: exact-head CI i merge locka testing 0.2.2 (#350), istniejący
+`kodi_ops.py release` (snapshot, skan, kwalifikacja BlueStacks → X88, promocja),
+następnie pełny rollout. Osobny czysty checkout chroni niezwiązane lokalne
+zmiany QTS Gateway; prywatne raporty operacji pozostają niewersjonowane.
+
+Niezależny audyt agy-yolo (`gemini-3.8-flash-high`, sesja
+`2003dafc-2314-42f1-9372-54c8148a3d73`, SUCCESS) potwierdził granice P3.
+Zweryfikowane minimum puli przed audytem: 0.9264124631881714.
+Brak App i rollbacku to zadania implementacyjne, nie dowód niedostępności
+Copilota. Brak kwalifikowanej niezależnej ścieżki maintenance jest natomiast
+blokadą włączenia required checka. Jednorazowa zgoda na #31–#34 nie upoważnia
+do kolejnych bypassów ani utworzenia zastępczego konta zatwierdzającego.
+
+- [ ] R1: promocja niezmienionego, sprawdzonego ZIP-a 0.2.2 do stable.
+- [ ] R2: rollout floty z jawnymi PASS/DEFERRED oraz ponowny odczyt panelu.
+- [ ] P5a: pasywna kolejka PR w istniejącym Control Plane, w cyklu obserwacji
+  GitHub co 900 s i na ręczne odświeżenie; bez nowego crona, tokenu zapisu,
+  wywołań AI, approval lub merge. Brak PR nie jest awarią; awaria odczytu nie
+  może wyglądać jak pusta, poprawnie odczytana kolejka. Widok ma jawnie odróżniać
+  natywne dane GitHub od nieobserwowanego lokalnego rejestru prób Copilota.
+- [ ] P4: zlecenia naprawcze z trwałym limitem dwóch tur — nadal osobny etap;
+  istniejący profil agenta nie stanowi wykonania ani testu tej funkcji.
+- [ ] P3: decyzja o uprawnionej ścieżce maintenance, App z `integration_id`,
+  rollback i kwalifikacja na GitHub; do tego czasu approvals pozostają wyłączone.
+
+P5a nie importuje kontrolera z kandydata i nie nazywa zielonego CI dowodem
+`ELIGIBLE`. Obserwowane zatwierdzenie AI nie jest równoznaczne z policzonym
+approval ani kwalifikacją do merge. Zakończenie P5a nie zamyka całego P5.

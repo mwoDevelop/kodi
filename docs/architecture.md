@@ -170,7 +170,11 @@ Na hoście działa również [operatorski pilot Copilot review](copilot-pr-opera
 kontroler pobiera kwalifikację PR z GitHub, zapisuje prywatną rezerwację SQLite
 i może zlecić natywne review wykonywane w GitHub. Wynik wraca przez API.
 Pilot nie komunikuje się z QNAP/Kodi i nie scala PR. Produkcyjna faza approvals
-oraz jej monitoring są planowane, nie wdrożone. Zaufany workflow na `main`
+oraz jej pełny monitoring są planowane, nie wdrożone. Pasywny widok P5a w
+Control Plane 0.12.4 obserwuje przez GET natywne review otwartych PR mwoScrapers,
+bez dostępu do rejestru operatora i bez uprawnień scalających. Współdzieli cykl
+kolekcji GitHub (900 s), nie jest nowym serwisem ani cronem. `APPROVAL_OBSERVED`
+nie stanowi kwalifikacji do merge. Zaufany workflow na `main`
 mwoScrapers ma już włączony tryb `observe`: odczytuje dowody tylko dla
 kwalifikujących się PR, bez approvals i bez automatycznych żądań nowego review.
 

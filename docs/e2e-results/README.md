@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-09
 
+- [mwoScrapers stable i pasywna obserwacja PR](2026-09-09-stable-and-pr-observation.md)
 - [Bootstrap PR i tygodniowy monitoring](2026-09-08-pr-bootstrap-cutover.md)
 - [Copilot PR — operatorski pilot i odbiór częściowy](2026-09-08-copilot-advisory.md)
 - [Kontrolowana automatyzacja PR — implementacja i odbiór częściowy](2026-09-08-controlled-pr-automation.md)
