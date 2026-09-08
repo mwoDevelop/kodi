@@ -1,8 +1,10 @@
 # Operatorski pilot Copilot PR
 
-Stan z 8.09.2026: działa lokalny pilot review. Nowy kontroler nie jest jeszcze
-wdrożony na chronionym `main`; [PR #34](https://github.com/mwoDevelop/script.module.mwoscrapers/pull/34)
-zależy od bootstrapu #33. Nie zmieniono wymaganych approvals, stable ani QNAP.
+Stan z 8.09.2026: lokalny pilot review oraz kontroler na chronionym `main`.
+[PR #34](https://github.com/mwoDevelop/script.module.mwoscrapers/pull/34)
+jest scalony; `MWOSCRAPERS_COPILOT_MODE=observe`. Nie włączono automatycznych
+approvals ani żądań płatnego review z Actions. Wymagany jeden approval pozostaje.
+[Odbiór bootstrapu i powiązanego wdrożenia QNAP](e2e-results/2026-09-08-pr-bootstrap-cutover.md).
 
 [Plan](COPILOT_PR_AUTOMATION_PLAN.md),
 [review](COPILOT_PR_AUTOMATION_PLAN_REVIEW.md) i
@@ -10,10 +12,12 @@ zależy od bootstrapu #33. Nie zmieniono wymaganych approvals, stable ani QNAP.
 
 ## Wywołania z hosta
 
-Do czasu scalenia używaj istniejącego worktree implementacji:
+Używaj aktualnego checkoutu mwoScrapers. Numery PR w poniższych przykładach
+są historyczne: #32 jest już scalony, więc do nowego review podaj numer
+aktualnie otwartego, kwalifikującego się PR.
 
 ```bash
-cd /home/mwo/projects/kodi/.kodi-private/worktrees/mwoscrapers-copilot-20260908
+cd /home/mwo/projects/kodi/mwoscrapers
 python3 tools/copilot_pr_review.py observe --pr 32 \
   --state-db /home/mwo/projects/kodi/.kodi-private/copilot-pr/reviews.sqlite3
 ```

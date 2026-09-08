@@ -150,11 +150,20 @@ class AdbTransport(Transport):
     def process_id(self, package):
         if not re.fullmatch(r"[A-Za-z0-9._-]+", package):
             raise ValueError("invalid Android package id")
-        return self._shell_output(
+        output = self._shell_output(
             "pidof",
             package,
             allowed_returncodes=(0, 1),
         ).strip()
+        if output and not re.fullmatch(r"[1-9][0-9]*(?:\s+[1-9][0-9]*)*", output):
+            # Some emulator images emit a service-count banner instead of PIDs.
+            # Do not mistake arbitrary stdout for a running Kodi process.
+            output = self._shell_output(
+                "toybox", "pidof", package, allowed_returncodes=(0, 1),
+            ).strip()
+        if output and not re.fullmatch(r"[1-9][0-9]*(?:\s+[1-9][0-9]*)*", output):
+            raise TransportError("Android process probe returned invalid PID data")
+        return output
 
     def probe_identity(self):
         state = self._invoke("get-state").stdout.strip()
