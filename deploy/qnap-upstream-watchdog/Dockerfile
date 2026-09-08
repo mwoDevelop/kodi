@@ -5,6 +5,7 @@ RUN addgroup -S -g 10001 watchdog \
 
 WORKDIR /app
 COPY tools/upstream_watchdog.py tools/upstream_watchdog.py
+COPY tools/watchdog_remediation.py tools/watchdog_remediation.py
 COPY manifests/upstream-watchdog.json manifests/upstream-watchdog.json
 
 USER 10001:10001

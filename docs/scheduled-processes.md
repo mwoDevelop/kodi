@@ -124,9 +124,17 @@ Po wysłaniu dispatchu watchdog wykonuje dodatkowy odczyt po 60 sekundach zamias
 czekać na kolejny pełny cykl 15-minutowy.
 
 Ten szybki odczyt nie jest zgodą na kolejne wywołanie: cooldown uwzględnia również
-nieudane i anulowane `workflow_dispatch`. Osobna pamięć prób procesu chroni przed
-ponowieniem POST, zanim GitHub pokaże nowy przebieg, oraz po utracie odpowiedzi
-HTTP. Po restarcie źródłem odstępu pozostaje historia GitHub. Błąd limitu miejsca
+nieudane i anulowane `workflow_dispatch`. Trwały prywatny dziennik rezerwuje próbę
+przed POST i zachowuje odstęp po restarcie oraz utracie odpowiedzi HTTP.
+Potwierdzona adnotacją blokada billing/storage (`BILLING_BLOCKED`) albo nieznana
+przyczyna bez dostępnych adnotacji ogranicza próby do jednej na 24 h.
+Dodatkowo obowiązuje limit trzech automatycznych prób na workflow w ruchomych
+24 h także przy innych awariach. Uszkodzony lub niedostępny dziennik blokuje
+POST (`remediation_ready=false`), ale nie zbieranie statusów. Szczegóły i
+[powtarzalny E2E restartu](../deploy/qnap-upstream-watchdog/README.md#trwała-ochrona-puli-actions).
+Kolumna statusu procesu nadal pokazuje rzeczywiste `FAILED`; przyczyna i
+stan ograniczenia są polami API watchdoga i `qnap_images.py status`, a nie
+odczytem pozostałych minut konta. Błąd limitu miejsca
 na artefakty lub budżetu Actions jest rzeczywistym błędem workflow, nawet gdy
 same testy providerów zakończyły się sukcesem. Nie naprawia się go wyłączaniem
 obowiązkowej publikacji raportu bezpieczeństwa ani ukrywaniem alertu.

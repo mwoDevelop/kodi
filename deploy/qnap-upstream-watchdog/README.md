@@ -38,7 +38,8 @@ API nie może go zwrócić bez dodatkowego zakresu `user:email`. W takim przypad
 walidator akceptuje wyłącznie token należący do wersjonowanego właściciela
 repozytoriów `mwoDevelop`; token dowolnego innego konta jest odrzucany.
 
-Aplikacja wymaga odczytu publicznych repozytoriów oraz `Actions: write`, ale nie
+Aplikacja wymaga odczytu monitorowanych repozytoriów, `Checks: read` (adnotacje
+przyczyn błędów) oraz `Actions: write`, ale nie
 wymaga zapisu treści, PR, release ani administracji repozytorium. Dedykowany token
 w `GITHUB_TOKEN` powinien być ograniczony do repozytoriów obecnych w manifeście.
 Migracyjny token `gh auth` może mieć szersze zakresy, dlatego należy zastąpić go
@@ -46,8 +47,10 @@ dedykowanym PAT. Obecny walidator wdrożeniowy potrafi dowieść capability na
 podstawie klasycznego zakresu `workflow`; fine-grained PAT bez nagłówka zakresów
 jest odrzucany fail-closed zamiast ujawniać brak uprawnień dopiero po awarii crona.
 Kontener nie ma opublikowanych portów, dodatkowych capabilities ani zapisywalnego
-głównego systemu plików. Jedyne bind mounty to trzy pliki certyfikatów obserwatora,
-zamontowane read-only z zarządzanego katalogu QNAP. Prywatny endpoint
+głównego systemu plików. Bind mounty obejmują trzy pliki certyfikatów obserwatora
+read-only oraz prywatny katalog `state/` (RW, UID 10001, tryb 0700) na trwały
+dziennik prób `attempts.json` (0600). Nie ma dostępu do innych danych QNAP.
+Prywatny endpoint
 `https://upstream-watchdog:9445/v1/status` jest osiągalny wyłącznie w sieci
 `mwodevelop-control` i wymaga certyfikatu klienta mTLS; służy Control Plane do
 sprawdzania świeżości cyklu. Wdrażaj wyłącznie niezmienny
@@ -84,3 +87,34 @@ python tools/qnap_images.py deploy upstream-watchdog control-plane --reconcile
 Skonfiguruj Container Station/QTS tak, aby powiadamiał o niezdrowym kontenerze. Dokument
 statusu pozostaje w pliku tmpfs o rozmiarze 1 MiB i zawiera tylko identyfikatory
 workflow, czasy, wnioski i nazwy repozytoriów.
+
+## Trwała ochrona puli Actions
+
+`--remediate` wymaga jawnego `--remediation-ledger`. Skrypt wdrożeniowy tworzy
+pierwszy dziennik krótkotrwałym kontenerem bez sieci; zwykły start nigdy go nie
+resetuje. Zapis rezerwacji próby (fsync pliku i katalogu, atomic replace) następuje
+**przed** POST. Blokada pojedynczego writera zapobiega równoległym dispatchom.
+Uszkodzenie, utrata lub brak możliwości zapisu daje `remediation_ready=false`
+i blokuje remediację, ale nadal pozwala odczytywać stan workflow. Nie usuwać
+dziennika ani markera `state-initialized-v1` w celu pozornego naprawienia alarmu.
+
+Adnotacje GitHub Actions są czytane ograniczoną liczbą zapytań i nie są
+zapisywane. `failure_category=BILLING_BLOCKED` oznacza potwierdzoną blokadę
+budżetu/magazynu, a `NOT_OBSERVED` nieznaną przyczynę. W obu sytuacjach
+ponowienie następuje nie częściej niż co 24 h. Nowszy sukces tego samego
+workflow/ref usuwa potwierdzoną blokadę. Pozostałe awarie zachowują minimalny
+odstęp manifestu, lecz wszystkie automatyczne próby mają dodatkowy limit
+trzech rezerwacji na ruchome 24 h. Ręczne działania operatora i cron GitHub
+nie są zatrzymywane przez ten lokalny licznik. Alarm domenowy nie znika
+po samym dispatchu. Rollback automatyczny uruchamia obserwację bez remediacji.
+
+Powtarzalny test odtworzenia kontenera z tym samym wolumenem (bez prawdziwych
+zapytań GitHub, czas symulowany) i testy przypadków błędów:
+
+```bash
+docker build -f deploy/qnap-upstream-watchdog/Dockerfile -t kodi-watchdog-e2e .
+.venv/bin/python tests/e2e/watchdog_retry_container.py --image kodi-watchdog-e2e
+.venv/bin/python -m pytest -q tests/test_watchdog_remediation.py tests/test_upstream_watchdog.py tests/test_qnap_images.py
+```
+
+E2E usuwa wyłącznie swój losowo nazwany wolumen testowy; nie dotyka stanu QNAP.

@@ -13,6 +13,11 @@ from pathlib import Path
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+try:
+    from .watchdog_remediation import RetryLedger
+except ImportError:  # Direct CLI / container entrypoint.
+    from watchdog_remediation import RetryLedger
+
 API = "https://api.github.com"
 MONITORED_STATES = frozenset({"HEALTHY", "FAILED", "UNKNOWN"})
 
@@ -129,6 +134,7 @@ def evaluate(
     token=None,
     remediator=None,
     remediation_attempts=None,
+    retry_ledger=None,
 ):
     now = now or dt.datetime.now(dt.timezone.utc)
     # Separate retry throttling from selection of a successful recovery. Failed
@@ -156,6 +162,11 @@ def evaluate(
                 }
             )
             continue
+        if retry_ledger is not None and any(not run.get("head_branch") for run in runs):
+            results.append({**config, "status": "contract_error", "healthy": False,
+                            "monitored_state": "UNKNOWN"})
+            continue
+        runs = [run for run in runs if run.get("head_branch", config["ref"]) == config["ref"]]
         scheduled, effective = _select_runs(runs)
         if not scheduled:
             result = {
@@ -198,6 +209,14 @@ def evaluate(
                 }
                 remediation_state = "DISABLED"
                 remediation_error_code = None
+                key = (config["repository"], config["workflow"], config["ref"])
+                policy = None
+                if retry_ledger is not None:
+                    try:
+                        policy = retry_ledger.policy(key, runs, now, token=token)
+                        result.update(policy)
+                    except OSError:
+                        result["remediation_ledger_state"] = "UNAVAILABLE"
                 if remediator is not None and not active:
                     age_seconds = max(0, int(age.total_seconds()))
                     threshold = config["remediation_after_seconds"]
@@ -207,7 +226,6 @@ def evaluate(
                     ) or (
                         conclusion != "success" and age_seconds >= cooldown
                     )
-                    key = (config["repository"], config["workflow"], config["ref"])
                     latest_attempt = remediation_attempts.get(key)
                     for attempt in runs:
                         if attempt.get("event") != "workflow_dispatch":
@@ -219,6 +237,20 @@ def evaluate(
                         result["last_remediation_attempt_at"] = latest_attempt.isoformat()
                         due = due and (now - latest_attempt).total_seconds() >= cooldown
                     if due:
+                        if retry_ledger is not None:
+                            try:
+                                reservation = (
+                                    retry_ledger.reserve(key, now, latest_attempt, cooldown, policy)
+                                    if policy is not None else "LEDGER_UNAVAILABLE"
+                                )
+                            except OSError:
+                                reservation = "LEDGER_UNAVAILABLE"
+                                result["remediation_ledger_state"] = "UNAVAILABLE"
+                            if reservation != "RESERVED":
+                                result["remediation_state"] = reservation
+                                result["remediation_error_code"] = None
+                                results.append(result)
+                                continue
                         # Also throttle an ambiguous HTTP failure: the POST may
                         # have reached GitHub even if its response was lost.
                         remediation_attempts[key] = now
@@ -265,6 +297,7 @@ def evaluate(
         "observer_ready": collection_state == "READY",
         "collection_state": collection_state,
         "monitored_state": monitored_state,
+        "remediation_ready": retry_ledger.ready if retry_ledger is not None else remediator is None,
         # Compatibility alias for the N/N+1 migration window.
         "healthy": monitored_state == "HEALTHY",
         "workflows": results,
@@ -289,6 +322,7 @@ def validate_status(
         or report.get("monitored_state") not in MONITORED_STATES
         or not isinstance(report.get("healthy"), bool)
         or report["healthy"] != (report["monitored_state"] == "HEALTHY")
+        or report.get("remediation_ready") is False
         or not isinstance(report.get("workflows"), list)
     ):
         return False
@@ -430,10 +464,11 @@ def start_observer(listen, port, certificate, key, client_ca, state):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "command", choices=("check", "watch", "health"), nargs="?", default="check"
+        "command", choices=("check", "watch", "health", "init-ledger"), nargs="?", default="check"
     )
     parser.add_argument("--manifest", default="manifests/upstream-watchdog.json")
     parser.add_argument("--status")
+    parser.add_argument("--remediation-ledger", help="persistent private retry ledger (required for --remediate)")
     parser.add_argument("--interval-seconds", type=int, default=900)
     parser.add_argument("--remediation-recheck-seconds", type=int, default=60)
     parser.add_argument("--listen")
@@ -449,6 +484,14 @@ def main():
         help="dispatch allowlisted stale workflows using workflow_dispatch",
     )
     args = parser.parse_args()
+    if args.command == "init-ledger":
+        if not args.remediation_ledger:
+            parser.error("init-ledger requires --remediation-ledger")
+        RetryLedger.initialize(args.remediation_ledger)
+        print('{"remediation_ledger": "INITIALIZED"}')
+        return 0
+    if args.remediate and not args.remediation_ledger:
+        parser.error("--remediate requires a provisioned --remediation-ledger")
     manifest = load_manifest(args.manifest)
     if args.command == "health":
         if not args.status:
@@ -481,12 +524,14 @@ def main():
     elif any(observer_values):
         parser.error("observer TLS files require --listen")
     remediation_attempts = {}
+    retry_ledger = RetryLedger(args.remediation_ledger) if args.remediation_ledger else None
     while True:
         report = evaluate(
             manifest,
             token=token,
             remediator=dispatch_workflow if args.remediate else None,
             remediation_attempts=remediation_attempts,
+            retry_ledger=retry_ledger,
         )
         state.set(report)
         if args.status:
