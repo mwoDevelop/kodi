@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-09
 
+- [Bootstrap PR i tygodniowy monitoring](2026-09-08-pr-bootstrap-cutover.md)
 - [Copilot PR — operatorski pilot i odbiór częściowy](2026-09-08-copilot-advisory.md)
 - [Kontrolowana automatyzacja PR — implementacja i odbiór częściowy](2026-09-08-controlled-pr-automation.md)
 - [Odblokowanie automatyzacji po GitHub Pro](2026-09-08-pro-recovery.md)

@@ -20,7 +20,10 @@ braku wszystkich wad. Nie powstaje dodatkowa płatna usługa ani nowy częsty cr
 
 Użytkownik zlecił zaplanowanie, niezależne review, implementację, wdrożenie i testy.
 Zmiany zabezpieczeń poza opisaną polityką, zakup usług i obejście rulesetów nie
-są częścią automatyzacji. Zastane lokalne zmiany QTS Gateway pozostają nietknięte.
+są częścią automatyzacji. 8.09 użytkownik osobno zezwolił na jednorazowe
+operatorskie scalenie mwoScrapers #31–#34 przez istniejący owner bypass.
+Zgoda nie znosi wymaganego review przyszłych PR i nie upoważnia bota do bypassu.
+Zastane lokalne zmiany QTS Gateway pozostają nietknięte.
 
 ## Stan początkowy (sprawdzony przez API)
 
@@ -121,8 +124,8 @@ są częścią automatyzacji. Zastane lokalne zmiany QTS Gateway pozostają niet
 - Review wykazał, że jedynym kolaboratorem jest autor obu PR-ów. Reviewer
   zaproponował jednorazowy operatorski bypass, już dozwolony technicznie przez
   istniejący ruleset, dla #31 i PR wprowadzającego automat. **Ta opcja wymaga
-  osobnej wyraźnej zgody użytkownika**; zadano pytanie. Bez odpowiedzi wolno
-  przygotować kod, CI i tryb obserwacyjny, lecz bootstrap pozostaje BLOCKED.
+  osobnej wyraźnej zgody użytkownika**; uzyskano ją 8.09 dla #31–#34.
+  Operator ponownie sprawdza dokładny head, aktualną bazę i CI przed scaleniem.
   Nie tworzyć dodatkowych kont/aplikacji wyłącznie dla upozorowania review.
 - Niezależnie zakwalifikować #31 jako zmianę operatora; #32 jako runtime.
   Nowy commit po scaleniu innego PR wymaga ponownej kwalifikacji aktualnej pary.
@@ -137,7 +140,7 @@ są częścią automatyzacji. Zastane lokalne zmiany QTS Gateway pozostają niet
    Cutover wykonać w tej samej sesji, przed kolejnym porannym oknem dziennego
    monitoringu; w razie braku możliwości nie scalać #31 przed przygotowaniem
    przetestowanego obrazu i planu rollbacku.
-3. #32: automatyczna kwalifikacja, review i merge; jawny health na `main`, odczyt
+3. #32: operatorska kwalifikacja i merge w ramach jednorazowej zgody; jawny health na `main`, odczyt
    watchdoga i refresh panelu, bez ręcznego kasowania jego rejestru remediacji.
    Po #31 i bootstrapie zaktualizować #32 względem `main` i ponowić całą
    kwalifikację. Dotychczasowy zielony run starego head nie jest już dowodem.
@@ -188,8 +191,8 @@ Review: agy-yolo, `gemini-3.8-flash-high`, sesja
 przed delegacją 0.9569956660270691. Odczyt planu i repo bez edycji.
 Przyjęto uwagi o deadlocku bootstrap, zdarzeniu `workflow_run`, aktualizacji bazy,
 pochodzeniu checków, ścisłej allowliście i rozdzieleniu merge od release.
-Nie przyjęto jako automatycznej zgody postulatu owner bypass — oczekuje decyzji
-użytkownika. Nie przyjęto ogólnego globu `tests/test_*.py`; v1 ma listę konkretnych
+Nie przyjęto jako automatycznej zgody postulatu owner bypass — uzyskano osobną
+decyzję użytkownika 8.09. Nie przyjęto ogólnego globu `tests/test_*.py`; v1 ma listę konkretnych
 plików i zachowanie istniejących testów. Szczegóły: [review](CONTROLLED_PR_AUTOMATION_PLAN_REVIEW.md).
 
 Nie uznawać przygotowanego kodu, przyjętego dispatchu ani zielonego testu innej
