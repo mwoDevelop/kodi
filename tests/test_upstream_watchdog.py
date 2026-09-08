@@ -710,7 +710,14 @@ def test_control_plane_catalogs_are_valid_and_watchdog_thresholds_match():
         item for item in schedules["jobs"] if item["kind"] == "github_actions"
     ]
     assert len(github_jobs) == 12
-    assert len(sources["sources"]) == 8
+    assert {source["id"] for source in sources["sources"]} == {
+        "profile-sync-fleet", "profile-sync-rollouts", "profile-sync-playback",
+        "profile-sync-favourites", "secret-broker", "upstream-watchdog",
+        "github-workflows", "github-schedules", "github-pull-requests",
+    }
+    prs = next(source for source in sources["sources"] if source["id"] == "github-pull-requests")
+    assert prs["stale_after_seconds"] == 1800
+    assert prs["auth"] == "github_pat_read_only"
     assert len(severity["rules"]) == 11
     assert {
         item["reason_code"]
