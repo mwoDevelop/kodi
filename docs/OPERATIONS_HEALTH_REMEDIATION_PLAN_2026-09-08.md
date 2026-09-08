@@ -1,5 +1,8 @@
 # Naprawa statusów operacyjnych — 8 września 2026
 
+Aktualny wynik opisuje sekcja F i [raport po aktywacji Pro](e2e-results/2026-09-08-pro-recovery.md).
+Pozostałe sekcje zachowują historię wcześniejszego etapu i jego ówczesnych blokad.
+
 ## F. Odblokowanie po aktywacji GitHub Pro — plan bieżącej kontynuacji
 
 Użytkownik aktywował Pro samodzielnie. Odczyt Billing potwierdza Pro $4/mies.;
@@ -42,6 +45,24 @@ zwracają pusty sentinel API (odcinki działają), a diagnostyka nazywa go
 FILTERED_EMPTY. Sprawdzić zapytanie zawierające rok wobec samego tytułu i
 zachować ścisłą walidację tytułu/roku/IMDb. Nie zmieniać próbek ani progów tylko
 w celu zazielenienia monitoringu; poprawka adaptera wymaga osobnej kwalifikacji.
+
+### Wynik F — 8 września, 12:34 UTC
+
+- Audyt bezpieczeństwa, discovery i ponowienie promocji Umbrelli: SUCCESS.
+  Blokada uruchamiania/uploadu nie powtórzyła się po aktywacji Pro.
+- Backend **0.10.1** i Control Plane **0.12.3** wdrożone na QNAP; drugi deploy
+  `NO_CHANGE`, siedem kontenerów zdrowych, pięć przypisań nadal `APPLIED`.
+- Dodatkowa naprawa panelu: ręczny sukces na gałęzi testowej nie jest już
+  traktowany jako naprawa produkcyjnego crona. Regresje, API i produkcyjny
+  CDP PASS; audyt providerów prawidłowo pokazuje `FAILED`, nie fałszywe `OK`.
+- PirateBay: ograniczony fallback bez roku przechodzi 83 testy i rzeczywisty
+  health probe na gałęzi **mwoScrapers #32**. Wdrożenie pozostaje zablokowane
+  przez `REVIEW_REQUIRED`, podobnie jak optymalizacja harmonogramów **#31**.
+  Nie ominięto review. Zależny **kodi #360** pozostaje draftem; nowe katalogi
+  tygodniowe nie są aktywne w produkcji. Parser tygodniowy jest już gotowy.
+- Bedroom TV: ponowna próba ADB kończy się timeoutem, nadal DEFERRED.
+- Kod serwerów, stable lock i raport: scalone, wypchnięte, testy zakończone
+  sukcesem. Szczegółowe run ID, digests i dalsze kroki są w podlinkowanym raporcie.
 
 ## Zweryfikowany stan początkowy
 
@@ -407,7 +428,7 @@ bezpieczeństwo runnera, kolejność wdrożeń dwóch repozytoriów i kryteria s
   i narzędziu statusu; GUI zachowuje `FAILED`/`LAST_RUN_FAILED`, a nie licznik
   wolnych minut, którego API nadal nie udostępnia obecnemu tokenowi.
 
-## Stan końcowy etapu domknięcia
+## Historyczny stan etapu domknięcia — przed aktywacją Pro
 
 - A: narzędzie zaimplementowano i przetestowano, usunięto tylko dwa zweryfikowane
   duplikaty (113 MiB), zachowano trwały backup i release. Poprawka braku snapshotu
