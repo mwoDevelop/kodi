@@ -2,6 +2,15 @@
 
 Data: 8 września 2026. Status: PO NIEZALEŻNYM REVIEW; IMPLEMENTACJA.
 
+## Planowane rozszerzenie o Copilota
+
+[Docelowy plan integracji Copilota](COPILOT_PR_AUTOMATION_PLAN.md) opisuje review
+doradcze, warunkowe natywne approvals i osobnego agenta naprawczego. Nie zmienia
+obecnego statusu bootstrapu ani nie rozszerza dozwolonych przepisów runtime.
+Przejście na approvals Copilota wymaga kwalifikacji funkcji, dodatkowej wymaganej
+bramy GitHub i wyłączenia równoległego wystawiania approvals przez bota polityki.
+Do tego czasu obowiązują reguły i ograniczenia niniejszego planu.
+
 ## Cel i zakres zgody
 
 Automatyzować kwalifikację, review polityki, scalenie i potwierdzenie stanu po

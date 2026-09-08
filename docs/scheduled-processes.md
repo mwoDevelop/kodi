@@ -211,6 +211,12 @@ credentiali: lifecycle secret setu wymaga jawnej operacji administracyjnej.
 
 ## Procesy ręczne i sterowane zdarzeniami
 
+Copilot ma na razie [operatorski pilot review](copilot-pr-operations.md), nie
+nowy cron ani produkcyjny automat merge. Kod obserwatora w PR #34 mwoScrapers
+oczekuje na bootstrap na `main`; nie należy wpisywać go jako działającego zadania
+cyklicznego. Review działa w GitHub, prywatny rejestr prób na hoście operatora.
+Nie zmienia statusu health providerów ani usług QNAP.
+
 Buildy, CI, testy antymalware, publikacja testing, kwalifikacja hermetyczna i promocja
 stable są przede wszystkim sterowane zdarzeniami. Cykl Umbrelli może przejść te etapy
 automatycznie, ale każdy etap zachowuje kontrolę dokładnego SHA, snapshotu i atestacji.
