@@ -329,6 +329,41 @@ bezpieczeństwo runnera, kolejność wdrożeń dwóch repozytoriów i kryteria s
   samo minimum 15 minut nie chroni miesięcznej puli. Licznik nie jest kasowany
   przez restart ani udany dispatch, a nowszy sukces usuwa klasyfikację billing.
 
+### Stan wykonania E (8 września, 11:07 UTC)
+
+- E1–E3: implementacja scalona w **PR #357**, końcowe regresje **817 PASS**;
+  obraz przeszedł skan i wieloarchitekturowy build `34218298136`.
+  Kontrolowany deploy watchdoga i restart na QNAP przeszły: 12/12 obserwowanych
+  workflow, trzy potwierdzone blokady billing, brak dodatkowego dispatchu po
+  restarcie, identyczny dziennik przed/po. Promocja tego digestu do stable jest
+  ostatnią bramą tego etapu; nie oznacza odblokowania prywatnych Actions.
+- E4: **PR #31 mwoScrapers** zawiera tygodniowy audit/discovery, codzienny health,
+  deduplikację push/PR i filtrowanie builda relay po wejściach. Lokalnie **81 PASS**
+  i ruff PASS. CI prywatnego repo odrzuciło start, więc PR nie został scalony,
+  a aktywne katalogi monitoringu nadal zgodnie opisują codzienny cron.
+  Przy cutover ustawić progi watchdoga: remediacja `608400` s (tydzień + 1 h),
+  maksymalny wiek `610200` s (tydzień + 1,5 h); najpierw rozszerzyć limit
+  walidatora ponad `604800`. Zmienić oba katalogi, submodule ref i testy kadencji
+  dopiero dla scalonego commitu. Pełny tydzień i granice tolerancji muszą przejść
+  regresję przed włączeniem oczekiwań tygodniowych.
+- Prognoza wyłącznie harmonogramów mwoScrapers: ostatnie udane próbki
+  `34022666523` / `34023008514` / `34024256992` dają zaokrąglone czasy jobów
+  odpowiednio 3/3/1 min. Dla 31 dni i 5 poniedziałków: **217 → 61 min/miesiąc**
+  bez retry i wydań. To oszacowanie z czasów jobów, nie odczyt rachunku.
+  Maksymalnie trzy retry dziennie przy tych przykładowych czasach dodałyby
+  651 min; timeouts i koszt wydań mogą zwiększyć wynik. Cel 1400 dla całego
+  konta nie jest gwarancją — pozostają inne projekty, release i rezerwa.
+- E5–E6: backend PR #20 i publikacja nowego widoku liczników billing nadal
+  wymagają odblokowanego prywatnego CI/kwalifikowanego runnera. Istnieje runner
+  urządzeniowy oraz `/dev/kvm` na hoście, ale nie ma jeszcze zakwalifikowanego
+  odizolowanego runnera buildów. Nie użyto dostępu do produkcyjnego LAN/sekretów
+  jako obejścia izolacji; nie podnoszono budżetów ani zakresów tokenów.
+- E7: Bedroom TV nadal niedostępny. Publiczny smoke **57/57**, E2E Control Plane
+  mTLS **PASS**, panel pokazuje osiem źródeł `OK`, 5/6 applied i rzeczywiste
+  błędy budżetu. Pola `BILLING_BLOCKED`/cooldown są obecnie w API watchdoga
+  i narzędziu statusu; GUI zachowuje `FAILED`/`LAST_RUN_FAILED`, a nie licznik
+  wolnych minut, którego API nadal nie udostępnia obecnemu tokenowi.
+
 ## Stan końcowy etapu domknięcia
 
 - A: narzędzie zaimplementowano i przetestowano, usunięto tylko dwa zweryfikowane

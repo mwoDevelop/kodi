@@ -114,3 +114,25 @@ gałęzi, utraconego pliku oraz ponowienia odczytu początkowo pustych adnotacji
   nie jest raportowany jako PASS.
 - Ten zapis dokumentuje kwalifikację przed wdrożeniem. Digest produkcyjny,
   wynik CI i odczyt po wdrożeniu wymagają osobnego potwierdzenia poniżej.
+
+### Wdrożenie i weryfikacja
+
+- Końcowe regresje: **817 PASS**, targeted **98 PASS**, powtórzony kontenerowy
+  E2E **PASS**, publiczne repo **57/57**, E2E mTLS Control Plane **PASS**.
+- PR **#357** scalony po obu zielonych CI (`34218006694`, `34218010899`),
+  a CI merge commitu `34218443569` również zakończone sukcesem.
+- Obraz z workflow `34218298136` i raportem bezpieczeństwa `clean`:
+  `sha256:624b2295169be59bfc6f0849c4e2fdf68a5a3a7deeb35b576e153e105aa77dea`.
+  Wdrożono tylko watchdog istniejącym helperem qnap_images. Pozostałe cztery
+  digesty aplikacji (siedem kontenerów łącznie) pozostają bez zmian.
+- Rzeczywisty restart QNAP 11:07 UTC: `observer_ready=true`,
+  `remediation_ready=true`, katalog 12/12, trzy `BILLING_BLOCKED/NOT_DUE`.
+  Plik dziennika identyczny przed/po: SHA-256
+  `894c0c23d5d80c2d1eba3336a052fea28118d7b78c343bd7cce1990404cb11c6`.
+  Nie wysłano dodatkowych prób dla zablokowanych workflow.
+- API i DOM panelu: osiem źródeł `OK`, 5/6 urządzeń `APPLIED`; stare/pending
+  Bedroom TV nie zostało zamaskowane. Trzy prywatne workflow i ich agregat
+  pozostają `FAILED` — to nadal realna blokada uruchamiania Actions.
+- Oszczędniejsza kadencja i deduplikacja mwoScrapers są w **PR #31**:
+  81 lokalnych testów i ruff PASS, brak pomyślnego prywatnego CI (odrzucenie
+  przed startem przez budżet). Nie zmieniono aktywnych oczekiwań monitoringu.
