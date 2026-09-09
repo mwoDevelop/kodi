@@ -101,6 +101,11 @@ def inventory_device(
             if "runtime_path_status" in probe
             else {}
         ),
+        **(
+            {"flatpak_scope": probe["flatpak_scope"]}
+            if probe.get("flatpak_scope") is not None
+            else {}
+        ),
     }
 
 
