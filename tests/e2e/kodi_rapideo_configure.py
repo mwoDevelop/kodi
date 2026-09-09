@@ -22,6 +22,33 @@ def _write(path, document):
         destination.write("\n")
 
 
+def _json_object(response):
+    content_type = str(response.headers.get("content-type", "")).lower()
+    if "json" not in content_type:
+        raise ValueError("Rapideo API returned %s" % content_type[:80])
+    document = response.json()
+    if not isinstance(document, dict):
+        raise ValueError("Rapideo API returned a non-object")
+    return document
+
+
+def _login(namespace, username, password):
+    response = namespace["requests"].post(
+        namespace["base_url"] + "/login",
+        data={"login": username, "password": password},
+        timeout=30,
+    )
+    transport = {
+        "content_type": str(response.headers.get("content-type", ""))[:80],
+        "http_status": int(response.status_code),
+    }
+    authentication = _json_object(response)
+    token = authentication.get("authtoken", "")
+    if not isinstance(token, str):
+        token = ""
+    return token, transport, authentication
+
+
 def _credentials(path):
     with open(path, "r", encoding="utf-8") as source:
         document = json.load(source)
@@ -78,23 +105,10 @@ def main():
             storage["authtoken"] = token
             storage.sync()
         authenticated = False
+        authentication = None
         if not token:
-            response = namespace["requests"].post(
-                namespace["base_url"] + "/login",
-                data={"login": username, "password": password},
-                timeout=30,
-            )
-            report["authentication_transport"] = {
-                "content_type": str(
-                    response.headers.get("content-type", "")
-                )[:80],
-                "http_status": int(response.status_code),
-            }
-            authentication = response.json()
-            token = (
-                authentication.get("authtoken", "")
-                if isinstance(authentication, dict)
-                else ""
+            token, report["authentication_transport"], authentication = _login(
+                namespace, username, password
             )
             authenticated = True
         token_present = bool(token)
@@ -121,7 +135,29 @@ def main():
             )[:80],
             "http_status": int(response.status_code),
         }
-        account = response.json()
+        try:
+            account = _json_object(response)
+        except (ValueError, json.JSONDecodeError):
+            token, report["authentication_transport"], authentication = _login(
+                namespace, username, password
+            )
+            authenticated = True
+            if not token:
+                raise RuntimeError("Rapideo authentication was rejected")
+            storage["authtoken"] = token
+            storage.sync()
+            response = namespace["requests"].post(
+                namespace["base_url"] + "/account",
+                data={"authtoken": token},
+                timeout=30,
+            )
+            report["account_transport"] = {
+                "content_type": str(
+                    response.headers.get("content-type", "")
+                )[:80],
+                "http_status": int(response.status_code),
+            }
+            account = _json_object(response)
         account_details = (
             account.get("account", account)
             if isinstance(account, dict)

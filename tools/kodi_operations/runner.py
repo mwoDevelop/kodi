@@ -34,6 +34,7 @@ from tools.kodi_flatpak_restore import (
     verify_remote_snapshot as verify_flatpak_remote_snapshot,
 )
 from tools.kodi_inventory import inventory_device
+from tools.kodi_profile import AdbJsonRpcClient
 from tools.kodi_mwoscrapers_endpoint_probe import (
     probe as device_provider_probe,
 )
@@ -270,6 +271,12 @@ class ProductionExecutor:
             payload["flatpak_scope"] = result["flatpak_scope"]
         return payload
 
+    def _android_playback_active(self, device_id: str) -> bool:
+        serial = self.fleet["devices"][device_id]["endpoints"]["adb"]
+        with AdbJsonRpcClient(self.adb, self.adb_server_port, serial) as jsonrpc:
+            players = jsonrpc.call("Player.GetActivePlayers")
+        return bool(players)
+
     def _portable(self, command: str, device_id: str) -> dict[str, Any]:
         result = self._run_json(
             [
@@ -416,7 +423,22 @@ class ProductionExecutor:
             ],
             adapter="managed-settings",
         )
-        rapideo = self._run_json(
+        self._run_json(
+            [
+                sys.executable,
+                "tools/kodi_rapideo_token.py",
+                "export",
+                "--device",
+                self.fleet["publisher"],
+                "--adb",
+                self.adb,
+                "--adb-server-port",
+                str(self.adb_server_port),
+            ],
+            timeout=120,
+            adapter="rapideo-token",
+        )
+        rapideo = self._run_json_with_retry(
             [
                 sys.executable,
                 "tools/kodi_rapideo_configure.py",
@@ -1265,11 +1287,23 @@ class ProductionExecutor:
             )
         if step.adapter in {"android", "flatpak"}:
             inventory = self._inventory(step.target)
+            playback_active = False
+            if step.adapter == "android":
+                try:
+                    playback_active = self._android_playback_active(step.target)
+                except (OSError, RuntimeError, TimeoutError, ValueError):
+                    playback_active = False
+                inventory["playback_active"] = playback_active
             if dry_run or verify_only:
                 if step.adapter == "android":
                     portable = self._portable("audit", step.target)
                     inventory["portable_status"] = portable.get("status")
                 return StepOutcome(StepResult.PASS, inventory)
+            if step.adapter == "android" and playback_active:
+                return StepOutcome(
+                    StepResult.DEFERRED,
+                    {**inventory, "reason": "playback_active"},
+                )
             if step.adapter == "android":
                 return self._android_converge(step.target)
             # The existing Flatpak adapter already contains target binding,

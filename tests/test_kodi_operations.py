@@ -725,6 +725,7 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
                 "endpoints": {"adb": "127.0.0.1:5555"},
             }
         },
+        "publisher": "bluestacks1",
         "references": {},
     }
     executor.external_attempts = 1
@@ -737,6 +738,8 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
             return {"ok": True, "changed": False}
         if adapter == "opensubtitles-com":
             return {"ok": True, "changed": False}
+        if adapter == "rapideo-token":
+            return {"schema": 1, "device": "bluestacks1"}
         if adapter == "rapideo":
             return {"ok": True, "changed": False}
         if adapter == "mwoscrapers":
@@ -789,13 +792,89 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
         "stable-addons",
         "default-addons",
         "managed-settings",
+        "rapideo",
         "opensubtitles",
         "opensubtitles-com",
         "profile-sync",
     ]
+    assert any(call[2] == "rapideo-token" for call in calls)
     assert outcome.summary["opensubtitles"] == "pass"
     assert outcome.summary["opensubtitles_com"] == "pass"
     assert outcome.summary["managed_settings"] == "NO_CHANGE"
+
+
+def test_android_rollout_defers_when_playback_is_active(monkeypatch):
+    executor = object.__new__(ProductionExecutor)
+    executor.fleet = {
+        "devices": {"sony-tv": {"endpoints": {"adb": "192.168.1.12:5555"}}}
+    }
+    monkeypatch.setattr(
+        executor,
+        "_inventory",
+        lambda _device: {
+            "logical_device_id": "sony-tv",
+            "platform": "android",
+            "running": True,
+        },
+    )
+    monkeypatch.setattr(executor, "_android_playback_active", lambda _device: True)
+
+    def fail_converge(_device):
+        raise AssertionError("must not converge while playback is active")
+
+    monkeypatch.setattr(executor, "_android_converge", fail_converge)
+
+    outcome = executor.execute(
+        PlanStep(
+            "device:sony-tv",
+            "android",
+            "converge",
+            target="sony-tv",
+            mutation=True,
+        ),
+        dry_run=False,
+    )
+
+    assert outcome.result == StepResult.DEFERRED
+    assert outcome.summary["reason"] == "playback_active"
+    assert outcome.summary["playback_active"] is True
+
+
+def test_android_dry_run_reports_playback_without_deferring(monkeypatch):
+    executor = object.__new__(ProductionExecutor)
+    executor.fleet = {
+        "devices": {"sony-tv": {"endpoints": {"adb": "192.168.1.12:5555"}}}
+    }
+    monkeypatch.setattr(
+        executor,
+        "_inventory",
+        lambda _device: {
+            "logical_device_id": "sony-tv",
+            "platform": "android",
+            "running": True,
+        },
+    )
+    monkeypatch.setattr(executor, "_android_playback_active", lambda _device: True)
+    monkeypatch.setattr(
+        executor,
+        "_portable",
+        lambda _command, _device: {"status": "HEALTHY"},
+    )
+
+    outcome = executor.execute(
+        PlanStep(
+            "device:sony-tv",
+            "android",
+            "converge",
+            target="sony-tv",
+            mutation=True,
+        ),
+        dry_run=True,
+    )
+
+    assert outcome.result == StepResult.PASS
+    assert outcome.summary["playback_active"] is True
+    assert outcome.summary["portable_status"] == "HEALTHY"
 
 
 def test_flatpak_rollout_reports_managed_setting_changes(monkeypatch):
@@ -837,6 +916,7 @@ def test_android_rollout_retries_sanitized_provider_network_error(monkeypatch):
         "devices": {
             "sony-tv": {"endpoints": {"adb": "192.0.2.12:5555"}}
         },
+        "publisher": "sony-tv",
         "references": {},
     }
     executor.external_attempts = 2
@@ -844,6 +924,8 @@ def test_android_rollout_retries_sanitized_provider_network_error(monkeypatch):
     provider_calls = []
 
     def run_json(argv, timeout=900, adapter=None, attempts=2):
+        if adapter == "rapideo-token":
+            return {"schema": 1, "device": "sony-tv"}
         if adapter in {"rapideo", "opensubtitles", "opensubtitles-com"}:
             return {"ok": True, "changed": False}
         if adapter == "mwoscrapers":
