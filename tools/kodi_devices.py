@@ -27,7 +27,7 @@ def _require_string(value, label):
 def _validate_expected(expected, logical_id, platform=None):
     allowed = {"model", "kodi_major", "abi"}
     if platform == "linux-flatpak":
-        allowed.update({"flatpak_app_id", "kodi_data_root"})
+        allowed.update({"flatpak_app_id", "kodi_data_root", "flatpak_scope"})
     if not isinstance(expected, dict) or not set(expected).issubset(allowed):
         raise ValueError("%s has invalid expected fields" % logical_id)
     _require_string(expected.get("model"), "%s expected model" % logical_id)
@@ -53,6 +53,9 @@ def _validate_expected(expected, logical_id, platform=None):
         )
         if data_root.startswith(("/", "~")) or ".." in Path(data_root).parts:
             raise ValueError("%s has unsafe Kodi data root" % logical_id)
+        flatpak_scope = expected.get("flatpak_scope")
+        if flatpak_scope is not None and flatpak_scope not in {"user", "system"}:
+            raise ValueError("%s has invalid Flatpak scope" % logical_id)
 
 
 def _validate_roles(roles, logical_id):

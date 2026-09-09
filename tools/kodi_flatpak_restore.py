@@ -73,9 +73,12 @@ def _flatpak_lines(transport, scope):
                 "--%s" % scope,
                 "--app",
                 "--columns=application,arch,version",
-            )
+            ),
+            allowed_returncodes=(0, 1),
         )
     )
+    if result.returncode != 0:
+        return []
     return [line.split("\t") for line in result.stdout.splitlines() if line.strip()]
 
 
@@ -94,9 +97,10 @@ def _flatpak_info(transport, scope, app_id, option):
     return value
 
 
-def _installer_probe(transport, app_id, fallback=None):
+def _installer_probe(transport, app_id, fallback=None, expected_scope=None):
     observed = {}
-    for scope in ("user", "system"):
+    scopes = (expected_scope,) if expected_scope else ("user", "system")
+    for scope in scopes:
         matches = [
             row for row in _flatpak_lines(transport, scope)
             if len(row) == 3 and row[0].strip() == app_id
@@ -117,6 +121,22 @@ def _installer_probe(transport, app_id, fallback=None):
                 "scope": scope,
                 "version": version,
             }
+    if expected_scope and expected_scope in observed:
+        installer = observed[expected_scope]
+        ref_parts = str(installer.get("ref", "")).split("/")
+        if (
+            any(not value for value in installer.values())
+            or not APP_ID.fullmatch(installer["origin"])
+            or not re.fullmatch(
+                r"[A-Za-z0-9._-]+", installer["architecture"]
+            )
+            or len(ref_parts) != 4
+            or ref_parts[:2] != ["app", app_id]
+            or ref_parts[2] != installer["architecture"]
+            or not re.fullmatch(r"[A-Za-z0-9._-]+", ref_parts[3])
+        ):
+            raise RuntimeError("Flatpak Kodi installer identity is incomplete")
+        return installer
     if len(observed) == 1:
         installer = next(iter(observed.values()))
         ref_parts = str(installer.get("ref", "")).split("/")
@@ -182,7 +202,10 @@ def preflight_target(
         ):
             raise RuntimeError("Flatpak snapshot target binding differs")
     installer = _installer_probe(
-        transport, expected["flatpak_app_id"], fallback=fallback
+        transport,
+        expected["flatpak_app_id"],
+        fallback=fallback,
+        expected_scope=expected.get("flatpak_scope"),
     )
     if installer["architecture"] not in expected.get(
         "abi", [installer["architecture"]]
@@ -481,7 +504,9 @@ def audit_snapshot_runtime(target, manifest, repository):
     }:
         raise RuntimeError("Flatpak snapshot add-on inventory differs")
     installer = _installer_probe(
-        target["transport"], manifest["installer"]["flatpak"]["app_id"]
+        target["transport"],
+        manifest["installer"]["flatpak"]["app_id"],
+        expected_scope=manifest["installer"]["flatpak"]["scope"],
     )
     planned = {
         **build_repo.load_build_targets()["external_addons"],
@@ -510,6 +535,7 @@ def audit_snapshot_runtime(target, manifest, repository):
         installer["app_id"],
         installer["version"],
         catalog,
+        scope=installer["scope"],
     )
     return {
         "status": report["status"],

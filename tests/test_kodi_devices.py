@@ -330,3 +330,19 @@ def test_schema_two_reinstall_rejects_linux_before_transport(
         match="unsupported reinstall platform linux-flatpak",
     ):
         load_config(config, repository)
+
+
+def test_flatpak_scope_validation_accepts_user_and_system():
+    doc = linux_registry()
+    doc["devices"]["linux-consumer"]["expected"]["flatpak_scope"] = "user"
+    assert validate_registry(doc) == doc
+
+    doc["devices"]["linux-consumer"]["expected"]["flatpak_scope"] = "system"
+    assert validate_registry(doc) == doc
+
+
+def test_flatpak_scope_validation_rejects_invalid():
+    doc = linux_registry()
+    doc["devices"]["linux-consumer"]["expected"]["flatpak_scope"] = "invalid-scope"
+    with pytest.raises(ValueError, match="has invalid Flatpak scope"):
+        validate_registry(doc)

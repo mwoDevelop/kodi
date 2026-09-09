@@ -44,6 +44,7 @@
         "kodi_major": 21,
         "abi": ["x86_64"],
         "flatpak_app_id": "tv.kodi.Kodi",
+        "flatpak_scope": "user",
         "kodi_data_root": ".var/app/tv.kodi.Kodi/data"
       },
       "endpoints": {

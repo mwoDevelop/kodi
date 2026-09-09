@@ -199,14 +199,16 @@ def attest_flatpak_runtime(
     app_id,
     kodi_version,
     catalog,
+    scope=None,
 ):
     from tools.kodi_transports import ReadOnlyCommand
 
     locations = []
-    for scope in ("user", "system"):
+    scopes = (scope,) if scope else ("user", "system")
+    for s in scopes:
         result = transport.execute_read_only(
             ReadOnlyCommand(
-                ("flatpak", "info", "--%s" % scope, "--show-location", app_id),
+                ("flatpak", "info", "--%s" % s, "--show-location", app_id),
                 allowed_returncodes=(0, 1),
             )
         )
