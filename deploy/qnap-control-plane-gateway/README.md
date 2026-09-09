@@ -1,7 +1,9 @@
 # QTS gateway panelu Kodi Control Plane
 
-Minimalny, bezusługowy pakiet QPKG rejestruje skrót **Kodi admin** w QTS i instaluje
-bramę CGI. Nie zarządza kontenerami i nie modyfikuje `app_proxy.conf`. CGI
+Minimalny pakiet QPKG rejestruje skrót **Kodi admin** w QTS i instaluje
+bramę CGI. Program usługi nie uruchamia demona; odtwarza wyłącznie własne
+dowiązanie CGI po restarcie QTS. Pakiet nie zarządza kontenerami i nie
+modyfikuje `app_proxy.conf`. CGI
 przekazuje wyłącznie własny prefiks
 `/cgi-bin/qpkg/KodiCPGateway/gateway.cgi/control-plane/` do backendu HTTP
 wystawionego wyłącznie na `127.0.0.1:19445`.
@@ -33,5 +35,7 @@ wydaje `SameSite=Strict`, a żądania zmieniające stan pozostają chronione prz
 dokładny `Origin` i CSRF.
 
 Pakiet jest budowany i instalowany przez `tools/qnap_control_plane_gateway.py`.
-Źródło QDK 2.5.3 jest pobierane z przypiętym SHA-256; wygenerowany plik QPKG
-nie jest wersjonowany.
+Źródło QDK 2.5.3 jest pobierane z przypiętym SHA-256. QPKG jest podpisywany
+lokalną tożsamością wydawcy z `QPKG_SIGNING_DIR`, weryfikowany strukturalnie i
+instalowany przez `qpkg_cli`; wygenerowany plik zawierający dane operatora nie
+jest wersjonowany i po instalacji jest usuwany ze stagingu QNAP-a.
