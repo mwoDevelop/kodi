@@ -92,3 +92,53 @@ def test_configure_cleans_remote_credentials_and_returns_sanitized_report(
         item[0] == "shell" and rapideo.REMOTE_CONFIG in item[1]
         for item in calls
     )
+
+
+def test_configure_surfaces_access_restricted_without_retry_confusion(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(
+        rapideo, "adb_command", lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout="")
+    )
+    monkeypatch.setattr(rapideo, "_wait_for_kodi_ready", lambda *_args: None)
+    monkeypatch.setattr(
+        rapideo,
+        "AdbJsonRpcClient",
+        lambda *_args: type(
+            "Rpc",
+            (),
+            {
+                "__enter__": lambda self: self,
+                "__exit__": lambda self, *_args: None,
+                "call": lambda self, *_args, **_kwargs: None,
+            },
+        )(),
+    )
+    monkeypatch.setattr(
+        rapideo,
+        "_wait_report",
+        lambda *_args: {
+            "ok": False,
+            "schema": 1,
+            "stage": "account",
+            "status": "ACCESS_RESTRICTED",
+            "error_type": "RuntimeError",
+            "account_transport": {
+                "http_status": 200,
+                "content_type": "text/html",
+            },
+        },
+    )
+    script = tmp_path / "device.py"
+    script.write_text("pass\n")
+
+    with pytest.raises(RuntimeError, match=r"ACCESS_RESTRICTED") as raised:
+        rapideo.configure(
+            "adb",
+            5038,
+            "serial",
+            PROFILE,
+            {"RAPIDEO_USER": "secret-user", "RAPIDEO_PASS": "secret-pass"},
+            script,
+        )
+    assert "JSONDecodeError" not in str(raised.value)
