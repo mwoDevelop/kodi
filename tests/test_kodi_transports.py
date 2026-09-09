@@ -204,6 +204,29 @@ def test_flatpak_lifecycle_read_only_probe(tmp_path):
     assert probe["runtime_path_status"] == "QUALIFIED_FROM_KODI_RUNTIME_LOG"
 
 
+def test_flatpak_lifecycle_supports_user_scope(tmp_path):
+    device = linux_device()
+    device["expected"]["flatpak_scope"] = "user"
+    identity, known_hosts = private_ssh_files(tmp_path)
+    responses = ssh_responses()
+    responses[
+        "flatpak list --user --app --columns=application,arch,version"
+    ] = responses.pop("flatpak list --app --columns=application,arch,version")
+    runner = FakeSshRunner(responses)
+    transport = SshTransport(
+        "private-linux",
+        "kodi",
+        identity,
+        known_hosts,
+        runner=runner,
+    )
+
+    probe = lifecycle_for_device(device, transport).probe_kodi()
+
+    assert probe["kodi_version"] == "21.3-Omega"
+    assert probe["flatpak_scope"] == "user"
+
+
 def test_flatpak_lifecycle_rejects_runtime_mapping_for_other_account(tmp_path):
     identity, known_hosts = private_ssh_files(tmp_path)
     responses = ssh_responses()

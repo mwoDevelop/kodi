@@ -82,6 +82,10 @@
           "type": "string",
           "minLength": 1
         },
+        "flatpak_scope": {
+          "type": "string",
+          "enum": ["user", "system"]
+        },
         "kodi_data_root": {
           "type": "string",
           "minLength": 1,

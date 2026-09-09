@@ -254,7 +254,7 @@ class ProductionExecutor:
             ):
                 raise DeviceUnavailable("registered device is unavailable") from error
             raise
-        return {
+        payload = {
             key: result[key]
             for key in (
                 "logical_device_id",
@@ -264,7 +264,11 @@ class ProductionExecutor:
                 "running",
                 "runtime_paths_qualified",
             )
+            if key in result
         }
+        if result.get("flatpak_scope") is not None:
+            payload["flatpak_scope"] = result["flatpak_scope"]
+        return payload
 
     def _portable(self, command: str, device_id: str) -> dict[str, Any]:
         result = self._run_json(

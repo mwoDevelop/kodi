@@ -56,6 +56,18 @@ def test_installer_probe_rejects_duplicate_scope():
         )
 
 
+def test_installer_probe_respects_explicit_expected_scope():
+    transport = FlatpakTransport(
+        {"system": installer(), "user": installer("user")}
+    )
+    observed = restore._installer_probe(
+        transport,
+        "tv.kodi.Kodi",
+        expected_scope="user",
+    )
+    assert observed == installer("user")
+
+
 def test_installer_probe_rejects_ref_for_other_architecture():
     invalid = installer()
     invalid["ref"] = "app/tv.kodi.Kodi/aarch64/stable"

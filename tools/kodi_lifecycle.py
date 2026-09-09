@@ -155,14 +155,12 @@ class FlatpakKodiLifecycle(KodiPlatformLifecycle):
         if expected_abis and identity.architecture not in expected_abis:
             raise TransportError("Linux architecture differs from inventory")
         app_id = expected["flatpak_app_id"]
-        installed = self._execute(
-            (
-                "flatpak",
-                "list",
-                "--app",
-                "--columns=application,arch,version",
-            )
-        ).stdout.splitlines()
+        flatpak_scope = expected.get("flatpak_scope")
+        list_cmd = ["flatpak", "list"]
+        if flatpak_scope:
+            list_cmd.append("--%s" % flatpak_scope)
+        list_cmd.extend(["--app", "--columns=application,arch,version"])
+        installed = self._execute(tuple(list_cmd)).stdout.splitlines()
         matching = [
             line.split("\t")
             for line in installed
@@ -225,6 +223,11 @@ class FlatpakKodiLifecycle(KodiPlatformLifecycle):
             "kodi_version": version,
             "running": running_result.returncode == 0,
             "data_root": str(canonical),
+            **(
+                {"flatpak_scope": flatpak_scope}
+                if flatpak_scope is not None
+                else {}
+            ),
             **(
                 runtime_paths
                 if runtime_paths is not None

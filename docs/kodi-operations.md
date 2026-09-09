@@ -16,6 +16,11 @@ Bieżący kontrakt CLI definiuje `tools/kodi_ops.py`, kolejność i politykę fa
 - używaj `.venv/bin/python`;
 - `.env` i `.kodi-private/devices.json` muszą mieć tryb `0600` i zawierać
   aktualną listę `KODI_SYNC_DEVICES`;
+- cele Linux/Flatpak w `.kodi-private/devices.json` mogą jawnie definiować `flatpak_scope`
+  (`"user"` albo `"system"`, domyślnie `"system"`). Dla maszyn wieloużytkownikowych
+  (np. NUC ze środowiskiem `mwo` i `alek`) zalecany jest `flatpak_scope: "user"`, co
+  izoluje operacje Flatpak od systemowego `/var/lib/flatpak/app/` i eliminuje kolizje
+  z restrykcjami ACL innych aplikacji (np. Microsoft Edge);
 - aby pełny rollout spełniał kontrakt floty, `KODI_SYNC_DEVICES` musi zawierać
   BlueStacks i X88; planner używa ich wtedy jako canary w tej kolejności, ale
   nie dopisuje do prywatnego inventory brakujących urządzeń, dlatego zawsze
