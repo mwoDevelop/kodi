@@ -1169,12 +1169,14 @@ def qualify_clean_runtime_paths(device, transport, lifecycle, probe, timeout=90)
     stage = posixpath.join(data_root, "temp", ".mwodevelop-" + operation)
     display = 80 + identity.uid % 10
     display_name = ":%s" % display
+    flatpak_scope = device["expected"].get("flatpak_scope")
+    scope_flag = ("--" + flatpak_scope + " ") if flatpak_scope else ""
     launch = (
         "set -eu; test ! -e {lock}; mkdir -p -- {stage}; "
         "nohup Xvfb {display} -screen 0 1280x720x24 -nolisten tcp "
         "</dev/null >{xlog} 2>&1 & echo $! >{xpid}; sleep 1; "
         "nohup setsid env HOME={home} XDG_RUNTIME_DIR={runtime} DISPLAY={display} "
-        "flatpak run {app} --standalone </dev/null >{klog} 2>&1 & "
+        "flatpak run {scope}{app} --standalone </dev/null >{klog} 2>&1 & "
         "echo $! >{kpid}"
     ).format(
         lock=shlex.quote("/tmp/.X%s-lock" % display),
@@ -1184,6 +1186,7 @@ def qualify_clean_runtime_paths(device, transport, lifecycle, probe, timeout=90)
         xpid=shlex.quote(paths["xpid"]),
         home=shlex.quote(identity.home),
         runtime=shlex.quote("/run/user/%s" % identity.uid),
+        scope=scope_flag,
         app=shlex.quote(device["expected"]["flatpak_app_id"]),
         klog=shlex.quote(paths["klog"]),
         kpid=shlex.quote(paths["kpid"]),
@@ -1432,6 +1435,7 @@ def rollout(args):
             device["expected"]["flatpak_app_id"],
             probe["kodi_version"],
             runtime_catalog,
+            scope=device["expected"].get("flatpak_scope"),
         )
         expected = {
             "logical_device_id": args.device,
@@ -1548,12 +1552,14 @@ def rollout(args):
                 previous_log_mtime = sftp.lstat(kodi_log).st_mtime
             except OSError:
                 previous_log_mtime = None
+            flatpak_scope = device["expected"].get("flatpak_scope")
+            scope_flag = ("--" + flatpak_scope + " ") if flatpak_scope else ""
             launch = (
                 "set -eu; test ! -e {lock}; "
                 "nohup Xvfb {display} -screen 0 1280x720x24 -nolisten tcp "
                 "</dev/null >{xlog} 2>&1 & echo $! >{xpid}; sleep 1; "
                 "nohup setsid env HOME={home} XDG_RUNTIME_DIR={runtime} DISPLAY={display} "
-                "flatpak run {app} --standalone </dev/null >{klog} 2>&1 & "
+                "flatpak run {scope}{app} --standalone </dev/null >{klog} 2>&1 & "
                 "echo $! >{kpid}"
             ).format(
                 lock=shlex.quote("/tmp/.X%s-lock" % display),
@@ -1562,6 +1568,7 @@ def rollout(args):
                 xpid=shlex.quote(process_paths["xpid"]),
                 home=shlex.quote(identity.home),
                 runtime=shlex.quote("/run/user/%s" % identity.uid),
+                scope=scope_flag,
                 app=shlex.quote(device["expected"]["flatpak_app_id"]),
                 klog=shlex.quote(process_paths["klog"]),
                 kpid=shlex.quote(process_paths["kpid"]),
