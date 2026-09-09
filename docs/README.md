@@ -58,6 +58,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | Orchestrator operacji | [Plan release, rollout i restore](../KODI_OPS_PLAN.md) |
 | Zdrowie usług i procesów cyklicznych | [Plan naprawy providerów, watchdoga, heartbeatów i harmonogramów](../OPERATIONS_HEALTH_REMEDIATION_PLAN.md) |
 | Audyt operacyjny 8.09.2026 | [Limity Actions, cooldown remediacji i aktywne przypisania](OPERATIONS_HEALTH_REMEDIATION_PLAN_2026-09-08.md) |
+| Pozostałe zadania 9.09.2026 | [NUC `--user`, Gateway 0.3.4, Bedroom, kandydat Profile Sync, cron Umbrella](REMAINING_OPS_PLAN_2026-09-09.md) |
 | Kontrolowana akceptacja PR | [Plan automatyzacji mwoScrapers](CONTROLLED_PR_AUTOMATION_PLAN.md) |
 | Copilot w review i automatyzacji PR | [Docelowy plan integracji Copilota](COPILOT_PR_AUTOMATION_PLAN.md) |
 | Cykl życia formatów | [Schematy bieżące i legacy](schema-lifecycle.md) |
@@ -66,6 +67,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 
 ## Recenzje i zapisy decyzji
 
+- [Review planu pozostałych zadań 9.09.2026](REMAINING_OPS_PLAN_REVIEW_2026-09-09.md)
 - [Review integracji Copilota z kontrolowaną akceptacją PR](COPILOT_PR_AUTOMATION_PLAN_REVIEW.md)
 - [Review kontrolowanej akceptacji PR mwoScrapers](CONTROLLED_PR_AUTOMATION_PLAN_REVIEW.md)
 - [Review planu domyślnej instalacji YouTube](YOUTUBE_DEFAULT_ADDON_PLAN_REVIEW.md)

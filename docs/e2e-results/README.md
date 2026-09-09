@@ -10,6 +10,7 @@ Wróć do [indeks dokumentacji](../README.md).
 
 ## 2026-09
 
+- [Realizacja pozostałych zadań (NUC PR, Gateway 0.3.4, Bedroom, cron)](2026-09-09-remaining-ops.md)
 - [Migracja NUC Flatpak do instalacji per-user i kwalifikacja floty](2026-09-09-nuc-flatpak-user-migration.md)
 - [mwoScrapers stable i pasywna obserwacja PR](2026-09-09-stable-and-pr-observation.md)
 - [Bootstrap PR i tygodniowy monitoring](2026-09-08-pr-bootstrap-cutover.md)
