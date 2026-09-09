@@ -1,7 +1,8 @@
 # 9.09.2026 — mwoScrapers stable i pasywna obserwacja PR
 
-Status: **W TRAKCIE**. Godziny workflow są w UTC (wieczór 8.09 odpowiada
-nocy 9.09 w Polsce). Nie jest to deklaracja ukończenia P3/P4 Copilota.
+Status: **STABLE OPUBLIKOWANY; ROLLOUT 4/6; P5a WDROŻONY**.
+Godziny workflow są w UTC (wieczór 8.09 odpowiada nocy 9.09 w Polsce).
+Nie jest to deklaracja ukończenia P3/P4 Copilota ani pełnej promocji konfiguracji.
 
 ## Release dodatków
 
@@ -94,7 +95,7 @@ nocy 9.09 w Polsce). Nie jest to deklaracja ukończenia P3/P4 Copilota.
 - Dodatkowy read-only audyt YouTube na BlueStacks i Sony: **220/220** plików
   zgodnych z tym samym przypiętym ZIP-em, bez braków i różnic.
 - Snapshot obejmuje wcześniejsze testing Umbrella 6.7.86.3 i Profile Sync
-  1.5.1. Ich wspólna kwalifikacja urządzeń jest wymagana przed promocją.
+  1.5.1. Ich wspólna kwalifikacja urządzeń przeszła przed promocją.
 
 ## Copilot i niezależny review
 
@@ -162,10 +163,39 @@ nocy 9.09 w Polsce). Nie jest to deklaracja ukończenia P3/P4 Copilota.
   Pełna regresja przed ostatnią uwagą review: **845 PASS** (jeden test jest
   niezależną lokalną zmianą Gateway, niewłączoną do naszego commitu).
 
+### Wynik końcowy urządzeń
+
+`f34a550cb73046afac2a6dafbb4b78c2` zakończył się o 00:51:21 UTC jako
+**PARTIAL** (kod 2), zgodnie z dwiema odroczonymi pozycjami. Końcowy
+`tests/e2e/run.sh` z czystego checkoutu wydania: **836 PASS**, dwa identyczne buildy.
+
+| Cel | Wynik | Potwierdzenie |
+| --- | --- | --- |
+| BlueStacks | PASS / NO_CHANGE | stable i default addons, provider/RD, Rapideo, YouTube, OpenSubtitles.com; menu HEALTHY, 7 favourites |
+| X88 | PASS | te same bramy, portable APPLIED, aktywna generacja 20, brak starego tokenu |
+| Sony TV | PASS | stable i default addons, provider/RD, Rapideo, YouTube, OpenSubtitles.com; menu HEALTHY, 7 favourites |
+| NUC mwo | PASS | install, runtime AUDIT_PASS, favourites/playback/menu HEALTHY, brak oczekujących zdarzeń; YouTube ACCOUNT_READY, OpenSubtitles.com pass |
+| Bedroom TV | DEFERRED | brak dostępu ADB, bez udawania testu urządzenia |
+| NUC alek | DEFERRED | SSH dostępne, lecz Flatpak odmawia enumeracji z powodu ACL Edge; ogólny `device_unavailable` w raporcie nie oznacza tutaj braku sieci |
+
+Readback Android: mwoScrapers **0.2.2**, Umbrella **6.7.86.3**, Profile Sync
+**1.5.1** na wszystkich trzech dostępnych urządzeniach. Wersja repo Kodi bez zmian.
+Niezależny readback NUC mwo potwierdził te same trzy wersje z kwalifikowanej
+ścieżki runtime (nie założonej domyślnej ścieżki Flatpak). Po teście Kodi
+pozostaje zatrzymane, zgodnie ze stanem sprzed testu; instalacja jest zachowana.
+OpenSubtitles.org nadal zwraca **VIP_REQUIRED** — wynik zewnętrznej usługi,
+nie został zamaskowany przez poprawnie działający OpenSubtitles.com.
+
+Wspólny pełny proces `d43…`/`26a…` pozostaje zatrzymany na starszym kandydacie
+konfiguracji, a nie na publikacji stable. Nie edytowano historii ani wyniku
+nieudanych operacji. Wznowienie samego rolloutu dodatków używa standardowego
+`kodi_ops.py rollout --device ...`; promocja konfiguracji wymaga osobnego
+rozstrzygnięcia zastanego kandydata i właściciela stanu favourites.
+
 ## Dodatkowa diagnostyka operacyjna
 
-- Sony TV i X88: ADB osiągalne, Kodi uruchomione. BlueStacks Rvc64 uruchomiono;
-  instancja ADB osiągalna, Kodi należy uruchomić przed certyfikacją.
+- Sony TV i X88: ADB osiągalne, Kodi uruchomione. BlueStacks Rvc64 uruchomiono
+  przed certyfikacją i potwierdzono właściwą instancję ADB/Kodi.
 - Bedroom TV: timeout ADB; rollout wymaga dostępności urządzenia.
 - NUC `mwo`: SSH, kwalifikacja ścieżek i Kodi 21.3 Flatpak poprawne, aplikacja
   była wyłączona podczas audytu.
@@ -179,6 +209,10 @@ nocy 9.09 w Polsce). Nie jest to deklaracja ukończenia P3/P4 Copilota.
   a watchdog w próbie 22:55:25 UTC wrócił do `HEALTHY`, bez awarii workflow
   i blokad billing. Następny natywny cron `34289635006` (23:13:18 UTC) również
   zakończył się SUCCESS. Nie zwiększano limitów ponowień ani budżetów.
+- Odczyt 00:43 UTC ponownie wykazał zbyt stary ostatni przebieg tego samego
+  crona (ostatni start 23:13 UTC). Kontener watchdoga jest `healthy`, ale
+  `monitored_state=FAILED`; źródło panelu poprawnie odbiera ten alarm. Nie
+  przedstawiamy zdrowia kontenera jako potwierdzenia terminowości GitHub.
 
 Odtworzenie testu UI z checkoutem Control Plane 0.12.4:
 
@@ -188,13 +222,21 @@ Odtworzenie testu UI z checkoutem Control Plane 0.12.4:
   --expect-pr-observer
 ```
 
-## Odbiór końcowy — do uzupełnienia
+## Odbiór końcowy
 
-- [ ] Certyfikacja snapshotu na BlueStacks i X88.
-- [ ] Promocja stable, publiczny smoke i pełny rollout.
-- [ ] CI/merge CP #28, kwalifikowany obraz, deploy katalogu/obrazu i no-op.
-- [ ] Odczyt produkcyjnego API i GUI, zgodność źródeł, jawne blokady.
-- [ ] Commit/push dokumentacji, katalogu i testu E2E bez zmian Gateway/sekretów.
+- [x] Certyfikacja snapshotu na BlueStacks i X88.
+- [x] Promocja stable i publiczny smoke.
+- [x] Rollout wszystkich czterech kwalifikowalnych celów.
+- [ ] Bedroom, NUC alek i odrębna promocja zastanej konfiguracji Profile Sync.
+- [x] CI/merge CP #28, kwalifikowany obraz, deploy katalogu/obrazu i no-op.
+- [x] Odczyt produkcyjnego API i GUI, zgodność źródeł, jawne blokady.
+- [x] Commit/push dokumentacji, katalogu i testu E2E bez zmian Gateway/sekretów.
+
+Dodatkowa poprawka hostowego helpera i ten raport są w [PR #365](https://github.com/mwoDevelop/kodi/pull/365).
+Kontrola 107 testów powiązanych, w tym 24 regresji helpera, i test mTLS PASS.
+CI commitu `f5749f23476bc1acd801677a99650452b6ac58d3`: oba przebiegi
+`34296624208` i `34296627183` SUCCESS, czysta regresja **850 PASS**.
+Poprawka nie wymaga nowej wersji dodatku ani nowego obrazu kontenera.
 
 P3 (natywne approvals/required App check) i P4 (zlecenia napraw z limitem tur)
 nie są ukończone. P5a nie oznacza pełnej obserwacji kontrolera ani jego kosztów.

@@ -449,6 +449,8 @@ do kolejnych bypassów ani utworzenia zastępczego konta zatwierdzającego.
   PR #364, certyfikacja BlueStacks/X88 `34293451303`, deploy `34294476975`,
   Pages `34294502146` i publiczny smoke 57/57 PASS.
 - [ ] R2: rollout floty z jawnymi PASS/DEFERRED oraz ponowny odczyt panelu.
+  Wykonano: BlueStacks, X88, Sony i NUC mwo PASS; Bedroom i NUC alek DEFERRED.
+  Regresja wydania 836 PASS; panel odświeżony. Cały etap nie jest zamknięty.
 - [x] P5a: pasywna kolejka PR w istniejącym Control Plane, w cyklu obserwacji
   GitHub co 900 s i na ręczne odświeżenie; bez nowego crona, tokenu zapisu,
   wywołań AI, approval lub merge. Brak PR nie jest awarią; awaria odczytu nie
