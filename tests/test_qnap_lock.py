@@ -6,6 +6,13 @@ import pytest
 from tools import qnap_lock
 
 
+def with_companions(rows):
+    rows = {name: dict(item) for name, item in rows.items()}
+    for name in ("control-plane-authz", "control-plane-web"):
+        rows[name] = dict(rows["control-plane"])
+    return rows
+
+
 def lock_document():
     services = {}
     for name, service in qnap_lock.qnap_images.services().items():
@@ -77,9 +84,7 @@ def test_compose_lock_requires_exact_complete_approved_inputs(monkeypatch, tmp_p
     monkeypatch.setattr(
         qnap_lock.qnap_images,
         "source_identity",
-        lambda service, require_clean=False: {
-            "commit": current_commits[service.name]
-        },
+        lambda service, require_clean=False: {"commit": current_commits[service.name]},
     )
     monkeypatch.setattr(
         qnap_lock.qnap_images,
@@ -146,9 +151,7 @@ def test_deploy_can_reconcile_only_selected_stable_service(monkeypatch, tmp_path
     monkeypatch.setattr(
         qnap_lock.qnap_images,
         "status",
-        lambda *_args, **_kwargs: {
-            name: dict(item) for name, item in running.items()
-        },
+        lambda *_args, **_kwargs: {name: dict(item) for name, item in running.items()},
     )
 
     def deploy(name, image, *_args, **_kwargs):
@@ -157,9 +160,7 @@ def test_deploy_can_reconcile_only_selected_stable_service(monkeypatch, tmp_path
 
     monkeypatch.setattr(qnap_lock.qnap_images, "deploy", deploy)
 
-    result = qnap_lock.deploy(
-        path, service_names=["upstream-watchdog"]
-    )
+    result = qnap_lock.deploy(path, service_names=["upstream-watchdog"])
 
     assert result["result"] == "DEPLOYED"
     assert result["services"] == {"upstream-watchdog": "DEPLOYED"}
@@ -199,9 +200,7 @@ def test_deploy_accepts_a_structured_watchdog_alert(monkeypatch, tmp_path):
     monkeypatch.setattr(
         qnap_lock.qnap_images,
         "status",
-        lambda *_args, **_kwargs: {
-            name: dict(item) for name, item in running.items()
-        },
+        lambda *_args, **_kwargs: {name: dict(item) for name, item in running.items()},
     )
 
     result = qnap_lock.deploy(path, service_names=["upstream-watchdog"])
@@ -210,9 +209,7 @@ def test_deploy_accepts_a_structured_watchdog_alert(monkeypatch, tmp_path):
     assert result["services"] == {"upstream-watchdog": "NO_CHANGE"}
 
 
-def test_deploy_can_force_runtime_configuration_reconciliation(
-    monkeypatch, tmp_path
-):
+def test_deploy_can_force_runtime_configuration_reconciliation(monkeypatch, tmp_path):
     document = lock_document()
     path = tmp_path / "qnap-stable.json"
     path.write_text(json.dumps(document))
@@ -236,9 +233,7 @@ def test_deploy_can_force_runtime_configuration_reconciliation(
     monkeypatch.setattr(
         qnap_lock.qnap_images,
         "status",
-        lambda *_args, **_kwargs: {
-            name: dict(item) for name, item in running.items()
-        },
+        lambda *_args, **_kwargs: {name: dict(item) for name, item in running.items()},
     )
     monkeypatch.setattr(
         qnap_lock.qnap_images,
@@ -291,9 +286,9 @@ def test_full_deploy_orders_runtime_dependencies(monkeypatch, tmp_path):
     monkeypatch.setattr(
         qnap_lock.qnap_images,
         "status",
-        lambda *_args, **_kwargs: {
-            name: dict(item) for name, item in running.items()
-        },
+        lambda *_args, **_kwargs: with_companions(
+            {name: dict(item) for name, item in running.items()}
+        ),
     )
     monkeypatch.setattr(qnap_lock.qnap_images, "deploy", deploy)
 
@@ -331,14 +326,16 @@ def test_deploy_waits_for_selected_service_health(monkeypatch, tmp_path):
         nonlocal calls
         calls += 1
         health = "healthy" if calls >= 4 else "starting"
-        return {
-            name: {
-                "image": item["image"],
-                "status": "running",
-                "health": health if name == "control-plane" else "healthy",
+        return with_companions(
+            {
+                name: {
+                    "image": item["image"],
+                    "status": "running",
+                    "health": health if name == "control-plane" else "healthy",
+                }
+                for name, item in document["services"].items()
             }
-            for name, item in document["services"].items()
-        }
+        )
 
     monkeypatch.setattr(qnap_lock, "RemoteLock", Lock)
     monkeypatch.setattr(qnap_lock.qnap_images, "status", status)
@@ -350,3 +347,82 @@ def test_deploy_waits_for_selected_service_health(monkeypatch, tmp_path):
     assert result["services"] == {"control-plane": "NO_CHANGE"}
     assert calls == 4
     assert expected.endswith("a" * 64)
+
+
+@pytest.mark.parametrize("companion", ["control-plane-authz", "control-plane-web"])
+@pytest.mark.parametrize(
+    "condition",
+    [
+        "starting",
+        "unhealthy",
+        "missing",
+        "missing_then_ready",
+        "omitted",
+        "invalid",
+        "digest",
+    ],
+)
+def test_deploy_checks_all_compose_members(monkeypatch, tmp_path, companion, condition):
+    from contextlib import nullcontext
+
+    document = lock_document()
+    path = tmp_path / "qnap-stable.json"
+    path.write_text(json.dumps(document))
+    calls = 0
+    clock = 0
+    deployments = []
+
+    def status(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        rows = with_companions(
+            {
+                name: {"image": item["image"], "status": "running", "health": "healthy"}
+                for name, item in document["services"].items()
+            }
+        )
+        if condition == "omitted":
+            del rows[companion]
+        elif condition in {"missing", "invalid"}:
+            rows[companion] = {"status": condition}
+        elif condition == "missing_then_ready":
+            if calls == 3:
+                rows[companion] = {"status": "missing"}
+        elif condition == "digest":
+            rows[companion]["image"] = rows[companion]["image"].replace(
+                "a" * 64, "e" * 64
+            )
+        elif condition != "starting" or calls == 3:
+            rows[companion]["health"] = condition
+        return rows
+
+    def sleep(seconds):
+        nonlocal clock
+        clock += seconds
+
+    monkeypatch.setattr(qnap_lock, "RemoteLock", lambda *_a: nullcontext())
+    monkeypatch.setattr(qnap_lock.qnap_images, "status", status)
+    monkeypatch.setattr(
+        qnap_lock.qnap_images, "deploy", lambda *a, **kw: deployments.append(a)
+    )
+    monkeypatch.setattr(qnap_lock.time, "monotonic", lambda: clock)
+    monkeypatch.setattr(qnap_lock.time, "sleep", sleep)
+
+    if condition in {"starting", "missing_then_ready"}:
+        assert (
+            qnap_lock.deploy(path, service_names=["control-plane"])["result"]
+            == "NO_CHANGE"
+        )
+        assert calls == 4
+        assert clock == 3
+        assert deployments == []
+    else:
+        with pytest.raises(RuntimeError, match=companion):
+            qnap_lock.deploy(path, service_names=["control-plane"])
+        if condition in {"missing", "omitted", "invalid", "digest"}:
+            assert len(deployments) == 1
+            assert deployments[0][0] == "control-plane"
+        if condition in {"missing", "omitted", "unhealthy"}:
+            assert clock == 120
+        else:
+            assert clock == 0

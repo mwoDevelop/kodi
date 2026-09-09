@@ -27,6 +27,10 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 RUN_ID = re.compile(r"^[0-9]+$")
 REMOTE_LOCK = "/share/CACHEDEV3_DATA/.mwodevelop-services/kodi-ops.lock"
+# One approved image can back multiple containers in a Compose application.
+COMPOSE_COMPANIONS = {
+    "control-plane": ("control-plane-authz", "control-plane-web"),
+}
 APPROVAL_FIELDS = {
     "schema",
     "service",
@@ -223,6 +227,11 @@ def deploy(
     expected = {
         name: lock["services"][name]["image"] for name in selected
     }
+    runtime_expected = {
+        container: image
+        for name, image in expected.items()
+        for container in (name, *COMPOSE_COMPANIONS.get(name, ()))
+    }
     before = qnap_images.status(references, repository=repository)
     actions = {}
     with RemoteLock(repository, references):
@@ -232,7 +241,10 @@ def deploy(
         } != {name: item.get("image") for name, item in before.items()}:
             raise RuntimeError("QNAP runtime changed after preflight")
         for name, image in expected.items():
-            image_matches = observed[name].get("image") == image
+            image_matches = all(
+                observed.get(container, {}).get("image") == image
+                for container in (name, *COMPOSE_COMPANIONS.get(name, ()))
+            )
             if image_matches and name not in reconcile:
                 actions[name] = "NO_CHANGE"
                 continue
@@ -242,10 +254,16 @@ def deploy(
         while True:
             after = qnap_images.status(references, repository=repository)
             pending = []
-            for name, image in expected.items():
-                if after[name].get("image") != image:
+            for name, image in runtime_expected.items():
+                item = after.get(name)
+                if item is None or item.get("status") == "missing":
+                    pending.append(name)
+                    continue
+                if item.get("status") == "invalid" or not item.get("image"):
+                    raise RuntimeError(f"QNAP post-deploy observation invalid: {name}")
+                if item.get("image") != image:
                     raise RuntimeError("QNAP post-deploy digest mismatch: %s" % name)
-                if not qnap_images.service_is_operational(name, after[name]):
+                if not qnap_images.service_is_operational(name, item):
                     pending.append(name)
             if not pending:
                 break

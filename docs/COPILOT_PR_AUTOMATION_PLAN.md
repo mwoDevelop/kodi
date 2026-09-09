@@ -445,13 +445,20 @@ Copilota. Brak kwalifikowanej niezależnej ścieżki maintenance jest natomiast
 blokadą włączenia required checka. Jednorazowa zgoda na #31–#34 nie upoważnia
 do kolejnych bypassów ani utworzenia zastępczego konta zatwierdzającego.
 
-- [ ] R1: promocja niezmienionego, sprawdzonego ZIP-a 0.2.2 do stable.
+- [x] R1: promocja niezmienionego, sprawdzonego ZIP-a 0.2.2 do stable.
+  PR #364, certyfikacja BlueStacks/X88 `34293451303`, deploy `34294476975`,
+  Pages `34294502146` i publiczny smoke 57/57 PASS.
 - [ ] R2: rollout floty z jawnymi PASS/DEFERRED oraz ponowny odczyt panelu.
-- [ ] P5a: pasywna kolejka PR w istniejącym Control Plane, w cyklu obserwacji
+  Wykonano: BlueStacks, X88, Sony i NUC mwo PASS; Bedroom i NUC alek DEFERRED.
+  Regresja wydania 836 PASS; panel odświeżony. Cały etap nie jest zamknięty.
+- [x] P5a: pasywna kolejka PR w istniejącym Control Plane, w cyklu obserwacji
   GitHub co 900 s i na ręczne odświeżenie; bez nowego crona, tokenu zapisu,
   wywołań AI, approval lub merge. Brak PR nie jest awarią; awaria odczytu nie
   może wyglądać jak pusta, poprawnie odczytana kolejka. Widok ma jawnie odróżniać
   natywne dane GitHub od nieobserwowanego lokalnego rejestru prób Copilota.
+  Control Plane 0.12.4 wdrożony na QNAP; 9/9 źródeł OK, 14 procesów,
+  produkcyjne API/GUI i przycisk odświeżania PASS. PR #29 nie ma review ani
+  dowodu kwalifikacji; panel nie utożsamia obserwacji ze zgodą na merge.
 - [ ] P4: zlecenia naprawcze z trwałym limitem dwóch tur — nadal osobny etap;
   istniejący profil agenta nie stanowi wykonania ani testu tej funkcji.
 - [ ] P3: decyzja o uprawnionej ścieżce maintenance, App z `integration_id`,
@@ -460,3 +467,11 @@ do kolejnych bypassów ani utworzenia zastępczego konta zatwierdzającego.
 P5a nie importuje kontrolera z kandydata i nie nazywa zielonego CI dowodem
 `ELIGIBLE`. Obserwowane zatwierdzenie AI nie jest równoznaczne z policzonym
 approval ani kwalifikacją do merge. Zakończenie P5a nie zamyka całego P5.
+
+Przeszkody ujawnione w rolloucie R2: brak ADB Bedroom, jawna ACL dla użytkownika
+`alek` na katalogu Edge blokująca enumerację Flatpak oraz wcześniejszy kandydat
+Profile Sync `3c3391bf…` (ustawienia Umbrella). Nie nadpisywać tego kandydata ani
+nie usuwać ACL w ramach wydania dodatków. Po kwalifikacji stable kontynuować
+istniejącym trybem `rollout --device ...`, bez nowej promocji konfiguracji.
+Wyniki celów i zakres niedokończonego pełnego procesu są zapisane w
+[raporcie odbioru](e2e-results/2026-09-09-stable-and-pr-observation.md).

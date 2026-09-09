@@ -60,6 +60,12 @@ najwyższa generacja albo jej świeżość zmieniły się od planowania.
 Po promocji immutable digestu wdrożenie produkcyjne wykonuje się przez zwykły
 `tools/kodi_ops.py rollout` albo diagnostycznie przez `qnap_images.py deploy`.
 
+`qnap_lock.py deploy` sprawdza digest i gotowość wszystkich trzech kontenerów
+Control Plane: backendu, `control-plane-authz` i `control-plane-web`. Sam zdrowy
+backend nie kończy wdrożenia, gdy WWW dopiero startuje. Oczekiwanie jest ograniczone
+do 120 s; brak kontenera albo trwały błąd zdrowia kończy się błędem. Rozbieżność
+digestu nie jest akceptowana. Kontrola bez zmian nie restartuje zgodnych usług.
+
 Po wdrożeniu należy potwierdzić:
 
 1. trzy kontenery projektu są widoczne w Container Station i mają stan
