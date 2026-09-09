@@ -22,7 +22,17 @@ def _write(path, document):
         destination.write("\n")
 
 
+def _restricted_client(response):
+    content_type = str(response.headers.get("content-type", "")).lower()
+    body = (response.text or "")[:2000].lower()
+    if "html" not in content_type:
+        return False
+    return "tymczasowo ograniczon" in body or "access temporarily" in body
+
+
 def _json_object(response):
+    if _restricted_client(response):
+        raise RuntimeError("Rapideo restricted this client address")
     content_type = str(response.headers.get("content-type", "")).lower()
     if "json" not in content_type:
         raise ValueError("Rapideo API returned %s" % content_type[:80])
@@ -137,6 +147,9 @@ def main():
         }
         try:
             account = _json_object(response)
+        except RuntimeError:
+            report["status"] = "ACCESS_RESTRICTED"
+            raise
         except (ValueError, json.JSONDecodeError):
             token, report["authentication_transport"], authentication = _login(
                 namespace, username, password

@@ -199,6 +199,9 @@ def configure(
             missing_module = report.get("error_module")
             if isinstance(missing_module, str) and missing_module:
                 transport_summary += " (module %s)" % missing_module
+            status = report.get("status")
+            if status:
+                transport_summary += " [%s]" % status
             raise RuntimeError(
                 "Rapideo private adapter failed: %s at %s%s"
                 % (
