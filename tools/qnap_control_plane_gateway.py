@@ -8,12 +8,14 @@ import base64
 import binascii
 import hashlib
 import json
+import os
 import re
 import shlex
 import shutil
 import stat
 import subprocess
 import tempfile
+import time
 from pathlib import Path, PurePosixPath
 from urllib.parse import parse_qs, urlparse
 from urllib.request import urlopen
@@ -26,7 +28,7 @@ except ModuleNotFoundError:
 
 NAME = "KodiCPGateway"
 DISPLAY_NAME = "Kodi admin"
-VERSION = "0.3.2"
+VERSION = "0.3.4"
 BACKEND_PORT = 19445
 CGI_ROOT = f"/cgi-bin/qpkg/{NAME}"
 PUBLIC_BASE = f"{CGI_ROOT}/gateway.cgi/control-plane"
@@ -41,6 +43,111 @@ REMOTE_PACKAGE = PurePosixPath(
 
 class GatewayError(RuntimeError):
     pass
+
+
+def load_signing_identity(directory):
+    directory = Path(directory).expanduser().resolve()
+    if not directory.is_dir() or directory.is_symlink():
+        raise GatewayError("QPKG signing directory is missing or unsafe")
+    if stat.S_IMODE(directory.stat().st_mode) != 0o700:
+        raise GatewayError("QPKG signing directory must have mode 0700")
+    identity = {
+        "key": directory / "publisher.key.pem",
+        "certificate": directory / "publisher.cert.pem",
+        "ca": directory / "root-ca.cert.pem",
+    }
+    for path in identity.values():
+        if not path.is_file() or path.is_symlink():
+            raise GatewayError("QPKG signing identity is incomplete or unsafe")
+    if stat.S_IMODE(identity["key"].stat().st_mode) != 0o600:
+        raise GatewayError("QPKG signing key must have mode 0600")
+    subprocess.run(
+        ("openssl", "verify", "-CAfile", str(identity["ca"]), str(identity["certificate"])),
+        check=True,
+        capture_output=True,
+    )
+    key_public = subprocess.run(
+        ("openssl", "pkey", "-in", str(identity["key"]), "-pubout"),
+        check=True,
+        capture_output=True,
+    ).stdout
+    certificate_public = subprocess.run(
+        ("openssl", "x509", "-in", str(identity["certificate"]), "-pubkey", "-noout"),
+        check=True,
+        capture_output=True,
+    ).stdout
+    if key_public != certificate_public:
+        raise GatewayError("QPKG signing key does not match its certificate")
+    return identity
+
+
+def _certificate_digest(path):
+    der = subprocess.run(
+        ("openssl", "x509", "-in", str(path), "-outform", "DER"),
+        check=True,
+        capture_output=True,
+    ).stdout
+    return hashlib.sha256(der).hexdigest()
+
+
+def _qpkg_cms_area(document):
+    end = len(document) - 100
+    matches = []
+    cursor = 0
+    while end > 3:
+        start = document.find(b"QDK", cursor, end)
+        if start < 0:
+            break
+        cursor = start + 1
+        position = start + 3
+        signatures = []
+        valid = False
+        while position < end:
+            area_type = document[position]
+            position += 1
+            if area_type == 255:
+                valid = position == end
+                break
+            if position + 4 > end:
+                break
+            size = int.from_bytes(document[position : position + 4], "big")
+            position += 4
+            if size > end - position:
+                break
+            if area_type == 254:
+                signatures.append(document[position : position + size])
+            position += size
+        if valid and len(signatures) == 1:
+            matches.append((document[:start], signatures[0]))
+    if len(matches) != 1:
+        raise GatewayError("QPKG must contain one unambiguous QDK CMS area")
+    return matches[0]
+
+
+def verify_qpkg_cms(package, identity):
+    package_document = Path(package).read_bytes()
+    if identity["key"].read_bytes() in package_document:
+        raise GatewayError("private signing key is embedded in QPKG")
+    content, signature = _qpkg_cms_area(package_document)
+    with tempfile.TemporaryDirectory(prefix="mwodevelop-cms-verify-") as temporary:
+        temporary = Path(temporary)
+        signature_path = temporary / "signature.cms"
+        output_path = temporary / "digest.bin"
+        signer_path = temporary / "signer.pem"
+        signature_path.write_bytes(signature)
+        subprocess.run(
+            (
+                "openssl", "cms", "-verify", "-binary", "-in", str(signature_path),
+                "-CAfile", str(identity["ca"]), "-purpose", "any",
+                "-out", str(output_path), "-signer", str(signer_path),
+            ),
+            check=True,
+            capture_output=True,
+        )
+        if output_path.read_bytes() != hashlib.sha1(content).digest():
+            raise GatewayError("CMS does not sign the exact QPKG prefix digest")
+        if _certificate_digest(signer_path) != _certificate_digest(identity["certificate"]):
+            raise GatewayError("QPKG CMS signer differs")
 
 
 def source_root(repository):
@@ -104,15 +211,19 @@ def validate_source(repository):
         "QPKG_DESKTOP_APP": "0",
         "QPKG_VISIBLE": "0",
         "QPKG_FORCE_VISIBLE": "1",
+        "QPKG_SERVICE_PROGRAM": f"{NAME}.sh",
     }
     for key, value in expected.items():
         if not re.search(rf'^{key}="{re.escape(value)}"$', config, re.MULTILINE):
             raise GatewayError(f"unsafe or missing QPKG field: {key}")
-    if "QPKG_SERVICE_PROGRAM" in config or "QPKG_PROXY_PATH" in config:
-        raise GatewayError("gateway must not register a service or QTS proxy")
+    if "QPKG_PROXY_PATH" in config:
+        raise GatewayError("gateway must not register a QTS proxy")
     gateway = root / "shared/www/gateway.cgi"
     if not gateway.is_file() or gateway.is_symlink():
         raise GatewayError("gateway CGI is missing or unsafe")
+    service = root / f"shared/{NAME}.sh"
+    if not service.is_file() or service.is_symlink():
+        raise GatewayError("gateway service program is missing or unsafe")
     forbidden_assignment = re.compile(
         r"(?im)^\s*(password|secret|token|private_key)\s*="
     )
@@ -135,9 +246,10 @@ def _download(url, destination):
             handle.write(chunk)
 
 
-def build(repository, output_directory, operator):
+def build(repository, output_directory, operator, signing_directory):
     validate_source(repository)
     operator = load_operator(operator)
+    identity = load_signing_identity(signing_directory)
     output = Path(output_directory).resolve()
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="mwodevelop-qdk-") as temporary:
@@ -178,60 +290,95 @@ def build(repository, output_directory, operator):
                 "QDK_PATH": str(qbuild.parents[1]),
             },
         )
+        packages = sorted(output.glob(f"{NAME}_{VERSION}*.qpkg"))
+        if len(packages) != 1 or not packages[0].is_file():
+            raise GatewayError("QDK did not produce one expected gateway package")
+        signing_config = temporary / "signing.cfg"
+        signing_config.write_text(
+            f"QNAP_CERT={identity['certificate']}\n"
+            f"PRIVATE_KEY={identity['key']}\n"
+            f"CA_CERTS={identity['ca']}\n",
+            encoding="utf-8",
+        )
+        signing_config.chmod(0o600)
+        subprocess.run(
+            (
+                str(qbuild),
+                "--add-code-signing",
+                str(packages[0]),
+                "--code-signing-cfg",
+                str(signing_config),
+            ),
+            check=True,
+            env={
+                "PATH": str(qdk_root / "usr/bin") + ":/usr/bin:/bin",
+                "QDK_PATH": str(qbuild.parents[1]),
+            },
+        )
+        verify_qpkg_cms(packages[0], identity)
+        packages[0].chmod(0o600)
     packages = sorted(output.glob(f"{NAME}_{VERSION}*.qpkg"))
     if len(packages) != 1 or not packages[0].is_file():
         raise GatewayError("QDK did not produce one expected gateway package")
     return packages[0]
 
 
-def install(session, repository, operator):
+def install(session, repository, operator, signing_directory):
     validate_source(repository)
     with tempfile.TemporaryDirectory(prefix="mwodevelop-gateway-") as temporary:
-        package = build(repository, temporary, operator)
-        encoded = base64.b64encode(package.read_bytes()).decode("ascii")
-        encoded_path = str(REMOTE_PACKAGE) + ".b64"
-        session.upload_text(encoded_path, encoded + "\n", 0o600)
+        package = build(repository, temporary, operator, signing_directory)
+        package_digest = hashlib.sha256(package.read_bytes()).hexdigest()
+        remote_package = str(REMOTE_PACKAGE)
+        remote_new = remote_package + ".new"
         session.execute(
-            "base64 -d "
-            + shlex.quote(encoded_path)
-            + " > "
-            + shlex.quote(str(REMOTE_PACKAGE))
-            + " && chmod 600 "
-            + shlex.quote(str(REMOTE_PACKAGE))
-            + " && rm -f "
-            + shlex.quote(encoded_path)
+            "set -eu; directory="
+            + shlex.quote(str(REMOTE_PACKAGE.parent))
+            + "; mkdir -p \"$directory\"; test -d \"$directory\"; "
+            + "test ! -L \"$directory\"; chmod 700 \"$directory\"; rm -f "
+            + shlex.quote(remote_new)
         )
+        with session.client.open_sftp() as sftp:
+            sftp.put(str(package), remote_new)
+            sftp.chmod(remote_new, 0o600)
         try:
-            # QTS rejects locally built, unsigned packages in qpkgd before its
-            # documented ignore-cert flag is evaluated. Run the verified QDK
-            # self-extracting installer directly, matching qpkgd's own execution.
-            install_output = session.execute(
-                "QNAP_QPKG="
-                + NAME
-                + " /bin/sh "
-                + shlex.quote(str(REMOTE_PACKAGE))
-                + " 2>&1",
-                allowed=(0, 10),
-                timeout=180,
+            session.execute(
+                "set -eu; test -f "
+                + shlex.quote(remote_new)
+                + "; test ! -L "
+                + shlex.quote(remote_new)
+                + "; test \"$(sha256sum "
+                + shlex.quote(remote_new)
+                + " | awk '{print $1}')\" = "
+                + shlex.quote(package_digest)
+                + "; mv "
+                + shlex.quote(remote_new)
+                + " "
+                + shlex.quote(remote_package)
+                + "; chmod 600 "
+                + shlex.quote(remote_package)
+                + "; /sbin/qpkg_cli -m "
+                + shlex.quote(remote_package)
+                + " --keep",
+                timeout=60,
             )
+            registered = "missing"
+            for _attempt in range(20):
+                registered = session.execute(
+                    "/sbin/getcfg "
+                    + NAME
+                    + " Version -d missing -f /etc/config/qpkg.conf",
+                    allowed=(0, 1, 250),
+                )
+                if registered == VERSION:
+                    break
+                time.sleep(2)
         finally:
             session.execute(
-                "rm -f " + shlex.quote(str(REMOTE_PACKAGE)), allowed=(0, 1)
+                "rm -f " + shlex.quote(remote_new) + " " + shlex.quote(remote_package),
+                allowed=(0, 1),
             )
-    registered = session.execute(
-        "/sbin/getcfg " + NAME + " Version -d missing -f /etc/config/qpkg.conf",
-        allowed=(0, 1, 250),
-    )
     if registered != VERSION:
-        detail = (
-            install_output.splitlines()[-1][:240]
-            if install_output
-            else "no diagnostic"
-        )
-        raise GatewayError("QPKG installation failed: " + detail)
-    session.execute(
-        "/sbin/setcfg " + NAME + " Enable TRUE -f /etc/config/qpkg.conf"
-    )
+        raise GatewayError("signed QPKG installation did not register expected version")
     return verify(session)
 
 
@@ -266,7 +413,7 @@ def verify(session):
         "Web_SSL_Port": "-1",
         "Use_Proxy": "0",
         "Proxy_Path": "",
-        "Service_Program": "missing",
+        "Service_Program": f"{NAME}.sh",
         "Desktop": "0",
         "Visible": "0",
         "Force_Visible": "1",
@@ -280,9 +427,13 @@ def verify(session):
         + " Install_Path -d missing -f /etc/config/qpkg.conf); "
         + "link=/home/httpd/cgi-bin/qpkg/"
         + NAME
-        + "; test ! -L /etc/init.d/"
+        + "; test -L /etc/init.d/"
         + NAME
-        + ".sh && test -L \"$link\" && test \"$(readlink \"$link\")\" = "
+        + ".sh && test \"$(readlink /etc/init.d/"
+        + NAME
+        + ".sh)\" = \"$install_path/"
+        + NAME
+        + ".sh\" && test -L \"$link\" && test \"$(readlink \"$link\")\" = "
         + "\"$install_path/www\" && test -x \"$link/gateway.cgi\" || exit 1; "
         + "install_path=$(/sbin/getcfg "
         + NAME
@@ -291,7 +442,13 @@ def verify(session):
         + "for item in operator-username operator-credential totp-secret; do "
         + "test -f \"$private/$item\" && test ! -L \"$private/$item\" && "
         + "test \"$(stat -c '%a' \"$private/$item\")\" = 600 || exit 1; done; "
-        + "printf cgi-ready",
+        + "test -f \"$install_path/"
+        + NAME
+        + ".sh\" && test ! -L \"$install_path/"
+        + NAME
+        + ".sh\" && test \"$(stat -c '%a' \"$install_path/"
+        + NAME
+        + ".sh\")\" = 755 && printf cgi-ready",
         allowed=(0, 1),
     )
     if cgi_state != "cgi-ready":
@@ -307,19 +464,24 @@ def main():
     parser.add_argument(
         "--operator", default=".kodi-private/control-plane-operator.json"
     )
+    parser.add_argument(
+        "--signing-dir", default=os.environ.get("QPKG_SIGNING_DIR")
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
     build_parser = subparsers.add_parser("build")
     build_parser.add_argument("--output", required=True)
     subparsers.add_parser("deploy")
     subparsers.add_parser("status")
     args = parser.parse_args()
+    if args.command in {"build", "deploy"} and not args.signing_dir:
+        parser.error("--signing-dir or QPKG_SIGNING_DIR is required")
     if args.command == "build":
-        print(build(args.repository, args.output, args.operator))
+        print(build(args.repository, args.output, args.operator, args.signing_dir))
         return
     session = connect(args.repository, args.references)
     try:
         result = (
-            install(session, args.repository, args.operator)
+            install(session, args.repository, args.operator, args.signing_dir)
             if args.command == "deploy"
             else verify(session)
         )

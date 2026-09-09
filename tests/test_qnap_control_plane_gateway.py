@@ -51,7 +51,16 @@ def test_gateway_webui_uses_system_https_cgi_path(repository_root):
     assert 'QPKG_WEB_SSL_PORT="-1"' in config
     assert 'QPKG_USE_PROXY="0"' in config
     assert "QPKG_PROXY_PATH" not in config
-    assert "QPKG_SERVICE_PROGRAM" not in config
+    assert f'QPKG_SERVICE_PROGRAM="{NAME}.sh"' in config
+    service = (
+        repository_root
+        / "deploy/qnap-control-plane-gateway/shared"
+        / f"{NAME}.sh"
+    )
+    assert service.is_file() and not service.is_symlink()
+    assert "Refusing to replace non-symlink CGI path" in service.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_gateway_contains_no_credentials_or_generated_package(repository_root):
@@ -63,6 +72,15 @@ def test_gateway_contains_no_credentials_or_generated_package(repository_root):
     assert "github_token" not in text
     assert "password=" not in text
     assert not (root / "shared/private").exists()
+
+
+def test_package_install_refuses_foreign_cgi_path(repository_root):
+    routines = (
+        repository_root / "deploy/qnap-control-plane-gateway/package_routines"
+    ).read_text(encoding="utf-8")
+    refusal = routines.index("Refusing to replace non-symlink CGI path")
+    assert "return 1" in routines[refusal : refusal + 160]
+    assert 'Service_Program "KodiCPGateway.sh"' in routines
 
 
 def test_operator_credentials_are_loaded_only_from_private_file(tmp_path):
