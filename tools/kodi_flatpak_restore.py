@@ -74,12 +74,15 @@ def _flatpak_lines(transport, scope):
                 "--app",
                 "--columns=application,arch,version",
             ),
-            allowed_returncodes=(0, 1),
+            allowed_returncodes=(0,),
         )
     )
     if result.returncode != 0:
-        return []
-    return [line.split("\t") for line in result.stdout.splitlines() if line.strip()]
+        raise RuntimeError("Flatpak inventory command failed")
+    rows = [line.split("\t") for line in result.stdout.splitlines() if line.strip()]
+    if any(len(row) != 3 or not APP_ID.fullmatch(row[0]) for row in rows):
+        raise RuntimeError("Flatpak inventory response is invalid")
+    return rows
 
 
 def _flatpak_info(transport, scope, app_id, option):
@@ -156,6 +159,8 @@ def _installer_probe(transport, app_id, fallback=None, expected_scope=None):
     if observed:
         raise RuntimeError("Kodi is installed in both Flatpak scopes")
     if fallback:
+        if expected_scope and fallback.get("scope") != expected_scope:
+            raise RuntimeError("Flatpak snapshot scope differs from device policy")
         return dict(fallback)
     raise RuntimeError("Flatpak Kodi is not installed")
 

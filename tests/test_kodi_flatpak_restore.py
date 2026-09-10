@@ -56,6 +56,35 @@ def test_installer_probe_rejects_duplicate_scope():
         )
 
 
+@pytest.mark.parametrize("fallback", [None, installer("user")])
+def test_inventory_failure_is_never_absence(fallback):
+    class Broken:
+        def execute_read_only(self, command):
+            assert command.allowed_returncodes == (0,)
+            return CommandResult(1, "", "Permission denied")
+
+    with pytest.raises(RuntimeError, match="inventory command failed"):
+        restore._installer_probe(Broken(), "tv.kodi.Kodi", fallback, "user")
+
+
+@pytest.mark.parametrize("output", ["tv.kodi.Kodi\n", "invalid id\tx86_64\t1\n"])
+def test_invalid_inventory_cannot_use_fallback(output):
+    class Broken:
+        def execute_read_only(self, command):
+            return CommandResult(0, output, "")
+
+    with pytest.raises(RuntimeError, match="response is invalid"):
+        restore._installer_probe(Broken(), "tv.kodi.Kodi", installer("user"), "user")
+
+
+def test_successful_empty_inventory_can_restore_only_matching_scope():
+    assert restore._installer_probe(
+        FlatpakTransport({}), "tv.kodi.Kodi", installer("user"), "user"
+    ) == installer("user")
+    with pytest.raises(RuntimeError, match="scope differs"):
+        restore._installer_probe(FlatpakTransport({}), "tv.kodi.Kodi", installer(), "user")
+
+
 def test_installer_probe_respects_explicit_expected_scope():
     transport = FlatpakTransport(
         {"system": installer(), "user": installer("user")}

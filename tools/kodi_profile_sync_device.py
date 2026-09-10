@@ -26,6 +26,41 @@ def _write_atomic(path, payload, mode=0o600):
     os.replace(temporary, path)
 
 
+def clear_recovered_terminal_block(state, profile):
+    """Only a verified successful apply can retire an old terminal error."""
+    local = state.read()
+    if not local.get("terminal_configuration_fingerprint"):
+        return False
+    revision = local.get("applied_revision")
+    if (
+        local.get("status") not in {"APPLIED", "NO_CHANGE"}
+        or not revision
+        or local.get("assigned_revision") != revision
+        or revision in local.get("quarantined_revisions", [])
+        or local.get("pending_report")
+        or os.path.exists(os.path.join(profile, "apply-journal.json"))
+    ):
+        raise RuntimeError("terminal recovery requires a verified applied revision")
+    # The backup remains in Kodi's private 0700 profile; never in Download.
+    import tempfile
+
+    descriptor, backup = tempfile.mkstemp(
+        prefix="terminal-recovery-", suffix=".json", dir=profile
+    )
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write((json.dumps(local, sort_keys=True) + "\n").encode("utf-8"))
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.chmod(backup, 0o600)
+    state.update_public(
+        terminal_configuration_fingerprint=None,
+        consecutive_failures=0,
+        last_error_code=None,
+        next_retry_utc=None,
+    )
+    return True
+
+
 def main():
     config_path, marker = sys.argv[1:3]
     try:
@@ -121,6 +156,7 @@ def main():
         )
         applier.recover()
         sync_result = ReadOnlySync(addon, state, applier=applier)()
+        terminal_block_cleared = clear_recovered_terminal_block(state, profile)
         local = state.read()
         result = {
             "ok": True,
@@ -133,6 +169,7 @@ def main():
             "pending_report": bool(local.get("pending_report")),
             "sync_status": sync_result.get("status"),
             "skin_menu_status": local.get("skin_menu_status"),
+            "terminal_block_cleared": terminal_block_cleared,
         }
     except Exception as error:  # noqa: BLE001 - Kodi runtime boundary
         frame = traceback.extract_tb(error.__traceback__)[-1]
@@ -143,9 +180,8 @@ def main():
             "http_status": getattr(error, "status", None),
             # No exception text, local variables or full device paths: those
             # can contain credentials. The code location is enough to diagnose.
-            "error_location": "%s:%s:%s" % (
-                os.path.basename(frame.filename), frame.lineno, frame.name
-            ),
+            "error_location": "%s:%s:%s"
+            % (os.path.basename(frame.filename), frame.lineno, frame.name),
         }
     _write_atomic(
         marker,

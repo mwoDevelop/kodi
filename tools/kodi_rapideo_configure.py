@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import stat
+import sys
 import subprocess
 import tempfile
 import time
@@ -34,6 +35,10 @@ REMOTE_CONFIG = "/sdcard/Download/.mwo-rapideo-credentials.json"
 REMOTE_REPORT = "/sdcard/Download/.mwo-rapideo-configure.json"
 ADAPTER = "rapideo-v1"
 ENVIRONMENT_NAMES = ("RAPIDEO_USER", "RAPIDEO_PASS")
+
+
+class AccessRestricted(RuntimeError):
+    """Known remote WAF denial; retries cannot repair this device's egress."""
 
 
 def load_authoritative_token(path):
@@ -182,6 +187,8 @@ def configure(
         if report is None:
             raise TimeoutError("Rapideo private adapter timed out")
         if not report.get("ok"):
+            if report.get("status") == "ACCESS_RESTRICTED":
+                raise AccessRestricted("Rapideo ACCESS_RESTRICTED")
             transport_key = {
                 "authenticate": "authentication_transport",
                 "account": "account_transport",
@@ -261,4 +268,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except AccessRestricted:
+        print(json.dumps({"schema": 1, "adapter": "rapideo", "status": "ACCESS_RESTRICTED"}))
+        sys.exit(2)

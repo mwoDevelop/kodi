@@ -13,7 +13,24 @@ from tools.profile_sync_portable_release import (
     _skin_menu_for_fleet,
     _trigger_sync,
     bootstrap_active,
+    observe_active_revision,
 )
+
+
+def test_quarantine_recovery_observes_active_without_assigning_or_opt_in(monkeypatch, tmp_path):
+    class Session:
+        closed = False
+        def close(self): self.closed = True
+    session = Session()
+    module = "tools.profile_sync_portable_release."
+    monkeypatch.setattr(module + "connect", lambda *_: session)
+    monkeypatch.setattr(module + "_backup", lambda *_: (tmp_path, {}))
+    monkeypatch.setattr(module + "_database_state", lambda *_: {"active_revision": "sha256:" + "a" * 64})
+    def forbidden(*_, **__): raise AssertionError("observation must not modify enrollment")
+    monkeypatch.setattr(module + "_admin", forbidden)
+    monkeypatch.setattr(module + "reconcile_enrollment_policy", forbidden)
+    assert observe_active_revision(tmp_path) == "sha256:" + "a" * 64
+    assert session.closed
 
 
 def test_portable_bundle_becomes_profile_sync_adapter(tmp_path):
@@ -421,6 +438,10 @@ def test_bootstrap_active_signs_only_a_missing_current_assignment(
     monkeypatch.setattr(
         "tools.profile_sync_portable_release._assignment",
         lambda *_args: {"assignment_id": "sha256:" + "b" * 64},
+    )
+    monkeypatch.setattr(
+        "tools.profile_sync_portable_release.reconcile_enrollment_policy",
+        lambda *_args, **_kwargs: {"status": "NO_CHANGE"},
     )
     monkeypatch.setattr(
         "tools.profile_sync_portable_release._admin",

@@ -797,7 +797,7 @@ def test_android_rollout_configures_opensubtitles_from_private_references(
         "opensubtitles-com",
         "profile-sync",
     ]
-    assert any(call[2] == "rapideo-token" for call in calls)
+    assert not any(call[2] == "rapideo-token" for call in calls)
     assert outcome.summary["opensubtitles"] == "pass"
     assert outcome.summary["opensubtitles_com"] == "pass"
     assert outcome.summary["managed_settings"] == "NO_CHANGE"
@@ -840,6 +840,82 @@ def test_android_rollout_defers_when_playback_is_active(monkeypatch):
     assert outcome.summary["playback_active"] is True
 
 
+@pytest.mark.parametrize("failure", [TimeoutError(), RuntimeError(), OSError(), ValueError(), subprocess.CalledProcessError(1, "adb")])
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_unknown_playback_never_mutates(monkeypatch, failure, dry_run):
+    executor = object.__new__(ProductionExecutor)
+    monkeypatch.setattr(executor, "_inventory", lambda _: {"running": True})
+    def failed(_):
+        raise failure
+    monkeypatch.setattr(executor, "_android_playback_active", failed)
+    monkeypatch.setattr(executor, "_portable", lambda *_: {"status": "UNKNOWN"})
+    monkeypatch.setattr(executor, "_android_converge", lambda _: pytest.fail("unexpected mutation"))
+    outcome = executor.execute(PlanStep("device:test", "android", "converge", target="test", mutation=True), dry_run=dry_run)
+    assert outcome.summary["playback_state"] == "UNKNOWN"
+    assert outcome.summary["playback_active"] is None
+    if not dry_run:
+        assert outcome.result == StepResult.DEFERRED
+        assert outcome.summary["reason"] == "playback_unknown"
+
+
+def test_stopped_kodi_does_not_require_jsonrpc(monkeypatch):
+    executor = object.__new__(ProductionExecutor)
+    monkeypatch.setattr(executor, "_android_playback_active", lambda _: pytest.fail("no RPC for stopped Kodi"))
+    assert executor._android_playback_observation("test", {"running": False})["playback_state"] == "IDLE"
+    assert executor._android_playback_observation("test", {})["playback_state"] == "UNKNOWN"
+
+
+@pytest.mark.parametrize("players", [None, {}, "", [None], [{"playerid": True, "type": "video"}], [{"playerid": 1, "type": "invalid"}]])
+def test_bad_player_contract_is_not_idle(monkeypatch, players):
+    executor = object.__new__(ProductionExecutor)
+    executor.fleet = {"devices": {"test": {"endpoints": {"adb": "serial"}}}}
+    executor.adb = "adb"
+    executor.adb_server_port = 5038
+    class Rpc:
+        def __enter__(self): return self
+        def __exit__(self, *_): pass
+        def call(self, *_): return players
+    monkeypatch.setattr(operation_runner, "AdbJsonRpcClient", lambda *_: Rpc())
+    with pytest.raises(ValueError, match="invalid active players"):
+        executor._android_playback_active("test")
+
+
+@pytest.mark.parametrize("action", ["backup", "uninstall", "profile"])
+def test_restore_android_defers_before_any_destructive_action(monkeypatch, action):
+    executor = object.__new__(ProductionExecutor)
+    monkeypatch.setattr(executor, "_restore_target", lambda _: {"platform": "android", "installed_version": "21.3"})
+    monkeypatch.setattr(executor, "_inventory", lambda _: {"running": True})
+    def timeout(_): raise TimeoutError()
+    monkeypatch.setattr(executor, "_android_playback_active", timeout)
+    outcome = executor._restore_execute(PlanStep("restore:test", "restore", action, target="test", mutation=True), False, False)
+    assert outcome.result == StepResult.DEFERRED
+    assert outcome.summary["reason"] == "playback_unknown"
+
+
+def test_dry_run_never_launches_portable_adapter(monkeypatch):
+    executor = object.__new__(ProductionExecutor)
+    monkeypatch.setattr(executor, "_inventory", lambda _: {"running": False})
+    def forbidden(*_):
+        raise AssertionError("dry-run must not start Kodi or push scripts")
+    monkeypatch.setattr(executor, "_portable", forbidden)
+    result = executor.execute(PlanStep("device:test", "android", "converge", target="test", mutation=True), dry_run=True)
+    assert result.summary["portable_status"] == "NOT_PROBED_DRY_RUN"
+
+
+def test_rapideo_waf_is_classified_and_never_retried(monkeypatch, tmp_path):
+    executor = object.__new__(ProductionExecutor)
+    executor.repository = tmp_path
+    calls = []
+    def failed(*args, **kwargs):
+        calls.append(True)
+        raise subprocess.CalledProcessError(2, "adapter", output=json.dumps({"schema": 1, "adapter": "rapideo", "status": "ACCESS_RESTRICTED"}))
+    monkeypatch.setattr(operation_runner.subprocess, "run", failed)
+    with pytest.raises(OperationAdapterError) as error:
+        executor._run_json_with_retry(["python", "adapter.py"], adapter="rapideo", delay=0)
+    assert error.value.code == "ACCESS_RESTRICTED"
+    assert len(calls) == 1
+
+
 def test_android_dry_run_reports_playback_without_deferring(monkeypatch):
     executor = object.__new__(ProductionExecutor)
     executor.fleet = {
@@ -874,7 +950,7 @@ def test_android_dry_run_reports_playback_without_deferring(monkeypatch):
 
     assert outcome.result == StepResult.PASS
     assert outcome.summary["playback_active"] is True
-    assert outcome.summary["portable_status"] == "HEALTHY"
+    assert outcome.summary["portable_status"] == "NOT_PROBED_DRY_RUN"
 
 
 def test_flatpak_rollout_reports_managed_setting_changes(monkeypatch):
@@ -924,8 +1000,7 @@ def test_android_rollout_retries_sanitized_provider_network_error(monkeypatch):
     provider_calls = []
 
     def run_json(argv, timeout=900, adapter=None, attempts=2):
-        if adapter == "rapideo-token":
-            return {"schema": 1, "device": "sony-tv"}
+        assert adapter != "rapideo-token", "scoped rollout must not contact publisher"
         if adapter in {"rapideo", "opensubtitles", "opensubtitles-com"}:
             return {"ok": True, "changed": False}
         if adapter == "mwoscrapers":

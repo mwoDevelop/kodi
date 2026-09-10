@@ -56,6 +56,7 @@ sekcje statusu nie są bieżącymi raportami o stanie systemu.
 | Bramka bezpieczeństwa upstream | [Projekt skanowania w poszukiwaniu złośliwego oprogramowania](UPSTREAM_MALWARE_SCANNING_PLAN.md) |
 | Usunięcie zgodności legacy | [Plan usunięcia kodu legacy](../LEGACY_REMOVAL_PLAN.md) |
 | Orchestrator operacji | [Plan release, rollout i restore](../KODI_OPS_PLAN.md) |
+| Domknięcie handoveru agy/Grok | [Plan napraw operacji i synchronizacji 10.09](OPS_SYNC_RECOVERY_PLAN_2026-09-10.md) | Bramy mutacji, polityka enrollmentu, diagnoza urządzeń i niezależne review |
 | Zdrowie usług i procesów cyklicznych | [Plan naprawy providerów, watchdoga, heartbeatów i harmonogramów](../OPERATIONS_HEALTH_REMEDIATION_PLAN.md) |
 | Audyt operacyjny 8.09.2026 | [Limity Actions, cooldown remediacji i aktywne przypisania](OPERATIONS_HEALTH_REMEDIATION_PLAN_2026-09-08.md) |
 | Pozostałe zadania 9.09.2026 | [NUC `--user`, Gateway 0.3.4, Bedroom, kandydat Profile Sync, cron Umbrella](REMAINING_OPS_PLAN_2026-09-09.md) |

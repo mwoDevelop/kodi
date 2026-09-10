@@ -62,6 +62,44 @@ Wykrycie złośliwego lub wymagającego review kandydata pozostaje widoczne w po
 Brak procesu/statusu watchdog, niedostępny Profile Sync, control plane lub provider
 relay nadal daje `DIAGNOSTIC_FAILED`.
 
+### Brama odtwarzania i uzgadnianie stanów
+
+Android rozróżnia `IDLE`, `ACTIVE` i `UNKNOWN`. Timeout RPC w działającym
+Kodi nie oznacza braku odtwarzania: apply zostaje `DEFERRED/playback_unknown`.
+Ta sama ochrona działa przed backupem zatrzymującym Kodi, uninstall i restore
+profilu. Dry-run nie uruchamia adaptera portable (ten potrafi włączyć Kodi);
+pokazuje `NOT_PROBED_DRY_RUN`. Weryfikacja zatrzymanej aplikacji jest odraczana.
+
+Scoped rollout Rapideo korzysta z prywatnego tokenu lub danych `.env`, bez
+wymagania dostępności urządzenia-wydawcy. Rozpoznane `ACCESS_RESTRICTED`
+odracza adapter bez retry całego wdrożenia. Nie oznacza błędnego hasła i nie
+jest omijane zmianą parsera. Flota z odroczonym celem pozostaje `PARTIAL`.
+
+`manifests/profile-sync-state-policy.json` określa dla kanału wspólny scope
+oraz włączenie playback/favourites. Bootstrap Android i Flatpak uzgadnia
+politykę z dokładną aktualną generacją enrollmentu, bez kopiowania tożsamości
+między urządzeniami. Obcy scope, zmiana generacji, brak capabilities albo
+nieudany assignment blokują zapis. Naprawa samych flag nie wymaga parowania:
+
+```bash
+# GENERATION zastąp aktualną generacją sprawdzonego enrollmentu.
+.venv/bin/python tools/profile_sync_enrollment_policy.py --device x88pro20 --expected-generation GENERATION --dry-run
+.venv/bin/python tools/profile_sync_enrollment_policy.py --device x88pro20 --expected-generation GENERATION
+```
+
+Przed apply potwierdź lokalną tożsamość i zabezpiecz stan backendu istniejącym
+backupem Profile Sync. Powtórne wywołanie ma zwracać `NO_CHANGE`. Brak kluczy
+klienta wymaga odbudowy/parowania, a nie samego włączenia flag. Jawne leczenie
+nieudanego **pierwszego** assignmentu najpierw odczytuje active bez zmiany
+polityki kwarantannowanej generacji; zwykły rollout nie kasuje kwarantanny.
+
+Jeśli po udanej naprawie pozostaje stara blokada terminalna pętli usługi,
+adapter Android zabezpiecza lokalny stan w prywatnym `terminal-recovery-*.json`,
+czyści wyłącznie potwierdzony, już naprawiony błąd i przeładowuje samą usługę
+Profile Sync. Wymaga zgodności assigned/applied, braku journalu, pending report
+i kwarantanny tej rewizji. Nie zmienia kluczy ani statusów obejrzanych.
+Po operacji należy sprawdzić świeży `last_cycle_success_utc`, nie tylko heartbeat.
+
 ### Brama kompatybilności dodatków
 
 Każdy zarządzany ZIP przechodzi przed pierwszą mutacją wspólną bramę
@@ -89,6 +127,10 @@ Androidzie jest sagą jednego dodatku: trwały journal i backup znajdują się p
 dodatku i najpierw kompensowany. Nieudana kompensacja daje
 `RECOVERY_REQUIRED`; tego katalogu nie należy usuwać ręcznie przed zebraniem
 diagnozy.
+
+Stable/testing przed `NO_CHANGE` porównuje również wszystkie pliki ZIP z
+instalacją. Sam numer wersji z bazy Kodi nie potwierdza integralności dodatku.
+Brak/zmiana plików kieruje do istniejącej transakcyjnej instalacji.
 
 Brama działa również przy `NO_CHANGE`, w buildzie repo, stable/testing, dodatkach
 domyślnych, Android restore i Flatpak. Restore audytuje każdy kopiowany katalog

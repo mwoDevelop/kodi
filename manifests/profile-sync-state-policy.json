@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "channels": {
+    "home-stable": {
+      "playback": {"enabled": true, "scope_id": "scope:home"},
+      "favourites": {"enabled": true, "scope_id": "scope:home"}
+    }
+  }
+}
