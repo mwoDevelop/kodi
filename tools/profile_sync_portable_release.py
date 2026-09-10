@@ -49,6 +49,7 @@ from tools.kodi_skin_menu import (
 from tools.kodi_skin_menu import probe_device as probe_skin_menu_device
 from tools.kodi_sync_inventory import load_sync_inventory
 from tools.profile_portable_favourites import export_portable_favourites
+from tools.profile_sync_enrollment_policy import reconcile as reconcile_enrollment_policy
 from tools.profile_revision_compose import compose
 from tools.profile_sync_admin import (
     sign_admin_request,
@@ -449,6 +450,16 @@ def _require_report(state: dict, enrollment_id: str, revision: str, kind: str):
         raise RuntimeError("required Profile Sync %s report is missing" % kind)
 
 
+def observe_active_revision(repository: Path) -> str:
+    """Inspect active state without assigning or changing enrollment opt-ins."""
+    session = connect(repository, ".env")
+    try:
+        backup, _evidence = _backup(session, repository, "observe-active")
+        return _database_state(backup)["active_revision"]
+    finally:
+        session.close()
+
+
 def bootstrap_active(repository: Path, logical_id: str) -> dict:
     """Attach a fresh signed v2 assignment to a newly paired enrollment."""
 
@@ -457,6 +468,11 @@ def bootstrap_active(repository: Path, logical_id: str) -> dict:
         backup, evidence = _backup(session, repository, "bootstrap-%s" % logical_id)
         state = _database_state(backup)
         enrollment = _latest_enrollments(state, {logical_id})[logical_id]
+        state_policy = reconcile_enrollment_policy(
+            repository, logical_id, session=session,
+            expected_id=enrollment["enrollment_id"],
+            expected_generation=enrollment["generation"],
+        )
         current = None
         for item in state["assignments"]:
             if item["enrollment_id"] == enrollment["enrollment_id"]:
@@ -481,6 +497,7 @@ def bootstrap_active(repository: Path, logical_id: str) -> dict:
                     "backup": evidence["backup_id"],
                     "enrollment_id": enrollment["enrollment_id"],
                     "assignment": document,
+                    "state_policy": state_policy,
                 }
         assignment = _assignment(
             enrollment,
@@ -505,6 +522,7 @@ def bootstrap_active(repository: Path, logical_id: str) -> dict:
             "backup": evidence["backup_id"],
             "enrollment_id": enrollment["enrollment_id"],
             "assignment": assignment,
+            "state_policy": state_policy,
         }
     finally:
         session.close()

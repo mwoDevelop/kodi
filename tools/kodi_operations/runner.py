@@ -84,9 +84,10 @@ class DeviceUnavailable(RuntimeError):
 
 
 class OperationAdapterError(RuntimeError):
-    def __init__(self, adapter):
+    def __init__(self, adapter, code=None):
         super().__init__("Kodi operation adapter failed")
         self.adapter = adapter
+        self.code = code
 
 
 def release_rollout_result(child_report: dict[str, Any], child_code: int) -> StepResult:
@@ -214,6 +215,13 @@ class ProductionExecutor:
                 timeout=timeout,
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            if adapter == "rapideo" and isinstance(error, subprocess.CalledProcessError):
+                try:
+                    failure = json.loads(error.stdout or "")
+                except (ValueError, TypeError):
+                    failure = None
+                if failure == {"schema": 1, "adapter": "rapideo", "status": "ACCESS_RESTRICTED"}:
+                    raise OperationAdapterError(adapter, "ACCESS_RESTRICTED") from error
             raise OperationAdapterError(adapter or Path(argv[1]).stem) from error
         return json.loads(result.stdout)
 
@@ -230,8 +238,8 @@ class ProductionExecutor:
         for attempt in range(1, attempts + 1):
             try:
                 return self._run_json(argv, timeout=timeout, adapter=adapter)
-            except OperationAdapterError:
-                if attempt == attempts:
+            except OperationAdapterError as error:
+                if error.code == "ACCESS_RESTRICTED" or attempt == attempts:
                     raise
                 time.sleep(delay)
         raise AssertionError("bounded adapter retry exhausted without a result")
@@ -275,7 +283,40 @@ class ProductionExecutor:
         serial = self.fleet["devices"][device_id]["endpoints"]["adb"]
         with AdbJsonRpcClient(self.adb, self.adb_server_port, serial) as jsonrpc:
             players = jsonrpc.call("Player.GetActivePlayers")
+        if not isinstance(players, list) or any(
+            not isinstance(player, dict)
+            or type(player.get("playerid")) is not int
+            or player["playerid"] < 0
+            or player.get("type") not in {"audio", "video", "picture"}
+            for player in players
+        ):
+            raise ValueError("Kodi returned invalid active players")
         return bool(players)
+
+    def _android_playback_observation(self, device_id, inventory):
+        active = None
+        if inventory.get("running") is False:
+            active = False
+        elif inventory.get("running") is True:
+            try:
+                value = self._android_playback_active(device_id)
+                if type(value) is bool:
+                    active = value
+            except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
+                pass
+        return {
+            "playback_active": active,
+            "playback_state": "UNKNOWN" if active is None else "ACTIVE" if active else "IDLE",
+        }
+
+    @staticmethod
+    def _playback_deferral(observation):
+        if observation["playback_active"] is not False:
+            return StepOutcome(
+                StepResult.DEFERRED,
+                {**observation, "reason": "playback_unknown" if observation["playback_active"] is None else "playback_active"},
+            )
+        return None
 
     def _portable(self, command: str, device_id: str) -> dict[str, Any]:
         result = self._run_json(
@@ -422,21 +463,6 @@ class ProductionExecutor:
                 str(self.adb_server_port),
             ],
             adapter="managed-settings",
-        )
-        self._run_json(
-            [
-                sys.executable,
-                "tools/kodi_rapideo_token.py",
-                "export",
-                "--device",
-                self.fleet["publisher"],
-                "--adb",
-                self.adb,
-                "--adb-server-port",
-                str(self.adb_server_port),
-            ],
-            timeout=120,
-            adapter="rapideo-token",
         )
         rapideo = self._run_json_with_retry(
             [
@@ -677,6 +703,11 @@ class ProductionExecutor:
         target = self._restore_target(step.target)
         if target["platform"] == "linux-flatpak":
             return self._flatpak_restore_execute(step, target, dry_run, verify_only)
+        if not dry_run and not verify_only and step.action in {"backup", "uninstall", "profile"} and target["installed_version"] is not None:
+            observed = self._android_playback_observation(step.target, self._inventory(step.target))
+            deferred = self._playback_deferral(observed)
+            if deferred is not None:
+                return deferred
         if dry_run:
             return StepOutcome(
                 StepResult.PASS,
@@ -1287,25 +1318,32 @@ class ProductionExecutor:
             )
         if step.adapter in {"android", "flatpak"}:
             inventory = self._inventory(step.target)
-            playback_active = False
             if step.adapter == "android":
-                try:
-                    playback_active = self._android_playback_active(step.target)
-                except (OSError, RuntimeError, TimeoutError, ValueError):
-                    playback_active = False
-                inventory["playback_active"] = playback_active
+                inventory.update(self._android_playback_observation(step.target, inventory))
             if dry_run or verify_only:
-                if step.adapter == "android":
+                if dry_run and step.adapter == "android":
+                    # The portable adapter starts Kodi and pushes probe helpers.
+                    # A plan must not call it, even when playback is idle.
+                    inventory["portable_status"] = "NOT_PROBED_DRY_RUN"
+                elif step.adapter == "android":
+                    if inventory.get("running") is not True:
+                        return StepOutcome(StepResult.DEFERRED, {**inventory, "reason": "kodi_not_running"})
+                    deferred = self._playback_deferral(inventory)
+                    if deferred is not None:
+                        return deferred
                     portable = self._portable("audit", step.target)
                     inventory["portable_status"] = portable.get("status")
                 return StepOutcome(StepResult.PASS, inventory)
-            if step.adapter == "android" and playback_active:
-                return StepOutcome(
-                    StepResult.DEFERRED,
-                    {**inventory, "reason": "playback_active"},
-                )
             if step.adapter == "android":
-                return self._android_converge(step.target)
+                deferred = self._playback_deferral(inventory)
+                if deferred is not None:
+                    return deferred
+                try:
+                    return self._android_converge(step.target)
+                except OperationAdapterError as error:
+                    if error.code == "ACCESS_RESTRICTED":
+                        return StepOutcome(StepResult.DEFERRED, {"device": step.target, "adapter": "rapideo", "reason": "ACCESS_RESTRICTED"})
+                    raise
             # The existing Flatpak adapter already contains target binding,
             # lifecycle qualification, rollback and exact artifact checks.
             # Its invocation is assembled by the dedicated helper.

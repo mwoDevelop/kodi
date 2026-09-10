@@ -24,6 +24,7 @@ from tools.kodi_advancedsettings_policy import reconcile_android_advancedsetting
 from tools.kodi_default_addons import (
     addon_details,
     fetch_artifact,
+    installed_archive_matches,
     load_official_dependencies,
     reconcile_official_dependencies,
 )
@@ -343,6 +344,9 @@ def reconcile(
             current
             and current.get("enabled")
             and str(current.get("version")) == artifact["version"]
+            and installed_archive_matches(
+                adb, port, serial, artifact["path"], addon_id
+            )
         ):
             actions.append(
                 {

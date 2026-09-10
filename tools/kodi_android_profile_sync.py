@@ -20,7 +20,10 @@ from tools.kodi_flatpak_profile_sync_rollout import profile_sync_server_url
 from tools.kodi_portable_state_rollout import _cleanup, _profile_sync_probe
 from tools.kodi_profile import AdbEventClient, AdbJsonRpcClient, adb_command
 from tools.kodi_sync_inventory import load_sync_inventory
-from tools.profile_sync_portable_release import bootstrap_active
+from tools.profile_sync_portable_release import (
+    bootstrap_active,
+    observe_active_revision,
+)
 from tools.qnap_profile_sync import (
     connect,
     create_production_pairing,
@@ -82,7 +85,9 @@ def _target_tags(device, adb, port, serial):
     abi = (result.stdout or "").strip().split(",", 1)[0]
     if not abi:
         raise RuntimeError("Android device has no primary ABI")
-    kind = "android-emulator" if device["platform"] == "android-emulator" else "android-tv"
+    kind = (
+        "android-emulator" if device["platform"] == "android-emulator" else "android-tv"
+    )
     return [kind + ":" + abi, "home"]
 
 
@@ -160,6 +165,17 @@ def _revoke(repository, enrollment_id):
         session.close()
 
 
+def _resume_recovered_service(adb, port, serial):
+    """Reload only Profile Sync after its verified terminal recovery."""
+    addon_id = "service.mwodevelop.profilesync"
+    with AdbJsonRpcClient(adb, port, serial) as rpc:
+        try:
+            rpc.call("Addons.SetAddonEnabled", {"addonid": addon_id, "enabled": False})
+            time.sleep(2)
+        finally:
+            rpc.call("Addons.SetAddonEnabled", {"addonid": addon_id, "enabled": True})
+
+
 def converge(
     repository,
     device_id,
@@ -195,10 +211,8 @@ def converge(
             _target_tags(device, adb, port, serial),
         )
     elif replace_quarantined_enrollment:
-        current_assignment = bootstrap_active(repository, device_id)
-        if not _can_replace_quarantined_enrollment(
-            observed, current_assignment["active_revision"]
-        ):
+        active_revision = observe_active_revision(repository)
+        if not _can_replace_quarantined_enrollment(observed, active_revision):
             raise RuntimeError(
                 "Profile Sync quarantine is not eligible for safe replacement"
             )
@@ -261,6 +275,7 @@ def converge(
             REMOTE_MARKER,
         )
         result = _run_until_marker(adb, port, serial, command)
+        recovered_terminal = bool((result or {}).get("terminal_block_cleared"))
         if _requires_reenrollment(result):
             pairing = _pairing(
                 repository,
@@ -285,6 +300,7 @@ def converge(
                 check=False,
             )
             result = _run_until_marker(adb, port, serial, command)
+            recovered_terminal |= bool((result or {}).get("terminal_block_cleared"))
         if not result or not result.get("ok"):
             raise RuntimeError(
                 "Profile Sync Android convergence failed: %s/%s/%s at %s"
@@ -319,6 +335,7 @@ def converge(
                 check=False,
             )
             result = _run_until_marker(adb, port, serial, command)
+            recovered_terminal |= bool((result or {}).get("terminal_block_cleared"))
             if not result or not result.get("ok"):
                 raise RuntimeError(
                     "Profile Sync active assignment failed: %s/%s/%s at %s"
@@ -344,6 +361,8 @@ def converge(
             raise RuntimeError("Profile Sync Android verification failed")
         if pairing is not None and previous_enrollment_id:
             _revoke(repository, previous_enrollment_id)
+        if recovered_terminal:
+            _resume_recovered_service(adb, port, serial)
         return {
             "schema": 1,
             "device": device_id,
@@ -353,6 +372,7 @@ def converge(
             "assigned_revision": verified.get("assigned_revision"),
             "applied_revision": verified.get("applied_revision"),
             "skin_menu_status": verified.get("skin_menu_status"),
+            "terminal_service_resumed": recovered_terminal,
         }
     finally:
         local.unlink(missing_ok=True)
@@ -398,9 +418,7 @@ def main():
                 args.device,
                 args.adb,
                 args.adb_server_port,
-                replace_quarantined_enrollment=(
-                    args.replace_quarantined_enrollment
-                ),
+                replace_quarantined_enrollment=(args.replace_quarantined_enrollment),
                 replace_enrollment=args.replace_enrollment,
             ),
             indent=2,

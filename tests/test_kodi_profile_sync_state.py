@@ -54,6 +54,8 @@ def test_probe_redacts_server_and_secrets(tmp_path):
                 },
                 "access_token": "never-print-token",
                 "signing_seed": "never-print-seed",
+                "terminal_configuration_fingerprint": "never-print-fingerprint",
+                "last_cycle_success_utc": "2026-09-09T12:00:00Z",
             }
         ),
         encoding="utf-8",
@@ -69,6 +71,10 @@ def test_probe_redacts_server_and_secrets(tmp_path):
     assert result["ca_certificate_configured"] is False
     assert "profile-sync.example.test" not in serialized
     assert "never-print" not in serialized
+    assert result["state_file_present"] is True
+    assert result["settings_file_present"] is False
+    assert result["terminal_configuration_blocked"] is True
+    assert result["last_cycle_success_utc"] == "2026-09-09T12:00:00Z"
 
 
 def test_probe_accepts_schema_2_and_reports_only_redacted_secret_health(tmp_path):

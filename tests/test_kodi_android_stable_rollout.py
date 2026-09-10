@@ -1,6 +1,8 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from tools.kodi_android_stable_rollout import (
     desired_origins,
     ensure_kodi_ready,
@@ -69,7 +71,8 @@ def test_android_stable_preflight_restarts_a_stale_kodi_process(monkeypatch):
     assert ("shell", "input keyevent KEYCODE_HOME") in commands
 
 
-def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
+@pytest.mark.parametrize("payload_intact", [None, False, True])
+def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path, payload_intact):
     installed = []
     assigned = []
     loaded = {}
@@ -163,7 +166,12 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.addon_details",
-        lambda *_args: None,
+        lambda *_args: {"enabled": True, "version": "2.0.0"}
+        if payload_intact is not None else None,
+    )
+    monkeypatch.setattr(
+        "tools.kodi_android_stable_rollout.installed_archive_matches",
+        lambda *_args: payload_intact,
     )
     monkeypatch.setattr(
         "tools.kodi_android_stable_rollout.inspect_archive",
@@ -249,7 +257,7 @@ def test_android_rollout_can_reconcile_testing_channel(monkeypatch, tmp_path):
     assert [item[0] for item in installed] == [
         repository_id,
         "repository.mwodevelop",
-        *ADDON_IDS,
+        *(ADDON_IDS if payload_intact is not True else ()),
     ]
     assert assigned == [
         {

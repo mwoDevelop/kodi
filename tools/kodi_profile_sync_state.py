@@ -106,6 +106,16 @@ def probe(addon, profile):
         "interval_hours": settings["interval_hours"],
         "read_only": settings["read_only"].strip().casefold() == "true",
         "status": state.get("status", "UNKNOWN"),
+        "state_file_present": (Path(profile) / "state.json").is_file(),
+        "settings_file_present": (Path(profile) / "settings.xml").is_file(),
+        "last_attempt_utc": state.get("last_attempt_utc"),
+        "last_cycle_success_utc": state.get("last_cycle_success_utc"),
+        "last_heartbeat_success_utc": state.get("last_heartbeat_success_utc"),
+        "consecutive_failures": state.get("consecutive_failures"),
+        "last_error_code": state.get("last_error_code"),
+        "terminal_configuration_blocked": bool(
+            state.get("terminal_configuration_fingerprint")
+        ),
         "paired": enrollment is not None,
         "enrollment_id": enrollment.get("enrollment_id") if enrollment else None,
         "enrollment_generation": (
@@ -323,6 +333,10 @@ def main():
             result = probe(addon, profile)
             addon_root = xbmcvfs.translatePath(
                 "special://home/addons/" + ADDON_ID
+            )
+            result["addon_payload_present"] = all(
+                (Path(addon_root) / relative).is_file()
+                for relative in ("addon.xml", "service.py", "resources/settings.xml")
             )
             if addon_root not in sys.path:
                 sys.path.insert(0, addon_root)
