@@ -1,7 +1,8 @@
 # Domknięcie operacji po handoverze agy/Grok — 10.09.2026
 
-Status: implementacja i dostępne testy wykonane; odbiór floty PARTIAL,
-publikacja kodu w toku. Szczegóły odroczeń w raporcie wykonania.
+Status: implementacja, dostępne testy i publikacja gałęzi wykonane; odbiór
+floty PARTIAL. Kod `0ff2e59`, [PR #370 — bieżący stan CI/scalenia](https://github.com/mwoDevelop/kodi/pull/370).
+Szczegóły odroczeń w raporcie wykonania. Nie potrzeba nowego wydania pakietów.
 Review: [raport](OPS_SYNC_RECOVERY_REVIEW_2026-09-10.md).
 Wyniki: [raport wykonania](e2e-results/2026-09-10-ops-sync-recovery.md).
 Poprzednie wyniki: [9.09](e2e-results/2026-09-09-remaining-ops.md),
@@ -164,4 +165,6 @@ Poprzednie wyniki: [9.09](e2e-results/2026-09-09-remaining-ops.md),
 - [ ] C: Bedroom osiągalny ADB, ale RPC odtwarzania UNKNOWN — bezpiecznie
   odroczony; test konfliktu między fizycznymi klientami nadal niekwalifikowany.
 - [x] D: monitoring sprawdzony; decyzje Copilot/candidate/VIP jawnie odroczone.
-- [ ] E: dokumentacja, CI, publikacja i końcowy odbiór.
+- [x] E: dokumentacja, 912 PASS, publikacja kodu i odbiór dostępnego zakresu.
+  Exact-head CI oraz scalenie śledzi PR #370; dostępność całej floty i jej
+  testy pozostają pozycją C, nie są oznaczone jako zakończone.

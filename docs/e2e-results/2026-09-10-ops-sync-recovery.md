@@ -111,6 +111,10 @@ Polityka wszystkich sześciu najnowszych enrollmentów: NO_CHANGE.
 
 ## Granice odbioru
 
+Kod implementacji: `0ff2e59`, [PR #370](https://github.com/mwoDevelop/kodi/pull/370).
+Aktualny wynik exact-head CI i scalenia znajduje się w PR. Zmiany opublikowano
+bez plików prywatnych; sprawdzono staging pod kątem wartości sekretów z `.env`.
+
 Nie nazywać tego pełnym odbiorem floty, dopóki wskazane odroczenia pozostają.
 Nie zmieniono wersji repo, dodatków ani obrazów; wdrażane były zatwierdzone
 artefakty i konfiguracja, a nie nowy release pakietów. Copilot observe,
